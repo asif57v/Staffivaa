@@ -106,15 +106,19 @@ export const checkOut = asyncHandler(async (req, res) => {
   if (!record) return sendError(res, { message: 'No check-in found', statusCode: HTTP_STATUS.BAD_REQUEST })
 
   record.checkOutAt = new Date()
-  const hours = (record.checkOutAt.getTime() - record.checkInAt.getTime()) / (1000 * 60 * 60)
+  const checkInTime = record.checkInAt ? record.checkInAt.getTime() : record.shiftDate.getTime()
+  const hours = (record.checkOutAt.getTime() - checkInTime) / (1000 * 60 * 60)
   record.totalHours = parseFloat(hours.toFixed(2))
   record.projectStatus = 'completed'
   record.billableUnits = billableUnitsForStatus(record.attendanceStatus)
   await record.save()
 
-  // Note: We do NOT mark the assignment or request as completed here,
-  // because the assignment could be a multi-day project.
-  // The completion of the overall assignment will be handled separately.
+  // Mark the assignment as completed so it moves to the history tab for the worker
+  assignment.status = 'completed'
+  await assignment.save()
+
+  // Note: We do not mark the overall WorkforceRequest as completed here,
+  // as other workers might still be assigned.
 
   sendSuccess(res, { data: { record } })
 })

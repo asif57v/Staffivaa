@@ -4,6 +4,8 @@ import { store } from '../store/index.js'
 
 let baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
 
+console.log('API base URL:', baseUrl);
+
 if (typeof window !== 'undefined' && !import.meta.env.VITE_API_URL) {
   if (window.location.hostname !== 'localhost') {
     baseUrl = `http://${window.location.hostname}:5000/api/v1`

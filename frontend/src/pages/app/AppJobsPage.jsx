@@ -168,7 +168,8 @@ export function AppJobsPage() {
         await checkOut({ assignmentId: id }).unwrap()
         refetch()
       } catch (e) {
-        showToast('Failed to complete shift')
+        console.error('Checkout error:', e)
+        showToast(e?.data?.message || e?.error || 'Failed to complete shift')
         return
       }
     } else {
