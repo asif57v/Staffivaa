@@ -1,0 +1,30 @@
+/**
+ * App-only presentation tokens (radii, shadows). Brand colors stay in index.css @theme.
+ */
+@layer utilities {
+  .app-shadow-card {
+    box-shadow:
+      0 8px 40px -12px rgb(15 23 42 / 0.12),
+      0 0 0 1px rgb(255 255 255 / 0.6) inset;
+  }
+
+  .app-shadow-elevated {
+    box-shadow:
+      0 16px 48px -20px rgb(28 175 98 / 0.18),
+      0 8px 24px -12px rgb(15 23 42 / 0.08);
+  }
+
+  .app-shadow-nav {
+    box-shadow:
+      0 12px 40px -12px rgb(15 23 42 / 0.2),
+      0 0 0 1px rgb(255 255 255 / 0.5) inset;
+  }
+
+  .app-radius-screen {
+    border-radius: 1.25rem;
+  }
+
+  .app-radius-card {
+    border-radius: 1.5rem;
+  }
+}

@@ -1,0 +1,48 @@
+/* BuildMart — terracotta marketplace identity (separate from labour green brand) */
+@theme {
+  --color-bm-orange: #e85d2a;
+  --color-bm-terracotta: #c45c26;
+  --color-bm-amber: #f59e0b;
+  --color-bm-cream: #fff7f2;
+  --color-bm-ink: #1f2937;
+}
+
+.buildmart-gradient {
+  background: linear-gradient(135deg, #e85d2a 0%, #c45c26 48%, #9a3412 100%);
+}
+
+.buildmart-gradient-soft {
+  background: linear-gradient(160deg, #fff7f2 0%, #ffedd5 45%, #ffffff 100%);
+}
+
+.buildmart-glow {
+  box-shadow:
+    0 12px 40px -12px rgb(232 93 42 / 0.45),
+    0 0 0 1px rgb(255 255 255 / 0.12) inset;
+}
+
+.buildmart-card-shine {
+  background: linear-gradient(
+    110deg,
+    transparent 35%,
+    rgb(255 255 255 / 0.35) 50%,
+    transparent 65%
+  );
+  background-size: 200% 100%;
+  animation: buildmart-shine 4s ease-in-out infinite;
+}
+
+@keyframes buildmart-shine {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .buildmart-card-shine {
+    animation: none;
+  }
+}
