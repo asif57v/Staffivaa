@@ -78,16 +78,16 @@ export function Navbar() {
           >
             Sign in
           </Link>
-          <ButtonLink href="#app" variant="secondary" className="!py-2.5 !text-xs">
+          <ButtonLink href="/auth" variant="secondary" className="!py-2.5 !text-xs">
             Register as Labour
           </ButtonLink>
-          <ButtonLink href="#services" variant="primary" className="!py-2.5 !text-xs !bg-[#FFC107] !text-slate-900 !font-bold">
+          <ButtonLink href="/auth" variant="primary" className="!py-2.5 !text-xs !bg-[#FFC107] !text-slate-900 !font-bold">
             Hire
           </ButtonLink>
         </div>
 
         <div className="flex items-center gap-2 lg:hidden">
-          <ButtonLink href="#services" variant="primary" className="!py-1.5 !px-4 !text-sm !bg-[#FFC107] !text-slate-900 !font-bold !rounded-xl">
+          <ButtonLink href="/auth" variant="primary" className="!py-1.5 !px-4 !text-sm !bg-[#FFC107] !text-slate-900 !font-bold !rounded-xl">
             Hire
           </ButtonLink>
           <button
@@ -135,10 +135,10 @@ export function Navbar() {
                 >
                   Sign in / Register
                 </Link>
-                <ButtonLink href="#services" variant="primary" onClick={() => setOpen(false)}>
+                <ButtonLink href="/auth" variant="primary" onClick={() => setOpen(false)}>
                   Hire Labour
                 </ButtonLink>
-                <ButtonLink href="#app" variant="secondary" onClick={() => setOpen(false)}>
+                <ButtonLink href="/auth" variant="secondary" onClick={() => setOpen(false)}>
                   Register as Labour
                 </ButtonLink>
               </div>
