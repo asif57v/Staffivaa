@@ -302,6 +302,7 @@ export function VendorDashboardPage() {
                 const req = a.requestId
                 const projectName = req?.projectId?.name || 'Maiyur'
                 const companyName = req?.clientId?.corporateProfile?.companyName || req?.clientId?.fullName || 'Appzeto'
+                const pending = a.status === 'pending'
                 const statusLabel = pending ? 'Pending' : 'Accepted'
                 const statusTone = pending ? 'bg-orange-50 text-orange-700' : 'bg-emerald-50 text-emerald-700'
 
