@@ -39,7 +39,7 @@ const byRole = {
     bottomNav: [
       { id: 'home', to: '/app', label: 'Home', icon: Home, end: true },
       { id: 'jobs', to: '/app/jobs', label: 'Jobs', icon: HardHat },
-      { id: 'buildmart', to: '/app/buildmart', label: 'Materials', icon: Package, premium: true },
+      { id: 'attendance', to: '/app/attendance', label: 'Attendance', icon: Clock },
       { id: 'earnings', to: '/app/earnings', label: 'Earnings', icon: IndianRupee },
       { id: 'profile', to: '/app/profile', label: 'Profile', icon: UserRound },
     ],

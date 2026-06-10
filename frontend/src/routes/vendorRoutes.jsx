@@ -7,6 +7,7 @@ import { VendorJobDetailPage } from '../panels/vendor/pages/VendorJobDetailPage.
 import { VendorJobAssignPage } from '../panels/vendor/pages/VendorJobAssignPage.jsx'
 import { VendorRequestsPage } from '../panels/vendor/pages/VendorRequestsPage.jsx'
 import { VendorAttendancePage } from '../panels/vendor/pages/VendorAttendancePage.jsx'
+import { VendorAttendanceWorkerPage } from '../panels/vendor/pages/VendorAttendanceWorkerPage.jsx'
 import { VendorEarningsPage } from '../panels/vendor/pages/VendorEarningsPage.jsx'
 import { VendorProfilePage } from '../panels/vendor/pages/VendorProfilePage.jsx'
 import { VendorSupportPage } from '../panels/vendor/pages/VendorSupportPage.jsx'
@@ -22,6 +23,7 @@ export const vendorChildRoutes = (
     <Route path="jobs/:id/assign" element={<VendorJobAssignPage />} />
     <Route path="requests" element={<VendorRequestsPage />} />
     <Route path="attendance" element={<VendorAttendancePage />} />
+    <Route path="attendance/:projectId/worker/:workerId" element={<VendorAttendanceWorkerPage />} />
     <Route path="earnings" element={<VendorEarningsPage />} />
     <Route path="profile" element={<VendorProfilePage />} />
     <Route path="support" element={<VendorSupportPage />} />

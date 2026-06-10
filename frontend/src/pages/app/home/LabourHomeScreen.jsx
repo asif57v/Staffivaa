@@ -284,6 +284,7 @@ export function LabourHomeScreen({ user }) {
   const [pendingCheckIn, setPendingCheckIn] = useState(false)
   const [notifTick, setNotifTick] = useState(0)
   const [assignmentDetailOpen, setAssignmentDetailOpen] = useState(false)
+  const [showAllSkills, setShowAllSkills] = useState(false)
   const { online, setOnline } = useLabourPresence()
 
   const { data: apiData, refetch } = useGetLabourAssignmentsQuery(undefined, { pollingInterval: 3000 })
@@ -940,15 +941,33 @@ export function LabourHomeScreen({ user }) {
             </ul>
             <div className="mt-3 flex flex-wrap gap-2">
               {Array.isArray(categories) && categories.length > 0 ? (
-                categories.map((c) => (
-                  <span
-                    key={typeof c === 'object' && c?._id ? c._id : String(c)}
-                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 shadow-sm"
-                  >
-                    <Wrench className="h-3 w-3 text-brand" aria-hidden />
-                    {typeof c === 'object' && c?.name ? c.name : 'Skill'}
-                  </span>
-                ))
+                <>
+                  {(showAllSkills ? categories : categories.slice(0, 5)).map((c) => (
+                    <span
+                      key={typeof c === 'object' && c?._id ? c._id : String(c)}
+                      className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 shadow-sm"
+                    >
+                      <Wrench className="h-3 w-3 text-brand" aria-hidden />
+                      {typeof c === 'object' && c?.name ? c.name : 'Skill'}
+                    </span>
+                  ))}
+                  {!showAllSkills && categories.length > 5 && (
+                    <button
+                      onClick={() => setShowAllSkills(true)}
+                      className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-100 transition cursor-pointer"
+                    >
+                      +{categories.length - 5} more
+                    </button>
+                  )}
+                  {showAllSkills && categories.length > 5 && (
+                    <button
+                      onClick={() => setShowAllSkills(false)}
+                      className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:bg-slate-100 transition cursor-pointer"
+                    >
+                      Show less
+                    </button>
+                  )}
+                </>
               ) : (
                 <span className="text-xs text-slate-500">Add your work types for better job matching.</span>
               )}

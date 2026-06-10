@@ -48,9 +48,9 @@ export function AppJobsPage() {
 
   const demo = useMemo(
     () => ({
-      offers: [...apiBuckets.offers, ...localDemo.offers.filter((o) => !isApiAssignment(o))],
-      active: [...apiBuckets.active, ...localDemo.active.filter((o) => !isApiAssignment(o))],
-      history: [...apiBuckets.history, ...localDemo.history.filter((o) => !isApiAssignment(o))],
+      offers: [...apiBuckets.offers, ...localDemo.offers.filter((o) => !isApiAssignment(o))].filter(j => j.sourceType === 'individual'),
+      active: [...apiBuckets.active, ...localDemo.active.filter((o) => !isApiAssignment(o))].filter(j => j.sourceType === 'individual'),
+      history: [...apiBuckets.history, ...localDemo.history.filter((o) => !isApiAssignment(o))].filter(j => j.sourceType === 'individual'),
     }),
     [apiBuckets, localDemo],
   )
@@ -343,19 +343,7 @@ export function AppJobsPage() {
           ))}
       </motion.div>
 
-      <section className="grid grid-cols-2 gap-2 pt-1" aria-label="Quick links">
-        <Link
-          to="/app/attendance"
-          className="group flex items-center gap-3 rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-sm ring-1 ring-slate-100/90 transition hover:border-brand/30 hover:shadow-md"
-        >
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand transition group-hover:bg-brand group-hover:text-white">
-            <Clock className="h-5 w-5" aria-hidden />
-          </span>
-          <span>
-            <p className="text-xs font-extrabold text-slate-900">Attendance</p>
-            <p className="text-[10px] text-slate-500">Daily punch</p>
-          </span>
-        </Link>
+      <section className="pt-1" aria-label="Quick links">
         <Link
           to="/app/earnings"
           className="group flex items-center gap-3 rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-sm ring-1 ring-slate-100/90 transition hover:border-brand/30 hover:shadow-md"

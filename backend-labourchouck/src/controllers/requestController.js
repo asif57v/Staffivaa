@@ -118,12 +118,19 @@ export const createRequest = asyncHandler(async (req, res) => {
 export const listMyRequests = asyncHandler(async (req, res) => {
   const filter = { clientId: req.user._id }
   if (req.query.status) filter.status = req.query.status
-  const requests = await WorkforceRequest.find(filter).sort({ createdAt: -1 }).limit(100).lean()
+  const requests = await WorkforceRequest.find(filter)
+    .sort({ createdAt: -1 })
+    .limit(100)
+    .populate('projectId', 'name')
+    .populate('lines.categoryId', 'name group')
+    .lean()
   sendSuccess(res, { data: { requests } })
 })
 
 export const getRequest = asyncHandler(async (req, res) => {
   const request = await WorkforceRequest.findById(req.params.id)
+    .populate('projectId', 'name')
+    .populate('clientId', 'fullName corporateProfile.companyName')
     .populate('lines.categoryId', 'name baseRate')
     .lean()
   if (!request) return sendError(res, { message: 'Not found', statusCode: HTTP_STATUS.NOT_FOUND })

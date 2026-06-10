@@ -15,7 +15,7 @@ export function AppBottomNav({ items }) {
       style={{ paddingBottom: 'max(0.4rem, env(safe-area-inset-bottom))' }}
       aria-label="Bottom navigation"
     >
-      <GlassPanel className="pointer-events-auto mb-1 flex w-full max-w-[min(100%,22rem)] items-end gap-0 px-1 py-1 shadow-[0_12px_40px_-12px_rgba(79,70,229,0.1),0_0_0_1px_rgba(255,255,255,0.8)_inset] !bg-slate-100 border border-slate-200">
+      <div className="pointer-events-auto mb-2 flex w-full max-w-[min(100%,24rem)] items-end gap-1 px-2 py-1.5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] bg-white/95 backdrop-blur-xl border border-slate-100/50 rounded-[2rem]">
         {items.map(({ id, to, end, label, icon: Icon, premium }) => (
           <NavLink
             key={`${id}-${to}`}
@@ -100,7 +100,7 @@ export function AppBottomNav({ items }) {
             }
           </NavLink>
         ))}
-      </GlassPanel>
+      </div>
     </nav>
   )
 }

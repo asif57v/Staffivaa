@@ -99,7 +99,7 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onOpenDetail, onComplet
     return `${Math.round(d)} m`
   }
 
-  const isCheckInDisabled = hasCoordinates && distance != null && distance > 200
+  const isCheckInDisabled = hasCoordinates && distance != null && distance > 120
 
   return (
     <article className="overflow-hidden rounded-[1.35rem] border border-emerald-200/80 bg-linear-to-br from-emerald-50/80 via-white to-white shadow-[0_10px_36px_-20px_rgba(16,185,129,0.35)] ring-1 ring-emerald-100">
@@ -184,7 +184,7 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onOpenDetail, onComplet
             </AppPrimaryButton>
             {hasCoordinates && distance != null && (
               <p className={`mt-2 text-center text-[10px] font-semibold ${isCheckInDisabled ? 'text-rose-600' : 'text-emerald-600'}`}>
-                {isCheckInDisabled ? `You are ${Math.round(distance)} meters away from the site. Move within 200m to check in.` : 'You have arrived near the work location.'}
+                {isCheckInDisabled ? `You are ${Math.round(distance)} meters away from the job site. Move within 120 meters to mark check-in.` : 'You have arrived near the work location.'}
               </p>
             )}
           </div>

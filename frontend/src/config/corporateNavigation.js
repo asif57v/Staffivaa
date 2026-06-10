@@ -15,6 +15,7 @@ export const corporateNavigation = {
     { id: 'home', to: '/corporate', label: 'Home', icon: Home, end: true },
     { id: 'projects', to: '/corporate/projects', label: 'Projects', icon: Building2 },
     { id: 'requests', to: '/corporate/requests', label: 'Requests', icon: ClipboardList },
+    { id: 'attendance', to: '/corporate/attendance', label: 'Attendance', icon: Clock },
     { id: 'profile', to: '/corporate/profile', label: 'Profile', icon: UserRound },
   ],
   drawerNav: [

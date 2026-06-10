@@ -35,18 +35,31 @@ export function PanelShell({
   const drawerInitials = adminInitials(user)
 
   const hideShellHeader =
+    pathname === '/vendor' ||
     pathname.includes('/profile') ||
     pathname.includes('/support') ||
     pathname.endsWith('/new') ||
     /\/projects\/[^/]+$/.test(pathname) ||
     /\/requests\/[^/]+$/.test(pathname) ||
     /\/jobs\/[^/]+$/.test(pathname) ||
-    /\/crew\/[^/]+$/.test(pathname)
+    /\/crew\/[^/]+$/.test(pathname) ||
+    /\/attendance\/[^/]+\/worker\/[^/]+$/.test(pathname)
 
   useEffect(() => {
     queueMicrotask(() => setDrawerOpen(false))
     queueMicrotask(() => setLocationModalOpen(false))
   }, [pathname])
+
+  useEffect(() => {
+    const onMenu = () => setDrawerOpen(true)
+    const onLoc = () => setLocationModalOpen(true)
+    window.addEventListener('lc-open-app-drawer', onMenu)
+    window.addEventListener('lc-open-location-modal', onLoc)
+    return () => {
+      window.removeEventListener('lc-open-app-drawer', onMenu)
+      window.removeEventListener('lc-open-location-modal', onLoc)
+    }
+  }, [])
 
   useEffect(() => {
     if (!drawerOpen) return

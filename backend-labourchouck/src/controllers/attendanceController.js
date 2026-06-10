@@ -43,8 +43,8 @@ export const checkIn = asyncHandler(async (req, res) => {
       return sendError(res, { message: 'Location is required to check-in', statusCode: HTTP_STATUS.BAD_REQUEST })
     }
     const distance = calculateDistance(lat, lng, request.locationLat, request.locationLng)
-    if (distance != null && distance > 200) {
-      return sendError(res, { message: `You are too far from the site (${Math.round(distance)}m). Move within 200m to check in.`, statusCode: HTTP_STATUS.BAD_REQUEST })
+    if (distance != null && distance > 120) {
+      return sendError(res, { message: `You are ${Math.round(distance)} meters away from the job site. Move within 120 meters to mark check-in.`, statusCode: HTTP_STATUS.BAD_REQUEST })
     }
   }
 
@@ -287,7 +287,10 @@ export const monitorAttendance = asyncHandler(async (req, res) => {
     }
 
     const projIdStr = reqData.projectId ? String(reqData.projectId._id) : String(reqData._id)
-    const projName = reqData.projectId?.name || reqData.clientId?.corporateProfile?.companyName || 'Corporate Request'
+    const projName = reqData.projectId?.name || 'Supply Job'
+    const corporateName = reqData.clientId?.corporateProfile?.companyName || reqData.clientId?.fullName || 'Corporate Client'
+    const projectLocation = reqData.locationText || 'Location TBD'
+    const status = reqData.status
 
     if (!projectGroups[projIdStr]) {
       let requiredWorkers = 0
@@ -296,10 +299,15 @@ export const monitorAttendance = asyncHandler(async (req, res) => {
       projectGroups[projIdStr] = {
         projectId: projIdStr,
         projectName: projName,
+        corporateName,
+        projectLocation,
+        projectStatus: status,
         requiredWorkers,
         assignedWorkers: 0,
         present: 0,
         absent: 0,
+        late: 0,
+        weeklyOff: 0,
         workingNow: 0,
         completedToday: 0,
         workers: []
@@ -328,17 +336,21 @@ export const monitorAttendance = asyncHandler(async (req, res) => {
         records: []
       })
     } else {
-      pg.present++
       const latestRecord = workerRecords[0] // Sorted descending
       if (latestRecord.projectStatus === 'working') pg.workingNow++
       if (latestRecord.projectStatus === 'completed') pg.completedToday++
       
+      if (latestRecord.attendanceStatus === 'Late') pg.late++
+      else if (latestRecord.attendanceStatus === 'Weekly Off') pg.weeklyOff++
+      else if (latestRecord.attendanceStatus === 'Present' || latestRecord.attendanceStatus === 'Half Day') pg.present++
+      else pg.absent++ // fallback if unknown but recorded
+
       pg.workers.push({
         assignmentId: assignment._id,
         workerId: assignment.labourId?._id,
         workerName: assignment.labourId?.fullName || 'Unknown Worker',
         role: assignment.categoryId?.name || 'Worker',
-        status: latestRecord.projectStatus,
+        status: latestRecord.attendanceStatus || latestRecord.projectStatus,
         records: workerRecords
       })
     }

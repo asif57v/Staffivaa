@@ -15,7 +15,7 @@ export const vendorNavigation = {
     { id: 'home', to: '/vendor', label: 'Home', icon: Home, end: true },
     { id: 'requests', to: '/vendor/requests', label: 'Requests', icon: FileText },
     { id: 'jobs', to: '/vendor/jobs', label: 'Jobs', icon: ClipboardList },
-    { id: 'crew', to: '/vendor/crew', label: 'Crew', icon: Users },
+    { id: 'attendance', to: '/vendor/attendance', label: 'Attendance', icon: Clock },
     { id: 'profile', to: '/vendor/profile', label: 'Profile', icon: UserRound },
   ],
   drawerNav: [

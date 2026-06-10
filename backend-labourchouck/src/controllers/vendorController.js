@@ -231,11 +231,21 @@ export const listVendorJobs = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .populate({
       path: 'requestId',
-      select: 'reference status locationText startDate endDate lines scheduleType shiftStart shiftEnd',
-      populate: {
-        path: 'lines.categoryId',
-        select: 'name group',
-      },
+      select: 'reference status locationText startDate endDate lines scheduleType shiftStart shiftEnd clientId projectId',
+      populate: [
+        {
+          path: 'lines.categoryId',
+          select: 'name group',
+        },
+        {
+          path: 'clientId',
+          select: 'fullName corporateProfile.companyName',
+        },
+        {
+          path: 'projectId',
+          select: 'name',
+        }
+      ],
     })
     .lean()
 

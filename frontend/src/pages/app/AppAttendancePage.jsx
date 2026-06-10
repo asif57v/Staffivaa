@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import {
@@ -7,8 +7,18 @@ import {
   useCheckOutMutation,
   useGetAttendanceQuery,
 } from '../../store/api/workforceApi.js'
+import {
+  loadJobDemoState,
+  subscribeJobDemo,
+  saveJobDemoState,
+  nowIso,
+} from '../../lib/labourJobDemoStorage.js'
 import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
 import { LogIn, LogOut, MapPin, Clock, Building2, Briefcase, UserCircle, CalendarDays, History } from 'lucide-react'
+
+function isApiAssignment(job) {
+  return Boolean(job?.requestId) && /^[a-f0-9]{24}$/i.test(String(job.id))
+}
 
 // Helper to format date
 const formatDate = (d) => {
@@ -48,10 +58,13 @@ function LiveDuration({ checkInAt }) {
 export function AppAttendancePage() {
   const reduce = useReducedMotion()
   const [toast, setToast] = useState('')
-  const { data: assignmentsData, isLoading: loadingAssignments } = useGetLabourAssignmentsQuery()
+  const { data: assignmentsData, isLoading: loadingAssignments, refetch } = useGetLabourAssignmentsQuery()
   
   // Fetch ALL historical attendance records for this worker, without date filtering
   const { data: attendanceData, isLoading: loadingAttendance } = useGetAttendanceQuery()
+  
+  const [localDemo, setLocalDemo] = useState(() => loadJobDemoState())
+  useEffect(() => subscribeJobDemo(setLocalDemo), [])
   
   const [checkIn, { isLoading: isCheckingIn }] = useCheckInMutation()
   const [checkOut, { isLoading: isCheckingOut }] = useCheckOutMutation()
@@ -59,23 +72,51 @@ export function AppAttendancePage() {
   const assignments = assignmentsData?.assignments ?? []
   const records = attendanceData?.records ?? []
 
-  const showToast = (msg) => {
+  const showToast = useCallback((msg) => {
     setToast(msg)
     window.setTimeout(() => setToast(''), 2400)
-  }
+  }, [])
 
-  const handleCheckIn = async (assignmentId) => {
+  const persistDemo = useCallback((next) => {
+    saveJobDemoState(next)
+    setLocalDemo(next)
+  }, [])
+
+  const handleCheckIn = async (assignmentId, isDemo) => {
+    if (isDemo) {
+      persistDemo({
+        ...localDemo,
+        active: localDemo.active.map((a) => (a.id === assignmentId ? { ...a, status: 'on_site', onSiteAt: nowIso() } : a)),
+      })
+      showToast('Checked in successfully.')
+      return
+    }
     try {
       await checkIn({ assignmentId, lat: 28.5355, lng: 77.3910 }).unwrap()
+      refetch()
       showToast('Checked in successfully.')
     } catch (err) {
       showToast(err?.data?.message || 'Failed to check in.')
     }
   }
 
-  const handleCheckOut = async (assignmentId) => {
+  const handleCheckOut = async (assignmentId, isDemo) => {
+    if (isDemo) {
+      const job = localDemo.active.find((a) => a.id === assignmentId)
+      if (job) {
+        const { acceptedAt, ...rest } = job
+        persistDemo({
+          ...localDemo,
+          active: localDemo.active.filter((a) => a.id !== assignmentId),
+          history: [{ ...rest, acceptedAt, completedAt: nowIso() }, ...localDemo.history],
+        })
+      }
+      showToast('Checked out successfully.')
+      return
+    }
     try {
       await checkOut({ assignmentId }).unwrap()
+      refetch()
       showToast('Checked out successfully.')
     } catch (err) {
       showToast(err?.data?.message || 'Failed to check out.')
@@ -89,7 +130,7 @@ export function AppAttendancePage() {
   const todayStr = getLocalDateStr(new Date())
 
   // Visibility Rule: Show if accepted/on_site AND current date is not past project end date.
-  const activeAssignments = assignments.filter((a) => {
+  const apiActiveAssignments = assignments.filter((a) => {
     if (a.status !== 'accepted' && a.status !== 'on_site') return false
     
     // If there is an end date, hide it if today is past the end date
@@ -98,7 +139,11 @@ export function AppAttendancePage() {
       if (todayStr > endStr) return false
     }
     return true
-  })
+  }).map(a => ({ ...a, isDemo: false }))
+
+  const demoActiveAssignments = localDemo.active.filter(a => !isApiAssignment(a)).map(a => ({ ...a, isDemo: true, _id: a.id }))
+
+  const activeAssignments = [...demoActiveAssignments, ...apiActiveAssignments]
 
   return (
     <div className="space-y-4 pb-8">
@@ -128,18 +173,35 @@ export function AppAttendancePage() {
       ) : (
         <div className="space-y-6">
           {activeAssignments.map((assignment) => {
+            const isDemo = assignment.isDemo
             const req = assignment.requestId || {}
-            const corporateName = req.clientId?.corporateProfile?.companyName || req.clientId?.fullName || 'Corporate Client'
-            const vendorName = assignment.vendorId?.contractorProfile?.businessName || assignment.vendorId?.fullName || 'Vendor'
-            const roleName = assignment.categoryId?.name || req.lines?.[0]?.categoryId?.name || 'Worker'
-            const locationStr = req.locationText || req.siteId?.address || 'Location not specified'
-            const shiftStr = (req.shiftStart && req.shiftEnd) ? `${req.shiftStart} - ${req.shiftEnd}` : 'Not specified'
+            
+            let corporateName, vendorName, roleName, locationStr, shiftStr
+            if (isDemo) {
+               corporateName = assignment.contractor || 'Corporate Client'
+               vendorName = assignment.vendorName || 'Vendor'
+               roleName = assignment.trade || 'Worker'
+               locationStr = assignment.location || assignment.site || 'Location not specified'
+               shiftStr = assignment.shiftWindow || 'Not specified'
+            } else {
+               corporateName = req.clientId?.corporateProfile?.companyName || req.clientId?.fullName || 'Corporate Client'
+               vendorName = assignment.vendorId?.contractorProfile?.businessName || assignment.vendorId?.fullName || 'Vendor'
+               roleName = assignment.categoryId?.name || req.lines?.[0]?.categoryId?.name || 'Worker'
+               locationStr = req.locationText || req.siteId?.address || 'Location not specified'
+               shiftStr = (req.shiftStart && req.shiftEnd) ? `${req.shiftStart} - ${req.shiftEnd}` : 'Not specified'
+            }
             
             // All records for this assignment
-            const assignmentRecords = records.filter(r => r.assignmentId === assignment._id)
+            const assignmentRecords = isDemo ? [] : records.filter(r => r.assignmentId === assignment._id)
             
             // Identify today's record
-            const todayRecord = assignmentRecords.find(r => getLocalDateStr(r.shiftDate) === todayStr)
+            let todayRecord = assignmentRecords.find(r => getLocalDateStr(r.shiftDate) === todayStr)
+            if (isDemo) {
+              todayRecord = {
+                checkInAt: assignment.status === 'on_site' ? (assignment.onSiteAt || nowIso()) : null,
+                projectStatus: assignment.status === 'on_site' ? 'working' : 'not_started',
+              }
+            }
             
             // Identify history records (sorted descending, omitting today)
             const historyRecords = assignmentRecords
@@ -264,7 +326,7 @@ export function AppAttendancePage() {
                               type="button"
                               className="w-full sm:w-auto px-6 py-2.5"
                               loading={isCheckingIn}
-                              onClick={() => handleCheckIn(assignment._id)}
+                              onClick={() => handleCheckIn(assignment._id, isDemo)}
                             >
                               <LogIn className="h-4 w-4 mr-2" />
                               Check In
@@ -273,7 +335,7 @@ export function AppAttendancePage() {
                             <button
                               type="button"
                               disabled={isCheckingOut}
-                              onClick={() => handleCheckOut(assignment._id)}
+                              onClick={() => handleCheckOut(assignment._id, isDemo)}
                               className="w-full sm:w-auto px-6 py-2.5 flex items-center justify-center gap-2 rounded-xl border-2 border-slate-200 bg-white text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
                             >
                               <LogOut className="h-4 w-4 text-slate-600" />
