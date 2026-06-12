@@ -22,6 +22,7 @@ import { ADMIN_NAV_SECTIONS, getAdminTitle } from '../config/adminNavigation.js'
 import { appSpring } from '../components/app/appMotion.js'
 import { GlassPanel } from '../components/ui/GlassPanel.jsx'
 import { adminInitials, formatLastLoginDisplay, formatLastLoginRelative } from '../lib/formatAdminLastLogin.js'
+import { fetchAdminUsers } from '../api/adminUsersApi.js'
 
 const STORAGE_KEY = 'lc-admin-sidebar-collapsed'
 
@@ -56,6 +57,32 @@ export function AdminLayout() {
   useEffect(() => {
     document.body.classList.add('admin-mode')
     return () => document.body.classList.remove('admin-mode')
+  }, [])
+
+  const [navBadges, setNavBadges] = useState({ pendingKyc: 0, newUsers: 0 })
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadStats() {
+      try {
+        const kycRes = await fetchAdminUsers({ role: 'labour', kycStatus: 'pending', limit: 1 })
+        const usersRes = await fetchAdminUsers({ limit: 1 })
+        if (!cancelled) {
+          let newUsers = 0
+          if (usersRes?.items?.[0]?.createdAt) {
+            const today = new Date().toISOString().split('T')[0]
+            if (usersRes.items[0].createdAt.startsWith(today)) {
+              newUsers = 1
+            }
+          }
+          setNavBadges({
+            pendingKyc: kycRes?.labourKycCounts?.pending || 0,
+            newUsers: newUsers > 0 ? 1 : 0
+          })
+        }
+      } catch (err) {}
+    }
+    loadStats()
   }, [])
 
   useEffect(() => {
@@ -173,11 +200,27 @@ export function AdminLayout() {
                         </span>
                         <span className={`min-w-0 flex-1 truncate ${collapsed ? 'md:sr-only' : ''}`}>{label}</span>
                         {!collapsed ? (
-                          <ChevronRight
-                            className={`h-4 w-4 shrink-0 transition ${isActive ? 'translate-x-0 text-brand opacity-100' : 'text-slate-300 opacity-0 group-hover:translate-x-0.5 group-hover:opacity-100'}`}
-                            aria-hidden
-                          />
+                          to === '/admin/labour' && navBadges.pendingKyc > 0 ? (
+                             <span className="ml-auto inline-flex items-center justify-center rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm ring-1 ring-inset ring-rose-600/20">
+                               {navBadges.pendingKyc}
+                             </span>
+                           ) : to === '/admin/users' && navBadges.newUsers > 0 ? (
+                             <span className="ml-auto inline-flex items-center justify-center rounded-full bg-blue-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm ring-1 ring-inset ring-blue-600/20">
+                               New
+                             </span>
+                           ) : (
+                            <ChevronRight
+                              className={`h-4 w-4 shrink-0 transition ${isActive ? 'translate-x-0 text-brand opacity-100' : 'text-slate-300 opacity-0 group-hover:translate-x-0.5 group-hover:opacity-100'}`}
+                              aria-hidden
+                            />
+                           )
                         ) : null}
+                        {collapsed && to === '/admin/labour' && navBadges.pendingKyc > 0 && (
+                          <span className="absolute right-1 top-1 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-rose-500 shadow-sm ring-2 ring-white md:right-1.5 md:top-1.5" />
+                        )}
+                        {collapsed && to === '/admin/users' && navBadges.newUsers > 0 && (
+                          <span className="absolute right-1 top-1 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-blue-500 shadow-sm ring-2 ring-white md:right-1.5 md:top-1.5" />
+                        )}
                       </>
                     )}
                   </NavLink>

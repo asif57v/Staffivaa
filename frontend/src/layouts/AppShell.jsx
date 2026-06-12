@@ -20,6 +20,8 @@ import { adminInitials } from '../lib/formatAdminLastLogin.js'
 import { readAppUserLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { APP_HOME_LOCATION, APP_HOME_PATH, hasBookingFlowQuery } from '../lib/bookingFlowNavigation.js'
+import { useGetLabourAssignmentsQuery } from '../store/api/workforceApi.js'
+import { loadJobDemoState, subscribeJobDemo } from '../lib/labourJobDemoStorage.js'
 
 export function AppShell() {
   const { pathname, search } = useLocation()
@@ -33,6 +35,32 @@ export function AppShell() {
   const reduce = useReducedMotion()
 
   const { headerTagline, bottomNav, drawerNav } = useMemo(() => getAppNavigation(user?.role), [user?.role])
+
+  const isLabour = user?.role === USER_ROLES.LABOUR
+  const { data: apiData } = useGetLabourAssignmentsQuery(undefined, { skip: !isLabour, pollingInterval: 5000 })
+  const [localDemo, setLocalDemo] = useState(() => loadJobDemoState())
+  useEffect(() => {
+    if (isLabour) return subscribeJobDemo(setLocalDemo)
+  }, [isLabour])
+
+  const pendingJobsCount = useMemo(() => {
+    let count = 0
+    if (apiData?.assignments) {
+      count += apiData.assignments.filter(a => a.status === 'offered').length
+    }
+    if (localDemo?.pending) {
+      count += localDemo.pending.length
+    }
+    return count
+  }, [apiData, localDemo])
+
+  const finalBottomNav = useMemo(() => {
+    if (!isLabour || !bottomNav) return bottomNav
+    return bottomNav.map(item => {
+      if (item.id === 'jobs') return { ...item, badge: pendingJobsCount > 0 ? pendingJobsCount : undefined }
+      return item
+    })
+  }, [bottomNav, isLabour, pendingJobsCount])
 
   const isIndividualAppHome = user?.role === USER_ROLES.INDIVIDUAL && pathname === '/app'
   const isLabourAppHome = user?.role === USER_ROLES.LABOUR && pathname === '/app'
@@ -440,7 +468,7 @@ export function AppShell() {
         </main>
       </div>
 
-      <AppBottomNav items={bottomNav} />
+      <AppBottomNav items={finalBottomNav} />
 
       {isIndividualAppHome ? (
         <AppUserLocationModal

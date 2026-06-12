@@ -384,7 +384,7 @@ export function IndividualHomeScreen({ user }) {
           aria-label="Search by category"
         >
           <Search className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-          <span className="min-w-0 flex-1 text-sm font-medium text-slate-500">
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-500">
             Search electrician, plumber, mason…
           </span>
           <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />

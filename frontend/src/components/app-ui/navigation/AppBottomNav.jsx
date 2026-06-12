@@ -16,7 +16,7 @@ export function AppBottomNav({ items }) {
       aria-label="Bottom navigation"
     >
       <div className="pointer-events-auto mb-2 flex w-full max-w-[min(100%,24rem)] items-end gap-1 px-2 py-1.5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] bg-white/95 backdrop-blur-xl border border-slate-100/50 rounded-[2rem]">
-        {items.map(({ id, to, end, label, icon: Icon, premium }) => (
+        {items.map(({ id, to, end, label, icon: Icon, premium, badge }) => (
           <NavLink
             key={`${id}-${to}`}
             to={to}
@@ -84,12 +84,19 @@ export function AppBottomNav({ items }) {
                   {isActive && reduce ? (
                     <div className="absolute inset-0 rounded-[18px] bg-[#FEF9E7] border border-[#F4C542]/20 shadow-2xs" />
                   ) : null}
-                  <Icon
-                    className={`relative z-10 h-[18px] w-[18px] transition-colors duration-255 ${
-                      isActive ? 'text-[#F4C542]' : 'text-[#9CA3AF]'
-                    }`}
-                    aria-hidden
-                  />
+                  <div className="relative inline-flex items-center justify-center">
+                    <Icon
+                      className={`relative z-10 h-[18px] w-[18px] transition-colors duration-255 ${
+                        isActive ? 'text-[#F4C542]' : 'text-[#9CA3AF]'
+                      }`}
+                      aria-hidden
+                    />
+                    {badge ? (
+                      <span className="absolute -top-1 -right-1.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-black text-white ring-2 ring-white z-20 shadow-sm">
+                        {badge}
+                      </span>
+                    ) : null}
+                  </div>
                   <span
                     className={`relative z-10 mt-0.5 truncate px-0.5 text-[9px] font-black tracking-wide transition-colors duration-255 ${
                       isActive ? 'text-[#8A6D1C]' : 'text-[#9CA3AF]'

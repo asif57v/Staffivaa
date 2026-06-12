@@ -78,7 +78,6 @@ export const ADMIN_NAV_SECTIONS = [
   {
     title: 'Operations',
     items: [
-      { to: '/admin/buildmart', label: 'BuildMart leads', icon: Package },
       { to: '/admin/bookings', label: 'Bookings & requests', icon: ClipboardList },
       { to: '/admin/allocations', label: 'Workforce allocation', icon: Network },
       { to: '/admin/attendance', label: 'Attendance', icon: Clock },
