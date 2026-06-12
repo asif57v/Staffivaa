@@ -58,6 +58,8 @@ function LiveDuration({ checkInAt }) {
 export function AppAttendancePage() {
   const reduce = useReducedMotion()
   const [toast, setToast] = useState('')
+  const [selectedDay, setSelectedDay] = useState(new Date().getDate())
+  
   const { data: assignmentsData, isLoading: loadingAssignments, refetch } = useGetLabourAssignmentsQuery()
   
   // Fetch ALL historical attendance records for this worker, without date filtering
@@ -145,6 +147,123 @@ export function AppAttendancePage() {
 
   const activeAssignments = [...demoActiveAssignments, ...apiActiveAssignments]
 
+  const now = new Date()
+  const currentMonth = now.getMonth()
+  const currentYear = now.getFullYear()
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
+
+  // Primary Assignment Data
+  const primaryAssignment = activeAssignments[0]
+  const isDemo = primaryAssignment?.isDemo
+  const req = primaryAssignment?.requestId || {}
+
+  let corporateName, vendorName, roleName, locationStr, shiftStr
+  if (primaryAssignment) {
+    if (isDemo) {
+      corporateName = primaryAssignment.contractor || 'Corporate Client'
+      vendorName = primaryAssignment.vendorName || 'Vendor'
+      roleName = primaryAssignment.trade || 'Worker'
+      locationStr = primaryAssignment.location || primaryAssignment.site || 'Location not specified'
+      shiftStr = primaryAssignment.shiftWindow || '08:00 AM - 06:00 PM'
+    } else {
+      corporateName = req.clientId?.corporateProfile?.companyName || req.clientId?.fullName || 'Corporate Client'
+      vendorName = primaryAssignment.vendorId?.contractorProfile?.businessName || primaryAssignment.vendorId?.fullName || 'Vendor'
+      roleName = primaryAssignment.categoryId?.name || req.lines?.[0]?.categoryId?.name || 'Worker'
+      locationStr = req.locationText || req.siteId?.address || 'Location not specified'
+      shiftStr = (req.shiftStart && req.shiftEnd) ? `${req.shiftStart} - ${req.shiftEnd}` : '08:00 AM - 06:00 PM'
+    }
+  }
+
+  // Determine Assignment Date
+  const assignedDate = primaryAssignment?.createdAt ? new Date(primaryAssignment.createdAt) : req.startDate ? new Date(req.startDate) : new Date(currentYear, currentMonth, 1)
+  assignedDate.setHours(0, 0, 0, 0)
+
+  // Map records for the current month
+  const recordMap = {}
+  if (records) {
+    records.forEach(r => {
+      const d = new Date(r.shiftDate)
+      if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+        recordMap[d.getDate()] = r
+      }
+    })
+  }
+
+  let totalPresent = 0
+  let totalAbsent = 0
+  let totalLate = 0
+  let totalWeeklyOff = 0
+  let totalHoursSum = 0
+  let daysWithHours = 0
+  let assignedWorkingDays = 0
+
+  const calendarDays = Array.from({ length: daysInMonth }, (_, i) => i + 1)
+
+  const getDayStatus = (d) => {
+    if (!primaryAssignment) return { type: 'Not Assigned', color: '#CBD5E1' }
+    const iterDate = new Date(currentYear, currentMonth, d)
+    if (iterDate < assignedDate) return { type: 'Not Assigned', color: '#CBD5E1' }
+    if (iterDate > now) return null // future
+    
+    const r = recordMap[d]
+    if (r) {
+      let st = r.attendanceStatus || (r.projectStatus === 'completed' || r.projectStatus === 'working' ? 'Present' : 'Absent')
+      if (st === 'working') st = 'Present'
+      
+      if (st === 'Present' || st === 'Half Day') return { type: 'Present', color: '#10B981' }
+      if (st === 'Absent') return { type: 'Absent', color: '#EF4444' }
+      if (st === 'Late') return { type: 'Late', color: '#F59E0B' }
+      if (st === 'Weekly Off') return { type: 'Off', color: '#8B5CF6' }
+      return { type: 'Present', color: '#10B981' }
+    }
+    
+    // Past day, >= assignedDate, no record -> Absent
+    return { type: 'Absent', color: '#EF4444' }
+  }
+
+  calendarDays.forEach(d => {
+    const s = getDayStatus(d)
+    if (s && s.type !== 'Not Assigned') {
+      assignedWorkingDays++
+      if (s.type === 'Present') totalPresent++
+      else if (s.type === 'Absent') totalAbsent++
+      else if (s.type === 'Late') totalLate++
+      else if (s.type === 'Off') {
+        totalWeeklyOff++
+        assignedWorkingDays-- // Exclude off days from assigned working days
+      }
+    }
+    
+    const r = recordMap[d]
+    if (r && r.totalHours) {
+      totalHoursSum += r.totalHours
+      daysWithHours++
+    }
+  })
+
+  const avgHours = daysWithHours > 0 ? (totalHoursSum / daysWithHours).toFixed(1) : 0
+
+  // Today's Check In Status
+  const todayRecord = recordMap[now.getDate()] || (isDemo && primaryAssignment?.status === 'on_site' ? { checkInAt: primaryAssignment.onSiteAt || nowIso(), projectStatus: 'working' } : null)
+  const isCheckedIn = todayRecord && (todayRecord.projectStatus === 'working' || (todayRecord.checkInAt && !todayRecord.checkOutAt))
+  const isCompleted = todayRecord && (todayRecord.projectStatus === 'completed' || (todayRecord.checkInAt && todayRecord.checkOutAt))
+  
+  // Selected Day specific data
+  const selectedRecord = recordMap[selectedDay]
+  const selectedStatusObj = getDayStatus(selectedDay)
+  const isSelectedToday = selectedDay === now.getDate()
+  const selectedDateStr = new Date(currentYear, currentMonth, selectedDay).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()
+
+  let selStatusText = selectedStatusObj?.type || 'No Data'
+  if (isSelectedToday && isCheckedIn && !isCompleted) {
+    selStatusText = 'Working'
+  }
+
+  // History Records
+  const historyRecords = records
+    .filter(r => getLocalDateStr(r.shiftDate) < todayStr)
+    .sort((a, b) => new Date(b.shiftDate) - new Date(a.shiftDate))
+
   return (
     <div className="space-y-4 pb-8">
       <AnimatePresence>
@@ -163,230 +282,343 @@ export function AppAttendancePage() {
 
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900">Attendance</h1>
-        <p className="mt-2 text-sm text-slate-600">Your assigned active projects.</p>
+        <p className="mt-2 text-sm text-slate-600">Your personal attendance dashboard.</p>
       </div>
 
-      {activeAssignments.length === 0 ? (
-        <GlassPanel className="p-6 text-center">
-          <p className="text-sm text-slate-500">You don't have any active assignments to check in to.</p>
-        </GlassPanel>
-      ) : (
-        <div className="space-y-6">
-          {activeAssignments.map((assignment) => {
-            const isDemo = assignment.isDemo
-            const req = assignment.requestId || {}
-            
-            let corporateName, vendorName, roleName, locationStr, shiftStr
-            if (isDemo) {
-               corporateName = assignment.contractor || 'Corporate Client'
-               vendorName = assignment.vendorName || 'Vendor'
-               roleName = assignment.trade || 'Worker'
-               locationStr = assignment.location || assignment.site || 'Location not specified'
-               shiftStr = assignment.shiftWindow || 'Not specified'
-            } else {
-               corporateName = req.clientId?.corporateProfile?.companyName || req.clientId?.fullName || 'Corporate Client'
-               vendorName = assignment.vendorId?.contractorProfile?.businessName || assignment.vendorId?.fullName || 'Vendor'
-               roleName = assignment.categoryId?.name || req.lines?.[0]?.categoryId?.name || 'Worker'
-               locationStr = req.locationText || req.siteId?.address || 'Location not specified'
-               shiftStr = (req.shiftStart && req.shiftEnd) ? `${req.shiftStart} - ${req.shiftEnd}` : 'Not specified'
-            }
-            
-            // All records for this assignment
-            const assignmentRecords = isDemo ? [] : records.filter(r => r.assignmentId === assignment._id)
-            
-            // Identify today's record
-            let todayRecord = assignmentRecords.find(r => getLocalDateStr(r.shiftDate) === todayStr)
-            if (isDemo) {
-              todayRecord = {
-                checkInAt: assignment.status === 'on_site' ? (assignment.onSiteAt || nowIso()) : null,
-                projectStatus: assignment.status === 'on_site' ? 'working' : 'not_started',
-              }
-            }
-            
-            // Identify history records (sorted descending, omitting today)
-            const historyRecords = assignmentRecords
-              .filter(r => getLocalDateStr(r.shiftDate) < todayStr)
-              .sort((a, b) => new Date(b.shiftDate) - new Date(a.shiftDate))
-            
-            // Today's Status
-            const isCheckedIn = todayRecord && todayRecord.projectStatus === 'working'
-            const isCompleted = todayRecord && todayRecord.projectStatus === 'completed'
-            const isNotCheckedIn = !isCheckedIn && !isCompleted
-
-            return (
-              <GlassPanel key={assignment._id} className={`overflow-hidden border-2 shadow-sm ${isCheckedIn ? 'border-brand/50' : isCompleted ? 'border-emerald-300' : 'border-slate-200'}`}>
-                {/* Header: Company Name */}
-                <div className={`px-4 py-3 border-b border-slate-100 flex items-center gap-3 ${isCheckedIn ? 'bg-brand/5' : isCompleted ? 'bg-emerald-50' : 'bg-slate-50'}`}>
-                  <div className={`p-2 rounded-lg ${isCheckedIn ? 'bg-brand/10 text-brand' : isCompleted ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-600'}`}>
-                    <Building2 className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-extrabold text-slate-900">{corporateName}</h3>
-                  </div>
-                </div>
-
-                {/* Details Section */}
-                <div className="p-4 space-y-4">
-                  
-                  {/* Role & Vendor */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1 mb-1">
-                        <Briefcase className="h-3 w-3" /> Role / Skill
-                      </p>
-                      <p className="text-sm font-bold text-slate-800">{roleName}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1 mb-1">
-                        <UserCircle className="h-3 w-3" /> Assigned By
-                      </p>
-                      <p className="text-sm font-bold text-slate-800">{vendorName}</p>
-                    </div>
-                  </div>
-
-                  {/* Location */}
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1 mb-1">
-                      <MapPin className="h-3 w-3" /> Location
-                    </p>
-                    <p className="text-sm font-medium text-slate-700">{locationStr}</p>
-                  </div>
-
-                  {/* Timing & Duration */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1 mb-1">
-                        <Clock className="h-3 w-3" /> Shift Timing
-                      </p>
-                      <p className="text-sm font-medium text-slate-700">{shiftStr}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1 mb-1">
-                        <CalendarDays className="h-3 w-3" /> Duration
-                      </p>
-                      <p className="text-sm font-medium text-slate-700">
-                        {formatDate(req.startDate)} - {req.endDate ? formatDate(req.endDate) : 'Ongoing'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <hr className="border-slate-100 my-4" />
-
-                  {/* Today's Attendance Block */}
-                  <div>
-                    <p className="text-[11px] font-black uppercase tracking-wider text-slate-800 mb-3">Today's Attendance</p>
-                    
-                    {/* Checked In Info */}
-                    {(isCheckedIn || isCompleted) && (
-                      <div className="bg-slate-50 p-3 rounded-xl grid grid-cols-3 gap-3 mb-4 border border-slate-100">
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Check In</p>
-                          <p className="text-sm font-bold text-slate-900">
-                            {todayRecord.checkInAt ? new Date(todayRecord.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Check Out</p>
-                          <p className="text-sm font-bold text-slate-900">
-                            {todayRecord.checkOutAt ? new Date(todayRecord.checkOutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                            {isCompleted ? 'Hours Worked' : 'Working Time'}
-                          </p>
-                          {isCompleted && todayRecord.totalHours != null ? (
-                            <p className="text-sm font-bold text-slate-900">{todayRecord.totalHours}h</p>
-                          ) : isCheckedIn && todayRecord.checkInAt ? (
-                            <p className="text-sm"><LiveDuration checkInAt={todayRecord.checkInAt} /></p>
-                          ) : (
-                            <p className="text-sm font-bold text-slate-900">—</p>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Status & Actions */}
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Today's Status</p>
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wider ${
-                          isCompleted ? 'bg-emerald-100 text-emerald-700' :
-                          isCheckedIn ? 'bg-brand/15 text-brand animate-pulse' :
-                          'bg-slate-100 text-slate-600'
-                        }`}>
-                          {isCompleted ? 'Completed' : isCheckedIn ? 'Working' : 'Not Checked In'}
-                        </span>
-                      </div>
-
-                      <div className="flex-1 flex justify-end">
-                        {!isCompleted && (
-                          !isCheckedIn ? (
-                            <AppPrimaryButton
-                              type="button"
-                              className="w-full sm:w-auto px-6 py-2.5"
-                              loading={isCheckingIn}
-                              onClick={() => handleCheckIn(assignment._id, isDemo)}
-                            >
-                              <LogIn className="h-4 w-4 mr-2" />
-                              Check In
-                            </AppPrimaryButton>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={isCheckingOut}
-                              onClick={() => handleCheckOut(assignment._id, isDemo)}
-                              className="w-full sm:w-auto px-6 py-2.5 flex items-center justify-center gap-2 rounded-xl border-2 border-slate-200 bg-white text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
-                            >
-                              <LogOut className="h-4 w-4 text-slate-600" />
-                              Check Out
-                            </button>
-                          )
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Attendance History Section */}
-                  {historyRecords.length > 0 && (
-                    <div className="pt-4 mt-4 border-t border-slate-100">
-                      <p className="text-[11px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5 mb-3">
-                        <History className="h-3.5 w-3.5 text-slate-400" /> Attendance History
-                      </p>
-                      <ul className="space-y-2">
-                        {historyRecords.map(r => (
-                          <li key={r._id} className="bg-slate-50/80 border border-slate-100 rounded-lg p-3 flex justify-between items-center">
-                            <div>
-                              <p className="text-xs font-bold text-slate-900">{formatDate(r.shiftDate)}</p>
-                              <p className="text-[10px] font-medium text-slate-500 mt-0.5">
-                                {r.checkInAt ? new Date(r.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'} 
-                                {' - '}
-                                {r.checkOutAt ? new Date(r.checkOutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                                r.attendanceStatus === 'present' ? 'bg-emerald-100 text-emerald-700' :
-                                r.attendanceStatus === 'absent' ? 'bg-rose-100 text-rose-700' :
-                                'bg-slate-200 text-slate-700'
-                              }`}>
-                                {r.attendanceStatus}
-                              </span>
-                              {r.totalHours != null && (
-                                <p className="text-[10px] font-bold text-slate-800 mt-1">{r.totalHours}h</p>
-                              )}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                </div>
-              </GlassPanel>
-            )
-          })}
+      {!primaryAssignment ? (
+        <div style={{
+          background: '#FFFFFF', borderRadius: 20, padding: '24px',
+          border: '1px solid #F1F5F9', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: '50%', background: '#F8FAFC',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 16px'
+          }}>
+            <Building2 style={{ width: 24, height: 24, color: '#94A3B8' }} />
+          </div>
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', margin: '0 0 8px' }}>📭 No Active Assignment</h2>
+          <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 16px', lineHeight: 1.5 }}>
+            You are currently not assigned to any Corporate project.
+          </p>
+          <div style={{ background: '#F8FAFC', borderRadius: 12, padding: '16px', textAlign: 'left' }}>
+            <p style={{ fontSize: 12, color: '#475569', margin: '0 0 8px', fontWeight: 600 }}>Once a Vendor or Corporate assigns you to a project, this page will automatically display:</p>
+            <ul style={{ fontSize: 12, color: '#64748B', margin: 0, paddingLeft: 20, lineHeight: 1.6 }}>
+              <li>Assigned Project</li>
+              <li>Attendance Calendar</li>
+              <li>Check-In / Check-Out</li>
+              <li>Working Hours</li>
+              <li>Attendance History</li>
+              <li>Monthly Summary</li>
+            </ul>
+          </div>
         </div>
+      ) : (
+        <>
+          {/* 1️⃣ Active Project Card */}
+          <div style={{
+            background: '#FFFFFF', borderRadius: 20, overflow: 'hidden',
+            border: '1px solid #F1F5F9', boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+          }}>
+            <div style={{ background: '#0F172A', padding: '16px', color: '#FFFFFF', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#1E293B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Building2 style={{ width: 20, height: 20, color: '#38BDF8' }} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>{corporateName}</h2>
+                <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>{project.projectName || 'Corporate Project'}</p>
+              </div>
+            </div>
+            <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}><Briefcase style={{ width: 12, height: 12 }} /> Role</p>
+                <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>{roleName}</p>
+              </div>
+              <div>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}><MapPin style={{ width: 12, height: 12 }} /> Location</p>
+                <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{locationStr}</p>
+              </div>
+              <div>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}><CalendarDays style={{ width: 12, height: 12 }} /> Assigned</p>
+                <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>{formatDate(assignedDate)}</p>
+              </div>
+              <div>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}><Clock style={{ width: 12, height: 12 }} /> Shift</p>
+                <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>{shiftStr}</p>
+              </div>
+            </div>
+            <div style={{ padding: '12px 16px', background: '#F8FAFC', borderTop: '1px solid #F1F5F9' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 800, color: '#10B981', background: '#ECFDF5', padding: '4px 10px', borderRadius: 12, border: '1px solid #A7F3D0' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }} /> Active Assignment
+              </span>
+            </div>
+          </div>
+
+          {/* 3️⃣ Today's Attendance Block */}
+          <div style={{
+            background: '#FFFFFF', borderRadius: 20, padding: '16px',
+            border: '1px solid #F1F5F9', boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+          }}>
+            <h3 style={{ fontSize: 11, fontWeight: 800, color: '#64748B', margin: '0 0 16px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Today's Attendance</h3>
+            
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4 }}>Status</p>
+                <span style={{
+                  display: 'inline-block', padding: '4px 12px', borderRadius: 8, fontSize: 13, fontWeight: 800,
+                  background: isCompleted ? '#ECFDF5' : isCheckedIn ? '#EFF6FF' : '#F1F5F9',
+                  color: isCompleted ? '#10B981' : isCheckedIn ? '#3B82F6' : '#64748B',
+                }}>
+                  {isCompleted ? '🟢 Present' : isCheckedIn ? '🔵 Working' : '⚪ Not Checked In'}
+                </span>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4 }}>{isCompleted ? 'Total Hours' : isCheckedIn ? 'Live Time' : ''}</p>
+                {isCompleted && todayRecord?.totalHours != null ? (
+                  <p style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', margin: 0 }}>{todayRecord.totalHours}h</p>
+                ) : isCheckedIn && todayRecord?.checkInAt ? (
+                  <p style={{ fontSize: 18, fontWeight: 800, color: '#3B82F6', margin: 0 }}><LiveDuration checkInAt={todayRecord.checkInAt} /></p>
+                ) : null}
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+              <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: 12, border: '1px solid #F1F5F9' }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 2 }}>Check In</p>
+                <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  {todayRecord?.checkInAt ? new Date(todayRecord.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'}
+                </p>
+              </div>
+              <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: 12, border: '1px solid #F1F5F9' }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 2 }}>Check Out</p>
+                <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  {todayRecord?.checkOutAt ? new Date(todayRecord.checkOutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'}
+                </p>
+              </div>
+            </div>
+
+            {!isCompleted && (
+              !isCheckedIn ? (
+                <AppPrimaryButton
+                  type="button"
+                  className="w-full py-3.5 rounded-xl shadow-lg shadow-sky-500/20 text-base"
+                  loading={isCheckingIn}
+                  onClick={() => handleCheckIn(primaryAssignment._id, isDemo)}
+                >
+                  <LogIn className="h-5 w-5 mr-2" />
+                  Check In Now
+                </AppPrimaryButton>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isCheckingOut}
+                  onClick={() => handleCheckOut(primaryAssignment._id, isDemo)}
+                  className="w-full py-3.5 flex items-center justify-center gap-2 rounded-xl border-2 border-slate-200 bg-white text-base font-bold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <LogOut className="h-5 w-5 text-slate-600" />
+                  Check Out
+                </button>
+              )
+            )}
+          </div>
+
+          {/* 4️⃣ Monthly Summary Cards */}
+          <div>
+            <h4 style={{ fontSize: 11, fontWeight: 800, color: '#64748B', margin: '0 0 10px 2px', textTransform: 'uppercase', letterSpacing: '0.8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <CalendarDays style={{ width: 14, height: 14 }} /> Monthly Summary
+            </h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 8 }}>
+              {[
+                { label: 'Present', value: totalPresent, color: '#10B981', bg: '#ECFDF5', border: '#D1FAE5' },
+                { label: 'Absent', value: totalAbsent, color: '#EF4444', bg: '#FEF2F2', border: '#FECACA' },
+                { label: 'Late', value: totalLate, color: '#F59E0B', bg: '#FFFBEB', border: '#FDE68A' },
+                { label: 'Off', value: totalWeeklyOff, color: '#8B5CF6', bg: '#F5F3FF', border: '#E9D5FF' },
+              ].map(s => (
+                <div key={s.label} style={{ background: s.bg, borderRadius: 14, padding: '12px 4px', border: `1px solid ${s.border}`, textAlign: 'center' }}>
+                  <p style={{ fontSize: 20, fontWeight: 800, color: '#0F172A', margin: 0, lineHeight: 1 }}>{s.value}</p>
+                  <p style={{ fontSize: 9, fontWeight: 700, color: s.color, margin: '6px 0 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{s.label}</p>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+               <div style={{ background: '#FFFFFF', borderRadius: 14, padding: '12px 16px', border: `1px solid #F1F5F9`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                 <p style={{ fontSize: 10, fontWeight: 700, color: '#64748B', margin: 0, display: 'flex', alignItems: 'center', gap: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}><Clock style={{ width: 12, height: 12 }} /> Total Hrs</p>
+                 <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>{totalHoursSum.toFixed(1)}h</p>
+               </div>
+               <div style={{ background: '#FFFFFF', borderRadius: 14, padding: '12px 16px', border: `1px solid #F1F5F9`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                 <p style={{ fontSize: 10, fontWeight: 700, color: '#64748B', margin: 0, display: 'flex', alignItems: 'center', gap: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}><Clock style={{ width: 12, height: 12 }} /> Avg / Day</p>
+                 <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>{avgHours}h</p>
+               </div>
+            </div>
+          </div>
+
+          {/* 5️⃣ Monthly Calendar */}
+          <div style={{ background: '#FFFFFF', borderRadius: 20, padding: '16px', border: '1px solid #F1F5F9', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, padding: '0 4px' }}>
+              <h3 style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', margin: 0 }}>{now.toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, textAlign: 'center', marginBottom: 12 }}>
+              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
+                <div key={d} style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', paddingBottom: 6, textTransform: 'uppercase', letterSpacing: '0.3px' }}>{d}</div>
+              ))}
+
+              {Array.from({ length: (new Date(currentYear, currentMonth, 1).getDay() + 6) % 7 }).map((_, i) => <div key={`blank-${i}`} />)}
+
+              {calendarDays.map((d) => {
+                const sObj = getDayStatus(d)
+                const dotColor = sObj?.color || 'transparent'
+                const isSelected = selectedDay === d
+                
+                let txtColor = '#334155'
+                if (sObj?.type === 'Not Assigned') txtColor = '#CBD5E1'
+                else if (d > now.getDate()) txtColor = '#CBD5E1'
+                if (isSelected) txtColor = '#FFFFFF'
+
+                return (
+                  <div key={d} onClick={() => d <= now.getDate() && setSelectedDay(d)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2px 0', gap: 3, cursor: d <= now.getDate() ? 'pointer' : 'default' }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: isSelected ? 800 : 600, background: isSelected ? '#0F172A' : (d <= now.getDate() && sObj?.type !== 'Not Assigned') ? '#F8FAFC' : 'transparent', color: txtColor, border: isSelected ? 'none' : (d <= now.getDate() && sObj?.type !== 'Not Assigned') ? '1px solid #F1F5F9' : '1px solid transparent', transition: 'all 0.2s' }}>
+                      {d}
+                    </div>
+                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: dotColor }} />
+                  </div>
+                )
+              })}
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 12, borderTop: '1px solid #F1F5F9', paddingTop: 12 }}>
+              {[
+                { label: 'Present', color: '#10B981' },
+                { label: 'Absent', color: '#EF4444' },
+                { label: 'Late', color: '#F59E0B' },
+                { label: 'Off', color: '#8B5CF6' },
+                { label: 'Not Assigned', color: '#CBD5E1' }
+              ].map(l => (
+                <span key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: l.color }} /> {l.label}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* 7️⃣ Selected Date Timeline */}
+          <div>
+            <h4 style={{ fontSize: 11, fontWeight: 800, color: '#64748B', margin: '0 0 10px 2px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+              {isSelectedToday ? "Today's Timeline" : "Timeline"} ({selectedDateStr})
+            </h4>
+            <div style={{ background: '#FFFFFF', borderRadius: 20, padding: '20px', border: '1px solid #F1F5F9', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+              {selectedStatusObj?.type === 'Not Assigned' ? (
+                <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 14, fontWeight: 600, color: '#94A3B8' }}>Worker was not assigned on this date.</div>
+              ) : selectedRecord || (isSelectedToday && isCheckedIn) ? (
+                <div style={{ position: 'relative', paddingLeft: 24 }}>
+                  <div style={{ position: 'absolute', top: 12, bottom: 12, left: 7, width: 2, background: '#E2E8F0', borderRadius: 2 }} />
+                  
+                  {/* Check In Event */}
+                  <div style={{ position: 'relative', marginBottom: 24 }}>
+                     <div style={{ position: 'absolute', left: -24, top: 2, width: 16, height: 16, borderRadius: '50%', background: '#ECFDF5', border: '2px solid #10B981', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}>
+                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }} />
+                     </div>
+                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                       <div style={{ flexShrink: 0, minWidth: 60 }}>
+                         <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                           {todayRecord?.checkInAt ? new Date(todayRecord.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).split(' ')[0] : selectedRecord?.checkInAt ? new Date(selectedRecord.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).split(' ')[0] : '—'}
+                         </p>
+                         <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', margin: 0 }}>
+                           {todayRecord?.checkInAt ? new Date(todayRecord.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).split(' ')[1] : selectedRecord?.checkInAt ? new Date(selectedRecord.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).split(' ')[1] : ''}
+                         </p>
+                       </div>
+                       <div>
+                         <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: '0 0 6px' }}>Checked In</p>
+                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: '#10B981', border: '1px solid #A7F3D0', borderRadius: 6, padding: '3px 8px', background: '#ECFDF5' }}>
+                           <MapPin style={{ width: 10, height: 10 }} /> GPS Verified
+                         </span>
+                       </div>
+                     </div>
+                  </div>
+
+                  {/* Check Out Event */}
+                  <div style={{ position: 'relative' }}>
+                     <div style={{ position: 'absolute', left: -24, top: 2, width: 16, height: 16, borderRadius: '50%', background: (isSelectedToday ? isCompleted : selectedRecord?.checkOutAt) ? '#EFF6FF' : '#F1F5F9', border: `2px solid ${(isSelectedToday ? isCompleted : selectedRecord?.checkOutAt) ? '#3B82F6' : '#CBD5E1'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}>
+                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: (isSelectedToday ? isCompleted : selectedRecord?.checkOutAt) ? '#3B82F6' : '#CBD5E1' }} />
+                     </div>
+                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                       <div style={{ flexShrink: 0, minWidth: 60 }}>
+                         <p style={{ fontSize: 14, fontWeight: 800, color: (isSelectedToday ? isCompleted : selectedRecord?.checkOutAt) ? '#0F172A' : '#94A3B8', margin: 0 }}>
+                           {todayRecord?.checkOutAt ? new Date(todayRecord.checkOutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).split(' ')[0] : selectedRecord?.checkOutAt ? new Date(selectedRecord.checkOutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).split(' ')[0] : '—'}
+                         </p>
+                         <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', margin: 0 }}>
+                           {todayRecord?.checkOutAt ? new Date(todayRecord.checkOutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).split(' ')[1] : selectedRecord?.checkOutAt ? new Date(selectedRecord.checkOutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).split(' ')[1] : ''}
+                         </p>
+                       </div>
+                       <div>
+                         <p style={{ fontSize: 14, fontWeight: 800, color: (isSelectedToday ? isCompleted : selectedRecord?.checkOutAt) ? '#0F172A' : '#94A3B8', margin: '0 0 6px' }}>
+                           {(isSelectedToday ? isCompleted : selectedRecord?.checkOutAt) ? 'Checked Out' : 'Not Checked Out'}
+                         </p>
+                         {(isSelectedToday ? todayRecord?.totalHours : selectedRecord?.totalHours) != null && (
+                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, color: '#64748B' }}>
+                             <Clock style={{ width: 12, height: 12 }} /> Total: <span style={{ fontWeight: 800 }}>{(isSelectedToday ? todayRecord?.totalHours : selectedRecord?.totalHours)} hrs</span>
+                           </span>
+                         )}
+                       </div>
+                     </div>
+                  </div>
+                </div>
+              ) : (
+                 <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 14, fontWeight: 600, color: '#94A3B8' }}>
+                   No records found for {selectedDateStr}. <br/>Status: {selStatusText}
+                 </div>
+              )}
+            </div>
+          </div>
+
+          {/* 8️⃣ Attendance History */}
+          {historyRecords.length > 0 && (
+            <div>
+              <h4 style={{ fontSize: 11, fontWeight: 800, color: '#64748B', margin: '0 0 10px 2px', textTransform: 'uppercase', letterSpacing: '0.8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <History style={{ width: 14, height: 14 }} /> Attendance History
+              </h4>
+              <div style={{ background: '#FFFFFF', borderRadius: 16, padding: '12px', border: '1px solid #F1F5F9', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: 400 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ padding: '10px 12px', fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', borderBottom: '1px solid #F1F5F9' }}>Date</th>
+                      <th style={{ padding: '10px 12px', fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', borderBottom: '1px solid #F1F5F9' }}>Status</th>
+                      <th style={{ padding: '10px 12px', fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', borderBottom: '1px solid #F1F5F9' }}>Check In</th>
+                      <th style={{ padding: '10px 12px', fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', borderBottom: '1px solid #F1F5F9' }}>Check Out</th>
+                      <th style={{ padding: '10px 12px', fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', borderBottom: '1px solid #F1F5F9', textAlign: 'right' }}>Hours</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyRecords.map((r, i) => {
+                      const d = new Date(r.shiftDate)
+                      const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+                      let st = r.attendanceStatus || (r.projectStatus === 'completed' || r.projectStatus === 'working' ? 'Present' : 'Absent')
+                      if (st === 'working') st = 'Working'
+
+                      const rColor = st === 'Present' || st === 'Working' ? '#10B981' : st === 'Late' ? '#F59E0B' : '#EF4444'
+                      const rBg = st === 'Present' || st === 'Working' ? '#ECFDF5' : st === 'Late' ? '#FFFBEB' : '#FEF2F2'
+
+                      return (
+                        <tr key={r._id || i} style={{ borderBottom: '1px solid #F8FAFC' }}>
+                          <td style={{ padding: '12px', fontSize: 13, fontWeight: 800, color: '#0F172A' }}>{dateStr}</td>
+                          <td style={{ padding: '12px' }}>
+                            <span style={{ background: rBg, color: rColor, padding: '4px 10px', borderRadius: 8, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                              {st}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px', fontSize: 12, fontWeight: 600, color: '#475569' }}>{r.checkInAt ? new Date(r.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                          <td style={{ padding: '12px', fontSize: 12, fontWeight: 600, color: '#475569' }}>{r.checkOutAt ? new Date(r.checkOutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                          <td style={{ padding: '12px', fontSize: 13, fontWeight: 800, color: '#0F172A', textAlign: 'right' }}>{r.totalHours ? `${r.totalHours}h` : '0h'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

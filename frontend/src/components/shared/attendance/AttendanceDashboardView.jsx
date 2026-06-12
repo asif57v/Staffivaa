@@ -42,15 +42,45 @@ export function AttendanceDashboardView({ basePath = '/vendor' }) {
 
   // Aggregate stats across all projects
   const totals = useMemo(() => {
-    let assigned = 0, present = 0, absent = 0, late = 0, weeklyOff = 0
+    let assigned = 0, present = 0, absent = 0, working = 0, checkedOut = 0;
+    let totalMins = 0;
+    let checkedOutCountForAvg = 0;
+
     projects.forEach(p => {
-      assigned += p.assignedWorkers || 0
-      present += p.present || 0
-      absent += p.absent || 0
-      late += p.late || 0
-      weeklyOff += p.weeklyOff || 0
+      const workers = p.workers || []
+      assigned += p.assignedWorkers || workers.length || 0
+      
+      let p_present = 0, p_working = 0, p_checkedOut = 0, p_absent = 0;
+      workers.forEach(w => {
+        const r = w.records && w.records[0] ? w.records[0] : null;
+        if (r && r.checkInAt) {
+          p_present++;
+          if (r.checkOutAt) {
+            p_checkedOut++;
+            if (r.totalHours) {
+              totalMins += parseFloat(r.totalHours) * 60;
+              checkedOutCountForAvg++;
+            } else {
+              const ms = new Date(r.checkOutAt) - new Date(r.checkInAt);
+              totalMins += ms / 60000;
+              checkedOutCountForAvg++;
+            }
+          } else {
+            p_working++;
+          }
+        } else {
+          p_absent++;
+        }
+      });
+      
+      present += p_present || p.present || 0;
+      working += p_working;
+      checkedOut += p_checkedOut;
+      absent += p_absent || p.absent || 0;
     })
-    return { assigned, present, absent, late, weeklyOff }
+    
+    const avgHours = checkedOutCountForAvg > 0 ? (totalMins / 60 / checkedOutCountForAvg).toFixed(1) : 0;
+    return { assigned, present, absent, working, checkedOut, avgHours }
   }, [projects])
 
   const attendancePct = totals.assigned > 0 ? Math.round((totals.present / totals.assigned) * 100) : 0
@@ -94,26 +124,27 @@ export function AttendanceDashboardView({ basePath = '/vendor' }) {
             display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 16
           }}>
             {[
-              { label: 'Total', value: totals.assigned, color: '#3B82F6', bg: '#EFF6FF', icon: Users },
+              { label: 'Assigned', value: totals.assigned, color: '#3B82F6', bg: '#EFF6FF', icon: Users },
               { label: 'Present', value: totals.present, color: '#10B981', bg: '#ECFDF5', icon: CheckCircle2 },
               { label: 'Absent', value: totals.absent, color: '#EF4444', bg: '#FEF2F2', icon: AlertCircle },
-              { label: 'Late', value: totals.late, color: '#F59E0B', bg: '#FFFBEB', icon: Clock },
-              { label: 'Off', value: totals.weeklyOff, color: '#8B5CF6', bg: '#F5F3FF', icon: CalendarDays },
+              { label: 'Working', value: totals.working, color: '#F59E0B', bg: '#FFFBEB', icon: Clock },
+              { label: 'Checked Out', value: totals.checkedOut, color: '#8B5CF6', bg: '#F5F3FF', icon: CheckCircle2 },
+              { label: 'Avg Hrs', value: `${totals.avgHours}h`, color: '#06B6D4', bg: '#ECFEFF', icon: CalendarDays },
             ].map((s) => (
               <div key={s.label} style={{
-                background: '#FFFFFF', borderRadius: 14, padding: '10px 8px',
+                background: '#FFFFFF', borderRadius: 10, padding: '8px 4px',
                 border: '1px solid #F1F5F9', textAlign: 'center',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
               }}>
                 <div style={{
-                  width: 28, height: 28, borderRadius: 8, background: s.bg,
+                  width: 24, height: 24, borderRadius: 6, background: s.bg,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  margin: '0 auto 6px'
+                  margin: '0 auto 4px'
                 }}>
-                  <s.icon style={{ width: 14, height: 14, color: s.color }} strokeWidth={2} />
+                  <s.icon style={{ width: 12, height: 12, color: s.color }} strokeWidth={2} />
                 </div>
-                <p style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', margin: 0, lineHeight: 1 }}>{s.value}</p>
-                <p style={{ fontSize: 9, fontWeight: 600, color: '#94A3B8', margin: 0, marginTop: 3, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{s.label}</p>
+                <p style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', margin: 0, lineHeight: 1 }}>{s.value}</p>
+                <p style={{ fontSize: 8, fontWeight: 700, color: '#94A3B8', margin: 0, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{s.label}</p>
               </div>
             ))}
           </div>
@@ -207,15 +238,28 @@ export function AttendanceDashboardView({ basePath = '/vendor' }) {
         {/* ──── Project Cards ──── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {filteredProjects.map((p) => {
-            const assignedCount = p.assignedWorkers || 0
-            const presentCount = p.present || 0
-            const absentCount = p.absent || 0
-            const lateCount = p.late || 0
-            const weeklyOffCount = p.weeklyOff || 0
-            const pct = assignedCount > 0 ? Math.round((presentCount / assignedCount) * 100) : 0
-
             const workers = p.workers || []
-            const previewWorkers = workers.slice(0, 3)
+            
+            let assignedCount = p.assignedWorkers || workers.length || 0
+            let presentCount = 0, workingCount = 0, checkedOutCount = 0, absentCount = 0;
+            
+            workers.forEach(w => {
+              const r = w.records && w.records[0] ? w.records[0] : null;
+              if (r && r.checkInAt) {
+                presentCount++;
+                if (r.checkOutAt) checkedOutCount++;
+                else workingCount++;
+              } else {
+                absentCount++;
+              }
+            })
+            
+            if (workers.length === 0) {
+              presentCount = p.present || 0;
+              absentCount = p.absent || 0;
+            }
+
+            const pct = assignedCount > 0 ? Math.round((presentCount / assignedCount) * 100) : 0
 
             return (
               <div key={p.projectId} style={{
@@ -276,9 +320,9 @@ export function AttendanceDashboardView({ basePath = '/vendor' }) {
                     {[
                       { label: 'Assigned', val: assignedCount, color: '#3B82F6', bg: '#EFF6FF' },
                       { label: 'Present', val: presentCount, color: '#10B981', bg: '#ECFDF5' },
+                      { label: 'Working', val: workingCount, color: '#F59E0B', bg: '#FFFBEB' },
+                      { label: 'Checked Out', val: checkedOutCount, color: '#8B5CF6', bg: '#F5F3FF' },
                       { label: 'Absent', val: absentCount, color: '#EF4444', bg: '#FEF2F2' },
-                      { label: 'Late', val: lateCount, color: '#F59E0B', bg: '#FFFBEB' },
-                      { label: 'Off', val: weeklyOffCount, color: '#8B5CF6', bg: '#F5F3FF' },
                     ].map(s => (
                       <div key={s.label} style={{
                         background: s.bg, borderRadius: 8, padding: '4px 8px',
@@ -306,70 +350,6 @@ export function AttendanceDashboardView({ basePath = '/vendor' }) {
                     </span>
                   </div>
 
-                  {/* Worker Previews */}
-                  {previewWorkers.length > 0 && (
-                    <div style={{ marginBottom: 10 }}>
-                      <p style={{
-                        fontSize: 9, fontWeight: 700, color: '#94A3B8', margin: '0 0 8px',
-                        textTransform: 'uppercase', letterSpacing: '0.6px'
-                      }}>Today's Workers</p>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {previewWorkers.map((w) => {
-                          const st = w.status
-                          const isPresent = st === 'Present' || st === 'working' || st === 'completed'
-                          const isAbsent = st === 'Absent'
-                          const isLate = st === 'Late'
-                          const stColor = isPresent ? '#10B981' : isAbsent ? '#EF4444' : isLate ? '#F59E0B' : '#8B5CF6'
-                          const stBg = isPresent ? '#ECFDF5' : isAbsent ? '#FEF2F2' : isLate ? '#FFFBEB' : '#F5F3FF'
-                          const stText = isPresent ? 'Present' : isAbsent ? 'Absent' : isLate ? 'Late' : st || 'Off'
-                          const r = w.records && w.records[0] ? w.records[0] : null
-
-                          return (
-                            <div key={w.workerId} style={{
-                              display: 'flex', alignItems: 'center', gap: 10,
-                              padding: '8px 10px', borderRadius: 12,
-                              background: '#FAFBFC', border: '1px solid #F1F5F9'
-                            }}>
-                              <img
-                                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(w.workerName)}&background=random&size=36`}
-                                alt={w.workerName}
-                                style={{ width: 36, height: 36, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }}
-                              />
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <p style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {w.workerName}
-                                </p>
-                                <p style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', margin: 0 }}>{w.role}</p>
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                                {r?.checkInAt && (
-                                  <span style={{ fontSize: 10, fontWeight: 600, color: '#64748B' }}>
-                                    {formatTime(r.checkInAt)}
-                                  </span>
-                                )}
-                                <span style={{
-                                  background: stBg, color: stColor, padding: '2px 7px',
-                                  borderRadius: 6, fontSize: 9, fontWeight: 700,
-                                  textTransform: 'uppercase', letterSpacing: '0.3px',
-                                  border: `1px solid ${stColor}20`
-                                }}>
-                                  {stText}
-                                </span>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                      {workers.length > 3 && (
-                        <p style={{
-                          fontSize: 10, fontWeight: 600, color: '#94A3B8', margin: '6px 0 0',
-                          textAlign: 'center'
-                        }}>
-                          +{workers.length - 3} more worker{workers.length - 3 !== 1 ? 's' : ''}
-                        </p>
-                      )}
-                    </div>
-                  )}
 
                   {/* View All Workers Link */}
                   <Link
@@ -380,7 +360,7 @@ export function AttendanceDashboardView({ basePath = '/vendor' }) {
                       background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)',
                       border: '1px solid #FCD34D',
                       fontSize: 12, fontWeight: 700, color: '#92400E',
-                      textDecoration: 'none', transition: 'all 0.2s'
+                      textDecoration: 'none', transition: 'all 0.2s', outline: 'none'
                     }}
                   >
                     <Users style={{ width: 14, height: 14 }} strokeWidth={2.5} />

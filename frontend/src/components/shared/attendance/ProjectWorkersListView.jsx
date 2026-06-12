@@ -313,6 +313,24 @@ export function ProjectWorkersListView({ basePath = '/vendor' }) {
 
             const r = w.records && w.records[0] ? w.records[0] : null
             const hasCheckIn = r?.checkInAt != null
+            const hasCheckOut = r?.checkOutAt != null
+            
+            let hoursText = '0h'
+            if (r && r.totalHours) {
+              hoursText = `${r.totalHours}h`
+            } else if (hasCheckIn && hasCheckOut) {
+              const diffMs = new Date(r.checkOutAt) - new Date(r.checkInAt)
+              const mins = Math.floor(diffMs / 60000)
+              const h = Math.floor(mins / 60)
+              const m = mins % 60
+              hoursText = `${h}h ${m}m`
+            } else if (hasCheckIn) {
+              const diffMs = new Date() - new Date(r.checkInAt)
+              const mins = Math.max(0, Math.floor(diffMs / 60000))
+              const h = Math.floor(mins / 60)
+              const m = mins % 60
+              hoursText = `${h}h ${m}m`
+            }
 
             return (
               <Link
@@ -368,7 +386,7 @@ export function ProjectWorkersListView({ basePath = '/vendor' }) {
                         </span>
                       </div>
                       <div style={{
-                        display: 'flex', gap: 8,
+                        display: 'flex', gap: 6, flexWrap: 'wrap',
                         background: '#F8FAFC', padding: '4px 8px', borderRadius: 8,
                         border: '1px solid #F1F5F9'
                       }}>
@@ -377,6 +395,9 @@ export function ProjectWorkersListView({ basePath = '/vendor' }) {
                         </span>
                         <span style={{ fontSize: 9, fontWeight: 600, color: '#94A3B8' }}>
                           OUT <span style={{ fontWeight: 700, color: '#334155', marginLeft: 2 }}>{r?.checkOutAt ? formatTime(r.checkOutAt) : '—'}</span>
+                        </span>
+                        <span style={{ fontSize: 9, fontWeight: 600, color: '#94A3B8', borderLeft: '1px solid #E2E8F0', paddingLeft: 6 }}>
+                          HRS <span style={{ fontWeight: 800, color: '#0F172A', marginLeft: 2 }}>{hoursText}</span>
                         </span>
                       </div>
                     </div>

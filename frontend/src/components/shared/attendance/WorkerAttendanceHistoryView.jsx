@@ -16,6 +16,11 @@ function formatTime(d) {
 export function WorkerAttendanceHistoryView({ basePath = '/vendor' }) {
   const { projectId, workerId } = useParams()
   const navigate = useNavigate()
+  
+  const now = new Date()
+  const currentMonth = now.getMonth()
+  const currentYear = now.getFullYear()
+  const [selectedDay, setSelectedDay] = useState(now.getDate())
 
   // We can fetch a broad range to get the monthly calendar data
   const queryParams = useMemo(() => {
@@ -90,39 +95,88 @@ export function WorkerAttendanceHistoryView({ basePath = '/vendor' }) {
   const stBg = isPresent ? '#ECFDF5' : isAbsent ? '#FEF2F2' : isLate ? '#FFFBEB' : '#F5F3FF'
 
   // Real Monthly Calendar data calculation
-  const now = new Date()
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
+  
   // Create a map of dates to records for easy lookup
   const recordMap = {}
+  
+  if (worker.records) {
+    worker.records.forEach(r => {
+      const d = new Date(r.shiftDate)
+      if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+        recordMap[d.getDate()] = r
+      }
+    })
+  }
+
+  // Determine Assignment Date
+  const assignedDate = worker.assignedAt ? new Date(worker.assignedAt) : project.startDate ? new Date(project.startDate) : new Date(currentYear, currentMonth, 1)
+  assignedDate.setHours(0, 0, 0, 0)
+  
   let totalPresent = 0
   let totalAbsent = 0
   let totalLate = 0
   let totalWeeklyOff = 0
   let totalHoursSum = 0
   let daysWithHours = 0
+  let assignedWorkingDays = 0
 
-  if (worker.records) {
-    worker.records.forEach(r => {
-      const dateKey = new Date(r.shiftDate).getDate()
-      recordMap[dateKey] = r
-
-      const st = r.attendanceStatus || (r.projectStatus === 'completed' || r.projectStatus === 'working' ? 'Present' : 'Absent')
-      if (st === 'Present' || st === 'Half Day') totalPresent++
-      else if (st === 'Absent') totalAbsent++
-      else if (st === 'Late') totalLate++
-      else if (st === 'Weekly Off') totalWeeklyOff++
-
-      if (r.totalHours) {
-        totalHoursSum += r.totalHours
-        daysWithHours++
-      }
-    })
+  // Calculate stats based purely on assignment date and backend records
+  const calendarDays = Array.from({ length: daysInMonth }, (_, i) => i + 1)
+  
+  const getDayStatus = (d) => {
+    const iterDate = new Date(currentYear, currentMonth, d)
+    if (iterDate < assignedDate) return { type: 'Not Assigned', color: '#CBD5E1' }
+    if (iterDate > now) return null // future
+    
+    const r = recordMap[d]
+    if (r) {
+      let st = r.attendanceStatus || (r.projectStatus === 'completed' || r.projectStatus === 'working' ? 'Present' : 'Absent')
+      if (st === 'working') st = 'Present'
+      
+      if (st === 'Present' || st === 'Half Day') return { type: 'Present', color: '#10B981' }
+      if (st === 'Absent') return { type: 'Absent', color: '#EF4444' }
+      if (st === 'Late') return { type: 'Late', color: '#F59E0B' }
+      if (st === 'Weekly Off') return { type: 'Off', color: '#8B5CF6' }
+      return { type: 'Present', color: '#10B981' } // Fallback if check in exists but no explicit status
+    }
+    
+    // Past day, >= assignedDate, no record -> Absent
+    return { type: 'Absent', color: '#EF4444' }
   }
 
-  // Generate calendar days
-  const calendarDays = Array.from({ length: daysInMonth }, (_, i) => i + 1)
+  calendarDays.forEach(d => {
+    const s = getDayStatus(d)
+    if (s && s.type !== 'Not Assigned') {
+      assignedWorkingDays++
+      if (s.type === 'Present') totalPresent++
+      else if (s.type === 'Absent') totalAbsent++
+      else if (s.type === 'Late') totalLate++
+      else if (s.type === 'Off') {
+        totalWeeklyOff++
+        assignedWorkingDays-- // Exclude off days from assigned working days
+      }
+    }
+    
+    const r = recordMap[d]
+    if (r && r.totalHours) {
+      totalHoursSum += r.totalHours
+      daysWithHours++
+    }
+  })
+
   const avgHours = daysWithHours > 0 ? (totalHoursSum / daysWithHours).toFixed(1) : 0
+  
+  // Selected Day specific data
+  const selectedRecord = recordMap[selectedDay]
+  const selectedStatusObj = getDayStatus(selectedDay)
+  const isSelectedToday = selectedDay === now.getDate()
+  const selectedDateStr = new Date(currentYear, currentMonth, selectedDay).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()
+
+  let selStatusText = selectedStatusObj?.type || 'No Data'
+  if (isSelectedToday && selectedRecord?.checkInAt && !selectedRecord?.checkOutAt) {
+    selStatusText = 'Working'
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: '#FAFAFA', paddingBottom: 90 }}>
@@ -250,7 +304,7 @@ export function WorkerAttendanceHistoryView({ basePath = '/vendor' }) {
             <CalendarDays style={{ width: 13, height: 13 }} />
             Monthly Summary
           </h4>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 8 }}>
             {[
               { label: 'Present', value: totalPresent, color: '#10B981', bg: '#ECFDF5', border: '#D1FAE5' },
               { label: 'Absent', value: totalAbsent, color: '#EF4444', bg: '#FEF2F2', border: '#FECACA' },
@@ -258,26 +312,26 @@ export function WorkerAttendanceHistoryView({ basePath = '/vendor' }) {
               { label: 'Off', value: totalWeeklyOff, color: '#8B5CF6', bg: '#F5F3FF', border: '#E9D5FF' },
             ].map(s => (
               <div key={s.label} style={{
-                background: s.bg, borderRadius: 14, padding: '10px 8px',
+                background: s.bg, borderRadius: 14, padding: '10px 4px',
                 border: `1px solid ${s.border}`, textAlign: 'center'
               }}>
-                <p style={{ fontSize: 20, fontWeight: 800, color: '#0F172A', margin: 0, lineHeight: 1 }}>{s.value}</p>
+                <p style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', margin: 0, lineHeight: 1 }}>{s.value}</p>
                 <p style={{ fontSize: 8, fontWeight: 700, color: s.color, margin: '4px 0 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{s.label}</p>
               </div>
             ))}
           </div>
-          {/* Average hours */}
+          
           <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            background: '#FFFFFF', borderRadius: 14, padding: '12px 14px',
-            border: '1px solid #F1F5F9', marginTop: 6,
-            boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+             background: '#FFFFFF', borderRadius: 14, padding: '12px 16px',
+             border: `1px solid #F1F5F9`, display: 'flex', alignItems: 'center', justifyContent: 'space-between'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748B' }}>
-              <Clock style={{ width: 14, height: 14, color: '#94A3B8' }} />
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Avg Working Hours</span>
-            </div>
-            <span style={{ fontSize: 15, fontWeight: 800, color: '#0F172A' }}>{avgHours}h / day</span>
+             <p style={{ fontSize: 10, fontWeight: 700, color: '#64748B', margin: 0, display: 'flex', alignItems: 'center', gap: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+               <Clock style={{ width: 12, height: 12 }} />
+               Avg Working Hours
+             </p>
+             <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+               {avgHours}h <span style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8' }}>/ day</span>
+             </p>
           </div>
         </div>
 
@@ -314,31 +368,33 @@ export function WorkerAttendanceHistoryView({ basePath = '/vendor' }) {
             ))}
 
             {/* Blank spaces for the first day of month */}
-            {Array.from({ length: (new Date(now.getFullYear(), now.getMonth(), 1).getDay() + 6) % 7 }).map((_, i) => (
+            {Array.from({ length: (new Date(currentYear, currentMonth, 1).getDay() + 6) % 7 }).map((_, i) => (
               <div key={`blank-${i}`} />
             ))}
 
             {calendarDays.map((d) => {
-              const r = recordMap[d]
-              const st = r?.attendanceStatus || (r?.projectStatus === 'completed' || r?.projectStatus === 'working' ? 'Present' : null)
-
-              const isToday = d === now.getDate()
-
-              let dotColor = 'transparent'
-              if (st === 'Present' || st === 'Half Day') dotColor = '#10B981'
-              else if (st === 'Absent') dotColor = '#EF4444'
-              else if (st === 'Late') dotColor = '#F59E0B'
-              else if (st === 'Weekly Off') dotColor = '#8B5CF6'
+              const sObj = getDayStatus(d)
+              const dotColor = sObj?.color || 'transparent'
+              const isSelected = selectedDay === d
+              
+              let txtColor = '#334155'
+              if (sObj?.type === 'Not Assigned') txtColor = '#CBD5E1'
+              else if (d > now.getDate()) txtColor = '#CBD5E1'
+              if (isSelected) txtColor = '#FFFFFF'
 
               return (
-                <div key={d} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2px 0', gap: 3 }}>
+                <div 
+                  key={d} 
+                  onClick={() => d <= now.getDate() && setSelectedDay(d)}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2px 0', gap: 3, cursor: d <= now.getDate() ? 'pointer' : 'default' }}
+                >
                   <div style={{
                     width: 32, height: 32, borderRadius: 10,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 12, fontWeight: isToday ? 800 : 600,
-                    background: isToday ? '#0F172A' : d <= now.getDate() ? '#F8FAFC' : 'transparent',
-                    color: isToday ? '#FFFFFF' : d <= now.getDate() ? '#334155' : '#CBD5E1',
-                    border: isToday ? 'none' : d <= now.getDate() ? '1px solid #F1F5F9' : '1px solid transparent',
+                    fontSize: 12, fontWeight: isSelected ? 800 : 600,
+                    background: isSelected ? '#0F172A' : (d <= now.getDate() && sObj?.type !== 'Not Assigned') ? '#F8FAFC' : 'transparent',
+                    color: txtColor,
+                    border: isSelected ? 'none' : (d <= now.getDate() && sObj?.type !== 'Not Assigned') ? '1px solid #F1F5F9' : '1px solid transparent',
                     transition: 'all 0.2s'
                   }}>
                     {d}
@@ -368,99 +424,102 @@ export function WorkerAttendanceHistoryView({ basePath = '/vendor' }) {
           </div>
         </div>
 
-        {/* ──── Today's Timeline ──── */}
-        {todayRecord && (
-          <div style={{ marginBottom: 16 }}>
-            <h4 style={{
-              fontSize: 10, fontWeight: 800, color: '#64748B', margin: '0 0 10px 2px',
-              textTransform: 'uppercase', letterSpacing: '0.8px'
-            }}>
-              Today's Timeline ({formatDateLong(todayRecord.shiftDate)})
-            </h4>
-            <div style={{
-              background: '#FFFFFF', borderRadius: 18, padding: '20px',
-              border: '1px solid #F1F5F9', boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
-            }}>
-              <div style={{ position: 'relative', paddingLeft: 28 }}>
-                {/* Timeline line */}
-                <div style={{
-                  position: 'absolute', left: 11, top: 8, bottom: 8,
-                  width: 1.5, background: '#F1F5F9', borderRadius: 1
-                }} />
-
-                {/* Check-In Event */}
-                {todayRecord.checkInAt && (
-                  <div style={{ position: 'relative', marginBottom: todayRecord.checkOutAt ? 24 : 0 }}>
-                    <div style={{
-                      position: 'absolute', left: -28, top: 0,
-                      width: 22, height: 22, borderRadius: '50%',
-                      background: '#10B981', border: '3px solid #FFFFFF',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: '0 2px 6px rgba(16,185,129,0.3)', zIndex: 5
-                    }}>
-                      <CheckCircle2 style={{ width: 10, height: 10, color: '#FFFFFF' }} strokeWidth={3} />
-                    </div>
-                    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                      <p style={{ fontSize: 12, fontWeight: 800, color: '#475569', width: 50, paddingTop: 1 }}>
-                        {formatTime(todayRecord.checkInAt)}
-                      </p>
-                      <div>
-                        <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>Checked In</p>
-                        <p style={{
-                          fontSize: 10, fontWeight: 600, color: '#10B981', margin: '4px 0 0',
-                          display: 'flex', alignItems: 'center', gap: 4
-                        }}>
-                          <MapPin style={{ width: 10, height: 10 }} />
-                          <span style={{
-                            background: '#ECFDF5', padding: '2px 6px', borderRadius: 4,
-                            border: '1px solid #D1FAE5', fontSize: 9, fontWeight: 700
-                          }}>GPS Verified</span>
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Check-Out Event */}
-                {todayRecord.checkOutAt && (
-                  <div style={{ position: 'relative' }}>
-                    <div style={{
-                      position: 'absolute', left: -28, top: 0,
-                      width: 22, height: 22, borderRadius: '50%',
-                      background: '#3B82F6', border: '3px solid #FFFFFF',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: '0 2px 6px rgba(59,130,246,0.3)', zIndex: 5
-                    }}>
-                      <CheckCircle2 style={{ width: 10, height: 10, color: '#FFFFFF' }} strokeWidth={3} />
-                    </div>
-                    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                      <p style={{ fontSize: 12, fontWeight: 800, color: '#475569', width: 50, paddingTop: 1 }}>
-                        {formatTime(todayRecord.checkOutAt)}
-                      </p>
-                      <div>
-                        <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>Checked Out</p>
-                        <p style={{
-                          fontSize: 10, fontWeight: 600, color: '#64748B', margin: '4px 0 0',
-                          display: 'flex', alignItems: 'center', gap: 4
-                        }}>
-                          <Clock style={{ width: 10, height: 10 }} />
-                          Total: <span style={{ fontWeight: 800, color: '#0F172A' }}>{todayRecord.totalHours} hrs</span>
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Empty timeline */}
-                {!todayRecord.checkInAt && !todayRecord.checkOutAt && (
-                  <div style={{ textAlign: 'center', padding: '8px 0', fontSize: 12, fontWeight: 600, color: '#94A3B8' }}>
-                    No timeline events recorded today.
-                  </div>
-                )}
+        {/* ──── Selected Date Timeline ──── */}
+        <div style={{ marginBottom: 16 }}>
+          <h4 style={{
+            fontSize: 10, fontWeight: 800, color: '#64748B', margin: '0 0 10px 2px',
+            textTransform: 'uppercase', letterSpacing: '0.8px'
+          }}>
+            {isSelectedToday ? "Today's Timeline" : "Timeline"} ({selectedDateStr})
+          </h4>
+          <div style={{
+            background: '#FFFFFF', borderRadius: 18, padding: '16px',
+            border: '1px solid #F1F5F9', boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+          }}>
+            {selectedStatusObj?.type === 'Not Assigned' ? (
+              <div style={{ textAlign: 'center', padding: '12px 0', fontSize: 13, fontWeight: 600, color: '#94A3B8' }}>
+                Worker was not assigned on this date.
               </div>
-            </div>
+            ) : selectedRecord ? (
+              <div style={{ position: 'relative', paddingLeft: 24 }}>
+                {/* Timeline Line */}
+                <div style={{ position: 'absolute', top: 12, bottom: 12, left: 7, width: 2, background: '#E2E8F0', borderRadius: 2 }} />
+                
+                {/* Check In Event */}
+                <div style={{ position: 'relative', marginBottom: 24 }}>
+                   <div style={{
+                     position: 'absolute', left: -24, top: 2,
+                     width: 16, height: 16, borderRadius: '50%', background: '#ECFDF5',
+                     border: '2px solid #10B981', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1
+                   }}>
+                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }} />
+                   </div>
+                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                     <div style={{ flexShrink: 0, minWidth: 50 }}>
+                       <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                         {selectedRecord.checkInAt ? formatTime(selectedRecord.checkInAt).split(' ')[0] : '—'}
+                       </p>
+                       <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', margin: 0 }}>
+                         {selectedRecord.checkInAt ? formatTime(selectedRecord.checkInAt).split(' ')[1] : ''}
+                       </p>
+                     </div>
+                     <div>
+                       <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: '0 0 4px' }}>Checked In</p>
+                       <span style={{
+                         display: 'inline-flex', alignItems: 'center', gap: 4,
+                         fontSize: 9, fontWeight: 700, color: '#10B981',
+                         border: '1px solid #A7F3D0', borderRadius: 4, padding: '2px 6px',
+                         background: '#ECFDF5'
+                       }}>
+                         <MapPin style={{ width: 9, height: 9 }} />
+                         GPS Verified
+                       </span>
+                     </div>
+                   </div>
+                </div>
+
+                {/* Check Out Event */}
+                <div style={{ position: 'relative' }}>
+                   <div style={{
+                     position: 'absolute', left: -24, top: 2,
+                     width: 16, height: 16, borderRadius: '50%', background: selectedRecord.checkOutAt ? '#EFF6FF' : '#F1F5F9',
+                     border: `2px solid ${selectedRecord.checkOutAt ? '#3B82F6' : '#CBD5E1'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1
+                   }}>
+                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: selectedRecord.checkOutAt ? '#3B82F6' : '#CBD5E1' }} />
+                   </div>
+                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                     <div style={{ flexShrink: 0, minWidth: 50 }}>
+                       <p style={{ fontSize: 13, fontWeight: 800, color: selectedRecord.checkOutAt ? '#0F172A' : '#94A3B8', margin: 0 }}>
+                         {selectedRecord.checkOutAt ? formatTime(selectedRecord.checkOutAt).split(' ')[0] : '—'}
+                       </p>
+                       <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', margin: 0 }}>
+                         {selectedRecord.checkOutAt ? formatTime(selectedRecord.checkOutAt).split(' ')[1] : ''}
+                       </p>
+                     </div>
+                     <div>
+                       <p style={{ fontSize: 13, fontWeight: 800, color: selectedRecord.checkOutAt ? '#0F172A' : '#94A3B8', margin: '0 0 4px' }}>
+                         {selectedRecord.checkOutAt ? 'Checked Out' : 'Not Checked Out'}
+                       </p>
+                       {selectedRecord.totalHours && (
+                         <span style={{
+                           display: 'inline-flex', alignItems: 'center', gap: 4,
+                           fontSize: 9, fontWeight: 600, color: '#64748B'
+                         }}>
+                           <Clock style={{ width: 10, height: 10 }} />
+                           Total: <span style={{ fontWeight: 800 }}>{selectedRecord.totalHours} hrs</span>
+                         </span>
+                       )}
+                     </div>
+                   </div>
+                </div>
+              </div>
+            ) : (
+               <div style={{ textAlign: 'center', padding: '12px 0', fontSize: 13, fontWeight: 600, color: '#94A3B8' }}>
+                 No records found for {selectedDateStr}. <br/>Status: {selStatusText}
+               </div>
+            )}
           </div>
-        )}
+        </div>
 
         {/* ──── Attendance Records List ──── */}
         <div style={{ marginBottom: 16 }}>
@@ -470,68 +529,55 @@ export function WorkerAttendanceHistoryView({ basePath = '/vendor' }) {
           }}>
             Attendance Records
           </h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {worker.records && worker.records.length > 0 ? worker.records.map((r, i) => {
-              const d = new Date(r.shiftDate)
-              const dayStr = d.toLocaleDateString('en-GB', { weekday: 'short' })
-              const dateStr = formatDateLong(d)
+          <div style={{
+            background: '#FFFFFF', borderRadius: 14, padding: '12px',
+            border: '1px solid #F1F5F9', boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+            overflowX: 'auto'
+          }}>
+            {worker.records && worker.records.length > 0 ? (
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: 400 }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: '8px 10px', fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', borderBottom: '1px solid #F1F5F9' }}>Date</th>
+                    <th style={{ padding: '8px 10px', fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', borderBottom: '1px solid #F1F5F9' }}>Check In</th>
+                    <th style={{ padding: '8px 10px', fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', borderBottom: '1px solid #F1F5F9' }}>Check Out</th>
+                    <th style={{ padding: '8px 10px', fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', borderBottom: '1px solid #F1F5F9' }}>Hours</th>
+                    <th style={{ padding: '8px 10px', fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', borderBottom: '1px solid #F1F5F9', textAlign: 'right' }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {worker.records.map((r, i) => {
+                    const d = new Date(r.shiftDate)
+                    const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
 
-              const st = r.attendanceStatus || (r.projectStatus === 'completed' || r.projectStatus === 'working' ? 'Present' : 'Absent')
-              const rColor = st === 'Present' || st === 'Half Day' ? '#10B981' :
-                            st === 'Weekly Off' ? '#3B82F6' :
-                            st === 'Late' ? '#F59E0B' : '#EF4444'
-              const rBg = st === 'Present' || st === 'Half Day' ? '#ECFDF5' :
-                         st === 'Weekly Off' ? '#EFF6FF' :
-                         st === 'Late' ? '#FFFBEB' : '#FEF2F2'
+                    let st = r.attendanceStatus || (r.projectStatus === 'completed' || r.projectStatus === 'working' ? 'Present' : 'Absent')
+                    if (st === 'working') st = 'Working'
 
-              const Icon = st === 'Weekly Off' ? CalendarDays :
-                          st === 'Late' ? Clock :
-                          st === 'Absent' ? AlertCircle : CheckCircle2
+                    const rColor = st === 'Present' || st === 'Working' ? '#10B981' : '#EF4444'
+                    const rBg = st === 'Present' || st === 'Working' ? '#ECFDF5' : '#FEF2F2'
 
-              const timeStr = r.checkInAt && r.checkOutAt ? `${formatTime(r.checkInAt)} — ${formatTime(r.checkOutAt)}` :
-                             r.checkInAt ? `${formatTime(r.checkInAt)} — Present` : '—'
-
-              return (
-                <div key={r._id || i} style={{
-                  background: '#FFFFFF', borderRadius: 14, padding: '14px',
-                  border: '1px solid #F1F5F9',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                      <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>{dateStr}</p>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8' }}>{dayStr}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{
-                        background: rBg, color: rColor,
-                        padding: '3px 8px', borderRadius: 6,
-                        fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
-                        border: `1px solid ${rColor}20`,
-                        display: 'flex', alignItems: 'center', gap: 3
-                      }}>
-                        <Icon style={{ width: 10, height: 10 }} strokeWidth={2.5} />
-                        {st}
-                      </span>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8' }}>{timeStr}</span>
-                    </div>
-                  </div>
-                  {r.totalHours && (
-                    <div style={{
-                      background: '#F8FAFC', padding: '6px 10px', borderRadius: 10,
-                      border: '1px solid #F1F5F9'
-                    }}>
-                      <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>{r.totalHours}h</p>
-                    </div>
-                  )}
-                </div>
-              )
-            }) : (
-              <div style={{
-                background: '#FFFFFF', borderRadius: 14, padding: '32px 20px',
-                textAlign: 'center', border: '1px solid #F1F5F9'
-              }}>
+                    return (
+                      <tr key={r._id || i} style={{ borderBottom: '1px solid #F8FAFC' }}>
+                        <td style={{ padding: '10px', fontSize: 12, fontWeight: 800, color: '#0F172A' }}>{dateStr}</td>
+                        <td style={{ padding: '10px', fontSize: 11, fontWeight: 600, color: '#475569' }}>{r.checkInAt ? formatTime(r.checkInAt) : '—'}</td>
+                        <td style={{ padding: '10px', fontSize: 11, fontWeight: 600, color: '#475569' }}>{r.checkOutAt ? formatTime(r.checkOutAt) : '—'}</td>
+                        <td style={{ padding: '10px', fontSize: 11, fontWeight: 700, color: '#0F172A' }}>{r.totalHours ? `${r.totalHours}h` : '0h'}</td>
+                        <td style={{ padding: '10px', textAlign: 'right' }}>
+                          <span style={{
+                            background: rBg, color: rColor, padding: '3px 8px',
+                            borderRadius: 6, fontSize: 9, fontWeight: 800,
+                            textTransform: 'uppercase', letterSpacing: '0.4px'
+                          }}>
+                            {st}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '16px 0' }}>
                 <CalendarDays style={{ width: 24, height: 24, color: '#CBD5E1', margin: '0 auto 8px' }} />
                 <p style={{ fontSize: 12, fontWeight: 700, color: '#64748B', margin: 0 }}>No attendance records found for this month.</p>
               </div>
