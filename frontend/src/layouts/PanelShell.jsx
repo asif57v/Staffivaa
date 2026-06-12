@@ -35,7 +35,6 @@ export function PanelShell({
   const drawerInitials = adminInitials(user)
 
   const hideShellHeader =
-    pathname === '/vendor' ||
     pathname.includes('/profile') ||
     pathname.includes('/support') ||
     pathname.endsWith('/new') ||
@@ -188,8 +187,8 @@ export function PanelShell({
 
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-lg flex-col">
         {!hideShellHeader ? (
-          <header className="sticky top-0 z-30 bg-[#FFD166] px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top,0.5rem))] shadow-sm rounded-b-2xl">
-            <div className="flex items-center justify-between gap-3">
+          <header className="sticky top-0 z-30 bg-[#FFDF20] px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-3 sm:px-5">
+            <div className="flex items-center justify-between gap-2">
               <button
                 type="button"
                 onClick={() => setLocationModalOpen(true)}
@@ -220,7 +219,7 @@ export function PanelShell({
                   aria-label="Notifications"
                 >
                   <Bell className="h-5 w-5" />
-                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white ring-2 ring-[#FFD166]">
+                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white ring-2 ring-[#FFD100]">
                     3
                   </span>
                 </button>

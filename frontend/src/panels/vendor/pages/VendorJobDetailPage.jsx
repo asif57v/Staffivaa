@@ -272,7 +272,7 @@ export function VendorJobDetailPage() {
           <button onClick={() => acceptJob(id)} disabled={accepting} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm disabled:opacity-50">
             <CheckCircle2 className="h-4 w-4" /> Accept Job
           </button>
-        ) : req?.status === 'accepted' || req?.status === 'allocated' || req?.status === 'assigned' ? (
+        ) : (req?.status === 'accepted' || req?.status === 'allocated' || req?.status === 'assigned') && totalAssigned < totalRequired ? (
           <button onClick={() => navigate(`/vendor/jobs/${id}/assign`)} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
             <Users className="h-4 w-4" /> Assign Workers
           </button>

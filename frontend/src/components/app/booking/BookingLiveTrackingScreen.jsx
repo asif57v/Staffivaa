@@ -17,7 +17,8 @@ import {
   FileText,
   Map,
   Loader2,
-  User
+  User,
+  Lock
 } from 'lucide-react'
 import { io } from 'socket.io-client'
 import { useGetRequestQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation, useCreateExtraWorkMutation, useGetExtraWorkQuery, useUpdateExtraWorkStatusMutation } from '../../../store/api/workforceApi.js'
@@ -190,14 +191,23 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
 
 
 
+  // Derive stable 6-digit OTP from backend ID
+  const verificationOtp = useMemo(() => {
+    const id = request?._id || booking?._id || requestId;
+    if (!id) return '------';
+    const num = parseInt(String(id).slice(-6), 16) % 900000;
+    return String(100000 + (isNaN(num) ? 0 : num));
+  }, [request?._id, booking?._id, requestId]);
+
   // Derive timeline steps
   const steps = [
     { label: 'Booking Created', done: true, key: 'created' },
     { label: 'Labour Assigned', done: ['accepted', 'assigned', 'in_progress', 'on_site', 'completed'].includes(currentStatus) || !!assignedLabour, key: 'assigned' },
     { label: 'On The Way', done: ['accepted', 'in_progress', 'on_site', 'completed'].includes(currentStatus), key: 'in_progress' },
-    { label: 'Arrived', done: ['on_site', 'completed'].includes(currentStatus), key: 'on_site' },
-    { label: 'Work Started', done: ['on_site', 'completed'].includes(currentStatus), key: 'started' },
-    { label: 'Completed', done: ['completed'].includes(currentStatus), key: 'completed' },
+    { label: 'Waiting for OTP Verification', done: ['in_progress', 'on_site', 'completed'].includes(currentStatus), key: 'waiting_otp' },
+    { label: 'OTP Verified / Worker On Site', done: ['in_progress', 'on_site', 'completed'].includes(currentStatus), key: 'otp_verified' },
+    { label: 'Work In Progress', done: ['in_progress', 'completed'].includes(currentStatus), key: 'work_in_progress' },
+    { label: 'Work Completed', done: ['completed'].includes(currentStatus), key: 'completed' },
   ]
   const currentStepIdx = steps.findLastIndex(s => s.done)
 
@@ -348,6 +358,38 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
           </div>
         </div>
 
+        {/* Site Verification OTP Card */}
+        {isAcceptedOrBeyond && (
+          <div className="px-5 pb-4">
+            <div className="bg-white rounded-[20px] p-5 ring-1 ring-slate-200/60 shadow-[0_8px_30px_-4px_rgba(0,0,0,0.05)] relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-1.5 h-full bg-[#FFDF20]" />
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-yellow-50 text-yellow-600">
+                  <Lock className="h-6 w-6" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight">Site Verification OTP</h3>
+                  <p className="text-[10px] font-bold text-slate-500 leading-snug mt-0.5 pr-2">
+                    Share this OTP only after the worker reaches your location.
+                  </p>
+                  
+                  <div className="mt-4 flex items-center justify-between bg-slate-50 rounded-2xl p-3 border border-slate-100">
+                    <span className="text-2xl font-black tracking-[0.25em] text-slate-900 ml-2">
+                      {verificationOtp}
+                    </span>
+                    <button 
+                      onClick={() => navigator.clipboard.writeText(verificationOtp)}
+                      className="flex h-8 items-center justify-center rounded-xl bg-white px-3 text-[10px] font-bold text-slate-700 shadow-sm ring-1 ring-slate-200/50 hover:bg-slate-50 transition active:scale-95"
+                    >
+                      Copy OTP
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Status Timeline */}
         <div className="px-5 pb-4">
           <h3 className="text-xs font-extrabold text-slate-900 mb-2 uppercase tracking-wider">Live Status Tracker</h3>
@@ -449,18 +491,56 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
               </div>
             </div>
             {request.paymentStatus === 'paid' ? (
-              <div className="mt-4 flex items-center justify-center gap-2 text-sm font-bold text-emerald-600 bg-emerald-50 p-3 rounded-xl ring-1 ring-emerald-200">
-                <CheckCircle2 className="w-5 h-5" /> Payment Successful
+              <div className="mt-4 flex flex-col items-center justify-center gap-3 bg-emerald-50 p-6 rounded-2xl ring-1 ring-emerald-200 shadow-sm text-center">
+                <div className="flex items-center justify-center w-12 h-12 bg-emerald-100 rounded-full mb-1">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                </div>
+                <div>
+                  <h4 className="text-base font-black text-emerald-800">🎉 Payment Successful</h4>
+                  <p className="text-xs font-semibold text-emerald-600 mt-1.5 leading-snug">
+                    Thank you for your payment.<br/>Your booking has been completed successfully.
+                  </p>
+                </div>
+                <button 
+                  onClick={() => navigate('/app/bookings')}
+                  className="mt-2 w-full flex items-center justify-center gap-2 text-sm font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 transition py-3 rounded-xl active:scale-[0.98]"
+                >
+                  View Booking History
+                </button>
+              </div>
+            ) : currentStatus === 'completed' ? (
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <div className="mb-3 flex items-start gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200/60">
+                   <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
+                     <CheckCircle2 className="w-4 h-4" />
+                   </div>
+                   <div>
+                     <h4 className="text-sm font-black text-slate-900 leading-tight mb-0.5">✅ Work Completed</h4>
+                     <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">Your worker has marked this job as completed. Please review and complete payment.</p>
+                   </div>
+                </div>
+                <button 
+                  onClick={handlePayment}
+                  disabled={isCreatingOrder || isVerifying}
+                  className="w-full flex items-center justify-center gap-2 text-sm font-bold text-slate-900 bg-[#FFDF20] hover:bg-[#F0B400] transition p-3.5 rounded-xl shadow-[0_4px_15px_-4px_rgba(255,223,32,0.4)] disabled:opacity-70 active:scale-[0.98]"
+                >
+                  {isCreatingOrder || isVerifying ? <Loader2 className="w-5 h-5 animate-spin" /> : <Lock className="w-5 h-5" />} 
+                  {isVerifying ? 'Verifying...' : `Pay Securely ₹${paymentSummary.totalAmount.toFixed(2)}`}
+                </button>
               </div>
             ) : isAcceptedOrBeyond ? (
-              <button 
-                onClick={handlePayment}
-                disabled={isCreatingOrder || isVerifying}
-                className="w-full mt-4 flex items-center justify-center gap-2 text-sm font-bold text-slate-900 bg-brand hover:bg-brand-bright transition p-3 rounded-xl shadow-sm disabled:opacity-70"
-              >
-                {isCreatingOrder || isVerifying ? <Loader2 className="w-5 h-5 animate-spin" /> : <CreditCard className="w-5 h-5" />} 
-                {isVerifying ? 'Verifying...' : `Pay Now ₹${paymentSummary.totalAmount.toFixed(2)}`}
-              </button>
+              <div className="mt-4 flex flex-col items-center justify-center gap-2 bg-yellow-50 p-4 rounded-xl border border-yellow-200 shadow-sm">
+                <div className="flex items-center gap-1.5 text-sm font-extrabold text-yellow-700 uppercase tracking-widest">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
+                  </span>
+                  Work in Progress
+                </div>
+                <p className="text-center text-[11px] font-semibold text-yellow-600/90 leading-relaxed mt-1">
+                  Your assigned worker is currently completing the service. Payment will become available once the work is marked as completed.
+                </p>
+              </div>
             ) : (
               <div className="mt-4 flex items-center justify-center gap-2 text-xs font-bold text-slate-400 bg-slate-50 p-3 rounded-xl">
                 <CreditCard className="w-4 h-4" /> Secure Cashless Payment Available

@@ -117,8 +117,24 @@ export const checkOut = asyncHandler(async (req, res) => {
   assignment.status = 'completed'
   await assignment.save()
 
-  // Note: We do not mark the overall WorkforceRequest as completed here,
+  // Note: We do not mark the overall WorkforceRequest as completed here for corporate requests,
   // as other workers might still be assigned.
+  const request = await WorkforceRequest.findById(assignment.requestId)
+  if (request && request.sourceType === 'individual') {
+    request.status = 'completed'
+    await request.save()
+    
+    import('../utils/socket.js').then(({ getIO }) => {
+      try {
+        const io = getIO()
+        io.to(`request_${request._id.toString()}`).emit('request_status_update', {
+          requestStatus: request.status,
+        })
+      } catch (err) {
+        console.error('Socket emit error:', err)
+      }
+    })
+  }
 
   sendSuccess(res, { data: { record } })
 })

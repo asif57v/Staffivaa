@@ -131,6 +131,8 @@ export function assignmentToJobCard(assignment) {
     mapQuery: encodeURIComponent(loc || 'India'),
     locationLat: typeof req === 'object' ? req?.locationLat : undefined,
     locationLng: typeof req === 'object' ? req?.locationLng : undefined,
+    paymentStatus: typeof req === 'object' ? req?.paymentStatus : 'pending',
+    requestStatus: typeof req === 'object' ? req?.status : assignment.status,
   }
 }
 
@@ -140,9 +142,19 @@ export function bucketsFromAssignments(assignments = []) {
   const history = []
   for (const a of assignments) {
     const card = assignmentToJobCard(a)
-    if (a.status === 'offered') offers.push(card)
-    else if (a.status === 'accepted' || a.status === 'on_site') active.push(card)
-    else if (a.status === 'completed') history.push(card)
+    if (a.status === 'offered') {
+      offers.push(card)
+    } else if (a.status === 'accepted' || a.status === 'on_site' || a.status === 'in_progress') {
+      active.push(card)
+    } else if (a.status === 'completed') {
+      if (card.paymentStatus !== 'paid' && card.sourceType === 'individual') {
+        active.push(card)
+      } else {
+        history.push(card)
+      }
+    } else {
+      history.push(card)
+    }
   }
   return { offers, active, history }
 }

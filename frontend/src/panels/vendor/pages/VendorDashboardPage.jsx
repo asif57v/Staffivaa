@@ -78,8 +78,10 @@ export function VendorDashboardPage() {
 
   return (
     <div className="space-y-6 bg-[#F5F6F8] min-h-screen pb-6 -mx-4 -mt-4">
+
+
       {/* Hero Section */}
-      <section className="relative overflow-hidden rounded-b-[2rem] bg-slate-900 pb-10 pt-[max(1.25rem,env(safe-area-inset-top,1rem))] text-white shadow-lg">
+      <section className="relative overflow-hidden rounded-3xl mx-4 bg-slate-900 pb-10 pt-8 text-white shadow-lg -mt-2">
         {/* Background Image with Dark Overlay */}
         <div
           className="absolute inset-0 bg-cover bg-center"
@@ -88,50 +90,7 @@ export function VendorDashboardPage() {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-900/80 to-slate-900/60" aria-hidden />
 
-        {/* Custom Header in Hero */}
-        <div className="relative z-10 px-5">
-          <div className="flex items-start justify-between gap-3 mb-6">
-            {/* Location Dropdown */}
-            <button
-              type="button"
-              onClick={openLocationModal}
-              className="flex min-w-0 flex-1 flex-col items-start text-left outline-none transition active:opacity-70"
-            >
-              <span className="text-[9px] font-bold uppercase tracking-widest text-white/70 mb-0.5">Location</span>
-              <div className="flex w-full items-center gap-1.5">
-                <MapPin className="h-4 w-4 shrink-0 text-white" fill="currentColor" />
-                <span className="truncate text-sm font-extrabold tracking-tight text-white">
-                  {locationLabel}
-                </span>
-                <ChevronDown className="h-4 w-4 shrink-0 text-white/80" />
-              </div>
-            </button>
-
-            {/* Menu & Bell */}
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={openDrawer}
-                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-sm text-white shadow-sm transition hover:bg-white/20 active:scale-95"
-                aria-label="Open menu"
-              >
-                <Menu className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-sm text-white shadow-sm transition hover:bg-white/20 active:scale-95"
-                aria-label="Notifications"
-              >
-                <Bell className="h-5 w-5" />
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white ring-2 ring-slate-800">
-                  3
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Hero Content */}
-          <div className="mt-8 flex justify-between items-end relative">
+        <div className="relative z-10 px-5 flex justify-between items-end">
             <div className="max-w-[70%]">
               <p className="text-[10px] font-extrabold uppercase tracking-widest text-white/70">Supply partner</p>
               <h2 className="mt-1 text-2xl font-extrabold leading-tight text-white drop-shadow-sm">
@@ -155,7 +114,6 @@ export function VendorDashboardPage() {
               </div>
             </div>
           </div>
-        </div>
       </section>
 
       {/* Stats Grid */}

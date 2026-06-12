@@ -484,7 +484,7 @@ export function LabourHomeScreen({ user }) {
           className="relative overflow-hidden rounded-b-[2rem] border-b border-slate-200 bg-white text-slate-900 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.1)]"
         >
           <motion.div className="relative pb-2 sm:pb-3">
-            <div className="flex items-center justify-between gap-2 bg-[#FFC000] px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-3 sm:px-5">
+            <div className="flex items-center justify-between gap-2 bg-[#FFDF20] px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-3 sm:px-5">
               {/* Location (styled like the image) */}
               <button
                 type="button"

@@ -82,13 +82,13 @@ export function Navbar() {
             Register as Labour
           </ButtonLink>
           <ButtonLink href="/auth" variant="primary" className="!py-2.5 !text-xs !bg-[#FFC107] !text-slate-900 !font-bold">
-            Hire
+            Start
           </ButtonLink>
         </div>
 
         <div className="flex items-center gap-2 lg:hidden">
           <ButtonLink href="/auth" variant="primary" className="!py-1.5 !px-4 !text-sm !bg-[#FFC107] !text-slate-900 !font-bold !rounded-xl">
-            Hire
+            Start
           </ButtonLink>
           <button
             type="button"
@@ -136,7 +136,7 @@ export function Navbar() {
                   Sign in / Register
                 </Link>
                 <ButtonLink href="/auth" variant="primary" onClick={() => setOpen(false)}>
-                  Hire Labour
+                  Our service
                 </ButtonLink>
                 <ButtonLink href="/auth" variant="secondary" onClick={() => setOpen(false)}>
                   Register as Labour

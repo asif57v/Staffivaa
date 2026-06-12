@@ -29,7 +29,7 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
   }
   
   // Verify ownership
-  if (String(request.clientId) !== String(req.user._id) && req.user.role !== USER_ROLES.ADMIN) {
+  if (request.clientId && String(request.clientId._id || request.clientId) !== String(req.user._id) && req.user.role !== USER_ROLES.ADMIN) {
     return sendError(res, { message: 'Forbidden', statusCode: HTTP_STATUS.FORBIDDEN })
   }
 

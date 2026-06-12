@@ -1,6 +1,10 @@
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Calendar, Filter, MapPin, Search, ChevronDown, ChevronRight, UserCircle, Clock, CheckCircle2, AlertCircle, CalendarDays, Building2 } from 'lucide-react'
+import {
+  Calendar, Filter, MapPin, Search, ChevronRight, UserCircle,
+  Clock, CheckCircle2, AlertCircle, CalendarDays, Building2,
+  Users, TrendingUp, ChevronDown
+} from 'lucide-react'
 import { useGetAttendanceMonitorQuery } from '../../../store/api/workforceApi.js'
 
 function formatDate(d) {
@@ -22,218 +26,385 @@ export function AttendanceDashboardView({ basePath = '/vendor' }) {
   }, [date])
 
   const { data: monitorData, isLoading } = useGetAttendanceMonitorQuery(queryParams)
-  
+
   const projects = monitorData?.projects ?? []
 
+  // Filter projects by search
+  const filteredProjects = useMemo(() => {
+    if (!search.trim()) return projects
+    const q = search.toLowerCase()
+    return projects.filter(p =>
+      p.projectName?.toLowerCase().includes(q) ||
+      p.corporateName?.toLowerCase().includes(q) ||
+      p.projectLocation?.toLowerCase().includes(q)
+    )
+  }, [projects, search])
+
+  // Aggregate stats across all projects
+  const totals = useMemo(() => {
+    let assigned = 0, present = 0, absent = 0, late = 0, weeklyOff = 0
+    projects.forEach(p => {
+      assigned += p.assignedWorkers || 0
+      present += p.present || 0
+      absent += p.absent || 0
+      late += p.late || 0
+      weeklyOff += p.weeklyOff || 0
+    })
+    return { assigned, present, absent, late, weeklyOff }
+  }, [projects])
+
+  const attendancePct = totals.assigned > 0 ? Math.round((totals.present / totals.assigned) * 100) : 0
+
   return (
-    <div className="space-y-6 pb-20">
-      {/* Top Header & Date Filter Row */}
-      <div className="flex items-center gap-3">
-        <div className="flex-1 relative">
+    <div style={{ minHeight: '100vh', background: '#FAFAFA', paddingBottom: 90 }}>
+
+      {/* ──── Sticky Header ──── */}
+      <header style={{
+        position: 'sticky', top: 0, zIndex: 30,
+        background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(16px)',
+        borderBottom: '1px solid #F1F1F1',
+        padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+      }}>
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.3px' }}>Attendance</h1>
+          <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', margin: 0, marginTop: 2 }}>
+            {projects.length} Project{projects.length !== 1 ? 's' : ''} • {formatDate(date)}
+          </p>
+        </div>
+        <div style={{ position: 'relative' }}>
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="w-full rounded-[16px] border border-slate-200 bg-white px-10 py-3.5 text-[14px] font-black text-slate-800 shadow-sm outline-none focus:border-brand"
+            style={{
+              background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: 14,
+              padding: '10px 36px 10px 36px', fontSize: 13, fontWeight: 700,
+              color: '#334155', outline: 'none', width: 170, cursor: 'pointer'
+            }}
           />
-          <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-          <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
+          <Calendar style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 15, height: 15, color: '#94A3B8' }} />
         </div>
-        <button type="button" className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-[16px] border border-slate-200 bg-white shadow-sm transition active:scale-95">
-          <Filter className="h-5 w-5 text-slate-600" />
-        </button>
-      </div>
+      </header>
 
-      {isLoading && <div className="text-center text-sm font-semibold text-slate-500 py-10">Loading attendance data...</div>}
-      
-      {!isLoading && projects.length === 0 && (
-        <div className="rounded-[20px] bg-white p-8 text-center shadow-sm border border-slate-100">
-           <AlertCircle className="h-8 w-8 text-slate-300 mx-auto mb-3" />
-           <p className="text-[15px] font-bold text-slate-900">No Projects Found</p>
-           <p className="text-[13px] text-slate-500 mt-1">There are no active assignments for this date.</p>
-        </div>
-      )}
+      <div style={{ padding: '16px 16px 0' }}>
 
-      {/* Render each project */}
-      {projects.map((p) => {
-         const assignedCount = p.assignedWorkers || 0
-         const presentCount = p.present || 0
-         const absentCount = p.absent || 0
-         const lateCount = p.late || 0
-         const weeklyOffCount = p.weeklyOff || 0
-
-         // Filter workers based on search
-         let workersList = p.workers || []
-         if (search) {
-           const query = search.toLowerCase()
-           workersList = workersList.filter(w => w.workerName.toLowerCase().includes(query) || w.role.toLowerCase().includes(query))
-         }
-
-         return (
-           <div key={p.projectId} className="space-y-6">
-              {/* Project Card */}
-              <div className="overflow-hidden rounded-[20px] bg-white shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
-                <div className="relative h-32 w-full bg-slate-200 border-b border-slate-100/50">
-                  <img src="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=800&q=80" alt="Project Cover" className="h-full w-full object-cover" />
-                  <div className="absolute top-3 right-3 rounded-md bg-white/95 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-600 shadow-sm border border-emerald-100">
-                    {p.projectStatus === 'completed' ? 'Completed' : 'Active'}
-                  </div>
+        {/* ──── Aggregated Stats Banner ──── */}
+        {!isLoading && projects.length > 0 && (
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 16
+          }}>
+            {[
+              { label: 'Total', value: totals.assigned, color: '#3B82F6', bg: '#EFF6FF', icon: Users },
+              { label: 'Present', value: totals.present, color: '#10B981', bg: '#ECFDF5', icon: CheckCircle2 },
+              { label: 'Absent', value: totals.absent, color: '#EF4444', bg: '#FEF2F2', icon: AlertCircle },
+              { label: 'Late', value: totals.late, color: '#F59E0B', bg: '#FFFBEB', icon: Clock },
+              { label: 'Off', value: totals.weeklyOff, color: '#8B5CF6', bg: '#F5F3FF', icon: CalendarDays },
+            ].map((s) => (
+              <div key={s.label} style={{
+                background: '#FFFFFF', borderRadius: 14, padding: '10px 8px',
+                border: '1px solid #F1F5F9', textAlign: 'center',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+              }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 8, background: s.bg,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  margin: '0 auto 6px'
+                }}>
+                  <s.icon style={{ width: 14, height: 14, color: s.color }} strokeWidth={2} />
                 </div>
-                <div className="p-4">
-                  <h3 className="text-[16px] font-extrabold text-slate-900 truncate pr-2">{p.projectName}</h3>
-                  <div className="mt-1 flex items-center gap-1.5 text-slate-500">
-                     <Building2 className="h-3.5 w-3.5 shrink-0" />
-                     <p className="text-[13px] font-bold truncate">{p.corporateName || 'Corporate Client'}</p>
-                  </div>
-                  
-                  <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-3">
-                     <p className="flex items-center gap-2 text-[12px] font-semibold text-slate-600">
-                       <MapPin className="h-3.5 w-3.5 text-slate-400" /> <span className="truncate">{p.projectLocation || 'Location TBD'}</span>
-                     </p>
-                     <p className="flex items-center gap-2 text-[12px] font-semibold text-slate-600">
-                       <CalendarDays className="h-3.5 w-3.5 text-slate-400" /> <span>{formatDate(date)}</span>
-                     </p>
-                  </div>
-                </div>
+                <p style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', margin: 0, lineHeight: 1 }}>{s.value}</p>
+                <p style={{ fontSize: 9, fontWeight: 600, color: '#94A3B8', margin: 0, marginTop: 3, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{s.label}</p>
               </div>
+            ))}
+          </div>
+        )}
 
-              {/* Summary Cards */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col justify-center rounded-[18px] bg-blue-50/70 p-4 border border-blue-100/50">
-                   <div className="flex items-center justify-between mb-2">
-                     <UserCircle className="h-5 w-5 text-blue-500" strokeWidth={2} />
-                     <p className="text-[10px] font-black uppercase tracking-wider text-blue-800">Assigned</p>
-                   </div>
-                   <p className="text-2xl font-black text-slate-900">{assignedCount}</p>
-                   <p className="text-[10px] font-semibold text-slate-500 mt-0.5">Workers</p>
-                </div>
-                <div className="flex flex-col justify-center rounded-[18px] bg-emerald-50/70 p-4 border border-emerald-100/50">
-                   <div className="flex items-center justify-between mb-2">
-                     <CheckCircle2 className="h-5 w-5 text-emerald-500" strokeWidth={2} />
-                     <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">Present</p>
-                   </div>
-                   <p className="text-2xl font-black text-slate-900">{presentCount}</p>
-                   <p className="text-[10px] font-semibold text-slate-500 mt-0.5">{assignedCount ? Math.round((presentCount/assignedCount)*100) : 0}%</p>
-                </div>
-                <div className="flex flex-col justify-center rounded-[18px] bg-rose-50/70 p-4 border border-rose-100/50">
-                   <div className="flex items-center justify-between mb-2">
-                     <AlertCircle className="h-5 w-5 text-rose-500" strokeWidth={2} />
-                     <p className="text-[10px] font-black uppercase tracking-wider text-rose-800">Absent</p>
-                   </div>
-                   <p className="text-2xl font-black text-slate-900">{absentCount}</p>
-                   <p className="text-[10px] font-semibold text-slate-500 mt-0.5">{assignedCount ? Math.round((absentCount/assignedCount)*100) : 0}%</p>
-                </div>
-                <div className="flex flex-col justify-center rounded-[18px] bg-amber-50/70 p-4 border border-amber-100/50">
-                   <div className="flex items-center justify-between mb-2">
-                     <Clock className="h-5 w-5 text-amber-500" strokeWidth={2} />
-                     <p className="text-[10px] font-black uppercase tracking-wider text-amber-800">Late</p>
-                   </div>
-                   <p className="text-2xl font-black text-slate-900">{lateCount}</p>
-                   <p className="text-[10px] font-semibold text-slate-500 mt-0.5">{assignedCount ? Math.round((lateCount/assignedCount)*100) : 0}%</p>
-                </div>
-                <div className="col-span-2 flex items-center justify-between rounded-[18px] bg-violet-50/70 p-4 border border-violet-100/50">
-                   <div>
-                     <p className="text-[10px] font-black uppercase tracking-wider text-violet-800 mb-1 flex items-center gap-1.5"><CalendarDays className="h-3 w-3" /> Weekly Off</p>
-                     <p className="text-[11px] font-semibold text-slate-500">Workers off today</p>
-                   </div>
-                   <p className="text-2xl font-black text-slate-900">{weeklyOffCount}</p>
-                </div>
+        {/* ──── Attendance Rate Bar ──── */}
+        {!isLoading && projects.length > 0 && (
+          <div style={{
+            background: '#FFFFFF', borderRadius: 16, padding: '14px 16px',
+            border: '1px solid #F1F5F9', marginBottom: 16,
+            display: 'flex', alignItems: 'center', gap: 12
+          }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: '#64748B', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  <TrendingUp style={{ width: 12, height: 12, display: 'inline', marginRight: 4, verticalAlign: '-2px' }} />
+                  Attendance Rate
+                </p>
+                <p style={{ fontSize: 16, fontWeight: 800, color: attendancePct >= 75 ? '#10B981' : attendancePct >= 50 ? '#F59E0B' : '#EF4444', margin: 0 }}>
+                  {attendancePct}%
+                </p>
               </div>
+              <div style={{ width: '100%', height: 6, background: '#F1F5F9', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{
+                  width: `${attendancePct}%`, height: '100%', borderRadius: 3,
+                  background: attendancePct >= 75 ? 'linear-gradient(90deg, #10B981, #34D399)' :
+                             attendancePct >= 50 ? 'linear-gradient(90deg, #F59E0B, #FBBF24)' :
+                             'linear-gradient(90deg, #EF4444, #F87171)',
+                  transition: 'width 0.6s ease'
+                }} />
+              </div>
+            </div>
+          </div>
+        )}
 
-              {/* Workers List */}
-              <div className="rounded-[20px] bg-white shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100 p-4">
-                 <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-[13px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                      Today's Attendance <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse ml-1" /> <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded uppercase tracking-widest border border-emerald-100">Live</span>
-                    </h4>
-                 </div>
+        {/* ──── Search Bar ──── */}
+        {projects.length > 1 && (
+          <div style={{ position: 'relative', marginBottom: 16 }}>
+            <input
+              type="text"
+              placeholder="Search projects..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{
+                width: '100%', padding: '12px 16px 12px 42px',
+                background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: 14,
+                fontSize: 13, fontWeight: 600, color: '#0F172A', outline: 'none',
+                boxSizing: 'border-box', transition: 'border-color 0.2s'
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#F59E0B'}
+              onBlur={(e) => e.target.style.borderColor = '#E2E8F0'}
+            />
+            <Search style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', width: 16, height: 16, color: '#94A3B8' }} />
+          </div>
+        )}
 
-                 {workersList.length > 5 && (
-                   <div className="relative mb-5">
-                     <input
-                       type="text"
-                       className="block w-full rounded-[14px] border border-slate-100 bg-slate-50 py-3 pl-10 pr-4 text-[13px] font-medium text-slate-900 outline-none focus:border-brand focus:bg-white transition"
-                       placeholder="Search worker..."
-                       value={search}
-                       onChange={(e) => setSearch(e.target.value)}
-                     />
-                     <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                   </div>
-                 )}
+        {/* ──── Loading State ──── */}
+        {isLoading && (
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <div style={{
+              width: 40, height: 40, border: '3px solid #F1F5F9', borderTopColor: '#F59E0B',
+              borderRadius: '50%', margin: '0 auto 16px',
+              animation: 'spin 0.8s linear infinite'
+            }} />
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#64748B', margin: 0 }}>Loading attendance data...</p>
+            <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+          </div>
+        )}
 
-                 <ul className="space-y-3">
-                   {workersList.map((w) => {
-                      const status = w.status
-                      let statusTone = status === 'Present' || status === 'working' || status === 'completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-                                       status === 'Absent' ? 'bg-rose-50 text-rose-700 border-rose-100' :
-                                       status === 'Late' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                                       'bg-violet-50 text-violet-700 border-violet-100'
-                      
-                      let StatusIcon = status === 'Present' || status === 'working' || status === 'completed' ? CheckCircle2 :
-                                       status === 'Absent' ? AlertCircle :
-                                       status === 'Late' ? Clock : CalendarDays
+        {/* ──── Empty State ──── */}
+        {!isLoading && projects.length === 0 && (
+          <div style={{
+            background: '#FFFFFF', borderRadius: 20, padding: '48px 24px',
+            textAlign: 'center', border: '1px solid #F1F5F9',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+          }}>
+            <div style={{
+              width: 64, height: 64, borderRadius: '50%', background: '#FEF3C7',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 16px'
+            }}>
+              <CalendarDays style={{ width: 28, height: 28, color: '#F59E0B' }} />
+            </div>
+            <p style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', margin: 0 }}>No Projects Found</p>
+            <p style={{ fontSize: 13, fontWeight: 500, color: '#94A3B8', margin: '8px 0 0' }}>
+              There are no active assignments for this date. Try selecting a different date.
+            </p>
+          </div>
+        )}
 
-                      const r = w.records && w.records[0] ? w.records[0] : null
-                      const hasCheckIn = r?.checkInAt != null
-                      
-                      return (
-                        <li key={w.workerId}>
-                          <Link to={`${basePath}/attendance/${p.projectId}/worker/${w.workerId}`} className="block transition active:scale-[0.98]">
-                            <div className="flex items-center p-2 rounded-[16px] border border-slate-100/50 bg-slate-50/50 hover:bg-slate-50 transition">
-                              {/* Avatar */}
-                              <div className="relative h-[50px] w-[50px] shrink-0 rounded-[12px] bg-slate-200 shadow-sm overflow-hidden mr-3">
-                                <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(w.workerName)}&background=random`} alt={w.workerName} className="h-full w-full object-cover" />
+        {/* ──── Project Cards ──── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {filteredProjects.map((p) => {
+            const assignedCount = p.assignedWorkers || 0
+            const presentCount = p.present || 0
+            const absentCount = p.absent || 0
+            const lateCount = p.late || 0
+            const weeklyOffCount = p.weeklyOff || 0
+            const pct = assignedCount > 0 ? Math.round((presentCount / assignedCount) * 100) : 0
+
+            const workers = p.workers || []
+            const previewWorkers = workers.slice(0, 3)
+
+            return (
+              <div key={p.projectId} style={{
+                background: '#FFFFFF', borderRadius: 20, overflow: 'hidden',
+                border: '1px solid #F1F5F9',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.02)'
+              }}>
+                {/* Project Banner */}
+                <div style={{ position: 'relative', height: 120, background: '#E2E8F0' }}>
+                  <img
+                    src="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=800&q=80"
+                    alt="Project"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  <div style={{
+                    position: 'absolute', inset: 0,
+                    background: 'linear-gradient(180deg, rgba(15,23,42,0.1) 0%, rgba(15,23,42,0.65) 100%)'
+                  }} />
+                  {/* Status Badge */}
+                  <div style={{
+                    position: 'absolute', top: 10, right: 10,
+                    background: p.projectStatus === 'completed' ? 'rgba(16,185,129,0.9)' : 'rgba(255,255,255,0.95)',
+                    color: p.projectStatus === 'completed' ? '#FFFFFF' : '#10B981',
+                    padding: '4px 10px', borderRadius: 8,
+                    fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.6px',
+                    backdropFilter: 'blur(8px)'
+                  }}>
+                    {p.projectStatus === 'completed' ? 'Completed' : '● Active'}
+                  </div>
+                  {/* Project Name Overlay */}
+                  <div style={{ position: 'absolute', bottom: 12, left: 14, right: 14 }}>
+                    <h3 style={{
+                      fontSize: 17, fontWeight: 800, color: '#FFFFFF', margin: 0,
+                      textShadow: '0 1px 3px rgba(0,0,0,0.3)', lineHeight: 1.2,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                    }}>{p.projectName}</h3>
+                  </div>
+                </div>
+
+                {/* Project Info */}
+                <div style={{ padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+                    <p style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: '#64748B', margin: 0 }}>
+                      <Building2 style={{ width: 13, height: 13, color: '#94A3B8' }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{p.corporateName || 'Corporate Client'}</span>
+                    </p>
+                    <p style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: '#64748B', margin: 0 }}>
+                      <MapPin style={{ width: 13, height: 13, color: '#94A3B8' }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{p.projectLocation || 'Location TBD'}</span>
+                    </p>
+                  </div>
+
+                  {/* Attendance Stats Chips */}
+                  <div style={{
+                    display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10,
+                    padding: '10px 0', borderTop: '1px solid #F8FAFC', borderBottom: '1px solid #F8FAFC'
+                  }}>
+                    {[
+                      { label: 'Assigned', val: assignedCount, color: '#3B82F6', bg: '#EFF6FF' },
+                      { label: 'Present', val: presentCount, color: '#10B981', bg: '#ECFDF5' },
+                      { label: 'Absent', val: absentCount, color: '#EF4444', bg: '#FEF2F2' },
+                      { label: 'Late', val: lateCount, color: '#F59E0B', bg: '#FFFBEB' },
+                      { label: 'Off', val: weeklyOffCount, color: '#8B5CF6', bg: '#F5F3FF' },
+                    ].map(s => (
+                      <div key={s.label} style={{
+                        background: s.bg, borderRadius: 8, padding: '4px 8px',
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        border: `1px solid ${s.color}18`
+                      }}>
+                        <div style={{ width: 5, height: 5, borderRadius: '50%', background: s.color }} />
+                        <span style={{ fontSize: 10, fontWeight: 700, color: s.color }}>{s.val}</span>
+                        <span style={{ fontSize: 9, fontWeight: 600, color: '#94A3B8' }}>{s.label}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Attendance Progress */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    <div style={{ flex: 1, height: 5, background: '#F1F5F9', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${pct}%`, height: '100%', borderRadius: 3,
+                        background: pct >= 75 ? '#10B981' : pct >= 50 ? '#F59E0B' : '#EF4444',
+                        transition: 'width 0.6s ease'
+                      }} />
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: pct >= 75 ? '#10B981' : pct >= 50 ? '#F59E0B' : '#EF4444' }}>
+                      {pct}%
+                    </span>
+                  </div>
+
+                  {/* Worker Previews */}
+                  {previewWorkers.length > 0 && (
+                    <div style={{ marginBottom: 10 }}>
+                      <p style={{
+                        fontSize: 9, fontWeight: 700, color: '#94A3B8', margin: '0 0 8px',
+                        textTransform: 'uppercase', letterSpacing: '0.6px'
+                      }}>Today's Workers</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {previewWorkers.map((w) => {
+                          const st = w.status
+                          const isPresent = st === 'Present' || st === 'working' || st === 'completed'
+                          const isAbsent = st === 'Absent'
+                          const isLate = st === 'Late'
+                          const stColor = isPresent ? '#10B981' : isAbsent ? '#EF4444' : isLate ? '#F59E0B' : '#8B5CF6'
+                          const stBg = isPresent ? '#ECFDF5' : isAbsent ? '#FEF2F2' : isLate ? '#FFFBEB' : '#F5F3FF'
+                          const stText = isPresent ? 'Present' : isAbsent ? 'Absent' : isLate ? 'Late' : st || 'Off'
+                          const r = w.records && w.records[0] ? w.records[0] : null
+
+                          return (
+                            <div key={w.workerId} style={{
+                              display: 'flex', alignItems: 'center', gap: 10,
+                              padding: '8px 10px', borderRadius: 12,
+                              background: '#FAFBFC', border: '1px solid #F1F5F9'
+                            }}>
+                              <img
+                                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(w.workerName)}&background=random&size=36`}
+                                alt={w.workerName}
+                                style={{ width: 36, height: 36, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }}
+                              />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ fontSize: 12, fontWeight: 700, color: '#0F172A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {w.workerName}
+                                </p>
+                                <p style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', margin: 0 }}>{w.role}</p>
                               </div>
-                              
-                              <div className="flex-1 min-w-0 pr-1 py-0.5">
-                                <div className="flex justify-between items-start mb-0.5">
-                                  <p className="text-[14px] font-black text-slate-900 truncate pr-2">{w.workerName}</p>
-                                  <span className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase border ${statusTone}`}>
-                                    <StatusIcon className="h-2.5 w-2.5" strokeWidth={3} /> {status === 'working' || status === 'completed' ? 'Present' : status}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                                {r?.checkInAt && (
+                                  <span style={{ fontSize: 10, fontWeight: 600, color: '#64748B' }}>
+                                    {formatTime(r.checkInAt)}
                                   </span>
-                                </div>
-                                <p className="text-[11px] font-bold text-slate-500 mb-2 truncate">{w.role}</p>
-                                
-                                <div className="flex items-end justify-between text-[10px] font-semibold text-slate-500">
-                                   <div className="space-y-1">
-                                     <p className="flex items-center gap-1">
-                                       <MapPin className={`h-3 w-3 ${hasCheckIn ? 'text-emerald-500' : 'text-slate-300'}`} />
-                                       <span className={hasCheckIn ? "text-emerald-600" : "text-slate-400"}>
-                                         {hasCheckIn ? 'GPS Verified' : 'Not Verified'}
-                                       </span>
-                                     </p>
-                                   </div>
-                                   
-                                   <div className="text-right space-y-1 bg-white px-2 py-1.5 rounded-lg border border-slate-100 shadow-sm">
-                                      <p className="flex justify-between gap-3 items-center">
-                                        <span className="text-[9px] text-slate-400 font-bold uppercase">In</span>
-                                        <span className="font-bold text-slate-800">{r?.checkInAt ? formatTime(r.checkInAt) : '—'}</span>
-                                      </p>
-                                      <p className="flex justify-between gap-3 items-center">
-                                        <span className="text-[9px] text-slate-400 font-bold uppercase">Out</span>
-                                        <span className="font-bold text-slate-800">{r?.checkOutAt ? formatTime(r.checkOutAt) : '—'}</span>
-                                      </p>
-                                   </div>
-                                </div>
+                                )}
+                                <span style={{
+                                  background: stBg, color: stColor, padding: '2px 7px',
+                                  borderRadius: 6, fontSize: 9, fontWeight: 700,
+                                  textTransform: 'uppercase', letterSpacing: '0.3px',
+                                  border: `1px solid ${stColor}20`
+                                }}>
+                                  {stText}
+                                </span>
                               </div>
-                              
-                              <ChevronRight className="h-4 w-4 text-slate-300 ml-2 shrink-0" />
                             </div>
-                          </Link>
-                        </li>
-                      )
-                   })}
-                   {workersList.length === 0 && (
-                     <div className="py-6 text-center">
-                       <UserCircle className="h-8 w-8 text-slate-200 mx-auto mb-2" />
-                       <p className="text-[13px] font-bold text-slate-500">No workers found.</p>
-                     </div>
-                   )}
-                 </ul>
+                          )
+                        })}
+                      </div>
+                      {workers.length > 3 && (
+                        <p style={{
+                          fontSize: 10, fontWeight: 600, color: '#94A3B8', margin: '6px 0 0',
+                          textAlign: 'center'
+                        }}>
+                          +{workers.length - 3} more worker{workers.length - 3 !== 1 ? 's' : ''}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* View All Workers Link */}
+                  <Link
+                    to={`${basePath}/attendance/${p.projectId}`}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '11px 16px', borderRadius: 14,
+                      background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)',
+                      border: '1px solid #FCD34D',
+                      fontSize: 12, fontWeight: 700, color: '#92400E',
+                      textDecoration: 'none', transition: 'all 0.2s'
+                    }}
+                  >
+                    <Users style={{ width: 14, height: 14 }} strokeWidth={2.5} />
+                    View All Workers
+                    <ChevronRight style={{ width: 14, height: 14, marginLeft: 'auto' }} />
+                  </Link>
+                </div>
               </div>
-           </div>
-         )
-      })}
+            )
+          })}
+        </div>
+
+        {/* No results from search */}
+        {!isLoading && projects.length > 0 && filteredProjects.length === 0 && (
+          <div style={{
+            background: '#FFFFFF', borderRadius: 16, padding: '32px 20px',
+            textAlign: 'center', border: '1px solid #F1F5F9'
+          }}>
+            <Search style={{ width: 24, height: 24, color: '#CBD5E1', margin: '0 auto 8px' }} />
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#64748B', margin: 0 }}>No projects match "{search}"</p>
+          </div>
+        )}
+
+      </div>
     </div>
   )
 }

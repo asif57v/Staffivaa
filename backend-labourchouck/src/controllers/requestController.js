@@ -135,7 +135,7 @@ export const getRequest = asyncHandler(async (req, res) => {
     .lean()
   if (!request) return sendError(res, { message: 'Not found', statusCode: HTTP_STATUS.NOT_FOUND })
 
-  const isOwner = String(request.clientId) === String(req.user._id)
+  const isOwner = request.clientId && String(request.clientId._id || request.clientId) === String(req.user._id)
   const isAdmin = req.user.role === USER_ROLES.ADMIN
   if (!isOwner && !isAdmin) {
     return sendError(res, { message: 'Forbidden', statusCode: HTTP_STATUS.FORBIDDEN })

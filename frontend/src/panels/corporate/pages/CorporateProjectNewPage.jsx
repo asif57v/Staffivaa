@@ -20,6 +20,7 @@ function Field({ label, children }) {
 
 export function CorporateProjectNewPage() {
   const navigate = useNavigate()
+  const today = new Date().toISOString().split('T')[0]
   const [createProject, { isLoading }] = useCreateCorporateProjectMutation()
   const [name, setName] = useState('')
   const [startDate, setStartDate] = useState('')
@@ -83,6 +84,15 @@ export function CorporateProjectNewPage() {
       setError('Project name is required')
       return
     }
+    if (startDate && startDate < today) {
+      setError('Start date cannot be in the past.')
+      return
+    }
+    const minEnd = startDate || today
+    if (endDate && endDate < minEnd) {
+      setError('End date cannot be before the start date.')
+      return
+    }
     try {
       const body = {
         name: name.trim(),
@@ -121,10 +131,40 @@ export function CorporateProjectNewPage() {
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Start date">
-              <input type="date" className={inputClass} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              <input 
+                type="date" 
+                min={today} 
+                className={inputClass} 
+                value={startDate} 
+                onChange={(e) => {
+                  const val = e.target.value
+                  if (val && val < today) {
+                    setStartDate(today)
+                  } else {
+                    setStartDate(val)
+                    if (endDate && val && endDate < val) {
+                      setEndDate(val)
+                    }
+                  }
+                }} 
+              />
             </Field>
             <Field label="End date">
-              <input type="date" className={inputClass} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              <input 
+                type="date" 
+                min={startDate || today} 
+                className={inputClass} 
+                value={endDate} 
+                onChange={(e) => {
+                  const val = e.target.value
+                  const minAllowed = startDate || today
+                  if (val && val < minAllowed) {
+                    setEndDate(minAllowed)
+                  } else {
+                    setEndDate(val)
+                  }
+                }} 
+              />
             </Field>
           </div>
           <Field label="Notes">

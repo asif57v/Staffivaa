@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowLeft, ArrowRight, CalendarClock, Menu, Plus, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CalendarClock, Menu, Plus, Sparkles, Filter, Clock, Search, Activity, CheckCircle2, LayoutGrid } from 'lucide-react'
 import { AppButton } from '../../../components/app-ui/buttons/AppButton.jsx'
 import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
 import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
@@ -23,44 +23,50 @@ function openAppDrawer() {
   window.dispatchEvent(new Event('lc-open-app-drawer'))
 }
 
-function BookingsScreenHeader({ title, subtitle, onBack }) {
+function BookingsScreenHeader({ title, subtitle, onBack, rightIcon: RightIcon = Menu, onRightClick = openAppDrawer }) {
   return (
-    <motion.div layout className="-mx-4 px-4 pb-1">
-      <div className="flex items-start gap-2 sm:gap-3">
-        {onBack ? (
-          <button
-            type="button"
-            onClick={onBack}
-            className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-800 shadow-sm transition hover:border-brand/35 hover:text-brand"
-            aria-label="Go back"
-          >
-            <ArrowLeft className="h-5 w-5" aria-hidden />
-          </button>
-        ) : (
-          <Link
-            to="/app"
-            className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-800 shadow-sm transition hover:border-brand/35 hover:text-brand"
-            aria-label="Back to home"
-          >
-            <ArrowLeft className="h-5 w-5" aria-hidden />
-          </Link>
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-brand">Bookings</p>
-          <h1 className="mt-0.5 text-xl font-black tracking-tight text-slate-900">{title}</h1>
-          {subtitle ? (
-            <p className="mt-1 text-xs font-medium leading-relaxed text-slate-600 sm:text-sm">{subtitle}</p>
-          ) : null}
-        </div>
+    <motion.div
+      layout
+      className="sticky top-0 z-20 -mx-4 bg-white/95 backdrop-blur-md px-4 py-3 border-b border-slate-100/60 flex items-center justify-between shadow-xs"
+    >
+      {onBack ? (
         <button
           type="button"
-          onClick={openAppDrawer}
-          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-700 shadow-sm transition hover:border-brand/35 hover:text-brand"
-          aria-label="Open menu"
+          onClick={onBack}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-100 bg-white text-slate-800 shadow-xs transition hover:border-slate-200 hover:text-slate-955 active:scale-95"
+          aria-label="Go back"
         >
-          <Menu className="h-5 w-5" aria-hidden />
+          <ArrowLeft className="h-5 w-5" aria-hidden />
         </button>
-      </div>
+      ) : (
+        <Link
+          to="/app"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-100 bg-white text-slate-800 shadow-xs transition hover:border-slate-200 hover:text-slate-955 active:scale-95"
+          aria-label="Back to home"
+        >
+          <ArrowLeft className="h-5 w-5" aria-hidden />
+        </Link>
+      )}
+      
+      {title && title !== 'My bookings' ? (
+        <div className="min-w-0 flex-1 px-3 text-center">
+          <h1 className="truncate text-base font-extrabold tracking-tight text-slate-900">{title}</h1>
+          {subtitle ? (
+            <p className="truncate text-[10px] font-medium text-slate-500">{subtitle}</p>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex-1" />
+      )}
+
+      <button
+        type="button"
+        onClick={onRightClick}
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-100 bg-white text-slate-700 shadow-xs transition hover:border-slate-200 hover:text-slate-955 active:scale-95"
+        aria-label="Header action"
+      >
+        <RightIcon className="h-5 w-5" aria-hidden />
+      </button>
     </motion.div>
   )
 }
@@ -75,6 +81,29 @@ export function IndividualHomeownerBookings() {
   const detailRef = searchParams.get('ref')?.trim() || ''
   const displayHistory = useMemo(() => displayBookingsList(history), [history])
   const isDemoHistory = history.length === 0
+  const [selectedFilter, setSelectedFilter] = useState('all')
+  const [showFilters, setShowFilters] = useState(true)
+
+  const filteredHistory = useMemo(() => {
+    return displayHistory.filter((item) => {
+      const status = String(item.status || '').toLowerCase()
+      if (selectedFilter === 'all') return true
+      if (selectedFilter === 'active') {
+        return ['searching', 'pending_review', 'confirmed', 'assigned', 'accepted', 'in_progress', 'on_site'].includes(status)
+      }
+      if (selectedFilter === 'finding_labour') {
+        return status === 'searching' || status === 'pending_review'
+      }
+      if (selectedFilter === 'in_progress') {
+        return status === 'in_progress' || status === 'on_site'
+      }
+      if (selectedFilter === 'completed') {
+        return status === 'completed'
+      }
+      return true
+    })
+  }, [displayHistory, selectedFilter])
+
   const detailBooking = useMemo(
     () => (detailRef ? findBookingByRef(displayHistory, detailRef) : null),
     [detailRef, displayHistory],
@@ -247,41 +276,64 @@ export function IndividualHomeownerBookings() {
       <BookingsScreenHeader
         title="My bookings"
         subtitle="Track requests or book again from home."
+        rightIcon={Filter}
+        onRightClick={() => setShowFilters(prev => !prev)}
       />
 
-      <AppSurface className="border-brand/20 bg-linear-to-br from-brand/8 via-white to-emerald-50/40">
-        <div className="flex items-start gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand text-white shadow-md">
-            <Sparkles className="h-5 w-5" aria-hidden />
-          </span>
-          <motion.div layout className="min-w-0 flex-1">
-            <p className="text-sm font-extrabold text-slate-900">Book labour</p>
-            <p className="mt-1 text-xs leading-relaxed text-slate-600">
-              Search a skill on home, pick workers, then confirm — instant or scheduled.
+      <div className="pt-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-[22px] font-black tracking-tight text-slate-900 leading-tight">My Bookings</h1>
+            <p className="mt-1.5 text-xs font-semibold leading-relaxed text-slate-500">
+              Track your active and past workforce requests.
             </p>
-            <AppPrimaryButton
-              type="button"
-              className="mt-3 w-full py-3 text-sm sm:w-auto"
-              onClick={() => navigate('/app')}
-            >
-              <Plus className="h-4 w-4" aria-hidden />
-              New booking
-              <ArrowRight className="h-4 w-4" aria-hidden />
-            </AppPrimaryButton>
-          </motion.div>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/app')}
+            className="flex items-center justify-center gap-1.5 w-full sm:w-auto rounded-xl bg-gradient-to-r from-brand-bright to-brand hover:opacity-95 active:scale-[0.97] transition-all text-slate-950 font-extrabold px-4 py-2.5 text-xs shadow-xs border-0"
+          >
+            <Plus className="h-4 w-4" strokeWidth={3.5} />
+            <span>New Booking</span>
+          </button>
         </div>
-      </AppSurface>
+      </div>
+
+      {showFilters ? (
+        <div className="-mx-4 px-4 overflow-x-auto scrollbar-none flex gap-2 py-1">
+          {[
+            { id: 'all', label: 'All', icon: LayoutGrid },
+            { id: 'active', label: 'Active', icon: Clock },
+            { id: 'finding_labour', label: 'Finding Labour', icon: Search },
+            { id: 'in_progress', label: 'In Progress', icon: Activity },
+            { id: 'completed', label: 'Completed', icon: CheckCircle2 },
+          ].map((f) => {
+            const isSel = selectedFilter === f.id
+            const Icon = f.icon
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setSelectedFilter(f.id)}
+                className={`flex items-center gap-1.5 shrink-0 rounded-full px-4 py-2 text-xs font-bold transition duration-200 select-none ${
+                  isSel
+                    ? 'bg-[#FDF9EA] border border-[#F4C542]/70 text-[#8A6D1C] shadow-xs'
+                    : 'bg-white border border-slate-200/80 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+                }`}
+              >
+                <Icon className={`h-3.5 w-3.5 ${isSel ? 'text-[#F4C542]' : 'text-slate-400'}`} />
+                {f.label}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
 
       <motion.div
         initial={reduce ? false : { opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         className="space-y-3"
       >
-        <div className="flex items-center gap-2 px-0.5">
-          <CalendarClock className="h-4 w-4 text-slate-400" aria-hidden />
-          <h2 className="text-sm font-extrabold text-slate-900">History</h2>
-        </div>
-
         {isDemoHistory ? (
           <p className="rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2 text-center text-[11px] text-slate-600">
             Sample bookings below — your real requests appear after you confirm a booking.
@@ -289,7 +341,7 @@ export function IndividualHomeownerBookings() {
         ) : null}
 
         <IndividualBookingHistoryList
-          items={displayHistory}
+          items={filteredHistory}
           isDemo={isDemoHistory}
           onTrack={handleTrack}
           onRebook={handleRebook}

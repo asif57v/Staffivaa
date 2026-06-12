@@ -73,29 +73,31 @@ export function AppBottomNav({ items }) {
                   </span>
                 </>
               ) : (
-                <>
-                  <span className="relative flex h-8 w-8 items-center justify-center">
-                    {isActive && !reduce ? (
-                      <motion.span
-                        layoutId="app-tab-highlight"
-                        className="absolute inset-0 rounded-xl bg-linear-to-br from-[#F59E0B]/15 via-amber-50/20 to-white shadow-[0_4px_16px_-4px_rgba(245,158,11,0.25)] ring-1 ring-[#F59E0B]/15"
-                        transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-                      />
-                    ) : null}
-                    {isActive && reduce ? (
-                      <span className="absolute inset-0 rounded-xl bg-linear-to-br from-[#F59E0B]/15 to-amber-50/20 ring-1 ring-[#F59E0B]/15" />
-                    ) : null}
-                    <Icon
-                      className={`relative z-10 h-[18px] w-[18px] ${isActive ? 'text-[#F59E0B]' : 'text-[#9CA3AF]'}`}
-                      aria-hidden
+                <div className="relative flex flex-col items-center justify-center w-full py-2 px-1 text-center z-10 rounded-2xl">
+                  {isActive && !reduce ? (
+                    <motion.div
+                      layoutId="app-tab-pill-bg"
+                      className="absolute inset-0 rounded-[18px] bg-[#FEF9E7] border border-[#F4C542]/20 shadow-2xs"
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                     />
-                  </span>
+                  ) : null}
+                  {isActive && reduce ? (
+                    <div className="absolute inset-0 rounded-[18px] bg-[#FEF9E7] border border-[#F4C542]/20 shadow-2xs" />
+                  ) : null}
+                  <Icon
+                    className={`relative z-10 h-[18px] w-[18px] transition-colors duration-255 ${
+                      isActive ? 'text-[#F4C542]' : 'text-[#9CA3AF]'
+                    }`}
+                    aria-hidden
+                  />
                   <span
-                    className={`mt-0.5 truncate px-0.5 text-[9px] font-bold tracking-wide ${isActive ? 'text-[#F59E0B]' : 'text-[#9CA3AF]'}`}
+                    className={`relative z-10 mt-0.5 truncate px-0.5 text-[9px] font-black tracking-wide transition-colors duration-255 ${
+                      isActive ? 'text-[#8A6D1C]' : 'text-[#9CA3AF]'
+                    }`}
                   >
                     {label}
                   </span>
-                </>
+                </div>
               )
             }
           </NavLink>

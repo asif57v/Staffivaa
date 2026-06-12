@@ -6,9 +6,9 @@ export function ConstructionIllustration() {
   const float = reduce
     ? {}
     : {
-        animate: { y: [0, -10, 0] },
-        transition: { duration: 5, repeat: Infinity, ease: 'easeInOut' },
-      }
+      animate: { y: [0, -10, 0] },
+      transition: { duration: 5, repeat: Infinity, ease: 'easeInOut' },
+    }
 
   return (
     <div className="relative mx-auto aspect-[5/4] w-full max-w-lg">

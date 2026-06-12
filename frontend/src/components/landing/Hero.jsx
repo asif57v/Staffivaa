@@ -65,7 +65,7 @@ export function Hero() {
             transition={{ duration: 0.55, delay: 0.18 }}
           >
             <ButtonLink href="/auth" variant="primary" className="group !bg-[#FFC107] !text-slate-900 !font-bold flex-1 sm:flex-none">
-              Hire Labour
+              Our service
               <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" aria-hidden />
             </ButtonLink>
             <ButtonLink href="/auth" variant="secondary" className="!bg-slate-800/40 !text-white border border-slate-700/50 backdrop-blur-sm hover:!bg-slate-700/50 flex-1 sm:flex-none">
