@@ -327,7 +327,7 @@ export function AppAttendancePage() {
               </div>
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>{corporateName}</h2>
-                <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>{project.projectName || 'Corporate Project'}</p>
+                <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>{req?.projectName || req?.title || 'Corporate Project'}</p>
               </div>
             </div>
             <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>

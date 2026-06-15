@@ -36,6 +36,10 @@ export const checkIn = asyncHandler(async (req, res) => {
 
   const request = await WorkforceRequest.findById(assignment.requestId).lean()
   if (!request) return sendError(res, { message: 'Workforce request not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  
+  if (request.status === 'platform_fee_pending' && request.labourPaymentStatus !== 'paid') {
+    return sendError(res, { message: 'Platform fee must be paid before check-in', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
 
   // Distance validation
   if (request.locationLat != null && request.locationLng != null) {
@@ -96,14 +100,50 @@ export const checkIn = asyncHandler(async (req, res) => {
   sendSuccess(res, { data: { record } })
 })
 
+export const startWork = asyncHandler(async (req, res) => {
+  const { assignmentId } = req.body
+  const assignment = await Assignment.findOne({ _id: assignmentId, labourId: req.user._id })
+  if (!assignment) return sendError(res, { message: 'Assignment not found', statusCode: HTTP_STATUS.NOT_FOUND })
+
+  const request = await WorkforceRequest.findById(assignment.requestId)
+  if (!request) return sendError(res, { message: 'Workforce request not found', statusCode: HTTP_STATUS.NOT_FOUND })
+
+  if (request.status === 'platform_fee_pending' && request.labourPaymentStatus !== 'paid') {
+    return sendError(res, { message: 'Platform fee must be paid before starting work', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  assignment.status = 'in_progress'
+  await assignment.save()
+
+  request.status = 'in_progress'
+  await request.save()
+
+  import('../utils/socket.js').then(({ getIO }) => {
+    try {
+      const io = getIO()
+      io.to(`request_${request._id.toString()}`).emit('request_status_update', {
+        requestStatus: request.status,
+      })
+    } catch (err) {
+      console.error('Socket emit error:', err)
+    }
+  })
+
+  sendSuccess(res, { data: { assignment } })
+})
+
 export const checkOut = asyncHandler(async (req, res) => {
   const { assignmentId } = req.body
   const assignment = await Assignment.findOne({ _id: assignmentId, labourId: req.user._id })
   if (!assignment) return sendError(res, { message: 'Assignment not found', statusCode: HTTP_STATUS.NOT_FOUND })
 
-  // Find the most recent attendance record for this assignment
   const record = await AttendanceRecord.findOne({ assignmentId }).sort({ shiftDate: -1 })
   if (!record) return sendError(res, { message: 'No check-in found', statusCode: HTTP_STATUS.BAD_REQUEST })
+
+  const request = await WorkforceRequest.findById(assignment.requestId)
+  if (request && request.status === 'platform_fee_pending' && request.labourPaymentStatus !== 'paid') {
+    return sendError(res, { message: 'Platform fee must be paid before checking out', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
 
   record.checkOutAt = new Date()
   const checkInTime = record.checkInAt ? record.checkInAt.getTime() : record.shiftDate.getTime()
@@ -119,7 +159,6 @@ export const checkOut = asyncHandler(async (req, res) => {
 
   // Note: We do not mark the overall WorkforceRequest as completed here for corporate requests,
   // as other workers might still be assigned.
-  const request = await WorkforceRequest.findById(assignment.requestId)
   if (request && request.sourceType === 'individual') {
     request.status = 'completed'
     await request.save()

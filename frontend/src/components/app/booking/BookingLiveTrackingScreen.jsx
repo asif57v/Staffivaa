@@ -72,6 +72,13 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
   }, [])
 
   const handlePayment = async () => {
+    if (!requestId || String(requestId).startsWith('demo-')) {
+      // Simulate successful payment for demo bookings
+      setRealtimeStatus({ requestStatus: 'confirmed' })
+      alert('Simulated Payment Successful!')
+      return
+    }
+
     try {
       const order = await createOrder(requestId).unwrap()
       
@@ -202,10 +209,9 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
   // Derive timeline steps
   const steps = [
     { label: 'Booking Created', done: true, key: 'created' },
-    { label: 'Labour Assigned', done: ['accepted', 'assigned', 'in_progress', 'on_site', 'completed'].includes(currentStatus) || !!assignedLabour, key: 'assigned' },
-    { label: 'On The Way', done: ['accepted', 'in_progress', 'on_site', 'completed'].includes(currentStatus), key: 'in_progress' },
-    { label: 'Waiting for OTP Verification', done: ['in_progress', 'on_site', 'completed'].includes(currentStatus), key: 'waiting_otp' },
-    { label: 'OTP Verified / Worker On Site', done: ['in_progress', 'on_site', 'completed'].includes(currentStatus), key: 'otp_verified' },
+    { label: 'Labour Assigned', done: ['accepted', 'assigned', 'on_site', 'in_progress', 'completed'].includes(currentStatus) || !!assignedLabour, key: 'assigned' },
+    { label: 'On The Way', done: ['accepted', 'on_site', 'in_progress', 'completed'].includes(currentStatus), key: 'travel' },
+    { label: 'Worker Arrived (OTP Pending)', done: ['on_site', 'in_progress', 'completed'].includes(currentStatus), key: 'waiting_otp' },
     { label: 'Work In Progress', done: ['in_progress', 'completed'].includes(currentStatus), key: 'work_in_progress' },
     { label: 'Work Completed', done: ['completed'].includes(currentStatus), key: 'completed' },
   ]
@@ -231,6 +237,76 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
           <h2 className="text-xl font-bold text-slate-900 mb-2">Failed to load booking</h2>
           <p className="text-slate-500 mb-6 text-sm">We couldn't retrieve the details for this booking.</p>
           <button onClick={onBack} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl">Go Back</button>
+        </div>
+      </div>,
+      document.body
+    )
+  }
+
+  if (currentStatus === 'platform_fee_pending' || currentStatus === 'accepted') {
+    return createPortal(
+      <div className="fixed inset-0 z-[100] flex flex-col bg-slate-50 overflow-hidden" style={{ height: '100dvh' }}>
+        <div className="relative shrink-0 bg-white border-b border-slate-100 flex items-center p-4 pt-[max(1rem,env(safe-area-inset-top,1rem))] z-10 shadow-sm">
+          <button onClick={onBack} className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-800 transition active:scale-95">
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <h1 className="ml-4 text-lg font-black text-slate-900">Payment Required</h1>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-4 pb-24">
+          <div className="bg-white rounded-[20px] p-6 shadow-sm ring-1 ring-slate-200 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600 mb-4">
+              <CheckCircle2 className="h-8 w-8" />
+            </div>
+            <h2 className="text-xl font-black text-slate-900 mb-2">Worker Accepted!</h2>
+            <p className="text-sm font-semibold text-slate-500 mb-6">
+              Please pay the Staffivaa platform fee to confirm the booking and dispatch your worker.
+            </p>
+            
+            <div className="text-left space-y-3 mb-6 bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-200">
+                <span className="font-semibold text-slate-700">Platform Fee</span>
+                <span className="font-bold text-slate-900">₹{request.userPlatformFee || 49}</span>
+              </div>
+              <div className="mt-3 flex justify-between items-center pb-2">
+                <span className="text-xs font-semibold text-slate-500">Estimated Labour Charge</span>
+                <span className="text-sm font-bold text-slate-800">₹{paymentSummary?.serviceCost || booking?.estimate?.estimatedSubtotal || 0}</span>
+              </div>
+              <div className="mt-2 rounded-lg bg-amber-50 p-3 text-[10px] font-medium leading-relaxed text-amber-800 ring-1 ring-amber-200/50">
+                <AlertCircle className="inline h-3 w-3 mr-1 mb-0.5" />
+                Staffivaa only collects platform fees. The estimated labour charge is to be paid directly to the labour outside the platform after work is completed.
+              </div>
+            </div>
+
+            {request.userPaymentStatus === 'paid' ? (
+              <div className="mt-4 flex flex-col items-center justify-center gap-2 bg-blue-50 p-4 rounded-xl border border-blue-200 shadow-sm">
+                <div className="flex items-center gap-2 text-sm font-extrabold text-blue-700 uppercase tracking-widest">
+                  <Clock className="h-4 w-4" />
+                  Waiting for Worker
+                </div>
+                <p className="text-center text-[11px] font-semibold text-blue-600/90 leading-relaxed mt-1">
+                  You have successfully paid the platform fee. Waiting for the assigned worker to pay their platform fee to confirm the booking.
+                </p>
+              </div>
+            ) : (
+              <button 
+                onClick={handlePayment} 
+                disabled={isCreatingOrder || isVerifying}
+                className={`w-full flex items-center justify-center gap-2 py-4 rounded-xl text-slate-900 font-black transition shadow-sm ${
+                  isCreatingOrder || isVerifying ? 'bg-slate-200 cursor-not-allowed' : 'bg-[#FFDF20] hover:bg-[#F0B400] active:scale-95'
+                }`}
+              >
+                {isCreatingOrder || isVerifying ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" /> Processing...
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="h-5 w-5" /> Pay Platform Fee (₹{request.userPlatformFee || 49})
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>,
       document.body
@@ -359,7 +435,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
         </div>
 
         {/* Site Verification OTP Card */}
-        {isAcceptedOrBeyond && (
+        {currentStatus === 'on_site' && (
           <div className="px-5 pb-4">
             <div className="bg-white rounded-[20px] p-5 ring-1 ring-slate-200/60 shadow-[0_8px_30px_-4px_rgba(0,0,0,0.05)] relative overflow-hidden">
               <div className="absolute top-0 left-0 w-1.5 h-full bg-[#FFDF20]" />
@@ -468,47 +544,24 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
           <div className="bg-white rounded-3xl p-5 ring-1 ring-slate-200/60 shadow-sm">
             <div className="space-y-3 text-sm font-medium">
               <div className="flex justify-between text-slate-600">
-                <span>Service Cost</span>
-                <span>₹{paymentSummary.serviceCost.toFixed(2)}</span>
-              </div>
-              {paymentSummary.extraCost > 0 && (
-                <div className="flex justify-between text-brand font-bold">
-                  <span>Extra Work</span>
-                  <span>+ ₹{paymentSummary.extraCost.toFixed(2)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-slate-600">
-                <span>Platform Fee</span>
-                <span>₹{paymentSummary.platformFee.toFixed(2)}</span>
+                <span>Platform Fee Paid</span>
+                <span>₹{(paymentSummary?.userPlatformFee || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-slate-600">
-                <span>Taxes & GST</span>
-                <span>₹{paymentSummary.taxes.toFixed(2)}</span>
+                <span>Estimated Labour Charge</span>
+                <span>₹{((paymentSummary?.serviceCost || 0) + (paymentSummary?.extraCost || 0)).toFixed(2)}</span>
               </div>
               <div className="border-t border-slate-100 pt-3 mt-1 flex justify-between font-black text-slate-900 text-lg">
-                <span>Total Amount</span>
-                <span>₹{paymentSummary.totalAmount.toFixed(2)}</span>
+                <span>Total Amount Paid on Staffivaa</span>
+                <span>₹{(paymentSummary?.totalAmount || 0).toFixed(2)}</span>
               </div>
             </div>
-            {request.paymentStatus === 'paid' ? (
-              <div className="mt-4 flex flex-col items-center justify-center gap-3 bg-emerald-50 p-6 rounded-2xl ring-1 ring-emerald-200 shadow-sm text-center">
-                <div className="flex items-center justify-center w-12 h-12 bg-emerald-100 rounded-full mb-1">
-                  <CheckCircle2 className="w-6 h-6 text-emerald-600" />
-                </div>
-                <div>
-                  <h4 className="text-base font-black text-emerald-800">🎉 Payment Successful</h4>
-                  <p className="text-xs font-semibold text-emerald-600 mt-1.5 leading-snug">
-                    Thank you for your payment.<br/>Your booking has been completed successfully.
-                  </p>
-                </div>
-                <button 
-                  onClick={() => navigate('/app/bookings')}
-                  className="mt-2 w-full flex items-center justify-center gap-2 text-sm font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 transition py-3 rounded-xl active:scale-[0.98]"
-                >
-                  View Booking History
-                </button>
-              </div>
-            ) : currentStatus === 'completed' ? (
+            <div className="mt-4 rounded-lg bg-amber-50 p-3 text-[10px] font-medium leading-relaxed text-amber-800 ring-1 ring-amber-200/50">
+              <AlertCircle className="inline h-3 w-3 mr-1" />
+              Staffivaa only collects platform fees. The labour charge is to be paid directly to the labour.
+            </div>
+
+            {currentStatus === 'completed' ? (
               <div className="mt-4 border-t border-slate-100 pt-4">
                 <div className="mb-3 flex items-start gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200/60">
                    <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
@@ -516,17 +569,9 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
                    </div>
                    <div>
                      <h4 className="text-sm font-black text-slate-900 leading-tight mb-0.5">✅ Work Completed</h4>
-                     <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">Your worker has marked this job as completed. Please review and complete payment.</p>
+                     <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">Your worker has marked this job as completed. Please pay the labour charge directly to the worker.</p>
                    </div>
                 </div>
-                <button 
-                  onClick={handlePayment}
-                  disabled={isCreatingOrder || isVerifying}
-                  className="w-full flex items-center justify-center gap-2 text-sm font-bold text-slate-900 bg-[#FFDF20] hover:bg-[#F0B400] transition p-3.5 rounded-xl shadow-[0_4px_15px_-4px_rgba(255,223,32,0.4)] disabled:opacity-70 active:scale-[0.98]"
-                >
-                  {isCreatingOrder || isVerifying ? <Loader2 className="w-5 h-5 animate-spin" /> : <Lock className="w-5 h-5" />} 
-                  {isVerifying ? 'Verifying...' : `Pay Securely ₹${paymentSummary.totalAmount.toFixed(2)}`}
-                </button>
               </div>
             ) : isAcceptedOrBeyond ? (
               <div className="mt-4 flex flex-col items-center justify-center gap-2 bg-yellow-50 p-4 rounded-xl border border-yellow-200 shadow-sm">
@@ -538,14 +583,10 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
                   Work in Progress
                 </div>
                 <p className="text-center text-[11px] font-semibold text-yellow-600/90 leading-relaxed mt-1">
-                  Your assigned worker is currently completing the service. Payment will become available once the work is marked as completed.
+                  Your assigned worker is currently completing the service. Pay the labour directly after work is done.
                 </p>
               </div>
-            ) : (
-              <div className="mt-4 flex items-center justify-center gap-2 text-xs font-bold text-slate-400 bg-slate-50 p-3 rounded-xl">
-                <CreditCard className="w-4 h-4" /> Secure Cashless Payment Available
-              </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

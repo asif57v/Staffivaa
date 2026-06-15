@@ -568,132 +568,8 @@ export function IndividualBookingFlowPage() {
   }
 
   if (step === 'payment') {
-    const booking = activeBooking
-    const worker = booking?.assignedWorker || (draft.selectedWorkers || [])[0]
-    const timelineIdx = BOOKING_JOB_TIMELINE.findIndex((t) => t.id === (booking?.jobTimelineStep || 'accepted'))
-
-    return (
-      <div className="space-y-4 pb-8">
-        <FlowHeader
-          title={'Payment'}
-          subtitle={booking?.ref ? `Ref ${booking.ref}` : draft.categoryName}
-          onBack={() => goStep('active')}
-        />
-
-        {worker ? (
-          <GlassPanel className="overflow-hidden border-slate-200/90 p-0">
-            <motion.div layout className="flex gap-4 p-4">
-              <img
-                src={worker.photoUrl || enrichDiscoverLabourUi(worker).photoUrl}
-                alt=""
-                className="h-16 w-16 rounded-2xl object-cover ring-2 ring-white"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="text-lg font-black text-slate-900">{worker.displayName}</p>
-                <p className="text-xs font-semibold text-brand">ETA · {booking?.etaMinutes || 20} min</p>
-                <p className="mt-1 text-[11px] text-slate-500">{draft.categoryName}</p>
-              </div>
-            </motion.div>
-          </GlassPanel>
-        ) : null}
-
-        <AppSurface>
-          <p className="text-[11px] font-bold uppercase text-slate-400">Status</p>
-          <ol className="mt-3 space-y-2">
-            {BOOKING_JOB_TIMELINE.map((t, i) => {
-              const done = i <= Math.max(0, timelineIdx)
-              return (
-                <li key={t.id} className="flex items-center gap-3">
-                  <span
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${done ? 'bg-brand text-white' : 'bg-slate-100 text-slate-400'
-                      }`}
-                  >
-                    {done ? <Check className="h-3.5 w-3.5" /> : i + 1}
-                  </span>
-                  <span className={`text-sm font-semibold ${done ? 'text-slate-900' : 'text-slate-400'}`}>{t.label}</span>
-                </li>
-              )
-            })}
-          </ol>
-        </AppSurface>
-
-        {step === 'payment' ? (
-          <motion.div layout className="space-y-4">
-            <FieldLabel>Pay now or after work</FieldLabel>
-            <motion.div layout className="grid grid-cols-2 gap-2">
-              {[
-                { id: 'pay_now', label: 'Pay now' },
-                { id: 'after_work', label: 'Pay after work' },
-              ].map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => syncDraft({ paymentTiming: opt.id })}
-                  className={`rounded-2xl border px-3 py-3 text-sm font-bold transition ${draft.paymentTiming === opt.id
-                    ? 'border-brand/40 bg-brand/8 ring-2 ring-brand/20'
-                    : 'border-slate-200/90'
-                    }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </motion.div>
-            <FieldLabel>Payment method</FieldLabel>
-            <motion.div layout className="grid grid-cols-2 gap-2">
-              {PAYMENT_METHODS.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => syncDraft({ paymentMethod: m.id })}
-                  className={`rounded-2xl border px-3 py-3 text-sm font-bold transition ${draft.paymentMethod === m.id
-                    ? 'border-brand/40 bg-brand/8 ring-2 ring-brand/20'
-                    : 'border-slate-200/90'
-                    }`}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </motion.div>
-            <GlassPanel className="p-4 text-sm">
-              <div className="flex justify-between">
-                <span>Subtotal</span>
-                <span className="font-semibold">{formatInr(estimate.estimatedSubtotal)}</span>
-              </div>
-              <motion.div layout className="mt-1 flex justify-between text-slate-500">
-                <span>Platform fee</span>
-                <span>{formatInr(estimate.platformFee)}</span>
-              </motion.div>
-              <div className="mt-1 flex justify-between text-slate-500">
-                <span>Taxes (GST)</span>
-                <span>{formatInr(estimate.gst)}</span>
-              </div>
-              <div className="mt-2 flex justify-between border-t border-slate-100 pt-2 font-black text-brand">
-                <span>Total</span>
-                <span>{formatInr(estimate.grandTotal)}</span>
-              </div>
-            </GlassPanel>
-            <AppPrimaryButton
-              type="button"
-              className="w-full py-3.5"
-              onClick={() => {
-                clearBookingDraft()
-                navigate(`/app/bookings?ref=${encodeURIComponent(booking?.ref || '')}`)
-              }}
-            >
-              <CheckCircle2 className="h-4 w-4" aria-hidden />
-              Confirm payment
-            </AppPrimaryButton>
-          </motion.div>
-        ) : (
-          <div className="sticky bottom-2 z-10 pt-2">
-            <AppPrimaryButton type="button" className="w-full py-3.5 shadow-xl" onClick={() => goStep('payment')}>
-              <IndianRupee className="h-4 w-4" aria-hidden />
-              Proceed to payment
-            </AppPrimaryButton>
-          </div>
-        )}
-      </div>
-    )
+    // This step is no longer used, we now pay in the tracking screen.
+    return null
   }
 
   return (
@@ -1000,8 +876,8 @@ export function IndividualBookingFlowPage() {
               Edit details
             </AppButton>
             <AppPrimaryButton type="button" className="flex-1 py-3.5" onClick={confirmBooking}>
-              Confirm booking
-              <CheckCircle2 className="h-4 w-4" aria-hidden />
+              Request Booking
+              <CheckCircle2 className="h-4 w-4 ml-1 inline" aria-hidden />
             </AppPrimaryButton>
           </div>
         </motion.div>

@@ -10,6 +10,7 @@ export const REQUEST_STATUS = {
   ALLOCATING: 'allocating',
   ASSIGNED: 'assigned',
   ACCEPTED: 'accepted',
+  PLATFORM_FEE_PENDING: 'platform_fee_pending',
   IN_PROGRESS: 'in_progress',
   ON_SITE: 'on_site',
   ATTENDANCE: 'attendance_tracking',

@@ -48,7 +48,7 @@ function BookingsScreenHeader({ title, subtitle, onBack, rightIcon: RightIcon = 
         </Link>
       )}
       
-      {title && title !== 'My bookings' ? (
+      {title ? (
         <div className="min-w-0 flex-1 px-3 text-center">
           <h1 className="truncate text-base font-extrabold tracking-tight text-slate-900">{title}</h1>
           {subtitle ? (
@@ -281,13 +281,7 @@ export function IndividualHomeownerBookings() {
       />
 
       <div className="pt-2">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-[22px] font-black tracking-tight text-slate-900 leading-tight">My Bookings</h1>
-            <p className="mt-1.5 text-xs font-semibold leading-relaxed text-slate-500">
-              Track your active and past workforce requests.
-            </p>
-          </div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3">
           <button
             type="button"
             onClick={() => navigate('/app')}

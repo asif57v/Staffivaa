@@ -25,17 +25,6 @@ export function LabourJobHistoryCard({ job, onOpenDetail }) {
           <ChevronRight className="ml-auto mt-1 h-4 w-4 text-slate-300" aria-hidden />
         </div>
       </button>
-      
-      {job.paymentStatus === 'paid' && (
-        <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 shadow-[0_2px_10px_-2px_rgba(16,185,129,0.1)]">
-          <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
-              <IndianRupee className="h-3 w-3" />
-            </div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Payment Received</p>
-          </div>
-        </div>
-      )}
     </li>
   )
 }

@@ -1,4 +1,4 @@
-import { CheckCircle2, FileText, MapPin } from 'lucide-react'
+import { CheckCircle2, FileText, MapPin, Lock, IndianRupee, Clock } from 'lucide-react'
 import { AppButton } from '../../app-ui/buttons/AppButton.jsx'
 import { useNavigate } from 'react-router-dom'
 import { AppPrimaryButton } from '../../app/AppPrimaryButton.jsx'
@@ -6,8 +6,6 @@ import { useEffect, useState, useMemo } from 'react'
 import { useGetExtraWorkQuery, useUpdateExtraWorkStatusMutation } from '../../../store/api/workforceApi.js'
 import { io } from 'socket.io-client'
 import { ExtraWorkNegotiateModal } from './ExtraWorkNegotiateModal.jsx'
-
-import { Lock, IndianRupee } from 'lucide-react'
 
 const STEPS = [
   { key: 'accepted', label: 'Accepted' },
@@ -39,8 +37,11 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   return R * c
 }
 
-export function LabourJobActiveCard({ job, onMarkOnSite, onOpenDetail, onComplete }) {
-  const status = job.status || 'accepted'
+export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDetail, onComplete, onPayFee }) {
+  const status = job?.status || 'accepted'
+  const requestStatus = job?.requestStatus || 'searching'
+  const isPlatformFeePending = requestStatus === 'platform_fee_pending' && job?.labourPaymentStatus !== 'paid'
+  const isCustomerPaymentPending = requestStatus === 'platform_fee_pending' && job?.labourPaymentStatus === 'paid'
   const isCompleted = status === 'completed'
   const isCheckedIn = ['on_site', 'in_progress', 'completed'].includes(status)
   const onSite = status === 'on_site' || status === 'in_progress'
@@ -50,7 +51,7 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onOpenDetail, onComplet
   const [currentLat, setCurrentLat] = useState(null)
   const [currentLng, setCurrentLng] = useState(null)
   const [distance, setDistance] = useState(null)
-  const hasCoordinates = job.locationLat != null && job.locationLng != null
+  const hasCoordinates = job?.locationLat != null && job?.locationLng != null
 
   useEffect(() => {
     if (!navigator.geolocation || onSite) return
@@ -105,7 +106,7 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onOpenDetail, onComplet
     if (entered === expectedOtp) {
       setOtpSuccess(true)
       setTimeout(() => {
-        onMarkOnSite(job.id, currentLat, currentLng)
+        onStartWork(job.id)
         setIsOtpMode(false)
       }, 1500)
     } else {
@@ -144,6 +145,38 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onOpenDetail, onComplet
   }
 
   const isCheckInDisabled = hasCoordinates && distance != null && distance > 120
+
+  if (isPlatformFeePending) {
+    return (
+      <article className="overflow-hidden rounded-[1.35rem] border border-slate-200 bg-white shadow-sm ring-1 ring-slate-100 p-6 flex flex-col items-center text-center">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 shadow-inner">
+          <Lock className="h-8 w-8" />
+        </div>
+        <h3 className="mb-2 text-lg font-black text-slate-900">Booking Locked</h3>
+        <p className="mb-6 text-sm font-semibold text-slate-500 leading-relaxed px-4">
+          Complete your platform fee payment to unlock this booking.
+        </p>
+        
+        <div className="w-full rounded-xl bg-slate-50 p-4 mb-6 border border-slate-100 text-left">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs font-bold text-slate-500">Distance to Site</span>
+            <span className="text-sm font-black text-slate-900">{job.distanceKm != null ? `${job.distanceKm} km` : 'Calculating...'}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-xs font-bold text-slate-500">Platform Fee</span>
+            <span className="text-sm font-black text-slate-900 flex items-center"><IndianRupee className="h-3 w-3 mr-0.5"/> {job.labourPlatformFee || 0}</span>
+          </div>
+        </div>
+
+        <AppPrimaryButton 
+          className="w-full py-4 text-sm font-black bg-slate-900 text-white hover:bg-slate-800"
+          onClick={() => onPayFee(job)}
+        >
+          Pay Now
+        </AppPrimaryButton>
+      </article>
+    )
+  }
 
   return (
     <article className="overflow-hidden rounded-[1.35rem] border border-emerald-200/80 bg-linear-to-br from-emerald-50/80 via-white to-white shadow-[0_10px_36px_-20px_rgba(16,185,129,0.35)] ring-1 ring-emerald-100">
@@ -212,43 +245,52 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onOpenDetail, onComplet
           </div>
         ))}
 
-        {isCompleted ? (
-          <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4 mb-3 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]">
+        {isCustomerPaymentPending ? (
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 mb-3 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]">
             <div className="flex items-center gap-3 mb-2">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-100 text-yellow-600">
-                <IndianRupee className="h-5 w-5" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
+                <Clock className="h-5 w-5" />
               </div>
               <div>
-                <h4 className="text-[10px] font-bold uppercase tracking-widest text-yellow-600">Payment Status</h4>
-                <p className="text-sm font-black text-slate-900 leading-tight">Waiting for Customer Payment</p>
+                <h4 className="text-[10px] font-bold uppercase tracking-widest text-blue-600">Waiting</h4>
+                <p className="text-sm font-black text-slate-900 leading-tight">Customer Payment Pending</p>
               </div>
             </div>
             <p className="text-xs font-semibold text-slate-700 mt-2 leading-snug">
-              Your work has been completed successfully.<br/>Waiting for payment confirmation from the customer.
+              Please wait for the customer to complete their platform fee payment before proceeding to the site.
             </p>
           </div>
         ) : !isCheckedIn ? (
           <div>
+            <AppPrimaryButton 
+              type="button" 
+              className={`w-full py-3 text-sm flex items-center justify-center gap-2 ${isCheckInDisabled ? 'opacity-50 cursor-not-allowed bg-slate-400 border-slate-400 hover:bg-slate-400 hover:border-slate-400 shadow-none' : ''}`} 
+              onClick={() => {
+                if (isCheckInDisabled) return
+                onMarkOnSite(job.id, currentLat, currentLng)
+              }}
+              disabled={isCheckInDisabled}
+            >
+              <MapPin className="h-4 w-4" aria-hidden />
+              Mark Arrived
+            </AppPrimaryButton>
+            {hasCoordinates && distance != null && (
+              <p className={`mt-2 text-center text-[10px] font-semibold ${isCheckInDisabled ? 'text-rose-600' : 'text-emerald-600'}`}>
+                {isCheckInDisabled ? `You are ${Math.round(distance)} meters away. Move within 120 meters to verify arrival.` : 'You have arrived near the work location.'}
+              </p>
+            )}
+          </div>
+        ) : status === 'on_site' ? (
+          <div>
             {!isOtpMode ? (
-              <>
-                <AppPrimaryButton 
-                  type="button" 
-                  className={`w-full py-3 text-sm flex items-center justify-center gap-2 ${isCheckInDisabled ? 'opacity-50 cursor-not-allowed bg-slate-400 border-slate-400 hover:bg-slate-400 hover:border-slate-400 shadow-none' : ''}`} 
-                  onClick={() => {
-                    if (isCheckInDisabled) return
-                    setIsOtpMode(true)
-                  }}
-                  disabled={isCheckInDisabled}
-                >
-                  <Lock className="h-4 w-4" aria-hidden />
-                  Verify Arrival
-                </AppPrimaryButton>
-                {hasCoordinates && distance != null && (
-                  <p className={`mt-2 text-center text-[10px] font-semibold ${isCheckInDisabled ? 'text-rose-600' : 'text-emerald-600'}`}>
-                    {isCheckInDisabled ? `You are ${Math.round(distance)} meters away. Move within 120 meters to verify arrival.` : 'You have arrived near the work location.'}
-                  </p>
-                )}
-              </>
+              <AppPrimaryButton 
+                type="button" 
+                className="w-full py-3 text-sm flex items-center justify-center gap-2 bg-[#FFDF20] hover:bg-[#F0B400] text-slate-900 shadow-sm" 
+                onClick={() => setIsOtpMode(true)}
+              >
+                <Lock className="h-4 w-4" aria-hidden />
+                Verify OTP to Start Work
+              </AppPrimaryButton>
             ) : (
               <div className="rounded-2xl border border-yellow-200 bg-white p-4 shadow-sm ring-1 ring-slate-100 mb-3">
                 <div className="flex items-center gap-3 mb-2">
@@ -285,7 +327,7 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onOpenDetail, onComplet
                               document.getElementById(`otp-input-${job.id}-${i - 1}`)?.focus()
                             }
                           }}
-                          className={`w-10 h-12 text-center text-xl font-black rounded-xl border-2 outline-none transition-colors ${
+                          className={`flex-1 min-w-0 h-11 text-center text-lg font-black rounded-xl border-2 outline-none transition-colors ${
                             otpError ? 'border-rose-300 bg-rose-50 text-rose-600' : 'border-slate-200 bg-slate-50 text-slate-900 focus:border-[#FFDF20] focus:bg-white'
                           }`}
                         />

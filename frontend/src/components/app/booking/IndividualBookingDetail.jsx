@@ -100,25 +100,20 @@ export function IndividualBookingDetail({ booking, onRebook, onBack, onAdvancePi
             </p>
           ) : null}
 
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-white">
-            <div className="flex items-center gap-2">
-              <IndianRupee className="h-4 w-4 text-emerald-300" aria-hidden />
-              <span className="text-xs font-medium text-white/80">Estimated total</span>
+          <div className="space-y-3 mt-4 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-100">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-600">Platform Fee Paid</span>
+              <span className="text-sm font-bold text-emerald-600">{formatInr(booking.userPlatformFee || 49)}</span>
             </div>
-            <span className="text-lg font-black">{formatInr(booking.estimatedTotal)}</span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-600">Estimated Labour Charge</span>
+              <span className="text-sm font-bold text-slate-900">{formatInr(booking.labourCharge || booking.estimatedTotal || 0)}</span>
+            </div>
+            <div className="mt-2 rounded-lg bg-amber-50 p-3 text-[10px] font-medium leading-relaxed text-amber-800 ring-1 ring-amber-200/50">
+              <Sparkles className="inline h-3 w-3 mr-1" />
+              Staffivaa only collects platform fees. Labour charges are negotiated and paid directly between the client and the labour and are not processed by the platform.
+            </div>
           </div>
-
-          {booking.paymentPreference === 'advance' && booking.advanceAmount > 0 ? (
-            <p className="text-[11px] font-medium text-slate-600">
-              Advance paid (demo): <strong className="text-slate-900">{formatInr(booking.advanceAmount)}</strong> —
-              balance after work completion.
-            </p>
-          ) : (
-            <p className="text-[11px] font-medium text-slate-600">
-              Payment: <strong className="text-slate-900">After assignment</strong> — ops will confirm rates before
-              deploy.
-            </p>
-          )}
         </div>
       </GlassPanel>
 

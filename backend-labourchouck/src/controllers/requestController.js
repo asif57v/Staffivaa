@@ -149,11 +149,13 @@ export const getRequest = asyncHandler(async (req, res) => {
     .lean()
     
   // Calculate a basic payment summary based on lines
-  let serviceCost = 0
-  request.lines?.forEach(line => {
-    const rate = line.categoryId?.baseRate || 800 // default 800
-    serviceCost += rate * (line.quantity || 1)
-  })
+  let serviceCost = request.labourCharge || 0;
+  if (!serviceCost) {
+    request.lines?.forEach(line => {
+      const rate = line.categoryId?.baseRate || 800 // default 800
+      serviceCost += rate * (line.quantity || 1)
+    })
+  }
 
   const extraWorkRequests = await ExtraWorkRequest.find({ bookingId: request._id, status: 'accepted' }).lean()
   let extraCost = 0
@@ -161,15 +163,15 @@ export const getRequest = asyncHandler(async (req, res) => {
     extraCost += ew.revisedAmount != null ? ew.revisedAmount : ew.extraAmount
   })
   
-  const platformFee = Math.round((serviceCost + extraCost) * 0.1) // 10%
-  const taxes = Math.round((serviceCost + extraCost + platformFee) * 0.18) // 18% GST
-  const totalAmount = serviceCost + extraCost + platformFee + taxes
+  const userPlatformFee = request.userPlatformFee || 49;
+  const labourPlatformFee = request.labourPlatformFee || 0;
+  const totalAmount = userPlatformFee; // Total amount paid on platform by user
   
   const paymentSummary = {
     serviceCost,
     extraCost,
-    platformFee,
-    taxes,
+    userPlatformFee,
+    labourPlatformFee,
     totalAmount
   }
 

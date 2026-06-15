@@ -12,6 +12,7 @@ import {
 } from '../controllers/allocationController.js'
 import {
   checkIn,
+  startWork,
   checkOut,
   listAttendance,
   markAttendanceVendor,
@@ -35,8 +36,8 @@ router.post('/requests', restrictTo(USER_ROLES.INDIVIDUAL, USER_ROLES.CORPORATE)
 router.get('/requests', restrictTo(...APP_ROLES), listMyRequests)
 router.get('/requests/:id', restrictTo(...APP_ROLES, USER_ROLES.ADMIN), getRequest)
 
-router.post('/requests/:id/payment/order', restrictTo(USER_ROLES.INDIVIDUAL), createRazorpayOrder)
-router.post('/requests/:id/payment/verify', restrictTo(USER_ROLES.INDIVIDUAL), verifyRazorpayPayment)
+router.post('/requests/:id/payment/order', restrictTo(...APP_ROLES), createRazorpayOrder)
+router.post('/requests/:id/payment/verify', restrictTo(...APP_ROLES), verifyRazorpayPayment)
 
 router.post('/requests/:id/extra-work', restrictTo(USER_ROLES.INDIVIDUAL), createExtraWork)
 router.get('/requests/:id/extra-work', restrictTo(...APP_ROLES), getExtraWorkForBooking)
@@ -46,6 +47,7 @@ router.get('/assignments', restrictTo(USER_ROLES.LABOUR), listLabourAssignments)
 router.patch('/assignments/:id/respond', restrictTo(USER_ROLES.LABOUR), respondToAssignment)
 
 router.post('/attendance/check-in', restrictTo(USER_ROLES.LABOUR), checkIn)
+router.post('/attendance/start-work', restrictTo(USER_ROLES.LABOUR), startWork)
 router.post('/attendance/check-out', restrictTo(USER_ROLES.LABOUR), checkOut)
 router.get('/attendance', restrictTo(...APP_ROLES, USER_ROLES.ADMIN), listAttendance)
 router.get('/attendance/monitor', restrictTo(USER_ROLES.CONTRACTOR, USER_ROLES.CORPORATE, USER_ROLES.ADMIN), monitorAttendance)

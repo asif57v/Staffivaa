@@ -45,12 +45,28 @@ const workforceRequestSchema = new mongoose.Schema(
       enum: Object.values(BILLING_MODE),
       default: BILLING_MODE.POSTPAID,
     },
+    labourCharge: { type: Number },
+    userPlatformFee: { type: Number, default: 49 },
+    labourPlatformFee: { type: Number },
+    distanceKm: { type: Number },
     paymentStatus: {
       type: String,
       enum: ['pending', 'paid', 'failed'],
       default: 'pending',
     },
-    razorpayOrderId: String,
+    userPaymentStatus: {
+      type: String,
+      enum: ['pending', 'paid', 'failed'],
+      default: 'pending',
+    },
+    labourPaymentStatus: {
+      type: String,
+      enum: ['pending', 'paid', 'failed'],
+      default: 'pending',
+    },
+    userRazorpayOrderId: String,
+    labourRazorpayOrderId: String,
+    razorpayOrderId: String, // Legacy, kept for backward compatibility if needed
     razorpayPaymentId: String,
     razorpaySignature: String,
     status: {

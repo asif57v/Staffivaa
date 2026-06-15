@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
+import { useLoadScript } from '@react-google-maps/api'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, Loader2, MapPin, Navigation, X } from 'lucide-react'
@@ -8,6 +9,8 @@ function formatCoords(lat, lng) {
   if (lat == null || lng == null) return ''
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`
 }
+
+const libraries = ['places']
 
 export function AppUserLocationModal({
   open,
@@ -19,6 +22,15 @@ export function AppUserLocationModal({
   requireLocation = false,
 }) {
   const reduce = useReducedMotion()
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+  const { isLoaded } = useLoadScript({
+    googleMapsApiKey: apiKey,
+    libraries,
+  })
+
+  const inputRef = useRef(null)
+  const autocompleteRef = useRef(null)
+
   const [address, setAddress] = useState('')
   const [lat, setLat] = useState(null)
   const [lng, setLng] = useState(null)
@@ -29,7 +41,9 @@ export function AppUserLocationModal({
     if (!open) return
     const stored = readAppUserLocation()
     queueMicrotask(() => {
-      setAddress(stored?.address ?? '')
+      const initAddr = stored?.address ?? ''
+      setAddress(initAddr)
+      if (inputRef.current) inputRef.current.value = initAddr
       setLat(stored?.lat ?? null)
       setLng(stored?.lng ?? null)
       setHint('')
@@ -44,6 +58,36 @@ export function AppUserLocationModal({
       document.body.style.overflow = prev
     }
   }, [open])
+
+  useEffect(() => {
+    if (!open || !isLoaded || !inputRef.current || !apiKey) return
+
+    autocompleteRef.current = new window.google.maps.places.Autocomplete(inputRef.current, {
+      fields: ['formatted_address', 'geometry'],
+      componentRestrictions: { country: 'in' },
+    })
+
+    const listener = autocompleteRef.current.addListener('place_changed', () => {
+      const place = autocompleteRef.current.getPlace()
+      if (place && place.geometry) {
+        setAddress(place.formatted_address)
+        setLat(place.geometry.location.lat())
+        setLng(place.geometry.location.lng())
+        setHint('Location selected from suggestions.')
+      } else {
+        setAddress(inputRef.current.value)
+      }
+    })
+
+    return () => {
+      if (listener) {
+        window.google.maps.event.removeListener(listener)
+      }
+      if (autocompleteRef.current) {
+        window.google.maps.event.clearInstanceListeners(autocompleteRef.current)
+      }
+    }
+  }, [isLoaded, apiKey, open])
 
   const fetchCurrent = useCallback(() => {
     if (!navigator.geolocation) {
@@ -60,7 +104,6 @@ export function AppUserLocationModal({
         setLng(ln)
         
         try {
-          const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
           if (!apiKey) {
              setGeoBusy(false)
              setHint('Coordinates updated. Add an address label below if you like.')
@@ -70,6 +113,7 @@ export function AppUserLocationModal({
           const data = await res.json()
           if (data.results && data.results.length > 0) {
             setAddress(data.results[0].formatted_address)
+            if (inputRef.current) inputRef.current.value = data.results[0].formatted_address
             setHint('Location successfully updated.')
           } else {
             setHint('Coordinates updated. Could not resolve address.')
@@ -88,12 +132,12 @@ export function AppUserLocationModal({
     )
   }, [])
 
-  const canSave = requireLocation ? Boolean(address.trim() || (lat != null && lng != null)) : true
+  const canSave = requireLocation ? Boolean(lat != null && lng != null) : true
 
   const save = useCallback(() => {
     const trimmed = address.trim()
-    if (requireLocation && !trimmed && (lat == null || lng == null)) {
-      setHint('Enter your area or fetch current location before continuing.')
+    if (requireLocation && (lat == null || lng == null)) {
+      setHint('Please select a location from the dropdown suggestions or fetch your current GPS location.')
       return
     }
     writeAppUserLocation({ address: trimmed, lat, lng })
@@ -180,12 +224,13 @@ export function AppUserLocationModal({
             {hint ? <p className="text-center text-[11px] font-medium text-slate-500">{hint}</p> : null}
             <label className="block space-y-1.5">
               <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Or enter location</span>
-              <textarea
-                value={address}
+              <input
+                ref={inputRef}
+                type="text"
+                defaultValue={address}
                 onChange={(e) => setAddress(e.target.value)}
-                rows={4}
                 placeholder="Area, landmark, city…"
-                className="w-full resize-none rounded-2xl border border-slate-200/90 bg-white px-3 py-2.5 text-sm font-medium text-slate-900 shadow-inner outline-none placeholder:text-slate-400 focus:border-brand/40 focus:ring-2 focus:ring-brand/15"
+                className="w-full rounded-2xl border border-slate-200/90 bg-white px-3 py-3 text-sm font-medium text-slate-900 shadow-inner outline-none placeholder:text-slate-400 focus:border-brand/40 focus:ring-2 focus:ring-brand/15"
               />
             </label>
           </section>

@@ -178,16 +178,21 @@ export const workforceApi = baseApi.injectEndpoints({
       providesTags: ['Assignments'],
     }),
     respondAssignment: build.mutation({
-      query: ({ id, action }) => ({
+      query: ({ id, action, labourLat, labourLng }) => ({
         url: `/workforce/assignments/${id}/respond`,
         method: 'PATCH',
-        body: { action },
+        body: { action, labourLat, labourLng },
       }),
       transformResponse: unwrap,
       invalidatesTags: ['Assignments'],
     }),
     checkIn: build.mutation({
       query: (body) => ({ url: '/workforce/attendance/check-in', method: 'POST', body }),
+      transformResponse: unwrap,
+      invalidatesTags: ['Attendance', 'Assignments'],
+    }),
+    startWork: build.mutation({
+      query: (body) => ({ url: '/workforce/attendance/start-work', method: 'POST', body }),
       transformResponse: unwrap,
       invalidatesTags: ['Attendance', 'Assignments'],
     }),
@@ -325,6 +330,7 @@ export const {
   useGetLabourAssignmentsQuery,
   useRespondAssignmentMutation,
   useCheckInMutation,
+  useStartWorkMutation,
   useCheckOutMutation,
   useGetAttendanceQuery,
   useGetAttendanceMonitorQuery,

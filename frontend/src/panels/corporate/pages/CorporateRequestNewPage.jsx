@@ -37,6 +37,8 @@ export function CorporateRequestNewPage() {
   const [shiftStart, setShiftStart] = useState('08:00')
   const [shiftEnd, setShiftEnd] = useState('18:00')
   const [locationText, setLocationText] = useState('')
+  const [locationLat, setLocationLat] = useState(null)
+  const [locationLng, setLocationLng] = useState(null)
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState([emptyLine()])
   const [isSkillsExpanded, setIsSkillsExpanded] = useState(true)
@@ -55,6 +57,10 @@ export function CorporateRequestNewPage() {
       if (place.formatted_address) {
         setLocationText(place.formatted_address)
       }
+      if (place.geometry && place.geometry.location) {
+        setLocationLat(place.geometry.location.lat())
+        setLocationLng(place.geometry.location.lng())
+      }
     }
   }
 
@@ -66,6 +72,8 @@ export function CorporateRequestNewPage() {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords
+        setLocationLat(lat)
+        setLocationLng(lng)
         try {
           const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
           if (!apiKey) {
@@ -138,6 +146,8 @@ export function CorporateRequestNewPage() {
         shiftStart,
         shiftEnd,
         locationText: locationText.trim() || undefined,
+        locationLat: locationLat || undefined,
+        locationLng: locationLng || undefined,
         notes: notes.trim() || undefined,
         lines: validLines.map((l) => ({
           categoryId: l.categoryId,

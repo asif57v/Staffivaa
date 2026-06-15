@@ -133,6 +133,9 @@ export function assignmentToJobCard(assignment) {
     locationLng: typeof req === 'object' ? req?.locationLng : undefined,
     paymentStatus: typeof req === 'object' ? req?.paymentStatus : 'pending',
     requestStatus: typeof req === 'object' ? req?.status : assignment.status,
+    labourPaymentStatus: typeof req === 'object' ? req?.labourPaymentStatus : 'pending',
+    labourPlatformFee: typeof req === 'object' ? req?.labourPlatformFee : undefined,
+    distanceKm: typeof req === 'object' ? req?.distanceKm : undefined,
   }
 }
 
@@ -147,11 +150,7 @@ export function bucketsFromAssignments(assignments = []) {
     } else if (a.status === 'accepted' || a.status === 'on_site' || a.status === 'in_progress') {
       active.push(card)
     } else if (a.status === 'completed') {
-      if (card.paymentStatus !== 'paid' && card.sourceType === 'individual') {
-        active.push(card)
-      } else {
-        history.push(card)
-      }
+      history.push(card)
     } else {
       history.push(card)
     }

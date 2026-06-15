@@ -111,8 +111,25 @@ export const listLabourAssignments = asyncHandler(async (req, res) => {
   sendSuccess(res, { data: { assignments } })
 })
 
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Radius of the earth in km
+  const dLat = deg2rad(lat2-lat1); 
+  const dLon = deg2rad(lon2-lon1); 
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2); 
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+  const d = R * c; // Distance in km
+  return d;
+}
+
+function deg2rad(deg) {
+  return deg * (Math.PI/180)
+}
+
 export const respondToAssignment = asyncHandler(async (req, res) => {
-  const { action } = req.body
+  const { action, labourLat, labourLng } = req.body
   const assignment = await Assignment.findOne({ _id: req.params.id, labourId: req.user._id })
   if (!assignment) return sendError(res, { message: 'Not found', statusCode: HTTP_STATUS.NOT_FOUND })
   if (action === 'accept') {
@@ -125,7 +142,47 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
     }
 
     if (request) {
-      request.status = REQUEST_STATUS.ACCEPTED
+      let distanceKm = 8.5; // Fallback if no location data available
+      let reqLat = request.locationLat;
+      let reqLng = request.locationLng;
+
+      // Geocode on backend if missing
+      if ((!reqLat || !reqLng) && request.locationText) {
+        try {
+          const apiKey = "AIzaSyCV6QreLE4QR76xie0BI3B9y2wY4awcPP8"; // Frontend map key from .env
+          const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(request.locationText)}&key=${apiKey}`;
+          const mapRes = await fetch(url);
+          const data = await mapRes.json();
+          if (data && data.results && data.results.length > 0) {
+            reqLat = data.results[0].geometry.location.lat;
+            reqLng = data.results[0].geometry.location.lng;
+            request.locationLat = reqLat;
+            request.locationLng = reqLng;
+          }
+        } catch (err) {
+          console.error("Backend Geocoding failed:", err.message);
+        }
+      }
+
+      if (reqLat && reqLng && labourLat && labourLng) {
+         distanceKm = getDistanceFromLatLonInKm(reqLat, reqLng, labourLat, labourLng);
+      }
+      
+      // Round distance to 1 decimal place
+      distanceKm = Math.round(distanceKm * 10) / 10;
+      
+      let labourFee = 0;
+      if (distanceKm <= 2) labourFee = 20;
+      else if (distanceKm <= 5) labourFee = 15;
+      else if (distanceKm <= 10) labourFee = 10;
+      else if (distanceKm <= 15) labourFee = 5;
+      else labourFee = 0;
+
+      request.distanceKm = distanceKm;
+      request.labourPlatformFee = labourFee;
+      
+      // Update status to PLATFORM_FEE_PENDING to indicate fees are due
+      request.status = REQUEST_STATUS.PLATFORM_FEE_PENDING;
       request.labourId = req.user._id
       request.labourName = req.user.fullName
       request.labourPhone = req.user.phone
@@ -140,6 +197,8 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
           labourName: request.labourName,
           labourPhone: request.labourPhone,
           acceptedAt: request.acceptedAt,
+          distanceKm: request.distanceKm,
+          labourPlatformFee: request.labourPlatformFee,
           estimatedArrival: '30 mins' // Add a dummy ETA or omit it
         })
       } catch (err) {
@@ -157,5 +216,6 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Invalid action', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
   await assignment.save()
-  sendSuccess(res, { data: { assignment } })
+  const updatedRequest = await WorkforceRequest.findById(assignment.requestId);
+  sendSuccess(res, { data: { assignment, request: updatedRequest } })
 })

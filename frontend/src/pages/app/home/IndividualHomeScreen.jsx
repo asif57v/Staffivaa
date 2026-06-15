@@ -122,6 +122,23 @@ export function IndividualHomeScreen({ user }) {
   const [groupsLoading, setGroupsLoading] = useState(true)
   const [selectedGroupId, setSelectedGroupId] = useState(null)
 
+  const HERO_IMAGES = useMemo(() => [
+    '/service_electrician.png',
+    '/service_plumber.png',
+    '/service_ac.png',
+    '/service_mali.png',
+    '/service_carpenter.png',
+    '/service_painter.png'
+  ], [])
+  const [heroImageIndex, setHeroImageIndex] = useState(0)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setHeroImageIndex((prev) => (prev + 1) % HERO_IMAGES.length)
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [HERO_IMAGES.length])
+
   const categoryScrollRef = useRef(null)
   const isCategoryHoveredRef = useRef(false)
 
@@ -364,13 +381,20 @@ export function IndividualHomeScreen({ user }) {
                 <span className="ml-1 text-[8px] sm:text-[9px] font-medium text-slate-400">Starting*</span>
               </div>
             </div>
-            <div className="w-[40%] relative shrink-0">
-              <img
-                src="/skilled_labour_hero.png"
-                alt="Home Repair and Handyman Services"
-                className="absolute inset-0 w-full h-full object-cover object-[center_20%]"
-              />
-              <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-white to-transparent" />
+            <div className="w-[40%] relative shrink-0 overflow-hidden">
+              <AnimatePresence mode="popLayout">
+                <motion.img
+                  key={HERO_IMAGES[heroImageIndex]}
+                  src={HERO_IMAGES[heroImageIndex]}
+                  alt="Home Repair and Handyman Services"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.8 }}
+                  className="absolute inset-0 w-full h-full object-cover object-[center_20%]"
+                />
+              </AnimatePresence>
+              <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-white to-transparent z-10" />
             </div>
           </div>
         </motion.div>

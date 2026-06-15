@@ -5,6 +5,7 @@ import { CheckCircle2, Clock, IndianRupee, MapPin, RotateCcw, Sparkles } from 'l
 import { useAuth } from '../../hooks/useAuth.js'
 import { KYC_STATUS } from '../../constants/userRoles.js'
 import { AppEmptyState } from '../../components/app/AppEmptyState.jsx'
+import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
 import { AppButton } from '../../components/app-ui/buttons/AppButton.jsx'
 import { LabourAssignmentDetailModal } from '../../components/labour/LabourAssignmentDetailModal.jsx'
 import { LabourJobActiveCard } from '../../components/labour/jobs/LabourJobActiveCard.jsx'
@@ -12,11 +13,15 @@ import { LabourJobHistoryCard } from '../../components/labour/jobs/LabourJobHist
 import { LabourJobOfferCard } from '../../components/labour/jobs/LabourJobOfferCard.jsx'
 import { LabourJobsHero } from '../../components/labour/jobs/LabourJobsHero.jsx'
 import { LabourJobsTabBar } from '../../components/labour/jobs/LabourJobsTabBar.jsx'
+import { readAppUserLocation } from '../../lib/appUserLocationStorage.js'
 import {
   useGetLabourAssignmentsQuery,
   useRespondAssignmentMutation,
   useCheckInMutation,
+  useStartWorkMutation,
   useCheckOutMutation,
+  useCreateRazorpayOrderMutation,
+  useVerifyRazorpayPaymentMutation,
 } from '../../store/api/workforceApi.js'
 import {
   bucketsFromAssignments,
@@ -39,7 +44,10 @@ export function AppJobsPage() {
   const { data: apiData, error: apiError, refetch } = useGetLabourAssignmentsQuery(undefined, { pollingInterval: 3000 })
   const [respondAssignment] = useRespondAssignmentMutation()
   const [checkIn] = useCheckInMutation()
+  const [startWork] = useStartWorkMutation()
   const [checkOut] = useCheckOutMutation()
+  const [createOrder, { isLoading: isCreatingOrder }] = useCreateRazorpayOrderMutation()
+  const [verifyPayment, { isLoading: isVerifying }] = useVerifyRazorpayPaymentMutation()
 
   const apiBuckets = useMemo(
     () => bucketsFromAssignments(apiData?.assignments || []),
@@ -59,10 +67,18 @@ export function AppJobsPage() {
   const [detailKind, setDetailKind] = useState('offers')
   const [toast, setToast] = useState('')
   const [showAllHistory, setShowAllHistory] = useState(false)
+  const [feePaymentRequest, setFeePaymentRequest] = useState(null)
 
   const kycOk = user?.labourProfile?.kycStatus === KYC_STATUS.VERIFIED
 
-  useEffect(() => subscribeJobDemo(setLocalDemo), [])
+  useEffect(() => {
+    subscribeJobDemo(setLocalDemo)
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.async = true
+    document.body.appendChild(script)
+    return () => document.body.removeChild(script)
+  }, [])
 
   const showToast = useCallback((msg) => {
     setToast(msg)
@@ -122,8 +138,25 @@ export function AppJobsPage() {
     if (!kycOk) return
     if (isApiAssignment(offer)) {
       try {
-        await respondAssignment({ id: offer.id, action: 'accept' }).unwrap()
+        const loc = readAppUserLocation()
+        if (!loc?.lat || !loc?.lng) {
+          showToast('Please update your Work Area with a valid GPS location first.')
+          setWorkAreaModalOpen(true)
+          return
+        }
+        const res = await respondAssignment({ 
+          id: offer.id, 
+          action: 'accept',
+          labourLat: loc?.lat,
+          labourLng: loc?.lng
+        }).unwrap()
         refetch()
+        if (res.request && res.request.status === 'platform_fee_pending') {
+          setConfirmingOfferId(null);
+          showToast('Booking Accepted! Please pay the platform fee to unlock.')
+          setTab('active')
+          return;
+        }
       } catch (e) {
         showToast('Failed to accept offer')
         return
@@ -140,6 +173,57 @@ export function AppJobsPage() {
     setTab('active')
   }
 
+  const handlePayment = async (job) => {
+    if (!job || !job.requestId) return;
+    const requestId = job.requestId;
+    try {
+      const order = await createOrder(requestId).unwrap();
+      
+      // Handle zero-fee bypass
+      if (order.bypassPayment) {
+        showToast('Platform fee waived for long distance! Shift confirmed.');
+        refetch();
+        return;
+      }
+
+      const options = {
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency,
+        name: 'Staffivaa',
+        description: 'Labour Platform Fee',
+        order_id: order.orderId,
+        handler: async function (response) {
+          try {
+            await verifyPayment({
+              id: requestId,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature
+            }).unwrap();
+            showToast('Platform fee paid! Booking unlocked.');
+            refetch();
+          } catch (err) {
+            console.error('Payment verification failed', err);
+            showToast('Payment verification failed. Please contact support.');
+          }
+        },
+        theme: {
+          color: '#FFD100'
+        }
+      };
+      const rzp1 = new window.Razorpay(options);
+      rzp1.on('payment.failed', function (response){
+        console.error(response.error);
+        showToast('Payment failed');
+      });
+      rzp1.open();
+    } catch (err) {
+      console.error('Failed to create order', err);
+      showToast(err?.data?.message || 'Failed to initiate payment');
+    }
+  }
+
   const handleMarkOnSite = async (id, lat, lng) => {
     const job = demo.active.find((a) => a.id === id)
     if (!job) return
@@ -148,7 +232,7 @@ export function AppJobsPage() {
         await checkIn({ assignmentId: id, lat, lng }).unwrap()
         refetch()
       } catch (e) {
-        showToast(e?.data?.message || 'Failed to check in')
+        showToast(e?.data?.message || 'Failed to mark arrival')
         return
       }
     } else {
@@ -157,7 +241,27 @@ export function AppJobsPage() {
         active: localDemo.active.map((a) => (a.id === id ? { ...a, status: 'on_site', onSiteAt: nowIso() } : a)),
       })
     }
-    showToast('On site — attendance counts toward pay.')
+    showToast('Arrived at site.')
+  }
+
+  const handleStartWork = async (id) => {
+    const job = demo.active.find((a) => a.id === id)
+    if (!job) return
+    if (isApiAssignment(job)) {
+      try {
+        await startWork({ assignmentId: id }).unwrap()
+        refetch()
+      } catch (e) {
+        showToast(e?.data?.message || 'Failed to start work')
+        return
+      }
+    } else {
+      persist({
+        ...localDemo,
+        active: localDemo.active.map((a) => (a.id === id ? { ...a, status: 'in_progress' } : a)),
+      })
+    }
+    showToast('Work started — tracking attendance.')
   }
 
   const handleCompleteActive = async (id) => {
@@ -303,8 +407,10 @@ export function AppJobsPage() {
                 <LabourJobActiveCard
                   job={job}
                   onMarkOnSite={handleMarkOnSite}
-                  onOpenDetail={(j) => openDetail(j, 'active')}
+                  onStartWork={handleStartWork}
                   onComplete={handleCompleteActive}
+                  onOpenDetail={(j) => openDetail(j, 'active')}
+                  onPayFee={handlePayment}
                 />
               </motion.div>
             ))
