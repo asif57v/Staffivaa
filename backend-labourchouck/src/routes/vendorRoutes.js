@@ -15,6 +15,7 @@ import {
   listVendorSettlements,
   listVendorMarketplaceRequests,
   acceptVendorMarketplaceRequest,
+  declineVendorMarketplaceRequest,
   assignWorkforce,
 } from '../controllers/vendorController.js'
 
@@ -36,5 +37,6 @@ router.post('/jobs/:id/assign', assignWorkforce)
 router.get('/settlements', listVendorSettlements)
 router.get('/requests', listVendorMarketplaceRequests)
 router.post('/requests/:id/accept', acceptVendorMarketplaceRequest)
+router.post('/requests/:id/decline', declineVendorMarketplaceRequest)
 
 export default router

@@ -7,7 +7,7 @@ import { Assignment } from '../models/Assignment.js'
 import { User } from '../models/User.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
-import { emitRequestStatusUpdate, getIO } from '../utils/socket.js'
+import { emitRequestStatusUpdate, getIO, emitToUser } from '../utils/socket.js'
 
 export const createAllocationAdmin = asyncHandler(async (req, res) => {
   const { requestId, vendorId, labourIds, notes } = req.body
@@ -53,6 +53,7 @@ export const createAllocationAdmin = asyncHandler(async (req, res) => {
       status: ASSIGNMENT_STATUS.OFFERED,
     })
     assignments.push(assignment)
+    emitToUser('labour', labourId.toString(), 'assignment_assigned', { assignmentId: assignment._id.toString() })
   }
 
   if (request.status === REQUEST_STATUS.PENDING_REVIEW || request.status === REQUEST_STATUS.CONFIRMED) {
@@ -88,6 +89,10 @@ export const replaceAssignmentAdmin = asyncHandler(async (req, res) => {
     status: ASSIGNMENT_STATUS.OFFERED,
     replacedAssignmentId: old._id,
   })
+  
+  emitToUser('labour', newLabourId.toString(), 'assignment_assigned', { assignmentId: assignment._id.toString() })
+  emitToUser('labour', old.labourId.toString(), 'assignment_cancelled', { assignmentId: old._id.toString() })
+  
   sendSuccess(res, { data: { assignment, replaced: old } })
 })
 
@@ -99,7 +104,7 @@ export const listLabourAssignments = asyncHandler(async (req, res) => {
     .populate({
       path: 'requestId',
       populate: [
-        { path: 'clientId', select: 'fullName phone corporateProfile' },
+        { path: 'clientId', select: 'fullName phone corporateProfile companyName' },
         { path: 'lines.categoryId', select: 'name' },
         { path: 'projectId', select: 'name' },
         { path: 'siteId', select: 'address' }
@@ -108,7 +113,39 @@ export const listLabourAssignments = asyncHandler(async (req, res) => {
     .populate('vendorId', 'fullName contractorProfile')
     .populate('categoryId', 'name')
     .lean()
-  sendSuccess(res, { data: { assignments } })
+
+  const now = new Date()
+  const validAssignments = assignments.filter(a => {
+    if (!a.requestId) return false
+    
+    // If the assignment is merely an open OFFER, we must strictly check request validity
+    if (a.status === ASSIGNMENT_STATUS.OFFERED) {
+      if (a.requestId.status === REQUEST_STATUS.CANCELLED) return false
+      
+      // If it's an individual request searching for labour, it must not be expired
+      if (a.requestId.status === REQUEST_STATUS.SEARCHING) {
+        if (a.requestId.expiresAt && new Date(a.requestId.expiresAt) <= now) {
+          return false
+        }
+      }
+      
+      // If the request has already been accepted by someone else or moved forward
+      const validOfferStatuses = [
+        REQUEST_STATUS.SEARCHING, 
+        REQUEST_STATUS.ALLOCATING, 
+        REQUEST_STATUS.ASSIGNED, 
+        REQUEST_STATUS.CONFIRMED, 
+        REQUEST_STATUS.PENDING_REVIEW
+      ]
+      if (!validOfferStatuses.includes(a.requestId.status)) {
+        return false
+      }
+    }
+    
+    return true
+  })
+
+  sendSuccess(res, { data: { assignments: validAssignments } })
 })
 
 function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
@@ -136,9 +173,30 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
     assignment.status = ASSIGNMENT_STATUS.ACCEPTED
     assignment.acceptedAt = new Date()
 
-    const request = await WorkforceRequest.findById(assignment.requestId)
-    if (request && request.status !== REQUEST_STATUS.SEARCHING) {
-      return sendError(res, { message: 'Booking already accepted by another labour', statusCode: HTTP_STATUS.BAD_REQUEST })
+    let request = await WorkforceRequest.findOneAndUpdate(
+      {
+        _id: assignment.requestId,
+        status: REQUEST_STATUS.SEARCHING,
+        $or: [
+          { expiresAt: { $gt: new Date() } },
+          { expiresAt: { $exists: false } }
+        ]
+      },
+      {
+        $set: {
+          status: REQUEST_STATUS.PLATFORM_FEE_PENDING,
+          labourId: req.user._id,
+          labourName: req.user.fullName,
+          labourPhone: req.user.phone,
+          acceptedAt: new Date(),
+          acceptedBy: req.user._id
+        }
+      },
+      { new: true }
+    )
+
+    if (!request) {
+      return sendError(res, { message: 'Booking already accepted or expired', statusCode: HTTP_STATUS.BAD_REQUEST })
     }
 
     if (request) {
@@ -181,16 +239,13 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       request.distanceKm = distanceKm;
       request.labourPlatformFee = labourFee;
       
-      // Update status to PLATFORM_FEE_PENDING to indicate fees are due
-      request.status = REQUEST_STATUS.PLATFORM_FEE_PENDING;
-      request.labourId = req.user._id
-      request.labourName = req.user.fullName
-      request.labourPhone = req.user.phone
-      request.acceptedAt = new Date()
       await request.save()
 
       try {
         const io = getIO()
+        io.emit('bookingAcceptedGlobal', { requestId: request._id.toString() })
+        emitToUser('individual', request.clientId?.toString(), 'request_updated', { requestId: request._id.toString() })
+        emitToUser('labour', req.user._id.toString(), 'assignment_accepted', { assignmentId: assignment._id.toString() })
         io.to(`request_${request._id.toString()}`).emit('bookingAccepted', {
           status: request.status,
           labourId: request.labourId,
@@ -207,6 +262,7 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
     }
   } else if (action === 'decline') {
     assignment.status = ASSIGNMENT_STATUS.DECLINED
+    emitToUser('labour', req.user._id.toString(), 'assignment_rejected', { assignmentId: assignment._id.toString() })
     emitRequestStatusUpdate(assignment.requestId.toString(), {
       event: 'status_changed',
       assignmentStatus: assignment.status,

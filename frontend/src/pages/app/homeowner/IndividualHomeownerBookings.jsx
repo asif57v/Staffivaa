@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ArrowLeft, ArrowRight, CalendarClock, Menu, Plus, Sparkles, Filter, Clock, Search, Activity, CheckCircle2, LayoutGrid } from 'lucide-react'
+import { ArrowLeft, Menu, Plus, Filter, Clock, Search, Activity, CheckCircle2, LayoutGrid } from 'lucide-react'
 import { AppButton } from '../../../components/app-ui/buttons/AppButton.jsx'
-import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
 import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
 import { IndividualBookingDetail } from '../../../components/app/booking/IndividualBookingDetail.jsx'
 import { IndividualBookingHistoryList } from '../../../components/app/booking/IndividualBookingHistoryList.jsx'
@@ -15,7 +14,6 @@ import {
   saveIndividualBookings,
 } from '../../../lib/individualBookings.js'
 import { writeBookingDraft } from '../../../lib/individualBookingDraft.js'
-import { mapRequestStatusToIndividualBooking } from '../../../lib/workforceLabels.js'
 import { useGetMyRequestsQuery } from '../../../store/api/workforceApi.js'
 import { buildBookingFlowPath } from '../../../lib/bookingFlowNavigation.js'
 
@@ -109,7 +107,7 @@ export function IndividualHomeownerBookings() {
     [detailRef, displayHistory],
   )
 
-  const { data: serverRequestsData } = useGetMyRequestsQuery(undefined, { pollingInterval: 5000 })
+  const { data: serverRequestsData } = useGetMyRequestsQuery(undefined)
 
   useEffect(() => {
     if (!serverRequestsData?.requests) return
@@ -134,7 +132,8 @@ export function IndividualHomeownerBookings() {
 
     if (updated) {
       saveIndividualBookings(newHistory)
-      setHistory(newHistory)
+      // defer state update to avoid cascading render warnings
+      setTimeout(() => setHistory(newHistory), 0)
     }
   }, [serverRequestsData, history])
 

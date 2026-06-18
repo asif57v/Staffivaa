@@ -5,7 +5,7 @@ let io
 export const initSocket = (server) => {
   io = new Server(server, {
     cors: {
-      origin: '*', // In production, restrict this
+      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
       methods: ['GET', 'POST'],
       credentials: true,
     },
@@ -13,6 +13,20 @@ export const initSocket = (server) => {
 
   io.on('connection', (socket) => {
     console.log(`[Socket.io] Client connected: ${socket.id}`)
+
+    // Authenticate and join role-based personal rooms
+    socket.on('authenticate', (userData) => {
+      if (!userData || !userData._id || !userData.role) return;
+      
+      const { _id, role } = userData;
+      const personalRoom = `${role}_${_id}`;
+      const roleRoom = role;
+
+      socket.join(personalRoom);
+      socket.join(roleRoom);
+      
+      console.log(`[Socket.io] Socket ${socket.id} joined rooms: ${personalRoom}, ${roleRoom}`);
+    })
 
     // Client can join a room based on the requestId to receive updates for that specific request
     socket.on('join_request', (requestId) => {
@@ -43,5 +57,17 @@ export const getIO = () => {
 export const emitRequestStatusUpdate = (requestId, data) => {
   if (io) {
     io.to(`request_${requestId}`).emit('request_status_update', data)
+  }
+}
+
+export const emitToUser = (role, userId, eventName, payload) => {
+  if (io) {
+    io.to(`${role}_${userId}`).emit(eventName, payload)
+  }
+}
+
+export const emitToRole = (role, eventName, payload) => {
+  if (io) {
+    io.to(role).emit(eventName, payload)
   }
 }

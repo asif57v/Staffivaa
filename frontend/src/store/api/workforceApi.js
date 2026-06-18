@@ -153,6 +153,11 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       invalidatesTags: ['VendorJobs', 'Requests', 'VendorDashboard'],
     }),
+    declineMarketplaceRequest: build.mutation({
+      query: (id) => ({ url: `/vendor/requests/${id}/decline`, method: 'POST' }),
+      transformResponse: unwrap,
+      invalidatesTags: ['Requests', 'VendorJobs', 'VendorDashboard'],
+    }),
     patchVendorMe: build.mutation({
       query: (body) => ({ url: '/vendor/me', method: 'PATCH', body }),
       transformResponse: unwrap,
@@ -318,6 +323,7 @@ export const {
   useGetVendorSettlementsQuery,
   useGetVendorMarketplaceRequestsQuery,
   useAcceptMarketplaceRequestMutation,
+  useDeclineMarketplaceRequestMutation,
   useAssignWorkforceMutation,
   usePatchVendorMeMutation,
   useAddVendorDocumentMutation,

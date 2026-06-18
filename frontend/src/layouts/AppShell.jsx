@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ChevronDown, LogOut, MapPin, Menu, Sparkles, X, ShoppingCart, Bell } from 'lucide-react'
+import { useDispatch } from 'react-redux'
 import { useAuth } from '../hooks/useAuth.js'
 import {
   getAppNavigation,
@@ -20,13 +21,15 @@ import { adminInitials } from '../lib/formatAdminLastLogin.js'
 import { readAppUserLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { APP_HOME_LOCATION, APP_HOME_PATH, hasBookingFlowQuery } from '../lib/bookingFlowNavigation.js'
-import { useGetLabourAssignmentsQuery } from '../store/api/workforceApi.js'
+import { useGetLabourAssignmentsQuery, workforceApi } from '../store/api/workforceApi.js'
 import { loadJobDemoState, subscribeJobDemo } from '../lib/labourJobDemoStorage.js'
+import { connectSocket } from '../services/socket.js'
 
 export function AppShell() {
   const { pathname, search } = useLocation()
   const navigate = useNavigate()
-  const { logout, user } = useAuth()
+  const dispatch = useDispatch()
+  const { logout, user, token } = useAuth()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [individualHeaderSolid, setIndividualHeaderSolid] = useState(false)
   const [locationModalOpen, setLocationModalOpen] = useState(false)
@@ -37,11 +40,48 @@ export function AppShell() {
   const { headerTagline, bottomNav, drawerNav } = useMemo(() => getAppNavigation(user?.role), [user?.role])
 
   const isLabour = user?.role === USER_ROLES.LABOUR
-  const { data: apiData } = useGetLabourAssignmentsQuery(undefined, { skip: !isLabour, pollingInterval: 5000 })
+  const { data: apiData } = useGetLabourAssignmentsQuery(undefined, { skip: !isLabour })
   const [localDemo, setLocalDemo] = useState(() => loadJobDemoState())
   useEffect(() => {
     if (isLabour) return subscribeJobDemo(setLocalDemo)
   }, [isLabour])
+
+  // --- Socket.IO Real-time Implementation ---
+  useEffect(() => {
+    if (!user || !token) return;
+
+    const socket = connectSocket(user, token);
+
+    const invalidateCache = () => {
+      console.log('[Socket] Invalidating Assignments and Requests cache');
+      dispatch(workforceApi.util.invalidateTags(['Assignments', 'Requests']));
+    };
+
+    socket.on('assignment_created', invalidateCache);
+    socket.on('assignment_assigned', invalidateCache);
+    socket.on('assignment_accepted', invalidateCache);
+    socket.on('assignment_rejected', invalidateCache);
+    socket.on('assignment_completed', invalidateCache);
+    socket.on('assignment_cancelled', invalidateCache);
+
+    socket.on('request_created', invalidateCache);
+    socket.on('request_updated', invalidateCache);
+    socket.on('request_cancelled', invalidateCache);
+
+    return () => {
+      socket.off('assignment_created', invalidateCache);
+      socket.off('assignment_assigned', invalidateCache);
+      socket.off('assignment_accepted', invalidateCache);
+      socket.off('assignment_rejected', invalidateCache);
+      socket.off('assignment_completed', invalidateCache);
+      socket.off('assignment_cancelled', invalidateCache);
+
+      socket.off('request_created', invalidateCache);
+      socket.off('request_updated', invalidateCache);
+      socket.off('request_cancelled', invalidateCache);
+    };
+  }, [user, token, dispatch]);
+  // ------------------------------------------
 
   const pendingJobsCount = useMemo(() => {
     let count = 0

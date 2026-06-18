@@ -22,11 +22,16 @@ export function BookingFindingScreen({ categoryLabel, onComplete, onNoMatch }) {
       setProgress((p) => p >= 100 ? 0 : p + 4)
     }, 180)
 
+    const timeoutTimer = window.setTimeout(() => {
+      if (onNoMatch) onNoMatch()
+    }, 3 * 60 * 1000)
+
     return () => {
       window.clearInterval(msgTimer)
       window.clearInterval(progTimer)
+      window.clearTimeout(timeoutTimer)
     }
-  }, [])
+  }, [onNoMatch])
 
   return (
     <motion.div

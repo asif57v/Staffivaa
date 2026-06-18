@@ -42,7 +42,8 @@ export function AdminDashboardPage() {
       <div className="grid gap-6 grid-cols-4 w-full">
         {QUICK_STATS.map((s, i) => (
           <motion.div
-        initial={reduce ? false : { opacity: 0, y: 12 }}
+            key={s.label}
+            initial={reduce ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: 0.05 * i }}
           >

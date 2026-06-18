@@ -86,7 +86,8 @@ export const ADMIN_NAV_SECTIONS = [
   {
     title: 'Finance',
     items: [
-      { to: '/admin/billing', label: 'Payments & billing', icon: Wallet },
+      { to: '/admin/wallet', label: 'Admin Wallet', icon: Wallet },
+      { to: '/admin/billing', label: 'Payments & billing', icon: ClipboardList },
       { to: '/admin/pricing', label: 'Pricing & rates', icon: BadgeIndianRupee },
     ],
   },
@@ -109,6 +110,7 @@ const ROUTE_TITLES = [
   { prefix: '/admin/reports', title: 'Reports & analytics' },
   { prefix: '/admin/pricing', title: 'Pricing & rates' },
   { prefix: '/admin/billing', title: 'Payments & billing' },
+  { prefix: '/admin/wallet', title: 'Admin Wallet' },
   { prefix: '/admin/attendance', title: 'Attendance' },
   { prefix: '/admin/allocations', title: 'Workforce allocation' },
   { prefix: '/admin/buildmart', title: 'BuildMart leads' },

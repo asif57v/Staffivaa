@@ -20,6 +20,7 @@ import {
   Star,
   UserRound,
   Search,
+  Home,
 } from 'lucide-react'
 import { fetchLabourCategoriesGrouped } from '../../../api/labourCategoriesApi.js'
 import { GlassPanel } from '../../../components/ui/GlassPanel.jsx'
@@ -122,22 +123,53 @@ export function IndividualHomeScreen({ user }) {
   const [groupsLoading, setGroupsLoading] = useState(true)
   const [selectedGroupId, setSelectedGroupId] = useState(null)
 
-  const HERO_IMAGES = useMemo(() => [
-    '/service_electrician.png',
-    '/service_plumber.png',
-    '/service_ac.png',
-    '/service_mali.png',
-    '/service_carpenter.png',
-    '/service_painter.png'
-  ], [])
-  const [heroImageIndex, setHeroImageIndex] = useState(0)
+  const HERO_SLIDES = useMemo(() => [
+    {
+      image: '/home_service_hero.png',
+      title: `Welcome, ${user?.fullName || 'User'}! 👋`,
+      subtitle: 'Book verified experts for reliable, fast, and quality service.',
+      price: '₹99/hr'
+    },
+    {
+      image: '/service_ac.png',
+      title: 'AC Technician',
+      subtitle: 'Expert AC repair, servicing, and installation.',
+      price: '₹149/hr'
+    },
+    {
+      image: '/service_cook.png',
+      title: 'Professional Cook',
+      subtitle: 'Delicious home-cooked meals by verified chefs.',
+      price: '₹199/hr'
+    },
+    {
+      image: '/service_electrician.png',
+      title: 'Expert Electrician',
+      subtitle: 'Safe and reliable electrical repairs and wiring.',
+      price: '₹99/hr'
+    },
+    {
+      image: '/service_plumber.png',
+      title: 'Skilled Plumber',
+      subtitle: 'Fix leaks, blockages, and pipe installations.',
+      price: '₹99/hr'
+    },
+    {
+      image: '/service_painter.png',
+      title: 'House Painter',
+      subtitle: 'Professional home painting and touch-ups.',
+      price: '₹120/hr'
+    }
+  ], [user?.fullName])
+  
+  const [heroSlideIndex, setHeroSlideIndex] = useState(0)
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setHeroImageIndex((prev) => (prev + 1) % HERO_IMAGES.length)
-    }, 5000)
+      setHeroSlideIndex((prev) => (prev + 1) % HERO_SLIDES.length)
+    }, 3000)
     return () => clearInterval(interval)
-  }, [HERO_IMAGES.length])
+  }, [HERO_SLIDES.length])
 
   const categoryScrollRef = useRef(null)
   const isCategoryHoveredRef = useRef(false)
@@ -368,34 +400,31 @@ export function IndividualHomeScreen({ user }) {
           transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
           className="relative text-slate-900"
         >
-          <div className="flex items-stretch overflow-hidden rounded-2xl bg-white border border-slate-200 shadow-sm">
-            <div className="flex-1 p-3 flex flex-col justify-center relative z-10">
-              <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900">
-                Welcome, {user?.fullName || 'User'}! 👋
-              </h2>
-              <p className="mt-0.5 text-[10px] sm:text-[11px] font-medium leading-tight text-slate-500 line-clamp-2">
-                Book verified experts for reliable, fast, and quality service.
-              </p>
-              <div className="mt-2 inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 shadow-sm border border-slate-100 w-max">
-                <span className="text-[11px] sm:text-xs font-black text-[#F43F5E]">₹99/hr</span>
-                <span className="ml-1 text-[8px] sm:text-[9px] font-medium text-slate-400">Starting*</span>
+          <div className="relative overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-none flex gap-3 pb-2 pt-1 -mx-4 px-4 h-[130px]">
+            {HERO_SLIDES.map((slide, i) => (
+              <div key={i} className="w-full sm:w-[90%] shrink-0 snap-center relative overflow-hidden rounded-2xl bg-white border border-slate-200 shadow-sm h-[120px] flex items-stretch">
+                <div className="flex-1 p-3 flex flex-col justify-center relative z-10">
+                  <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900">
+                    {slide.title}
+                  </h2>
+                  <p className="mt-0.5 text-[10px] sm:text-[11px] font-medium leading-tight text-slate-500 line-clamp-2 pr-2">
+                    {slide.subtitle}
+                  </p>
+                  <div className="mt-2 inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 shadow-sm border border-slate-100 w-max">
+                    <span className="text-[11px] sm:text-xs font-black text-[#F43F5E]">{slide.price}</span>
+                    <span className="ml-1 text-[8px] sm:text-[9px] font-medium text-slate-400">Starting*</span>
+                  </div>
+                </div>
+                <div className="w-[45%] relative shrink-0 overflow-hidden">
+                  <img
+                    src={slide.image}
+                    alt={slide.title}
+                    className="absolute inset-0 w-full h-full object-cover object-[center_20%]"
+                  />
+                  <div className="absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-white to-transparent z-10" />
+                </div>
               </div>
-            </div>
-            <div className="w-[40%] relative shrink-0 overflow-hidden">
-              <AnimatePresence mode="popLayout">
-                <motion.img
-                  key={HERO_IMAGES[heroImageIndex]}
-                  src={HERO_IMAGES[heroImageIndex]}
-                  alt="Home Repair and Handyman Services"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.8 }}
-                  className="absolute inset-0 w-full h-full object-cover object-[center_20%]"
-                />
-              </AnimatePresence>
-              <div className="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-white to-transparent z-10" />
-            </div>
+            ))}
           </div>
         </motion.div>
       </section>
@@ -820,101 +849,119 @@ export function IndividualHomeScreen({ user }) {
         </motion.section>
 
         {/* Quick actions */}
-        <section className="space-y-3 mt-8">
-          <h3 className="px-1 text-[17px] font-bold tracking-tight text-slate-900">Quick actions</h3>
-          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none -mx-4 px-4">
+        <section className="space-y-5 mt-10 px-4">
+          <h3 className="text-[20px] font-extrabold tracking-tight text-slate-900">Quick Actions</h3>
+          <div className="flex flex-col gap-4">
             {[
-              { id: 'book', title: 'Book Labour', icon: UserRound, color: 'bg-indigo-100 text-indigo-600', action: () => setCategorySheetOpen(true) },
-              { id: 'history', title: 'My Bookings', icon: CalendarClock, color: 'bg-emerald-100 text-emerald-600', action: () => navigate('/app/bookings') },
-              { id: 'support', title: 'Support', icon: Headphones, color: 'bg-rose-100 text-rose-600', action: () => navigate('/app/support') }
+              { id: 'book', title: 'Book Labour', subtitle: 'Find skilled workers near you', img: '/bg_quick_book.png', action: () => setCategorySheetOpen(true) },
+              { id: 'history', title: 'My Bookings', subtitle: 'Track and manage your jobs', img: '/bg_quick_bookings.png', action: () => navigate('/app/bookings') },
+              { id: 'support', title: 'Support', subtitle: "We're here to help you", img: '/bg_quick_support.png', action: () => navigate('/app/support') }
             ].map((a) => (
               <button
                 key={a.id}
                 onClick={a.action}
-                className="flex flex-1 min-w-[100px] flex-col items-center justify-center gap-2.5 rounded-[20px] border border-slate-200 bg-white p-4 shadow-[0_2px_8px_-3px_rgba(0,0,0,0.05)] transition active:scale-[0.96]"
+                className="relative overflow-hidden w-full h-[130px] rounded-[24px] shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition active:scale-[0.98] group border border-slate-100"
               >
-                <div className={`flex h-12 w-12 items-center justify-center rounded-full ${a.color}`}>
-                  <a.icon className="h-6 w-6" />
+                <div className="absolute inset-0">
+                   <img src={a.img} alt="" className="h-full w-full object-cover object-center group-hover:scale-105 transition-transform duration-700" />
                 </div>
-                <span className="text-[13px] font-bold text-slate-900 whitespace-nowrap">{a.title}</span>
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0F172A]/90 via-[#0F172A]/40 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-r from-[#0F172A]/80 via-[#0F172A]/20 to-transparent" />
+                
+                <div className="absolute inset-0 p-5 flex items-end justify-between">
+                  <div className="relative z-10 flex-1 pr-4 text-left">
+                    <h4 className="text-[22px] font-black text-white leading-none tracking-tight mb-1.5">{a.title}</h4>
+                    <p className="text-[13px] font-medium text-white/80">{a.subtitle}</p>
+                  </div>
+                  
+                  <div className="relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#FFC107] text-black shadow-[0_4px_12px_rgba(255,193,7,0.4)] group-hover:bg-[#FFD100]">
+                    <ArrowRight className="h-6 w-6 stroke-[2.5]" />
+                  </div>
+                </div>
               </button>
             ))}
           </div>
         </section>
 
         {/* How it works */}
-        <motion.section
-          initial={reduce ? false : { opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.38, delay: 0.12 }}
-          className="mt-8"
-        >
-          <h3 className="mb-4 px-1 text-[17px] font-bold tracking-tight text-slate-900">How it works</h3>
-          <div className="flex items-start justify-between relative px-2">
-             <div className="absolute top-[22px] left-[10%] right-[10%] border-t-2 border-dashed border-slate-200 z-0" />
-             {STEPS.map((step, i) => (
-                <div key={i} className="flex flex-col items-center relative z-10 w-1/3">
-                   <div className="h-11 w-11 rounded-full bg-slate-50 border-2 border-white shadow-[0_2px_8px_rgba(0,0,0,0.08)] flex items-center justify-center mb-2">
-                     <span className="text-[18px] font-black text-[#3730A3]">{i + 1}</span>
-                   </div>
-                   <h4 className="text-[13px] font-bold text-slate-900 mb-0.5">{step.title}</h4>
-                   <p className="text-[10px] text-slate-500 text-center px-1 font-medium leading-tight">{step.copy}</p>
+        <section className="mt-10 px-4">
+          <h3 className="mb-6 text-[20px] font-extrabold tracking-tight text-slate-900">How it works</h3>
+          <div className="flex justify-between items-stretch gap-2.5">
+            {[
+              { num: 1, title: 'Request', copy: 'Tell us what you need', img: '/hiw_request.png' },
+              { num: 2, title: 'Match', copy: 'We find the best match', img: '/hiw_match.png' },
+              { num: 3, title: 'Relax', copy: 'Sit back and relax', img: '/hiw_relax.png' }
+            ].map((step, i) => (
+              <div key={i} className="relative flex flex-col items-center flex-1 min-w-0 bg-white rounded-[20px] shadow-[0_8px_20px_rgba(0,0,0,0.04)] border border-slate-100 h-[145px] overflow-visible">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 h-[26px] w-[26px] rounded-full bg-[#FFC107] text-black text-[12px] font-black flex items-center justify-center shadow-[0_4px_8px_rgba(255,193,7,0.3)] border-2 border-white z-20">
+                  {step.num}
                 </div>
-             ))}
+                
+                <div className="w-full h-[85px] p-1.5 shrink-0 relative z-10">
+                  <div className="w-full h-full rounded-[14px] overflow-hidden bg-slate-50 relative">
+                    <img src={step.img} alt="" className="h-full w-full object-cover" />
+                    <div className="absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05)] rounded-[14px]" />
+                  </div>
+                </div>
+                
+                <div className="flex-1 flex flex-col items-center px-1 pb-2 mt-0.5">
+                  <h4 className="text-[13px] font-black text-slate-900 mb-0.5 tracking-tight">{step.title}</h4>
+                  <p className="text-[9px] text-slate-500 text-center font-semibold leading-[1.2] px-0.5">{step.copy}</p>
+                </div>
+
+                {i < 2 && (
+                  <div className="absolute top-[40px] -right-[15px] z-0 text-[#FFC107]">
+                    <ChevronRight className="h-5 w-5 opacity-80" strokeWidth={3} />
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
-        </motion.section>
+        </section>
 
         {/* Trust */}
-        <motion.section
-          initial={reduce ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.18, duration: 0.35 }}
-          className="mt-8 bg-amber-50/50 -mx-4 px-4 py-4 border-y border-amber-100"
-        >
-          <div className="flex items-center justify-around">
-             <div className="flex flex-col items-center gap-1.5">
-                <ShieldCheck className="h-5 w-5 text-amber-500" />
-                <span className="text-[10px] font-bold text-slate-700">Aadhaar Verified</span>
-             </div>
-             <div className="flex flex-col items-center gap-1.5">
-                <Star className="h-5 w-5 text-amber-500" />
-                <span className="text-[10px] font-bold text-slate-700">Clear Rates</span>
-             </div>
-             <div className="flex flex-col items-center gap-1.5">
-                <CheckCircle2 className="h-5 w-5 text-amber-500" />
-                <span className="text-[10px] font-bold text-slate-700">Safe & Reliable</span>
-             </div>
+        <section className="mt-10 px-4">
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {[
+              { icon: ShieldCheck, label: 'Aadhaar Verified' },
+              { icon: Star, label: 'Transparent Pricing' },
+              { icon: CheckCircle2, label: 'Safe & Reliable' }
+            ].map((pill, i) => (
+              <div key={i} className="flex items-center gap-2 px-3.5 py-2.5 bg-[#FFFDE7] rounded-full border border-[#FFF59D] shadow-[0_4px_10px_rgba(255,193,7,0.1)]">
+                <pill.icon className="h-4 w-4 text-[#FBC02D] stroke-[2.5]" />
+                <span className="text-[11px] font-extrabold text-[#F57F17] tracking-tight">{pill.label}</span>
+              </div>
+            ))}
           </div>
-        </motion.section>
+        </section>
 
         {/* Support */}
-        <motion.div
-          initial={reduce ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.22, duration: 0.35 }}
-          className="mt-8 pb-4"
-        >
-          <div className="rounded-[20px] border border-slate-200 bg-[#FAFAFA] p-4 flex items-center justify-between gap-4">
-             <div className="flex items-center gap-3">
-               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#E0E7FF]">
-                 <Headphones className="h-6 w-6 text-[#4F46E5]" />
+        <section className="mt-10 mb-28 px-4">
+          <div className="relative h-[100px] w-full rounded-[24px] bg-white border border-slate-100 shadow-[0_12px_30px_rgba(0,0,0,0.06)] flex items-stretch p-2">
+            <div className="w-[85px] h-full shrink-0 relative rounded-[18px] overflow-hidden bg-slate-100">
+               <img src="/support_agent_avatar.png" alt="Support" className="h-full w-full object-cover" />
+               <div className="absolute bottom-1.5 right-1.5 h-3.5 w-3.5 rounded-full bg-emerald-500 border-[2.5px] border-white shadow-sm" />
+            </div>
+            
+            <div className="flex-1 flex flex-col justify-center pl-3 pr-2 min-w-0">
+               <h4 className="text-[16px] font-black text-slate-900 leading-tight mb-0.5 tracking-tight">Need Help?</h4>
+               <p className="text-[11px] font-semibold text-slate-500 leading-tight truncate">Chat with our team</p>
+               <div className="flex items-center gap-1.5 mt-2">
+                  <span className="text-[9px] font-extrabold text-emerald-700 tracking-tight bg-emerald-100/80 px-2 py-1 rounded-md">Avg. reply &lt; 2 mins</span>
                </div>
-               <div>
-                  <h4 className="text-[15px] font-bold text-slate-900">Need help?</h4>
-                  <p className="text-[11px] font-medium text-slate-500 mt-0.5">Chat with our support team</p>
-                  <p className="text-[9px] font-semibold text-emerald-600 mt-1 flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> We typically reply in under 2 minutes
-                  </p>
-               </div>
-             </div>
-             <button
-               onClick={() => navigate('/app/support')}
-               className="shrink-0 rounded-[12px] bg-[#4F46E5] px-4 py-3 text-[12px] font-bold text-white shadow-sm transition hover:bg-[#4338CA] active:scale-[0.98]"
-             >
-               Chat with support
-             </button>
+            </div>
+            
+            <div className="shrink-0 flex items-center pr-1">
+               <button
+                 onClick={() => navigate('/app/support')}
+                 className="h-[44px] px-5 rounded-[16px] bg-[#FFC107] text-slate-900 text-[13px] font-black shadow-[0_4px_12px_rgba(255,193,7,0.3)] transition active:scale-95 flex items-center justify-center"
+               >
+                 Chat Now
+               </button>
+            </div>
           </div>
-        </motion.div>
+        </section>
+
       </section>
       <CategoryPickBottomSheet
         open={categorySheetOpen}

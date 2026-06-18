@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronRight, ClipboardList, Search, Filter, MapPin, Calendar, Users, CheckCircle2, UserCircle, Clock, Construction, AlertCircle, XCircle, Building2 } from 'lucide-react'
 import { AppEmptyState } from '../../../components/app/AppEmptyState.jsx'
 import { useAcceptVendorJobMutation, useGetVendorJobsQuery } from '../../../store/api/workforceApi.js'
+import { markVendorJobsViewed } from '../../../hooks/useVendorNotificationCount.js'
 
 function formatDate(d) {
   if (!d) return '—'
@@ -12,6 +13,9 @@ function formatDate(d) {
 const TABS = ['All', 'Accepted', 'Assigned', 'Completed', 'Cancelled']
 
 export function VendorJobsPage() {
+  useEffect(() => {
+    markVendorJobsViewed()
+  }, [])
   const { data, isLoading, isError } = useGetVendorJobsQuery()
   const [acceptJob] = useAcceptVendorJobMutation()
   const allocations = data?.allocations ?? []

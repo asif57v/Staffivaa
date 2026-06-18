@@ -174,17 +174,45 @@ export function AppAttendancePage() {
     }
   }
 
+  let durationStr = '—'
+  if (primaryAssignment) {
+    if (isDemo) {
+      durationStr = '23 Jun 2026 – 30 Jun 2026'
+    } else if (req.startDate) {
+      durationStr = `${formatDate(req.startDate)}${req.endDate ? ` – ${formatDate(req.endDate)}` : ''}`
+    } else {
+      durationStr = 'Not specified'
+    }
+  }
+
   // Determine Assignment Date
-  const assignedDate = primaryAssignment?.createdAt ? new Date(primaryAssignment.createdAt) : req.startDate ? new Date(req.startDate) : new Date(currentYear, currentMonth, 1)
+  let assignedDate = new Date(currentYear, currentMonth, 1)
+  if (primaryAssignment) {
+    const created = primaryAssignment.createdAt ? new Date(primaryAssignment.createdAt) : null
+    const accepted = primaryAssignment.acceptedAt ? new Date(primaryAssignment.acceptedAt) : null
+    const start = req.startDate ? new Date(req.startDate) : null
+    
+    const validDates = [created, accepted, start].filter(Boolean)
+    if (validDates.length > 0) {
+      assignedDate = new Date(Math.max(...validDates.map(d => d.getTime())))
+    }
+  }
   assignedDate.setHours(0, 0, 0, 0)
+
+  const todayDateObj = new Date()
+  todayDateObj.setHours(0, 0, 0, 0)
+  const canCheckInToday = todayDateObj.getTime() >= assignedDate.getTime()
 
   // Map records for the current month
   const recordMap = {}
   if (records) {
     records.forEach(r => {
       const d = new Date(r.shiftDate)
-      if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
-        recordMap[d.getDate()] = r
+      d.setHours(0, 0, 0, 0)
+      if (d.getTime() >= assignedDate.getTime()) {
+        if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+          recordMap[d.getDate()] = r
+        }
       }
     })
   }
@@ -261,7 +289,18 @@ export function AppAttendancePage() {
 
   // History Records
   const historyRecords = records
-    .filter(r => getLocalDateStr(r.shiftDate) < todayStr)
+    .filter(r => {
+      const d = new Date(r.shiftDate)
+      d.setHours(0, 0, 0, 0)
+      if (d.getTime() < assignedDate.getTime()) return false
+      
+      const localStr = getLocalDateStr(r.shiftDate)
+      if (localStr < todayStr) return true
+      if (localStr === todayStr) {
+        return r.projectStatus === 'completed' || Boolean(r.checkOutAt)
+      }
+      return false
+    })
     .sort((a, b) => new Date(b.shiftDate) - new Date(a.shiftDate))
 
   return (
@@ -302,17 +341,6 @@ export function AppAttendancePage() {
           <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 16px', lineHeight: 1.5 }}>
             You are currently not assigned to any Corporate project.
           </p>
-          <div style={{ background: '#F8FAFC', borderRadius: 12, padding: '16px', textAlign: 'left' }}>
-            <p style={{ fontSize: 12, color: '#475569', margin: '0 0 8px', fontWeight: 600 }}>Once a Vendor or Corporate assigns you to a project, this page will automatically display:</p>
-            <ul style={{ fontSize: 12, color: '#64748B', margin: 0, paddingLeft: 20, lineHeight: 1.6 }}>
-              <li>Assigned Project</li>
-              <li>Attendance Calendar</li>
-              <li>Check-In / Check-Out</li>
-              <li>Working Hours</li>
-              <li>Attendance History</li>
-              <li>Monthly Summary</li>
-            </ul>
-          </div>
         </div>
       ) : (
         <>
@@ -346,6 +374,10 @@ export function AppAttendancePage() {
               <div>
                 <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}><Clock style={{ width: 12, height: 12 }} /> Shift</p>
                 <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>{shiftStr}</p>
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}><CalendarDays style={{ width: 12, height: 12 }} /> Project Duration</p>
+                <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>{durationStr}</p>
               </div>
             </div>
             <div style={{ padding: '12px 16px', background: '#F8FAFC', borderTop: '1px solid #F1F5F9' }}>
@@ -400,15 +432,22 @@ export function AppAttendancePage() {
 
             {!isCompleted && (
               !isCheckedIn ? (
-                <AppPrimaryButton
-                  type="button"
-                  className="w-full py-3.5 rounded-xl shadow-lg shadow-sky-500/20 text-base"
-                  loading={isCheckingIn}
-                  onClick={() => handleCheckIn(primaryAssignment._id, isDemo)}
-                >
-                  <LogIn className="h-5 w-5 mr-2" />
-                  Check In Now
-                </AppPrimaryButton>
+                canCheckInToday ? (
+                  <AppPrimaryButton
+                    type="button"
+                    className="w-full py-3.5 rounded-xl shadow-lg shadow-sky-500/20 text-base"
+                    loading={isCheckingIn}
+                    onClick={() => handleCheckIn(primaryAssignment._id, isDemo)}
+                  >
+                    <LogIn className="h-5 w-5 mr-2" />
+                    Check In Now
+                  </AppPrimaryButton>
+                ) : (
+                  <div className="w-full py-3.5 flex items-center justify-center gap-2 rounded-xl bg-slate-50 text-sm font-bold text-slate-500 border border-slate-200">
+                    <CalendarDays className="h-5 w-5" />
+                    Check-in opens on {formatDate(assignedDate)}
+                  </div>
+                )
               ) : (
                 <button
                   type="button"
@@ -578,43 +617,45 @@ export function AppAttendancePage() {
               <h4 style={{ fontSize: 11, fontWeight: 800, color: '#64748B', margin: '0 0 10px 2px', textTransform: 'uppercase', letterSpacing: '0.8px', display: 'flex', alignItems: 'center', gap: 6 }}>
                 <History style={{ width: 14, height: 14 }} /> Attendance History
               </h4>
-              <div style={{ background: '#FFFFFF', borderRadius: 16, padding: '12px', border: '1px solid #F1F5F9', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: 400 }}>
-                  <thead>
-                    <tr>
-                      <th style={{ padding: '10px 12px', fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', borderBottom: '1px solid #F1F5F9' }}>Date</th>
-                      <th style={{ padding: '10px 12px', fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', borderBottom: '1px solid #F1F5F9' }}>Status</th>
-                      <th style={{ padding: '10px 12px', fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', borderBottom: '1px solid #F1F5F9' }}>Check In</th>
-                      <th style={{ padding: '10px 12px', fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', borderBottom: '1px solid #F1F5F9' }}>Check Out</th>
-                      <th style={{ padding: '10px 12px', fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', borderBottom: '1px solid #F1F5F9', textAlign: 'right' }}>Hours</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historyRecords.map((r, i) => {
-                      const d = new Date(r.shiftDate)
-                      const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
-                      let st = r.attendanceStatus || (r.projectStatus === 'completed' || r.projectStatus === 'working' ? 'Present' : 'Absent')
-                      if (st === 'working') st = 'Working'
+              <div className="space-y-3">
+                {historyRecords.map((r, i) => {
+                  const d = new Date(r.shiftDate)
+                  const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                  let st = r.attendanceStatus || (r.projectStatus === 'completed' || r.projectStatus === 'working' ? 'Present' : 'Absent')
+                  if (st === 'working') st = 'Working'
 
-                      const rColor = st === 'Present' || st === 'Working' ? '#10B981' : st === 'Late' ? '#F59E0B' : '#EF4444'
-                      const rBg = st === 'Present' || st === 'Working' ? '#ECFDF5' : st === 'Late' ? '#FFFBEB' : '#FEF2F2'
+                  const rColor = st === 'Present' || st === 'Working' ? '#10B981' : st === 'Late' ? '#F59E0B' : '#EF4444'
+                  const rBg = st === 'Present' || st === 'Working' ? '#ECFDF5' : st === 'Late' ? '#FFFBEB' : '#FEF2F2'
 
-                      return (
-                        <tr key={r._id || i} style={{ borderBottom: '1px solid #F8FAFC' }}>
-                          <td style={{ padding: '12px', fontSize: 13, fontWeight: 800, color: '#0F172A' }}>{dateStr}</td>
-                          <td style={{ padding: '12px' }}>
-                            <span style={{ background: rBg, color: rColor, padding: '4px 10px', borderRadius: 8, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                              {st}
-                            </span>
-                          </td>
-                          <td style={{ padding: '12px', fontSize: 12, fontWeight: 600, color: '#475569' }}>{r.checkInAt ? new Date(r.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                          <td style={{ padding: '12px', fontSize: 12, fontWeight: 600, color: '#475569' }}>{r.checkOutAt ? new Date(r.checkOutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                          <td style={{ padding: '12px', fontSize: 13, fontWeight: 800, color: '#0F172A', textAlign: 'right' }}>{r.totalHours ? `${r.totalHours}h` : '0h'}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                  return (
+                    <div key={r._id || i} style={{ background: '#FFFFFF', borderRadius: 16, padding: '16px', border: '1px solid #F1F5F9', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                        <span style={{ fontSize: 14, fontWeight: 800, color: '#0F172A' }}>{dateStr}</span>
+                        <span style={{ background: rBg, color: rColor, padding: '4px 10px', borderRadius: 8, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                          {st}
+                        </span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                        <div>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 2 }}>Check In</p>
+                          <p style={{ fontSize: 13, fontWeight: 700, color: '#475569', margin: 0 }}>
+                            {r.checkInAt ? new Date(r.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 2 }}>Check Out</p>
+                          <p style={{ fontSize: 13, fontWeight: 700, color: '#475569', margin: 0 }}>
+                            {r.checkOutAt ? new Date(r.checkOutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </p>
+                        </div>
+                      </div>
+                      <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', margin: 0 }}>Total Hours</p>
+                        <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>{r.totalHours ? `${r.totalHours}h` : '0h'}</p>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}

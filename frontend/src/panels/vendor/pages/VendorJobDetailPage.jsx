@@ -240,9 +240,9 @@ export function VendorJobDetailPage() {
                 <p className="text-[14px] font-bold text-slate-500">No workers assigned yet.</p>
               </div>
             ) : (
-              <ul className="space-y-3">
+              <div className="space-y-3">
                 {assignments.map((a) => (
-                  <li key={a._id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <Link key={a._id} to={`/vendor/attendance/${req.projectId?._id || req._id}/worker/${a.labourId?._id}`} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100 transition hover:bg-slate-100 cursor-pointer">
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-white border border-slate-200">
                         <img src={a.labourId?.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(a.labourId?.fullName || 'W')}&background=random`} alt="Worker" className="h-full w-full object-cover" />
@@ -257,17 +257,17 @@ export function VendorJobDetailPage() {
                     <span className="rounded-full bg-white border border-slate-200 px-2.5 py-1 text-[10px] font-black uppercase text-slate-600">
                       {a.status}
                     </span>
-                  </li>
+                  </Link>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
         )}
 
       </div>
 
-      {/* Bottom Sticky Actions */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-6 shadow-[0_-10px_30px_-10px_rgba(0,0,0,0.05)] z-40 max-w-md mx-auto flex flex-col gap-3">
+      {/* Bottom Actions */}
+      <div className="mt-4 p-4 pb-24 max-w-md mx-auto flex flex-col gap-3">
         {pending ? (
           <button onClick={() => acceptJob(id)} disabled={accepting} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm disabled:opacity-50">
             <CheckCircle2 className="h-4 w-4" /> Accept Job

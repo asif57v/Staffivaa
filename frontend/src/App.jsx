@@ -33,6 +33,7 @@ const AdminAllocationsPage = lazy(() => import('./pages/admin/AdminAllocationsPa
 const AdminAttendancePage = lazy(() => import('./pages/admin/AdminAttendancePage.jsx').then(m => ({ default: m.AdminAttendancePage })))
 const AdminBillingPage = lazy(() => import('./pages/admin/AdminBillingPage.jsx').then(m => ({ default: m.AdminBillingPage })))
 const AdminPricingPage = lazy(() => import('./pages/admin/AdminPricingPage.jsx').then(m => ({ default: m.AdminPricingPage })))
+const AdminWalletDashboard = lazy(() => import('./pages/admin/wallet/AdminWalletDashboard.jsx').then(m => ({ default: m.AdminWalletDashboard })))
 const AdminModulePlaceholder = lazy(() => import('./components/admin/AdminModulePlaceholder.jsx').then(m => ({ default: m.AdminModulePlaceholder })))
 
 function App() {
@@ -121,6 +122,7 @@ function App() {
               <Route path="attendance" element={<AdminAttendancePage />} />
               <Route path="billing" element={<AdminBillingPage />} />
               <Route path="pricing" element={<AdminPricingPage />} />
+              <Route path="wallet" element={<AdminWalletDashboard />} />
               <Route
                 path="reports"
                 element={

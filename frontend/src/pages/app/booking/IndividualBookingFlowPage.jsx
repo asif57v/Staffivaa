@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   ImagePlus,
   IndianRupee,
+  Loader2,
   MapPin,
   MapPinned,
   MessageCircle,
@@ -109,7 +110,9 @@ export function IndividualBookingFlowPage() {
   const [activeBooking, setActiveBooking] = useState(null)
   const [noMatch, setNoMatch] = useState(false)
   const [imageFiles, setImageFiles] = useState([])
+  const [isLocating, setIsLocating] = useState(false)
   const [autocomplete, setAutocomplete] = useState(null)
+  const [isGenerating, setIsGenerating] = useState(false)
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
@@ -272,18 +275,20 @@ export function IndividualBookingFlowPage() {
       }
     }
 
-    // Poll immediately, then every 2 seconds
+    // Initial fetch to check status on load
     poll()
-    const interval = setInterval(poll, 2000)
 
     // Socket.io for instant updates
     let socket = null
     try {
       const socketUrl = baseUrl.replace('/api/v1', '')
       socket = io(socketUrl, { withCredentials: true })
-      if (activeBooking?.requestId) {
-        socket.emit('join_request', activeBooking.requestId)
-      }
+      
+      socket.on('connect', () => {
+        if (activeBooking?.requestId) {
+          socket.emit('join_request', activeBooking.requestId)
+        }
+      })
 
       socket.on('bookingAccepted', (data) => {
         console.log('[Homeowner] bookingAccepted socket event received:', data)
@@ -300,7 +305,6 @@ export function IndividualBookingFlowPage() {
 
     return () => {
       cancelled = true
-      clearInterval(interval)
       if (socket) {
         if (activeBooking?.requestId) socket.emit('leave_request', activeBooking.requestId)
         socket.disconnect()
@@ -351,6 +355,7 @@ export function IndividualBookingFlowPage() {
       setFormError('Location is not supported by your browser.')
       return
     }
+    setIsLocating(true)
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords
@@ -359,6 +364,7 @@ export function IndividualBookingFlowPage() {
           const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
           if (!apiKey) {
             syncDraft({ address: `${lat.toFixed(5)}, ${lng.toFixed(5)}` })
+            setIsLocating(false)
             return
           }
           const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`)
@@ -370,10 +376,13 @@ export function IndividualBookingFlowPage() {
           }
         } catch {
           syncDraft({ address: `${lat.toFixed(5)}, ${lng.toFixed(5)}` })
+        } finally {
+          setIsLocating(false)
         }
       },
       () => {
         setFormError('Unable to retrieve your location.')
+        setIsLocating(false)
       },
       { enableHighAccuracy: false, timeout: 10_000 },
     )
@@ -425,6 +434,10 @@ export function IndividualBookingFlowPage() {
   }
 
   const confirmBooking = async () => {
+    if (isGenerating) return
+    setIsGenerating(true)
+    setTimeout(() => setIsGenerating(false), 3000)
+
     if (!validateDetails()) return
     writeAppUserLocation({ address: draft.address.trim(), lat: draft.lat, lng: draft.lng })
     const payload = bookingPayloadFromDraft({
@@ -535,17 +548,19 @@ export function IndividualBookingFlowPage() {
   if (noMatch) {
     return (
       <div className="space-y-4 pb-8">
-        <FlowHeader title="No one available yet" subtitle="Try widening your search" onBack={() => navigate('/app/discover/labours')} />
-        <GlassPanel className="p-6 text-center">
-          <AlertCircle className="mx-auto h-10 w-10 text-amber-500" aria-hidden />
-          <p className="mt-3 text-sm font-bold text-slate-900">No labour accepted within 5 minutes</p>
-          <p className="mt-2 text-xs text-slate-600">You can retry with smart match or pick workers manually.</p>
-          <motion.div layout className="mt-5 flex flex-col gap-2">
-            <AppPrimaryButton type="button" onClick={() => { setNoMatch(false); goStep('searching') }}>
-              Retry search
+        <FlowHeader title="No Labour Assigned" subtitle="We couldn't find an available worker nearby" onBack={() => navigate('/app/discover/labours')} />
+        <GlassPanel className="p-8 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-100">
+            <AlertCircle className="h-8 w-8 text-slate-400" aria-hidden />
+          </div>
+          <p className="mt-4 text-base font-bold text-slate-900">Booking Expired</p>
+          <p className="mt-2 text-sm text-slate-600">No labour was able to accept your request within the 3-minute window. This can happen during peak hours.</p>
+          <motion.div layout className="mt-8 flex flex-col gap-3">
+            <AppPrimaryButton type="button" onClick={() => { setNoMatch(false); confirmBooking() }}>
+              Book Again
             </AppPrimaryButton>
             <AppButton type="button" variant="secondary" onClick={() => navigate('/app/discover/labours')}>
-              Change workers
+              Browse Available Workers
             </AppButton>
           </motion.div>
         </GlassPanel>
@@ -675,10 +690,15 @@ export function IndividualBookingFlowPage() {
               <button
                 type="button"
                 onClick={pickLocation}
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-brand/25 bg-brand/5 py-2.5 text-[11px] font-bold text-brand"
+                disabled={isLocating}
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-brand/25 bg-brand/5 py-2.5 text-[11px] font-bold text-brand disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                <Navigation className="h-3.5 w-3.5" aria-hidden />
-                Current location
+                {isLocating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <Navigation className="h-3.5 w-3.5" aria-hidden />
+                )}
+                {isLocating ? 'Locating...' : 'Current location'}
               </button>
               <button
                 type="button"
@@ -875,9 +895,9 @@ export function IndividualBookingFlowPage() {
             <AppButton type="button" variant="secondary" className="flex-1" onClick={() => goStep('details')}>
               Edit details
             </AppButton>
-            <AppPrimaryButton type="button" className="flex-1 py-3.5" onClick={confirmBooking}>
-              Request Booking
-              <CheckCircle2 className="h-4 w-4 ml-1 inline" aria-hidden />
+            <AppPrimaryButton type="button" className="flex-1 py-3.5" disabled={isGenerating} onClick={confirmBooking}>
+              {isGenerating ? 'Processing...' : 'Request Booking'}
+              {!isGenerating && <CheckCircle2 className="h-4 w-4 ml-1 inline" aria-hidden />}
             </AppPrimaryButton>
           </div>
         </motion.div>

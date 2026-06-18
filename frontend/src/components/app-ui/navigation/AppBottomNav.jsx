@@ -15,7 +15,7 @@ export function AppBottomNav({ items }) {
       style={{ paddingBottom: 'max(0.4rem, env(safe-area-inset-bottom))' }}
       aria-label="Bottom navigation"
     >
-      <div className="pointer-events-auto mb-2 flex w-full max-w-[min(100%,24rem)] items-end gap-1 px-2 py-1.5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] bg-white/95 backdrop-blur-xl border border-slate-100/50 rounded-[2rem]">
+      <div className="pointer-events-auto mb-2 flex h-[70px] w-full max-w-[min(100%,24rem)] items-center justify-around gap-1 px-2 shadow-[0_8px_32px_rgba(0,0,0,0.12)] bg-white/95 backdrop-blur-xl border border-slate-100 rounded-[35px]">
         {items.map(({ id, to, end, label, icon: Icon, premium, badge }) => (
           <NavLink
             key={`${id}-${to}`}
@@ -73,33 +73,33 @@ export function AppBottomNav({ items }) {
                   </span>
                 </>
               ) : (
-                <div className="relative flex flex-col items-center justify-center w-full py-2 px-1 text-center z-10 rounded-2xl">
+                <div className={`relative flex flex-col items-center justify-center w-full py-1 px-1 text-center z-10 rounded-2xl group ${isActive ? '-mt-5' : 'opacity-50 hover:opacity-100'}`}>
                   {isActive && !reduce ? (
                     <motion.div
                       layoutId="app-tab-pill-bg"
-                      className="absolute inset-0 rounded-[18px] bg-[#FEF9E7] border border-[#F4C542]/20 shadow-2xs"
+                      className="absolute inset-0 rounded-[18px] bg-transparent border-transparent shadow-none"
                       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                     />
                   ) : null}
-                  {isActive && reduce ? (
-                    <div className="absolute inset-0 rounded-[18px] bg-[#FEF9E7] border border-[#F4C542]/20 shadow-2xs" />
-                  ) : null}
                   <div className="relative inline-flex items-center justify-center">
-                    <Icon
-                      className={`relative z-10 h-[18px] w-[18px] transition-colors duration-255 ${
-                        isActive ? 'text-[#F4C542]' : 'text-[#9CA3AF]'
-                      }`}
-                      aria-hidden
-                    />
+                    {isActive ? (
+                      <div className="h-12 w-12 rounded-full bg-[#FFC107] text-black shadow-[0_6px_16px_rgba(255,193,7,0.4)] flex items-center justify-center mb-1 transition-transform group-active:scale-95">
+                        <Icon className="h-5 w-5" aria-hidden />
+                      </div>
+                    ) : (
+                      <div className="h-10 w-10 flex items-center justify-center mb-0.5">
+                        <Icon className="h-6 w-6 text-slate-600" aria-hidden />
+                      </div>
+                    )}
                     {badge ? (
-                      <span className="absolute -top-1 -right-1.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-black text-white ring-2 ring-white z-20 shadow-sm">
+                      <span className={`absolute ${isActive ? '-top-1 right-0' : '-top-1 -right-1'} flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-red-500 px-1 text-[8px] font-black text-white ring-2 ring-white z-20 shadow-sm`}>
                         {badge}
                       </span>
                     ) : null}
                   </div>
                   <span
-                    className={`relative z-10 mt-0.5 truncate px-0.5 text-[9px] font-black tracking-wide transition-colors duration-255 ${
-                      isActive ? 'text-[#8A6D1C]' : 'text-[#9CA3AF]'
+                    className={`relative z-10 truncate px-0.5 text-[10px] tracking-wide transition-colors duration-255 ${
+                      isActive ? 'font-extrabold text-slate-900' : 'font-bold text-slate-600'
                     }`}
                   >
                     {label}

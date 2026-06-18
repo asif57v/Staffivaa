@@ -23,6 +23,7 @@ import {
 import { io } from 'socket.io-client'
 import { useGetRequestQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation, useCreateExtraWorkMutation, useGetExtraWorkQuery, useUpdateExtraWorkStatusMutation } from '../../../store/api/workforceApi.js'
 import { enrichDiscoverLabourUi, hashSeed } from '../../../lib/discoverLabourDummyUi.js'
+import { loadRazorpayScript } from '../../../lib/razorpay.js'
 import { ExtraWorkModal } from './ExtraWorkModal.jsx'
 import { PlusCircle } from 'lucide-react'
 
@@ -31,7 +32,6 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
 
   const { data: requestData, isLoading, error, refetch } = useGetRequestQuery(requestId, {
     skip: !requestId,
-    pollingInterval: 3000,
   })
 
   const [createOrder, { isLoading: isCreatingOrder }] = useCreateRazorpayOrderMutation()
@@ -63,13 +63,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     }
   }
 
-  useEffect(() => {
-    const script = document.createElement('script')
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    script.async = true
-    document.body.appendChild(script)
-    return () => document.body.removeChild(script)
-  }, [])
+
 
   const handlePayment = async () => {
     if (!requestId || String(requestId).startsWith('demo-')) {
@@ -80,6 +74,12 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     }
 
     try {
+      const isLoaded = await loadRazorpayScript()
+      if (!isLoaded) {
+        alert('Failed to load payment gateway. Please check your internet connection.')
+        return
+      }
+
       const order = await createOrder(requestId).unwrap()
       
       const options = {

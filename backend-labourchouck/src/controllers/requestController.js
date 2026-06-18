@@ -13,6 +13,7 @@ import { User } from '../models/User.js'
 import { ExtraWorkRequest } from '../models/ExtraWorkRequest.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
+import { emitToUser } from '../utils/socket.js'
 
 function parseLines(lines) {
   if (!Array.isArray(lines) || !lines.length) return null
@@ -62,6 +63,21 @@ export const createRequest = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Start date required', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
 
+  // Calculate dynamic platform fee based on duration
+  let totalDurationInDays = 1;
+  if (endDate && startDate) {
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    const diffDays = Math.ceil(Math.abs(end - start) / (1000 * 60 * 60 * 24))
+    totalDurationInDays = Math.max(1, diffDays + 1)
+  }
+
+  let calculatedFee = 20;
+  if (totalDurationInDays === 1) calculatedFee = 20;
+  else if (totalDurationInDays <= 3) calculatedFee = 30;
+  else if (totalDurationInDays <= 7) calculatedFee = 50;
+  else calculatedFee = 100;
+
   const request = await WorkforceRequest.create({
     reference: generateRequestReference(sourceType === REQUEST_SOURCE.CORPORATE ? 'CR' : 'IR'),
     sourceType,
@@ -80,7 +96,10 @@ export const createRequest = asyncHandler(async (req, res) => {
     notes,
     billingMode,
     bookingType,
+    userPlatformFee: calculatedFee,
+    labourPlatformFee: calculatedFee,
     status: sourceType === REQUEST_SOURCE.INDIVIDUAL ? REQUEST_STATUS.SEARCHING : REQUEST_STATUS.ALLOCATING,
+    ...(sourceType === REQUEST_SOURCE.INDIVIDUAL && { expiresAt: new Date(Date.now() + 3 * 60 * 1000) }),
   })
 
   // Send offers to matching workers (for INDIVIDUAL requests)
@@ -99,18 +118,30 @@ export const createRequest = asyncHandler(async (req, res) => {
         notes: 'Auto-allocated by skill match for individual booking',
       })
 
+      const LabourCategory = mongoose.model('LabourCategory')
+      const category = await LabourCategory.findById(categoryId)
+      const baseRate = category?.baseRate || 800
+
       const assignmentsToCreate = workers.map((worker) => ({
         allocationId: allocation._id,
         requestId: request._id,
         labourId: worker._id,
         categoryId,
         status: ASSIGNMENT_STATUS.OFFERED,
+        perDayRate: baseRate,
       }))
 
-      await Assignment.insertMany(assignmentsToCreate)
+      const createdAssignments = await Assignment.insertMany(assignmentsToCreate)
       // Keep status as SEARCHING until a worker accepts
+
+      // Notify all matching workers instantly
+      createdAssignments.forEach((assignment) => {
+        emitToUser('labour', assignment.labourId.toString(), 'assignment_assigned', { assignmentId: assignment._id.toString() })
+      })
     }
   }
+
+  emitToUser('individual', user._id.toString(), 'request_created', { requestId: request._id.toString() })
 
   sendSuccess(res, { data: { request } }, HTTP_STATUS.CREATED)
 })
@@ -163,16 +194,36 @@ export const getRequest = asyncHandler(async (req, res) => {
     extraCost += ew.revisedAmount != null ? ew.revisedAmount : ew.extraAmount
   })
   
-  const userPlatformFee = request.userPlatformFee || 49;
+  let totalDurationInDays = 1;
+  if (request.endDate && request.startDate) {
+    const start = new Date(request.startDate)
+    const end = new Date(request.endDate)
+    const diffDays = Math.ceil(Math.abs(end - start) / (1000 * 60 * 60 * 24))
+    totalDurationInDays = Math.max(1, diffDays + 1)
+  }
+
+  let platformFee = 20;
+  if (totalDurationInDays === 1) platformFee = 20;
+  else if (totalDurationInDays <= 3) platformFee = 30;
+  else if (totalDurationInDays <= 7) platformFee = 50;
+  else platformFee = 100;
+
+  const totalLabourCost = allocation?.totalLabourCost || 0;
+  const grandTotal = totalLabourCost + platformFee + extraCost;
+
+  const userPlatformFee = request.userPlatformFee || platformFee;
   const labourPlatformFee = request.labourPlatformFee || 0;
-  const totalAmount = userPlatformFee; // Total amount paid on platform by user
   
   const paymentSummary = {
     serviceCost,
     extraCost,
     userPlatformFee,
     labourPlatformFee,
-    totalAmount
+    totalDurationInDays,
+    totalLabourCost,
+    platformFee,
+    grandTotal,
+    totalAmount: grandTotal
   }
 
   sendSuccess(res, { data: { request, allocation, assignments, paymentSummary } })
@@ -202,5 +253,8 @@ export const patchRequestStatusAdmin = asyncHandler(async (req, res) => {
   request.reviewedBy = req.user._id
   request.reviewedAt = new Date()
   await request.save()
+  
+  emitToUser('individual', request.clientId?.toString(), 'request_updated', { requestId: request._id.toString() })
+  
   sendSuccess(res, { data: { request } })
 })

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Clock, Building2, Calendar, Filter } from 'lucide-react'
+import { Clock, Building2, Calendar, Filter, CheckCircle } from 'lucide-react'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import { useGetAttendanceMonitorQuery, useVerifyAttendanceMutation } from '../../store/api/workforceApi.js'
 import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'

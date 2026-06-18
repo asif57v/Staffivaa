@@ -95,6 +95,7 @@ export function VendorProfilePage() {
   const [busy, setBusy] = useState(false)
   const [banner, setBanner] = useState(null)
   const [autocomplete, setAutocomplete] = useState(null)
+  const [isFetchingLocation, setIsFetchingLocation] = useState(false)
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
@@ -115,6 +116,7 @@ export function VendorProfilePage() {
       setBanner({ variant: 'error', message: 'Location is not supported by your browser.' })
       return
     }
+    setIsFetchingLocation(true)
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords
@@ -122,6 +124,7 @@ export function VendorProfilePage() {
           const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
           if (!apiKey) {
             setForm((f) => ({ ...f, businessAddress: `${lat.toFixed(5)}, ${lng.toFixed(5)}` }))
+            setIsFetchingLocation(false)
             return
           }
           const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`)
@@ -134,9 +137,11 @@ export function VendorProfilePage() {
         } catch {
           setForm((f) => ({ ...f, businessAddress: `${lat.toFixed(5)}, ${lng.toFixed(5)}` }))
         }
+        setIsFetchingLocation(false)
       },
       () => {
         setBanner({ variant: 'error', message: 'Unable to retrieve your location.' })
+        setIsFetchingLocation(false)
       },
       { enableHighAccuracy: false, timeout: 10_000 },
     )
@@ -471,10 +476,15 @@ export function VendorProfilePage() {
                 <button
                   type="button"
                   onClick={pickLocation}
-                  className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-100 active:scale-95"
+                  disabled={isFetchingLocation}
+                  className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-100 active:scale-95 disabled:opacity-70"
                 >
-                  <Navigation className="h-3.5 w-3.5" />
-                  Fetch live location
+                  {isFetchingLocation ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Navigation className="h-3.5 w-3.5" />
+                  )}
+                  {isFetchingLocation ? 'Fetching...' : 'Fetch live location'}
                 </button>
               </div>
             ) : null}

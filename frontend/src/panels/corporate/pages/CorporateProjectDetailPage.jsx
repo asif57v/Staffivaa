@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, MapPin, Plus, Navigation } from 'lucide-react'
+import { ArrowLeft, MapPin, Plus, Navigation, RefreshCw } from 'lucide-react'
 import { Autocomplete, useLoadScript } from '@react-google-maps/api'
 import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
 import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
@@ -23,6 +23,7 @@ export function CorporateProjectDetailPage() {
   const [addressAutocomplete, setAddressAutocomplete] = useState(null)
   const [cityAutocomplete, setCityAutocomplete] = useState(null)
   const [error, setError] = useState('')
+  const [isFetchingLocation, setIsFetchingLocation] = useState(false)
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
@@ -52,6 +53,7 @@ export function CorporateProjectDetailPage() {
       setError('Location is not supported by your browser.')
       return
     }
+    setIsFetchingLocation(true)
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords
@@ -59,6 +61,7 @@ export function CorporateProjectDetailPage() {
           const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
           if (!apiKey) {
             setSiteAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`)
+            setIsFetchingLocation(false)
             return
           }
           const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`)
@@ -78,9 +81,11 @@ export function CorporateProjectDetailPage() {
         } catch {
           setSiteAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`)
         }
+        setIsFetchingLocation(false)
       },
       () => {
         setError('Unable to retrieve your location.')
+        setIsFetchingLocation(false)
       },
       { enableHighAccuracy: false, timeout: 10_000 },
     )
@@ -212,10 +217,15 @@ export function CorporateProjectDetailPage() {
               <button
                 type="button"
                 onClick={pickLocation}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-100 active:scale-95"
+                disabled={isFetchingLocation}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-100 active:scale-95 disabled:opacity-70"
               >
-                <Navigation className="h-3.5 w-3.5" />
-                Fetch live location
+                {isFetchingLocation ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Navigation className="h-3.5 w-3.5" />
+                )}
+                {isFetchingLocation ? 'Fetching...' : 'Fetch live location'}
               </button>
             </div>
             {error && <p className="text-xs font-bold text-rose-600">{error}</p>}

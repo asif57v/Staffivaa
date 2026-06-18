@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useAuth } from '../hooks/useAuth.js'
 import { vendorNavigation, getVendorTitle } from '../config/vendorNavigation.js'
 import { PanelShell } from './PanelShell.jsx'
+import { useVendorNotificationCount } from '../hooks/useVendorNotificationCount.js'
 
 export function VendorShell() {
   const { user } = useAuth()
@@ -15,12 +16,26 @@ export function VendorShell() {
     return null
   }, [user])
 
+  const notifCounts = useVendorNotificationCount()
+
+  const navWithBadges = useMemo(() => {
+    return bottomNav.map(item => {
+      if (item.id === 'requests' && notifCounts.requests > 0) {
+        return { ...item, badge: notifCounts.requests }
+      }
+      if (item.id === 'jobs' && notifCounts.jobs > 0) {
+        return { ...item, badge: notifCounts.jobs }
+      }
+      return item
+    })
+  }, [bottomNav, notifCounts])
+
   return (
     <PanelShell
       panelId="vendor"
       brandLabel="Vendor"
       headerTagline={headerTagline}
-      bottomNav={bottomNav}
+      bottomNav={navWithBadges}
       drawerNav={drawerNav}
       getTitle={getVendorTitle}
       headerBadge={headerBadge}

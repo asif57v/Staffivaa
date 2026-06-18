@@ -12,6 +12,7 @@ import { AppBadge } from '../components/app-ui/data-display/AppBadge.jsx'
 import { adminInitials } from '../lib/formatAdminLastLogin.js'
 import { readAppUserLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
+import { useVendorNotificationCount } from '../hooks/useVendorNotificationCount.js'
 
 export function PanelShell({
   panelId,
@@ -33,6 +34,8 @@ export function PanelShell({
 
   const title = getTitle(pathname)
   const drawerInitials = adminInitials(user)
+  const notifCounts = useVendorNotificationCount(panelId === 'vendor')
+  const displayCount = panelId === 'vendor' ? notifCounts.total : 3
 
   const hideShellHeader =
     pathname.includes('/profile') ||
@@ -187,20 +190,22 @@ export function PanelShell({
 
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-lg flex-col">
         {!hideShellHeader ? (
-          <header className="sticky top-0 z-30 bg-[#FFDF20] px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-3 sm:px-5">
-            <div className="flex items-center justify-between gap-2">
+          <header className="sticky top-0 z-30 bg-[#FFC107] px-4 pt-[max(0.5rem,env(safe-area-inset-top,0px))] pb-3 sm:px-5">
+            <div className="flex items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={() => setLocationModalOpen(true)}
-                className="flex min-w-0 flex-1 flex-col items-start text-left outline-none transition active:opacity-70"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none transition active:opacity-70"
               >
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-800/80 mb-0.5">Location</span>
-                <div className="flex w-full items-center gap-1.5">
-                  <MapPin className="h-4 w-4 shrink-0 text-slate-900" fill="currentColor" />
-                  <span className="truncate text-[14px] font-extrabold tracking-tight text-slate-900">
-                    {individualLocationTitle}
-                  </span>
-                  <ChevronDown className="h-4 w-4 shrink-0 text-slate-900" />
+                <MapPin className="h-5 w-5 shrink-0 text-slate-900" fill="currentColor" />
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-800/80 mb-0.5">Location</span>
+                  <div className="flex w-full items-center gap-1">
+                    <span className="truncate text-[13px] font-extrabold tracking-tight text-slate-900">
+                      {individualLocationTitle}
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-900" />
+                  </div>
                 </div>
               </button>
 
@@ -208,20 +213,22 @@ export function PanelShell({
                 <button
                   type="button"
                   onClick={() => setDrawerOpen(true)}
-                  className="flex h-[42px] w-[42px] items-center justify-center rounded-2xl bg-white text-slate-800 shadow-sm transition hover:bg-slate-50 active:scale-95"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-800 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.1)] transition hover:bg-slate-50 active:scale-95"
                   aria-label="Open menu"
                 >
-                  <Menu className="h-5 w-5" />
+                  <Menu className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
-                  className="relative flex h-[42px] w-[42px] items-center justify-center rounded-2xl bg-white text-slate-800 shadow-sm transition hover:bg-slate-50 active:scale-95"
+                  className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-800 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.1)] transition hover:bg-slate-50 active:scale-95"
                   aria-label="Notifications"
                 >
-                  <Bell className="h-5 w-5" />
-                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white ring-2 ring-[#FFD100]">
-                    3
-                  </span>
+                  <Bell className="h-4 w-4" />
+                  {displayCount > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white ring-2 ring-[#FFC107]">
+                      {displayCount}
+                    </span>
+                  )}
                 </button>
               </div>
             </div>

@@ -1,6 +1,9 @@
 import Razorpay from 'razorpay'
 import crypto from 'crypto'
+import mongoose from 'mongoose'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
+import { Wallet } from '../models/Wallet.js'
+import { WalletTransaction } from '../models/WalletTransaction.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { USER_ROLES } from '../constants/roles.js'
@@ -53,7 +56,9 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
     }
   } else {
     if (request.userPaymentStatus === 'paid') return sendError(res, { message: 'Already paid by user', statusCode: HTTP_STATUS.BAD_REQUEST });
-    totalAmount = request.userPlatformFee || 49;
+    
+    let platformFee = request.userPlatformFee || 49;
+    totalAmount = platformFee;
   }
 
   const razorpay = getRazorpayInstance()
@@ -122,6 +127,62 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
   }
 
   await request.save()
+
+  // --- Wallet Ledger Integration ---
+  try {
+    const razorpay = getRazorpayInstance()
+    const order = await razorpay.orders.fetch(razorpay_order_id)
+    const amountPaid = (order.amount_paid ? order.amount_paid : order.amount) / 100
+
+    if (amountPaid > 0) {
+      let payerType = 'system';
+      if (req.user.role === 'individual') payerType = 'user';
+      else if (req.user.role === 'labour') payerType = 'labour';
+      else if (req.user.role === 'contractor') payerType = 'vendor';
+      else if (req.user.role === 'corporate') payerType = 'corporate';
+
+      const updatePayload = {
+        $inc: {
+          balance: amountPaid,
+          totalRevenue: amountPaid,
+          totalCredits: amountPaid,
+          totalPlatformRevenue: amountPaid,
+          pendingSettlements: isUserOrder ? amountPaid : 0,
+          platformEarnings: isLabourOrder ? amountPaid : 0,
+        }
+      }
+
+      if (payerType === 'user') updatePayload.$inc.userRevenue = amountPaid;
+      if (payerType === 'labour') updatePayload.$inc.labourRevenue = amountPaid;
+      if (payerType === 'vendor') updatePayload.$inc.vendorRevenue = amountPaid;
+      if (payerType === 'corporate') updatePayload.$inc.corporateRevenue = amountPaid;
+
+      await Wallet.findOneAndUpdate(
+        { singletonId: 'ADMIN_WALLET' },
+        updatePayload,
+        { new: true, upsert: true }
+      )
+
+      await WalletTransaction.create({
+        transactionId: `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        bookingId: request._id,
+        clientId: request.clientId,
+        payerId: req.user._id,
+        payerName: req.user.fullName || req.user.companyName || 'Unknown',
+        payerType,
+        platform_fee: true,
+        type: 'Credit',
+        source: `${payerType.charAt(0).toUpperCase() + payerType.slice(1)} Platform Fee`,
+        amount: amountPaid,
+        status: 'Completed',
+        razorpayOrderId: razorpay_order_id,
+        razorpayPaymentId: razorpay_payment_id
+      })
+    }
+  } catch (err) {
+    console.error('Wallet Ledger Error:', err)
+  }
+  // --- End Wallet Ledger ---
 
   sendSuccess(res, { data: { request } })
 })

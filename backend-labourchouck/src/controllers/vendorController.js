@@ -292,6 +292,7 @@ export const listVendorMarketplaceRequests = asyncHandler(async (req, res) => {
     status: {
       $in: [REQUEST_STATUS.PENDING_REVIEW, REQUEST_STATUS.ALLOCATING, REQUEST_STATUS.SEARCHING, REQUEST_STATUS.APPROVED],
     },
+    declinedBy: { $ne: req.user._id },
   })
     .sort({ createdAt: -1 })
     .populate('clientId', 'fullName corporateProfile.companyName')
@@ -330,6 +331,34 @@ export const acceptVendorMarketplaceRequest = asyncHandler(async (req, res) => {
   await request.save()
 
   sendSuccess(res, { data: { allocation } })
+})
+
+export const declineVendorMarketplaceRequest = asyncHandler(async (req, res) => {
+  const err = requireApprovedVendor(req.user)
+  if (err) return sendError(res, { message: err, statusCode: HTTP_STATUS.FORBIDDEN })
+
+  const request = await WorkforceRequest.findOne({
+    _id: req.params.id,
+    sourceType: REQUEST_SOURCE.CORPORATE,
+    status: {
+      $in: [REQUEST_STATUS.PENDING_REVIEW, REQUEST_STATUS.ALLOCATING, REQUEST_STATUS.SEARCHING, REQUEST_STATUS.APPROVED],
+    },
+  })
+
+  if (!request) {
+    return sendError(res, { message: 'Request not available', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  if (!request.declinedBy) {
+    request.declinedBy = []
+  }
+
+  if (!request.declinedBy.includes(req.user._id)) {
+    request.declinedBy.push(req.user._id)
+    await request.save()
+  }
+
+  sendSuccess(res, { data: { message: 'Request declined' } })
 })
 
 export const assignWorkforce = asyncHandler(async (req, res) => {
@@ -374,6 +403,27 @@ export const assignWorkforce = asyncHandler(async (req, res) => {
     }
   }
 
+  // Validate perDayRate
+  let sumOfRates = 0
+  for (const assignment of assignments) {
+    if (!assignment.perDayRate || isNaN(assignment.perDayRate) || assignment.perDayRate <= 0) {
+      return sendError(res, { message: 'Valid perDayRate is required for all assigned workers', statusCode: HTTP_STATUS.BAD_REQUEST })
+    }
+    sumOfRates += Number(assignment.perDayRate)
+  }
+
+  // Calculate project duration
+  let projectDurationInDays = 1
+  if (request.endDate && request.startDate) {
+    const start = new Date(request.startDate)
+    const end = new Date(request.endDate)
+    const diffTime = Math.abs(end - start)
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    projectDurationInDays = Math.max(1, diffDays + 1)
+  }
+
+  const totalLabourCost = sumOfRates * projectDurationInDays
+
   // Create assignments
   const assignmentDocs = assignments.map((assignment) => ({
     allocationId: allocation._id,
@@ -381,15 +431,20 @@ export const assignWorkforce = asyncHandler(async (req, res) => {
     labourId: assignment.labourId,
     vendorId: req.user._id,
     categoryId: assignment.categoryId,
+    perDayRate: Number(assignment.perDayRate),
     status: ASSIGNMENT_STATUS.ACCEPTED,
     acceptedAt: new Date(),
   }))
 
   await Assignment.insertMany(assignmentDocs)
 
+  // Update allocation cost
+  allocation.totalLabourCost = totalLabourCost
+  await allocation.save()
+
   // Update request status to ASSIGNED
   request.status = REQUEST_STATUS.ASSIGNED
   await request.save()
 
-  sendSuccess(res, { data: { message: 'Workforce assigned successfully' } })
+  sendSuccess(res, { data: { message: 'Workforce assigned successfully', totalLabourCost } })
 })

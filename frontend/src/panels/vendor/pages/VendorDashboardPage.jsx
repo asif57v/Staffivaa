@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ClipboardList, IndianRupee, Users, ChevronRight, FileText, CheckCircle, Menu, MapPin, ChevronDown, Bell, Calendar } from 'lucide-react'
+import { ClipboardList, IndianRupee, Users, ChevronRight, FileText, CheckCircle, Menu, MapPin, ChevronDown, Bell, Calendar, Hammer } from 'lucide-react'
 import { readAppUserLocation } from '../../../lib/appUserLocationStorage.js'
 import { ApprovalGate } from '../../../components/shared/ApprovalGate.jsx'
 import { OpsStatCard } from '../../../components/shared/OpsStatCard.jsx'
@@ -77,39 +77,39 @@ export function VendorDashboardPage() {
   const stats = data?.stats || {}
 
   return (
-    <div className="space-y-6 bg-[#F5F6F8] min-h-screen pb-6 -mx-4 -mt-4">
-
-
+    <div className="space-y-6 bg-[#F8F9FA] min-h-screen pb-6 -mx-4 -mt-4">
       {/* Hero Section */}
-      <section className="relative overflow-hidden rounded-3xl mx-4 bg-slate-900 pb-10 pt-8 text-white shadow-lg -mt-2">
+      <section className="relative overflow-hidden rounded-[24px] mx-4 bg-slate-900 pb-8 pt-8 text-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] -mt-2">
         {/* Background Image with Dark Overlay */}
         <div
-          className="absolute inset-0 bg-cover bg-center"
+          className="absolute inset-0 bg-cover bg-center opacity-80"
           style={{ backgroundImage: `url('/vendor-hero-bg.png')` }}
           aria-hidden
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-900/80 to-slate-900/60" aria-hidden />
+        <div className="absolute inset-0 bg-slate-950/60" aria-hidden />
 
-        <div className="relative z-10 px-5 flex justify-between items-end">
-            <div className="max-w-[70%]">
-              <p className="text-[10px] font-extrabold uppercase tracking-widest text-white/70">Supply partner</p>
-              <h2 className="mt-1 text-2xl font-extrabold leading-tight text-white drop-shadow-sm">
-                {user?.contractorProfile?.businessName || user?.fullName}
+        <div className="relative z-10 px-6 flex justify-between items-center">
+            <div className="max-w-[65%]">
+              <span className="inline-block rounded-full bg-[#3A3F47]/80 backdrop-blur-md px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-[#FFC107] mb-3 shadow-sm">
+                Supply partner
+              </span>
+              <h2 className="text-[26px] font-extrabold leading-tight text-white tracking-tight drop-shadow-sm">
+                {user?.contractorProfile?.businessName || user?.fullName || 'Mayur Corporate'}
               </h2>
-              <p className="mt-2 text-sm text-white/80 leading-snug font-medium">
+              <p className="mt-2 text-[13px] text-white/80 leading-snug font-medium">
                 Accept admin allocations and manage your crew.
               </p>
               <Link to="/vendor/jobs" className="mt-5 inline-block">
-                <button type="button" className="rounded-xl bg-white px-5 py-2.5 text-xs font-extrabold text-slate-900 shadow-sm transition hover:bg-slate-50 active:scale-95 flex items-center gap-1.5">
+                <button type="button" className="rounded-full bg-white px-5 py-2.5 text-[13px] font-bold text-slate-900 shadow-sm transition hover:bg-slate-50 active:scale-95 flex items-center gap-1.5">
                   View supply jobs
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </Link>
             </div>
 
-            {/* Vendor Avatar overlapping */}
-            <div className="absolute right-2 bottom-0 translate-y-3">
-              <div className="h-16 w-16 rounded-full border-[3px] border-white bg-slate-200 overflow-hidden shadow-md">
+            {/* Vendor Avatar */}
+            <div className="shrink-0 pl-2">
+              <div className="h-20 w-20 rounded-full border-[2px] border-white/80 bg-slate-200 overflow-hidden shadow-lg ring-4 ring-white/10">
                 <img src={user?.profileImageUrl || "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=200&q=80"} alt="Vendor" className="h-full w-full object-cover" />
               </div>
             </div>
@@ -117,19 +117,19 @@ export function VendorDashboardPage() {
       </section>
 
       {/* Stats Grid */}
-      <div className="relative z-10 mt-4 px-4 grid grid-cols-3 gap-2">
+      <div className="relative z-10 mt-6 px-4 grid grid-cols-3 gap-3">
         {[
-          { label: 'Crew', value: isLoading ? '—' : stats.crewCount ?? 0, icon: Users, tone: 'text-indigo-600 bg-indigo-50', sub: 'Linked' },
-          { label: 'Open', value: isLoading ? '—' : stats.openJobs ?? 0, icon: ClipboardList, tone: 'text-amber-600 bg-amber-50', sub: 'Jobs' },
-          { label: 'Active', value: isLoading ? '—' : stats.activeAssignments ?? 0, icon: IndianRupee, tone: 'text-emerald-600 bg-emerald-50', sub: 'Deployments' },
+          { label: 'CREW', value: isLoading ? '—' : stats.crewCount ?? 0, icon: Users, tone: 'text-indigo-500 bg-indigo-50', sub: 'Linked' },
+          { label: 'OPEN', value: isLoading ? '—' : stats.openJobs ?? 0, icon: ClipboardList, tone: 'text-orange-500 bg-orange-50', sub: 'Jobs' },
+          { label: 'ACTIVE', value: isLoading ? '—' : stats.activeAssignments ?? 0, icon: Hammer, tone: 'text-emerald-500 bg-emerald-50', sub: 'Deployments' },
         ].map((stat, i) => (
-          <div key={i} className="flex flex-col items-center justify-center rounded-xl bg-white px-1.5 py-3 shadow-sm border border-slate-100">
-            <span className={`mb-1.5 flex h-7 w-7 items-center justify-center rounded-full ${stat.tone}`}>
-              <stat.icon className="h-3.5 w-3.5" />
+          <div key={i} className="flex flex-col items-center justify-center rounded-2xl bg-white px-2 py-4 shadow-[0_2px_12px_rgb(0,0,0,0.03)] border-transparent">
+            <span className={`mb-3 flex h-10 w-10 items-center justify-center rounded-full ${stat.tone}`}>
+              <stat.icon className="h-5 w-5" />
             </span>
-            <p className="text-[9px] font-extrabold uppercase tracking-wide text-slate-500 text-center">{stat.label}</p>
-            <p className="mt-0.5 text-lg font-black text-slate-900">{stat.value}</p>
-            <p className="mt-0.5 text-[8px] font-semibold text-slate-400 text-center truncate w-full">{stat.sub}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 text-center">{stat.label}</p>
+            <p className="mt-1 text-[22px] font-black text-slate-900">{stat.value}</p>
+            <p className="mt-1 text-[11px] font-medium text-slate-500 text-center truncate w-full">{stat.sub}</p>
           </div>
         ))}
       </div>
@@ -137,22 +137,22 @@ export function VendorDashboardPage() {
       <div className="px-4 space-y-6">
         {/* Current Requests */}
         <section>
-          <div className="flex items-center justify-between mb-3 px-1">
-            <h3 className="text-base font-extrabold text-slate-900">Current Requests</h3>
+          <div className="flex items-center justify-between mb-4 px-1">
+            <h3 className="text-[17px] font-extrabold tracking-tight text-slate-900">Current Requests</h3>
             {requests.length > 4 && (
-              <Link to="/vendor/requests" className="text-xs font-bold text-brand hover:underline">
+              <Link to="/vendor/requests" className="text-[13px] font-bold text-[#FFC107] hover:underline">
                 View all
               </Link>
             )}
           </div>
           {requests.length === 0 ? (
-            <div className="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm border border-slate-100">
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 text-slate-400">
-                <FileText className="h-6 w-6" />
+            <div className="flex items-center gap-4 rounded-[20px] bg-white p-4 shadow-[0_2px_12px_rgb(0,0,0,0.03)] border border-slate-100/50">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 text-slate-400 shrink-0">
+                <FileText className="h-6 w-6" strokeWidth={1.5} />
               </span>
-              <div className="flex-1">
-                <p className="text-sm font-extrabold text-slate-900">No open requests</p>
-                <p className="text-xs font-medium text-slate-500">All caught up!</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-[15px] font-bold text-slate-900">No open requests</p>
+                <p className="text-[13px] text-slate-500">All caught up!</p>
               </div>
               <ChevronRight className="h-4 w-4 text-slate-300" />
             </div>
@@ -193,38 +193,38 @@ export function VendorDashboardPage() {
 
         {/* Crew Added by Vendor */}
         <section>
-          <div className="flex items-center justify-between mb-3 px-1">
-            <h3 className="text-base font-extrabold text-slate-900">Crew added by vendor</h3>
+          <div className="flex items-center justify-between mb-4 px-1">
+            <h3 className="text-[17px] font-extrabold tracking-tight text-slate-900">Crew added by vendor</h3>
             {crew.length > 4 && (
-              <Link to="/vendor/crew" className="text-xs font-bold text-brand hover:underline">
+              <Link to="/vendor/crew" className="text-[13px] font-bold text-[#FFC107] hover:underline">
                 View all
               </Link>
             )}
           </div>
           {crew.length === 0 ? (
-            <div className="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm border border-slate-100">
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 text-slate-400">
-                <Users className="h-6 w-6" />
+            <div className="flex items-center gap-4 rounded-[20px] bg-white p-4 shadow-[0_2px_12px_rgb(0,0,0,0.03)] border border-slate-100/50">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 text-slate-400 shrink-0">
+                <Users className="h-6 w-6" strokeWidth={1.5} />
               </span>
-              <div className="flex-1">
-                <p className="text-sm font-extrabold text-slate-900">No crew linked yet</p>
-                <p className="text-xs font-medium text-slate-500">Add workers to get started.</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-[15px] font-bold text-slate-900">No crew linked yet</p>
+                <p className="text-[13px] text-slate-500">Add workers to get started.</p>
               </div>
               <ChevronRight className="h-4 w-4 text-slate-300" />
             </div>
           ) : (
-            <div className="rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden divide-y divide-slate-100">
+            <div className="rounded-[20px] bg-white shadow-[0_2px_12px_rgb(0,0,0,0.03)] border border-slate-100/50 overflow-hidden divide-y divide-slate-100/80">
               {crew.slice(0, 4).map((w) => (
-                <Link key={w._id} to="/vendor/crew" className="flex items-center gap-3 p-4 transition hover:bg-slate-50 active:bg-slate-100">
-                  <div className="h-10 w-10 rounded-full bg-slate-200 overflow-hidden border border-slate-200 shrink-0">
-                    <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(w.fullName || 'Worker')}&background=random`} alt="Avatar" className="h-full w-full object-cover" />
+                <Link key={w._id} to="/vendor/crew" className="flex items-center gap-4 p-4 transition hover:bg-slate-50 active:bg-slate-100">
+                  <div className="h-12 w-12 rounded-full bg-[#FFF8E1] text-[#D4A000] flex items-center justify-center font-bold text-lg shrink-0">
+                    {w.fullName?.slice(0, 2).toUpperCase() || 'WO'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-extrabold text-slate-900 truncate">{w.fullName || 'Worker'}</p>
-                      <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-emerald-700">New</span>
+                      <p className="text-[15px] font-bold text-slate-900 truncate">{w.fullName || 'Worker'}</p>
+                      <span className="rounded bg-[#E8F5E9] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#2E7D32]">New</span>
                     </div>
-                    <p className="text-xs font-medium text-slate-500 mt-0.5 truncate">{w.phone}</p>
+                    <p className="text-[13px] text-slate-500 mt-0.5 truncate">{w.phone}</p>
                   </div>
                   <ChevronRight className="h-4 w-4 text-slate-300 shrink-0" aria-hidden />
                 </Link>
@@ -235,22 +235,22 @@ export function VendorDashboardPage() {
 
         {/* Current Jobs */}
         <section className="pb-10">
-          <div className="flex items-center justify-between mb-3 px-1">
-            <h3 className="text-base font-extrabold text-slate-900">Current Jobs</h3>
-            {allocations.length > 4 && (
-              <Link to="/vendor/jobs" className="text-xs font-bold text-brand hover:underline">
+          <div className="flex items-center justify-between mb-4 px-1">
+            <h3 className="text-[17px] font-extrabold tracking-tight text-slate-900">Current Jobs</h3>
+            {allocations.length > 0 && (
+              <Link to="/vendor/jobs" className="text-[13px] font-bold text-[#FFC107] hover:underline">
                 View all
               </Link>
             )}
           </div>
           {allocations.length === 0 ? (
-             <div className="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm border border-slate-100">
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 text-slate-400">
-                <ClipboardList className="h-6 w-6" />
+             <div className="flex items-center gap-4 rounded-[20px] bg-white p-4 shadow-[0_2px_12px_rgb(0,0,0,0.03)] border border-slate-100/50">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 text-slate-400 shrink-0">
+                <ClipboardList className="h-6 w-6" strokeWidth={1.5} />
               </span>
-              <div className="flex-1">
-                <p className="text-sm font-extrabold text-slate-900">No active jobs</p>
-                <p className="text-xs font-medium text-slate-500">Wait for new allocations.</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-[15px] font-bold text-slate-900">No active jobs</p>
+                <p className="text-[13px] text-slate-500">Wait for new allocations.</p>
               </div>
               <ChevronRight className="h-4 w-4 text-slate-300" />
             </div>
@@ -258,53 +258,36 @@ export function VendorDashboardPage() {
             <ul className="space-y-3">
               {allocations.slice(0, 4).map((a) => {
                 const req = a.requestId
-                const projectName = req?.projectId?.name || 'Maiyur'
-                const companyName = req?.clientId?.corporateProfile?.companyName || req?.clientId?.fullName || 'Appzeto'
+                const projectName = req?.projectId?.name || 'Mayur'
+                const companyName = req?.clientId?.corporateProfile?.companyName || req?.clientId?.fullName || 'ABCD'
                 const pending = a.status === 'pending'
-                const statusLabel = pending ? 'Pending' : 'Accepted'
-                const statusTone = pending ? 'bg-orange-50 text-orange-700' : 'bg-emerald-50 text-emerald-700'
+                const statusLabel = pending ? 'Pending' : 'In Progress'
 
                 return (
                   <li key={a._id}>
                     <Link to={`/vendor/jobs/${a._id}`} className="block transition active:scale-[0.98]">
-                      <div className="flex flex-row rounded-[20px] bg-white p-3 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+                      <div className="flex flex-row items-center rounded-[20px] bg-white p-3 shadow-[0_2px_12px_rgb(0,0,0,0.03)] border border-slate-100/50 hover:shadow-md transition-shadow">
                         {/* Thumbnail */}
-                        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-[14px] bg-slate-200 mr-3 shadow-sm border border-slate-100/50">
-                          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/10 to-transparent z-10" />
+                        <div className="relative h-16 w-[90px] shrink-0 overflow-hidden rounded-[14px] bg-slate-200 mr-4">
                           <img src="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=300&q=80" alt="Site" className="h-full w-full object-cover" />
                         </div>
                         
                         {/* Content */}
                         <div className="flex-1 min-w-0 flex flex-col justify-center">
-                          <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5 truncate pr-2">
-                              <h3 className="text-[14px] font-bold text-slate-900 truncate">{projectName}</h3>
+                              <h3 className="text-[15px] font-bold text-slate-900 truncate">{projectName}</h3>
                               <span className="text-slate-300 text-sm">|</span>
-                              <span className="text-[12px] font-medium text-slate-500 truncate">{companyName}</span>
+                              <span className="text-[14px] font-medium text-slate-500 truncate">{companyName}</span>
                             </div>
-                            <ChevronRight className="h-4 w-4 text-slate-300 shrink-0" />
-                          </div>
                           
-                          <div className="mt-1 flex items-center gap-2.5 text-slate-500 flex-wrap">
-                            <div className="flex items-center gap-1">
-                              <MapPin className="h-3 w-3 shrink-0" />
-                              <p className="text-[11px] font-medium truncate max-w-[90px]">{req?.locationText || 'Location TBD'}</p>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3 shrink-0" />
-                              <p className="text-[11px] font-medium">{formatDate(req?.startDate)}</p>
-                            </div>
-                          </div>
-                          
-                          <div className="mt-2.5 flex items-center gap-2">
-                            <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${statusTone}`}>
-                              {pending ? <CheckCircle className="h-2.5 w-2.5" /> : <CheckCircle className="h-2.5 w-2.5" strokeWidth={3} />} {statusLabel}
-                            </span>
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider ml-auto">
-                              ID: {req?.reference || 'CR-MQ7'}
+                          <div className="mt-1.5 flex items-center gap-1.5">
+                            <div className={`h-2 w-2 rounded-full ${pending ? 'bg-orange-500' : 'bg-[#FF9800]'}`} />
+                            <span className={`text-[12px] font-semibold ${pending ? 'text-orange-700' : 'text-[#1976D2]'}`}>
+                              {statusLabel}
                             </span>
                           </div>
                         </div>
+                        <ChevronRight className="h-4 w-4 text-slate-300 shrink-0 mr-1" />
                       </div>
                     </Link>
                   </li>

@@ -83,10 +83,14 @@ const workforceRequestSchema = new mongoose.Schema(
     labourName: { type: String, trim: true },
     labourPhone: { type: String, trim: true },
     acceptedAt: Date,
+    expiresAt: Date,
+    acceptedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    declinedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   },
   { timestamps: true },
 )
 
+workforceRequestSchema.index({ status: 1, expiresAt: 1 })
 workforceRequestSchema.index({ status: 1, createdAt: 1 })
 
 export const WorkforceRequest = mongoose.model('WorkforceRequest', workforceRequestSchema)

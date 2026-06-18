@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { CheckCircle2, Loader2, MessageCircle } from 'lucide-react'
 import { AppBottomSheetBackdrop, AppBottomSheetChrome, AppBottomSheetPanel } from '../app-ui/feedback/AppBottomSheet.jsx'
@@ -31,21 +31,24 @@ export function BuildMartRequestQuoteSheet({
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [savedLead, setSavedLead] = useState(null)
+  const [prevOpen, setPrevOpen] = useState(open)
 
-  useEffect(() => {
-    if (!open) return
-    setForm({
-      name: user?.fullName?.trim() || '',
-      phone: user?.phone?.replace(/\D/g, '').slice(-10) || '',
-      siteLocation: '',
-      quantity: '',
-      deliveryDate: '',
-      notes: '',
-    })
-    setError('')
-    setSuccess(false)
-    setSavedLead(null)
-  }, [open, user?.fullName, user?.phone])
+  if (open !== prevOpen) {
+    setPrevOpen(open)
+    if (open) {
+      setForm({
+        name: user?.fullName?.trim() || '',
+        phone: user?.phone?.replace(/\D/g, '').slice(-10) || '',
+        siteLocation: '',
+        quantity: '',
+        deliveryDate: '',
+        notes: '',
+      })
+      setError('')
+      setSuccess(false)
+      setSavedLead(null)
+    }
+  }
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
 

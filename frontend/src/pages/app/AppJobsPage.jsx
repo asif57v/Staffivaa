@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { CheckCircle2, Clock, IndianRupee, MapPin, RotateCcw, Sparkles } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth.js'
 import { KYC_STATUS } from '../../constants/userRoles.js'
+import { io } from 'socket.io-client'
 import { AppEmptyState } from '../../components/app/AppEmptyState.jsx'
 import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
 import { AppButton } from '../../components/app-ui/buttons/AppButton.jsx'
@@ -31,6 +32,7 @@ import {
   saveJobDemoState,
   subscribeJobDemo,
 } from '../../lib/labourJobDemoStorage.js'
+import { loadRazorpayScript } from '../../lib/razorpay.js'
 
 function isApiAssignment(job) {
   return Boolean(job?.requestId) && /^[a-f0-9]{24}$/i.test(String(job.id))
@@ -41,7 +43,7 @@ export function AppJobsPage() {
   const reduce = useReducedMotion()
   const [tab, setTab] = useState('offers')
   const [localDemo, setLocalDemo] = useState(() => loadJobDemoState())
-  const { data: apiData, error: apiError, refetch } = useGetLabourAssignmentsQuery(undefined, { pollingInterval: 3000 })
+  const { data: apiData, error: apiError, refetch } = useGetLabourAssignmentsQuery(undefined)
   const [respondAssignment] = useRespondAssignmentMutation()
   const [checkIn] = useCheckInMutation()
   const [startWork] = useStartWorkMutation()
@@ -73,12 +75,22 @@ export function AppJobsPage() {
 
   useEffect(() => {
     subscribeJobDemo(setLocalDemo)
-    const script = document.createElement('script')
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    script.async = true
-    document.body.appendChild(script)
-    return () => document.body.removeChild(script)
   }, [])
+
+  useEffect(() => {
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
+    const socketUrl = baseUrl.replace('/api/v1', '')
+    const socket = io(socketUrl, { withCredentials: true })
+    
+    socket.on('bookingAcceptedGlobal', (data) => {
+      console.log('[LabourJobs] Global booking accepted:', data.requestId)
+      refetch()
+    })
+
+    return () => {
+      socket.disconnect()
+    }
+  }, [refetch])
 
   const showToast = useCallback((msg) => {
     setToast(msg)
@@ -177,6 +189,12 @@ export function AppJobsPage() {
     if (!job || !job.requestId) return;
     const requestId = job.requestId;
     try {
+      const isLoaded = await loadRazorpayScript();
+      if (!isLoaded) {
+        showToast('Failed to load payment gateway. Please check your internet connection.');
+        return;
+      }
+
       const order = await createOrder(requestId).unwrap();
       
       // Handle zero-fee bypass

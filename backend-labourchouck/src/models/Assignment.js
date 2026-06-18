@@ -18,6 +18,7 @@ const assignmentSchema = new mongoose.Schema(
     labourId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     vendorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
     categoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'LabourCategory' },
+    perDayRate: { type: Number, required: true, min: 1 },
     status: {
       type: String,
       enum: Object.values(ASSIGNMENT_STATUS),

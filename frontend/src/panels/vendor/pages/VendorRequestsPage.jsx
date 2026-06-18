@@ -1,8 +1,10 @@
-import { FileText, CheckCircle } from 'lucide-react'
+import { FileText, CheckCircle, XCircle } from 'lucide-react'
 import { AppEmptyState } from '../../../components/app/AppEmptyState.jsx'
 import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
 import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
-import { useGetVendorMarketplaceRequestsQuery, useAcceptMarketplaceRequestMutation } from '../../../store/api/workforceApi.js'
+import { useGetVendorMarketplaceRequestsQuery, useAcceptMarketplaceRequestMutation, useDeclineMarketplaceRequestMutation } from '../../../store/api/workforceApi.js'
+import { markVendorRequestsViewed } from '../../../hooks/useVendorNotificationCount.js'
+import { useEffect } from 'react'
 
 function formatDate(d) {
   if (!d) return '—'
@@ -10,12 +12,14 @@ function formatDate(d) {
 }
 
 export function VendorRequestsPage() {
-  const { data, isLoading, isError } = useGetVendorMarketplaceRequestsQuery(undefined, {
-    pollingInterval: 30000, // Refresh every 30s for real-time feel
-  })
+  useEffect(() => {
+    markVendorRequestsViewed()
+  }, [])
+  const { data: marketplaceData, isLoading: loadingMarketplace } = useGetVendorMarketplaceRequestsQuery(undefined)
   const [acceptRequest, { isLoading: isAccepting }] = useAcceptMarketplaceRequestMutation()
+  const [declineRequest, { isLoading: isDeclining }] = useDeclineMarketplaceRequestMutation()
   
-  const requests = data?.requests ?? []
+  const requests = marketplaceData?.requests ?? []
 
   return (
     <div className="space-y-4 pb-10">
@@ -25,19 +29,13 @@ export function VendorRequestsPage() {
         <p className="mt-1 text-xs text-slate-500">Live feed of corporate workforce needs.</p>
       </div>
 
-      {isLoading ? (
+      {loadingMarketplace ? (
         <AppSurface>
           <p className="text-sm text-slate-500">Loading requests…</p>
         </AppSurface>
       ) : null}
 
-      {isError ? (
-        <AppSurface className="border-rose-200/90 bg-rose-50/40">
-          <p className="text-sm font-semibold text-rose-800">Could not load marketplace requests.</p>
-        </AppSurface>
-      ) : null}
-
-      {!isLoading && !isError && requests.length === 0 ? (
+      {!loadingMarketplace && requests.length === 0 ? (
         <AppEmptyState
           icon={FileText}
           title="No open requests"
@@ -92,10 +90,19 @@ export function VendorRequestsPage() {
                   )}
                 </div>
 
-                <div className="pt-2">
+                <div className="pt-2 flex gap-2">
+                  <button
+                    disabled={isDeclining || isAccepting}
+                    onClick={() => declineRequest(req._id)}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <XCircle className="h-4 w-4" />
+                    Decline
+                  </button>
                   <AppPrimaryButton
-                    className="w-full flex items-center justify-center gap-2"
+                    className="flex-1 flex items-center justify-center gap-2"
                     loading={isAccepting}
+                    disabled={isDeclining}
                     onClick={() => acceptRequest(req._id)}
                   >
                     <CheckCircle className="h-4 w-4" />

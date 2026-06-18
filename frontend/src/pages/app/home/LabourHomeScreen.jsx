@@ -287,7 +287,7 @@ export function LabourHomeScreen({ user }) {
   const [showAllSkills, setShowAllSkills] = useState(false)
   const { online, setOnline } = useLabourPresence()
 
-  const { data: apiData, refetch } = useGetLabourAssignmentsQuery(undefined, { pollingInterval: 3000 })
+  const { data: apiData, refetch } = useGetLabourAssignmentsQuery(undefined)
   const [respondAssignment] = useRespondAssignmentMutation()
   const apiBuckets = useMemo(
     () => bucketsFromAssignments(apiData?.assignments || []),
