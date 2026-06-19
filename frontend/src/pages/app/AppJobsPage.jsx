@@ -80,14 +80,25 @@ export function AppJobsPage() {
   useEffect(() => {
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
     const socketUrl = baseUrl.replace('/api/v1', '')
-    const socket = io(socketUrl, { withCredentials: true })
+    const socket = io(socketUrl, { 
+      withCredentials: true,
+      transports: ['websocket', 'polling']
+    })
     
+    socket.on('connect', () => console.log('[Socket.io AppJobsPage] Connected:', socket.id))
+    socket.on('connect_error', (err) => console.error('[Socket.io AppJobsPage] Error:', err.message))
+    socket.on('disconnect', (reason) => console.log('[Socket.io AppJobsPage] Disconnected:', reason))
+
     socket.on('bookingAcceptedGlobal', (data) => {
       console.log('[LabourJobs] Global booking accepted:', data.requestId)
       refetch()
     })
 
     return () => {
+      socket.off('connect')
+      socket.off('connect_error')
+      socket.off('disconnect')
+      socket.off('bookingAcceptedGlobal')
       socket.disconnect()
     }
   }, [refetch])

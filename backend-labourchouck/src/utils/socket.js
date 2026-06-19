@@ -5,8 +5,11 @@ let io
 export const initSocket = (server) => {
   io = new Server(server, {
     cors: {
-      origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-      methods: ['GET', 'POST'],
+      origin: function (origin, callback) {
+        // Allow dynamic origin resolution to support Vercel preview and production domains
+        callback(null, true);
+      },
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       credentials: true,
     },
   })

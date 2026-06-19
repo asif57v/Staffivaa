@@ -118,11 +118,26 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
     if (!requestId) return
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
     const socketUrl = baseUrl.replace('/api/v1', '')
-    const socket = io(socketUrl, { withCredentials: true })
-    socket.on('connect', () => socket.emit('join_request', requestId))
+    const socket = io(socketUrl, { 
+      withCredentials: true,
+      transports: ['websocket', 'polling']
+    })
+    socket.on('connect', () => {
+      console.log('[Socket.io LabourJobActiveCard] Connected:', socket.id)
+      socket.emit('join_request', requestId)
+    })
+    socket.on('connect_error', (err) => console.error('[Socket.io LabourJobActiveCard] Error:', err.message))
+    socket.on('disconnect', (reason) => console.log('[Socket.io LabourJobActiveCard] Disconnected:', reason))
+    
     socket.on('extra_work_requested', () => refetchEw())
     socket.on('extra_work_updated', () => refetchEw())
+    
     return () => {
+      socket.off('connect')
+      socket.off('connect_error')
+      socket.off('disconnect')
+      socket.off('extra_work_requested')
+      socket.off('extra_work_updated')
       socket.emit('leave_request', requestId)
       socket.disconnect()
     }

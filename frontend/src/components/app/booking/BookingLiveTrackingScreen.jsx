@@ -127,12 +127,18 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
     const socketUrl = baseUrl.replace('/api/v1', '')
 
-    const socket = io(socketUrl, { withCredentials: true })
+    const socket = io(socketUrl, { 
+      withCredentials: true,
+      transports: ['websocket', 'polling']
+    })
 
     socket.on('connect', () => {
+      console.log('[Socket.io BookingLive] Connected:', socket.id)
       setSocketConnected(true)
       socket.emit('join_request', requestId)
     })
+
+    socket.on('connect_error', (err) => console.error('[Socket.io BookingLive] Error:', err.message))
 
     socket.on('request_status_update', (data) => {
       setRealtimeStatus(data)
@@ -149,11 +155,18 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
       refetch() // Refresh booking total if accepted
     })
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
+      console.log('[Socket.io BookingLive] Disconnected:', reason)
       setSocketConnected(false)
     })
 
     return () => {
+      socket.off('connect')
+      socket.off('connect_error')
+      socket.off('request_status_update')
+      socket.off('bookingAccepted')
+      socket.off('extra_work_updated')
+      socket.off('disconnect')
       socket.emit('leave_request', requestId)
       socket.disconnect()
     }

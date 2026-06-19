@@ -6,10 +6,12 @@ export const connectSocket = (user, token) => {
   if (socket) return socket
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+  const socketUrl = API_URL.replace('/api/v1', '')
   
-  socket = io(API_URL, {
+  socket = io(socketUrl, {
     auth: { token },
     withCredentials: true,
+    transports: ['websocket', 'polling'], // Force WebSocket transport if polling fails
   })
 
   socket.on('connect', () => {
@@ -22,8 +24,16 @@ export const connectSocket = (user, token) => {
     }
   })
 
-  socket.on('disconnect', () => {
-    console.log('[Socket.io] Disconnected from server')
+  socket.on('disconnect', (reason) => {
+    console.log('[Socket.io] Disconnected from server:', reason)
+  })
+
+  socket.on('connect_error', (err) => {
+    console.error('[Socket.io] Connection Error:', err.message)
+  })
+
+  socket.on('reconnect', (attempt) => {
+    console.log('[Socket.io] Reconnected on attempt:', attempt)
   })
 
   return socket

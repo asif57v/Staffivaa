@@ -282,12 +282,28 @@ export function IndividualBookingFlowPage() {
     let socket = null
     try {
       const socketUrl = baseUrl.replace('/api/v1', '')
-      socket = io(socketUrl, { withCredentials: true })
+      socket = io(socketUrl, { 
+        withCredentials: true,
+        transports: ['websocket', 'polling']
+      })
       
       socket.on('connect', () => {
+        console.log('[Socket.io] Connected:', socket.id)
         if (activeBooking?.requestId) {
           socket.emit('join_request', activeBooking.requestId)
         }
+      })
+
+      socket.on('disconnect', (reason) => {
+        console.log('[Socket.io] Disconnected:', reason)
+      })
+
+      socket.on('connect_error', (err) => {
+        console.error('[Socket.io] Connection Error:', err.message)
+      })
+
+      socket.on('reconnect', (attempt) => {
+        console.log('[Socket.io] Reconnected on attempt:', attempt)
       })
 
       socket.on('bookingAccepted', (data) => {
@@ -306,6 +322,11 @@ export function IndividualBookingFlowPage() {
     return () => {
       cancelled = true
       if (socket) {
+        socket.off('connect')
+        socket.off('disconnect')
+        socket.off('connect_error')
+        socket.off('reconnect')
+        socket.off('bookingAccepted')
         if (activeBooking?.requestId) socket.emit('leave_request', activeBooking.requestId)
         socket.disconnect()
       }
