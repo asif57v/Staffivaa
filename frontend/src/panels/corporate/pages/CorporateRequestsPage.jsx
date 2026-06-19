@@ -5,6 +5,8 @@ import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
 import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
 import { useGetMyRequestsQuery } from '../../../store/api/workforceApi.js'
 import { useAuth } from '../../../hooks/useAuth.js'
+import { useEffect } from 'react'
+import { getSocket } from '../../../services/socket.js'
 
 function formatDate(d) {
   if (!d) return '—'
@@ -12,8 +14,33 @@ function formatDate(d) {
 }
 
 export function CorporateRequestsPage() {
-  const { data, isLoading, isError } = useGetMyRequestsQuery()
+  const { data, isLoading, isError, refetch } = useGetMyRequestsQuery()
   const { user } = useAuth()
+
+  useEffect(() => {
+    const socket = getSocket()
+    if (socket) {
+      const handleUpdate = () => refetch()
+      socket.on('vendor_accepted_request', handleUpdate)
+      socket.on('vendor_declined_request', handleUpdate)
+      socket.on('vendor_accepted_job', handleUpdate)
+      socket.on('vendor_assigned_workforce', handleUpdate)
+      socket.on('work_progress_update', handleUpdate)
+      socket.on('work_completed', handleUpdate)
+      socket.on('request_status_update', handleUpdate)
+      
+      return () => {
+        socket.off('vendor_accepted_request', handleUpdate)
+        socket.off('vendor_declined_request', handleUpdate)
+        socket.off('vendor_accepted_job', handleUpdate)
+        socket.off('vendor_assigned_workforce', handleUpdate)
+        socket.off('work_progress_update', handleUpdate)
+        socket.off('work_completed', handleUpdate)
+        socket.off('request_status_update', handleUpdate)
+      }
+    }
+  }, [refetch])
+
   const requests = data?.requests ?? []
 
   const companyName = user?.corporateProfile?.companyName || user?.fullName || 'Appzeto'

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, MapPin, Plus, Navigation, RefreshCw } from 'lucide-react'
+import { ArrowLeft, MapPin, Plus, Navigation, RefreshCw, ChevronRight } from 'lucide-react'
 import { Autocomplete, useLoadScript } from '@react-google-maps/api'
 import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
 import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
@@ -239,17 +239,22 @@ export function CorporateProjectDetailPage() {
       <ul className="space-y-2">
         {sites.map((s) => (
           <li key={s._id}>
-            <AppSurface className="flex gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
-                <MapPin className="h-4 w-4" aria-hidden />
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-slate-900">{s.name}</p>
-                <p className="text-xs text-slate-500">
-                  {[s.address, s.city].filter(Boolean).join(' · ') || 'No address'}
-                </p>
-              </div>
-            </AppSurface>
+            <Link to={`/corporate/projects/${id}/sites/${s._id}`} className="block">
+              <AppSurface className="cursor-pointer transition-all hover:bg-slate-50 flex gap-3 items-center">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+                  <MapPin className="h-4 w-4" aria-hidden />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-slate-900">{s.name}</p>
+                  <p className="text-xs text-slate-500">
+                    {[s.address, s.city].filter(Boolean).join(' · ') || 'No address'}
+                  </p>
+                </div>
+                <div className="shrink-0 text-slate-400">
+                  <ChevronRight className="h-4 w-4" />
+                </div>
+              </AppSurface>
+            </Link>
           </li>
         ))}
       </ul>

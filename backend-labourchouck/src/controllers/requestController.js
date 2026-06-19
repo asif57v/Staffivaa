@@ -13,7 +13,7 @@ import { User } from '../models/User.js'
 import { ExtraWorkRequest } from '../models/ExtraWorkRequest.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
-import { emitToUser } from '../utils/socket.js'
+import { emitToUser, emitToRole, emitToCorporate, emitToVendor } from '../utils/socket.js'
 
 function parseLines(lines) {
   if (!Array.isArray(lines) || !lines.length) return null
@@ -142,6 +142,9 @@ export const createRequest = asyncHandler(async (req, res) => {
   }
 
   emitToUser('individual', user._id.toString(), 'request_created', { requestId: request._id.toString() })
+  if (sourceType === REQUEST_SOURCE.CORPORATE) {
+    emitToRole('contractor', 'corporate_request_created', { requestId: request._id.toString() })
+  }
 
   sendSuccess(res, { data: { request } }, HTTP_STATUS.CREATED)
 })
@@ -149,10 +152,13 @@ export const createRequest = asyncHandler(async (req, res) => {
 export const listMyRequests = asyncHandler(async (req, res) => {
   const filter = { clientId: req.user._id }
   if (req.query.status) filter.status = req.query.status
+  if (req.query.projectId) filter.projectId = req.query.projectId
+  if (req.query.siteId) filter.siteId = req.query.siteId
   const requests = await WorkforceRequest.find(filter)
     .sort({ createdAt: -1 })
     .limit(100)
     .populate('projectId', 'name')
+    .populate('siteId', 'name')
     .populate('lines.categoryId', 'name group')
     .lean()
   sendSuccess(res, { data: { requests } })
@@ -161,6 +167,7 @@ export const listMyRequests = asyncHandler(async (req, res) => {
 export const getRequest = asyncHandler(async (req, res) => {
   const request = await WorkforceRequest.findById(req.params.id)
     .populate('projectId', 'name')
+    .populate('siteId', 'name')
     .populate('clientId', 'fullName corporateProfile.companyName')
     .populate('lines.categoryId', 'name baseRate')
     .lean()
@@ -255,6 +262,17 @@ export const patchRequestStatusAdmin = asyncHandler(async (req, res) => {
   await request.save()
   
   emitToUser('individual', request.clientId?.toString(), 'request_updated', { requestId: request._id.toString() })
+  
+  if (request.sourceType === REQUEST_SOURCE.CORPORATE) {
+    emitToCorporate(request.clientId?.toString(), 'request_status_update', { requestId: request._id.toString(), status: request.status })
+    
+    // Also notify the vendor if one is allocated
+    Allocation.findOne({ requestId: request._id }).then(allocation => {
+      if (allocation && allocation.vendorId) {
+        emitToVendor(allocation.vendorId.toString(), 'request_status_update', { requestId: request._id.toString(), status: request.status })
+      }
+    }).catch(err => console.error(err))
+  }
   
   sendSuccess(res, { data: { request } })
 })

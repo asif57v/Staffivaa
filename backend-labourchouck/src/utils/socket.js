@@ -28,6 +28,13 @@ export const initSocket = (server) => {
       socket.join(personalRoom);
       socket.join(roleRoom);
       
+      // Explicit vendor and corporate rooms as requested
+      if (role === 'vendor' || role === 'contractor') {
+        socket.join(`vendor-${_id}`);
+      } else if (role === 'corporate') {
+        socket.join(`corporate-${_id}`);
+      }
+      
       console.log(`[Socket.io] Socket ${socket.id} joined rooms: ${personalRoom}, ${roleRoom}`);
     })
 
@@ -72,5 +79,17 @@ export const emitToUser = (role, userId, eventName, payload) => {
 export const emitToRole = (role, eventName, payload) => {
   if (io) {
     io.to(role).emit(eventName, payload)
+  }
+}
+
+export const emitToVendor = (vendorId, eventName, payload) => {
+  if (io) {
+    io.to(`vendor-${vendorId}`).emit(eventName, payload)
+  }
+}
+
+export const emitToCorporate = (corporateId, eventName, payload) => {
+  if (io) {
+    io.to(`corporate-${corporateId}`).emit(eventName, payload)
   }
 }

@@ -7,6 +7,7 @@ import { AttendanceRecord } from '../models/AttendanceRecord.js'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
+import { emitToCorporate, emitToVendor } from '../utils/socket.js'
 
 function billableUnitsForStatus(status) {
   if (status === ATTENDANCE_STATUS.PRESENT) return 1
@@ -92,6 +93,11 @@ export const checkIn = asyncHandler(async (req, res) => {
       io.to(`request_${request._id.toString()}`).emit('request_status_update', {
         requestStatus: request.status,
       })
+      
+      if (request.sourceType === 'corporate') {
+        if (request.clientId) emitToCorporate(request.clientId.toString(), 'work_progress_update', { requestId: request._id.toString() });
+        if (assignment.vendorId) emitToVendor(assignment.vendorId.toString(), 'work_progress_update', { requestId: request._id.toString() });
+      }
     } catch (err) {
       console.error('Socket emit error:', err)
     }
@@ -124,6 +130,10 @@ export const startWork = asyncHandler(async (req, res) => {
       io.to(`request_${request._id.toString()}`).emit('request_status_update', {
         requestStatus: request.status,
       })
+      if (request.sourceType === 'corporate') {
+        if (request.clientId) emitToCorporate(request.clientId.toString(), 'work_progress_update', { requestId: request._id.toString() });
+        if (assignment.vendorId) emitToVendor(assignment.vendorId.toString(), 'work_progress_update', { requestId: request._id.toString() });
+      }
     } catch (err) {
       console.error('Socket emit error:', err)
     }
@@ -173,6 +183,9 @@ export const checkOut = asyncHandler(async (req, res) => {
         console.error('Socket emit error:', err)
       }
     })
+  } else if (request && request.sourceType === 'corporate') {
+    if (request.clientId) emitToCorporate(request.clientId.toString(), 'work_completed', { requestId: request._id.toString(), assignmentId: assignment._id.toString() });
+    if (assignment.vendorId) emitToVendor(assignment.vendorId.toString(), 'work_completed', { requestId: request._id.toString(), assignmentId: assignment._id.toString() });
   }
 
   sendSuccess(res, { data: { record } })

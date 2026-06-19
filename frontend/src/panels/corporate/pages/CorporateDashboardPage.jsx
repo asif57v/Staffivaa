@@ -5,6 +5,8 @@ import { useAuth } from '../../../hooks/useAuth.js'
 import { CORPORATE_STATUS } from '../../../constants/userRoles.js'
 import { ApprovalGate } from '../../../components/shared/ApprovalGate.jsx'
 import { useGetCorporateDashboardQuery, useGetMyRequestsQuery } from '../../../store/api/workforceApi.js'
+import { useEffect } from 'react'
+import { getSocket } from '../../../services/socket.js'
 
 function timeAgo(date) {
   if (!date) return '—'
@@ -27,8 +29,36 @@ export function CorporateDashboardPage() {
   const { user } = useAuth()
   const approved = user?.corporateProfile?.status === CORPORATE_STATUS.APPROVED
   
-  const { data, isLoading } = useGetCorporateDashboardQuery(undefined, { skip: !approved })
-  const { data: requestsData } = useGetMyRequestsQuery(undefined, { skip: !approved })
+  const { data, isLoading, refetch: refetchDashboard } = useGetCorporateDashboardQuery(undefined, { skip: !approved })
+  const { data: requestsData, refetch: refetchRequests } = useGetMyRequestsQuery(undefined, { skip: !approved })
+
+  useEffect(() => {
+    const socket = getSocket()
+    if (socket && approved) {
+      const handleUpdate = () => {
+        refetchDashboard()
+        refetchRequests()
+      }
+      
+      socket.on('vendor_accepted_request', handleUpdate)
+      socket.on('vendor_declined_request', handleUpdate)
+      socket.on('vendor_accepted_job', handleUpdate)
+      socket.on('vendor_assigned_workforce', handleUpdate)
+      socket.on('work_progress_update', handleUpdate)
+      socket.on('work_completed', handleUpdate)
+      socket.on('request_status_update', handleUpdate)
+      
+      return () => {
+        socket.off('vendor_accepted_request', handleUpdate)
+        socket.off('vendor_declined_request', handleUpdate)
+        socket.off('vendor_accepted_job', handleUpdate)
+        socket.off('vendor_assigned_workforce', handleUpdate)
+        socket.off('work_progress_update', handleUpdate)
+        socket.off('work_completed', handleUpdate)
+        socket.off('request_status_update', handleUpdate)
+      }
+    }
+  }, [approved, refetchDashboard, refetchRequests])
 
   const activities = useMemo(() => {
     const list = []

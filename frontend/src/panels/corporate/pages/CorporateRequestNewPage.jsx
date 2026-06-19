@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { 
   ArrowLeft, Plus, Trash2, Navigation, ChevronDown, 
   MapPin, Clock, Calendar, Users, Briefcase, RefreshCw, Minus
 } from 'lucide-react'
 import { Autocomplete, useLoadScript } from '@react-google-maps/api'
 import { apiRequest } from '../../../api/http.js'
-import { useCreateRequestMutation, useGetCorporateProjectsQuery } from '../../../store/api/workforceApi.js'
+import { 
+  useCreateRequestMutation, 
+  useGetCorporateProjectsQuery,
+  useGetCorporateProjectQuery,
+  useAddCorporateSiteMutation
+} from '../../../store/api/workforceApi.js'
 
 function emptyLine() {
   return { categoryId: '', quantity: 1, experienceLevel: '' }
@@ -14,11 +19,25 @@ function emptyLine() {
 
 export function CorporateRequestNewPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const prefillProjectId = location.state?.prefillProjectId || ''
+  const prefillSiteId = location.state?.prefillSiteId || ''
+
   const { data: projectsData } = useGetCorporateProjectsQuery()
   const [createRequest, { isLoading }] = useCreateRequestMutation()
   const projects = projectsData?.projects ?? []
 
-  const [projectId, setProjectId] = useState('')
+  const [projectId, setProjectId] = useState(prefillProjectId)
+  const [siteId, setSiteId] = useState(prefillSiteId)
+  
+  const { data: projectData, isFetching: isFetchingProject } = useGetCorporateProjectQuery(projectId, { skip: !projectId || projectId === 'none' })
+  const [addSite, { isLoading: isAddingSiteMutation }] = useAddCorporateSiteMutation()
+
+  const projectSites = projectData?.project?.sites || []
+
+  const [isAddingSite, setIsAddingSite] = useState(false)
+  const [newSiteName, setNewSiteName] = useState('')
+
   const [scheduleType, setScheduleType] = useState('daily')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -91,6 +110,30 @@ export function CorporateRequestNewPage() {
   }
 
   useEffect(() => {
+    setSiteId('')
+    setIsAddingSite(false)
+    setNewSiteName('')
+  }, [projectId])
+
+  const handleCreateSite = async () => {
+    if (!newSiteName.trim()) return
+    setError('')
+    try {
+      const res = await addSite({
+        projectId,
+        name: newSiteName.trim(),
+      }).unwrap()
+      if (res?.data?.site?._id) {
+        setSiteId(res.data.site._id)
+      }
+      setIsAddingSite(false)
+      setNewSiteName('')
+    } catch (err) {
+      setError(err?.data?.message || err?.message || 'Failed to add site')
+    }
+  }
+
+  useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
@@ -132,6 +175,7 @@ export function CorporateRequestNewPage() {
     try {
       await createRequest({
         projectId: projectId && projectId !== 'none' ? projectId : undefined,
+        siteId: siteId || undefined,
         scheduleType,
         startDate,
         endDate: endDate || undefined,
@@ -200,6 +244,72 @@ export function CorporateRequestNewPage() {
                </select>
                <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none h-4 w-4 text-slate-400" />
              </div>
+          </div>
+
+          {/* Site Selector Widget (Always visible, disabled if no project) */}
+          <div className={`bg-white border border-slate-200 rounded-[12px] shadow-sm flex flex-col overflow-hidden transition-all duration-300 ${(!projectId || projectId === 'none') ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className="h-[48px] px-1.5 flex items-center">
+              <div className="h-8 w-8 shrink-0 bg-brand/10 rounded-[8px] flex items-center justify-center">
+                <MapPin className="h-4 w-4 text-brand" />
+              </div>
+              
+              {isAddingSite ? (
+                <div className="flex-1 ml-2 flex items-center gap-2 pr-1.5">
+                  <input 
+                    type="text" 
+                    placeholder="Enter new site name..." 
+                    className="flex-1 bg-transparent text-[13px] font-semibold text-slate-900 outline-none"
+                    value={newSiteName}
+                    onChange={(e) => setNewSiteName(e.target.value)}
+                    autoFocus
+                  />
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button 
+                      type="button" 
+                      onClick={() => setIsAddingSite(false)} 
+                      className="text-[11px] font-bold text-slate-400 hover:text-slate-600 px-2 py-1"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="button" 
+                      disabled={isAddingSiteMutation || !newSiteName.trim()}
+                      onClick={handleCreateSite}
+                      className="bg-brand text-brand-foreground text-[11px] font-bold px-3 py-1.5 rounded-[8px] shadow-sm disabled:opacity-50"
+                    >
+                      {isAddingSiteMutation ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 ml-2 flex items-center pr-3">
+                  <div className="flex-1 relative">
+                    <select 
+                      className="w-full bg-transparent text-slate-900 text-[13px] font-semibold outline-none appearance-none cursor-pointer" 
+                      value={siteId} 
+                      onChange={(e) => setSiteId(e.target.value)}
+                      disabled={isFetchingProject || !projectId || projectId === 'none'}
+                    >
+                      <option value="" disabled hidden>
+                        {(!projectId || projectId === 'none') ? 'Select a project first' : isFetchingProject ? 'Loading sites...' : 'Select a Site...'}
+                      </option>
+                      {projectSites.map(s => (
+                        <option key={s._id} value={s._id}>{s.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none h-4 w-4 text-slate-400" />
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setIsAddingSite(true)}
+                    disabled={!projectId || projectId === 'none'}
+                    className="shrink-0 flex items-center justify-center h-7 w-7 rounded-full bg-slate-50 text-brand border border-slate-200 ml-2 shadow-sm hover:bg-slate-100 transition-colors disabled:opacity-50"
+                  >
+                    <Plus className="h-4 w-4" strokeWidth={3} />
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Dashboard Block: Skills & Workers */}

@@ -7,7 +7,7 @@ import { WalletTransaction } from '../models/WalletTransaction.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { USER_ROLES } from '../constants/roles.js'
-import { emitRequestStatusUpdate } from '../utils/socket.js'
+import { emitRequestStatusUpdate, emitToVendor } from '../utils/socket.js'
 
 // Cache the instance
 let razorpayInstance = null
@@ -127,6 +127,17 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
   }
 
   await request.save()
+
+  if (isUserOrder && request.sourceType === 'corporate') {
+    // Notify vendor if payment was from Corporate
+    import('../models/Allocation.js').then(({ Allocation }) => {
+      Allocation.findOne({ requestId: request._id }).then(allocation => {
+        if (allocation && allocation.vendorId) {
+          emitToVendor(allocation.vendorId.toString(), 'payment_status_update', { requestId: request._id.toString() });
+        }
+      });
+    }).catch(err => console.error(err));
+  }
 
   // --- Wallet Ledger Integration ---
   try {

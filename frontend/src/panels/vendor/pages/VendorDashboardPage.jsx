@@ -15,6 +15,7 @@ import {
   useAcceptMarketplaceRequestMutation,
   useAcceptVendorJobMutation
 } from '../../../store/api/workforceApi.js'
+import { getSocket } from '../../../services/socket.js'
 
 function formatDate(d) {
   if (!d) return '—'
@@ -25,18 +26,17 @@ export function VendorDashboardPage() {
   const { user } = useAuth()
   const [appLocation, setAppLocation] = useState(() => readAppUserLocation())
   const approved = user?.contractorProfile?.verificationStatus === 'approved'
-  const { data, isLoading } = useGetVendorDashboardQuery(undefined, { skip: !approved })
+  const { data: dashboardData, isLoading, refetch: refetchDashboard } = useGetVendorDashboardQuery(undefined, { skip: !approved })
 
   const { data: crewData } = useGetVendorCrewQuery(undefined, { skip: !approved })
   const crew = crewData?.crew ?? []
 
-  const { data: jobsData } = useGetVendorJobsQuery(undefined, { skip: !approved })
+  const { data: jobsData, refetch: refetchJobs } = useGetVendorJobsQuery(undefined, { skip: !approved })
   const allocations = jobsData?.allocations ?? []
   const [acceptJob, { isLoading: acceptingJob }] = useAcceptVendorJobMutation()
 
-  const { data: requestsData } = useGetVendorMarketplaceRequestsQuery(undefined, {
+  const { data: requestsData, refetch: refetchRequests } = useGetVendorMarketplaceRequestsQuery(undefined, {
     skip: !approved,
-    pollingInterval: 30000,
   })
   const requests = requestsData?.requests ?? []
   const [acceptRequest, { isLoading: isAcceptingRequest }] = useAcceptMarketplaceRequestMutation()
@@ -54,8 +54,33 @@ export function VendorDashboardPage() {
   useEffect(() => {
     const onLoc = () => setAppLocation(readAppUserLocation())
     window.addEventListener('lc-app-user-location-changed', onLoc)
+
+    const socket = getSocket()
+    if (socket && approved) {
+      const handleUpdate = () => {
+        refetchDashboard()
+        refetchJobs()
+        refetchRequests()
+      }
+
+      socket.on('corporate_request_created', handleUpdate)
+      socket.on('request_status_update', handleUpdate)
+      socket.on('payment_status_update', handleUpdate)
+      socket.on('work_progress_update', handleUpdate)
+      socket.on('work_completed', handleUpdate)
+
+      return () => {
+        window.removeEventListener('lc-app-user-location-changed', onLoc)
+        socket.off('corporate_request_created', handleUpdate)
+        socket.off('request_status_update', handleUpdate)
+        socket.off('payment_status_update', handleUpdate)
+        socket.off('work_progress_update', handleUpdate)
+        socket.off('work_completed', handleUpdate)
+      }
+    }
+
     return () => window.removeEventListener('lc-app-user-location-changed', onLoc)
-  }, [])
+  }, [approved, refetchDashboard, refetchJobs, refetchRequests])
 
   const locationLabel = appLocation?.address?.trim() || 'Set your location'
 
@@ -74,7 +99,7 @@ export function VendorDashboardPage() {
     )
   }
 
-  const stats = data?.stats || {}
+  const stats = dashboardData?.stats || {}
 
   return (
     <div className="space-y-6 bg-[#F8F9FA] min-h-screen pb-6 -mx-4 -mt-4">

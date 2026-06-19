@@ -2,6 +2,8 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Users, Building2, MapPin, Calendar, Clock, UserCircle, CheckCircle2, Construction, AlertCircle, XCircle, Phone } from 'lucide-react'
 import { useGetRequestQuery } from '../../../store/api/workforceApi.js'
 import { useAuth } from '../../../hooks/useAuth.js'
+import { useEffect } from 'react'
+import { getSocket } from '../../../services/socket.js'
 
 function formatDate(d) {
   if (!d) return '—'
@@ -11,7 +13,27 @@ function formatDate(d) {
 export function CorporateRequestDetailPage() {
   const { id } = useParams()
   const { user } = useAuth()
-  const { data, isLoading, isError } = useGetRequestQuery(id, { skip: !id })
+  const { data, isLoading, isError, refetch } = useGetRequestQuery(id, { skip: !id })
+
+  useEffect(() => {
+    const socket = getSocket()
+    if (socket && id) {
+      const handleUpdate = () => refetch()
+      socket.on('vendor_accepted_job', handleUpdate)
+      socket.on('vendor_assigned_workforce', handleUpdate)
+      socket.on('work_progress_update', handleUpdate)
+      socket.on('work_completed', handleUpdate)
+      socket.on('request_status_update', handleUpdate)
+      
+      return () => {
+        socket.off('vendor_accepted_job', handleUpdate)
+        socket.off('vendor_assigned_workforce', handleUpdate)
+        socket.off('work_progress_update', handleUpdate)
+        socket.off('work_completed', handleUpdate)
+        socket.off('request_status_update', handleUpdate)
+      }
+    }
+  }, [id, refetch])
 
   const request = data?.request
   const allocation = data?.allocation
@@ -39,10 +61,10 @@ export function CorporateRequestDetailPage() {
     )
   }
 
-  const projectName = request.projectId?.name || 'Maiyur'
-  const companyName = user?.corporateProfile?.companyName || user?.fullName || 'Appzeto'
-  const tradeName = request.lines?.[0]?.categoryId?.name || 'Mason (Raj Mistri)'
-  const shiftStr = (request.shiftStart && request.shiftEnd) ? `${request.shiftStart} - ${request.shiftEnd}` : '08:00 AM - 06:00 PM'
+  const projectName = request.projectId?.name || 'Project Name N/A'
+  const companyName = user?.corporateProfile?.companyName || user?.fullName || 'Company Name N/A'
+  const tradeName = request.lines?.[0]?.categoryId?.name || 'Skill Not Specified'
+  const shiftStr = (request.shiftStart && request.shiftEnd) ? `${request.shiftStart} - ${request.shiftEnd}` : 'Standard Shift'
   
   let statusLabel = 'Pending'
   let statusTone = 'bg-orange-50 text-orange-700'
@@ -89,9 +111,17 @@ export function CorporateRequestDetailPage() {
                   <StatusIcon className="h-2.5 w-2.5" strokeWidth={3} /> {statusLabel}
                 </span>
               </div>
+              
+              {request.siteId?.name && (
+                <div className="flex items-center gap-1.5 mt-0.5 text-slate-700">
+                  <MapPin className="h-3.5 w-3.5 shrink-0" />
+                  <p className="text-[14px] font-bold truncate">{request.siteId.name}</p>
+                </div>
+              )}
+
               <div className="flex items-center gap-1.5 mt-0.5 text-slate-500">
                 <Building2 className="h-3.5 w-3.5 shrink-0" />
-                <p className="text-[14px] font-medium truncate">{companyName}</p>
+                <p className="text-[13px] font-medium truncate">{companyName}</p>
               </div>
               
               <div className="mt-2.5 flex items-center gap-1.5 text-slate-500">
@@ -210,13 +240,13 @@ export function CorporateRequestDetailPage() {
             </div>
             <div>
               <p className="text-[15px] font-black text-slate-900">
-                {allocation.vendorId?.contractorProfile?.companyName || allocation.vendorId?.fullName || 'Sammy'}
+                {allocation.vendorId?.contractorProfile?.companyName || allocation.vendorId?.fullName || 'Vendor Name N/A'}
               </p>
               <p className="text-[13px] font-medium text-slate-500 mt-1">
-                {allocation.vendorId?.phone}
+                {allocation.vendorId?.phone || 'Phone N/A'}
               </p>
               <p className="text-[12px] text-slate-500 mt-1.5 leading-relaxed">
-                {allocation.vendorId?.contractorProfile?.businessAddress || 'Corporate House, 103, Film Colony Rd, Indore, Madhya Pradesh 452001, India'}
+                {allocation.vendorId?.contractorProfile?.businessAddress || 'Business Address N/A'}
               </p>
               <div className="mt-3 inline-block rounded bg-amber-100 px-2 py-1 text-[9px] font-black uppercase text-amber-700 tracking-wider">
                 ACCEPTED JOB

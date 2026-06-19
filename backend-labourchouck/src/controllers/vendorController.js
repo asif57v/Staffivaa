@@ -19,6 +19,7 @@ import {
   normalizeVendorProfilePatch,
   validateVendorProfileForSubmit,
 } from '../utils/vendorVerification.js'
+import { emitToCorporate, emitToRole } from '../utils/socket.js'
 
 function requireApprovedVendor(user) {
   if (user.role !== USER_ROLES.CONTRACTOR) return 'Vendor account required'
@@ -273,6 +274,13 @@ export const acceptVendorJob = asyncHandler(async (req, res) => {
   allocation.vendorAcceptedAt = new Date()
   allocation.deployedAt = new Date()
   await allocation.save()
+
+  // Notify corporate
+  const request = await WorkforceRequest.findById(allocation.requestId)
+  if (request && request.sourceType === REQUEST_SOURCE.CORPORATE) {
+    emitToCorporate(request.clientId.toString(), 'vendor_accepted_job', { requestId: request._id.toString(), allocationId: allocation._id.toString() })
+  }
+
   sendSuccess(res, { data: { allocation } })
 })
 
@@ -330,6 +338,10 @@ export const acceptVendorMarketplaceRequest = asyncHandler(async (req, res) => {
   request.status = REQUEST_STATUS.ACCEPTED
   await request.save()
 
+  // Notify corporate
+  emitToCorporate(request.clientId.toString(), 'vendor_accepted_request', { requestId: request._id.toString(), vendorId: req.user._id.toString() })
+  emitToRole('contractor', 'vendor_accepted_request_global', { requestId: request._id.toString() })
+
   sendSuccess(res, { data: { allocation } })
 })
 
@@ -357,6 +369,8 @@ export const declineVendorMarketplaceRequest = asyncHandler(async (req, res) => 
     request.declinedBy.push(req.user._id)
     await request.save()
   }
+
+  emitToCorporate(request.clientId.toString(), 'vendor_declined_request', { requestId: request._id.toString(), vendorId: req.user._id.toString() })
 
   sendSuccess(res, { data: { message: 'Request declined' } })
 })
@@ -445,6 +459,10 @@ export const assignWorkforce = asyncHandler(async (req, res) => {
   // Update request status to ASSIGNED
   request.status = REQUEST_STATUS.ASSIGNED
   await request.save()
+
+  if (request.sourceType === REQUEST_SOURCE.CORPORATE) {
+    emitToCorporate(request.clientId.toString(), 'vendor_assigned_workforce', { requestId: request._id.toString(), allocationId: allocation._id.toString() })
+  }
 
   sendSuccess(res, { data: { message: 'Workforce assigned successfully', totalLabourCost } })
 })

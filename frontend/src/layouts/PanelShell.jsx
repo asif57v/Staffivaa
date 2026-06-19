@@ -3,6 +3,8 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { LogOut, Menu, Sparkles, X, MapPin, ChevronDown, Bell } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth.js'
+import { useDispatch } from 'react-redux'
+import { workforceApi } from '../store/api/workforceApi.js'
 import { AppAmbientBackground } from '../components/app/AppAmbientBackground.jsx'
 import { AppPageTransition } from '../components/app/AppPageTransition.jsx'
 import { appSpring } from '../components/app/appMotion.js'
@@ -13,6 +15,7 @@ import { adminInitials } from '../lib/formatAdminLastLogin.js'
 import { readAppUserLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { useVendorNotificationCount } from '../hooks/useVendorNotificationCount.js'
+import { connectSocket } from '../services/socket.js'
 
 export function PanelShell({
   panelId,
@@ -26,11 +29,50 @@ export function PanelShell({
 }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { logout, user } = useAuth()
+  const { logout, user, token } = useAuth()
+  const dispatch = useDispatch()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [locationModalOpen, setLocationModalOpen] = useState(false)
   const [appLocation, setAppLocation] = useState(() => readAppUserLocation())
   const reduce = useReducedMotion()
+
+  useEffect(() => {
+    if (!user || !token) return;
+
+    const socket = connectSocket(user, token);
+
+    const invalidateCache = () => {
+      console.log('[Socket] Invalidating Corporate and Vendor cache');
+      dispatch(workforceApi.util.invalidateTags([
+        'VendorDashboard', 'VendorJobs', 'Requests', 
+        'CorporateDashboard', 'Projects', 'Attendance', 'Invoices'
+      ]));
+    };
+
+    socket.on('corporate_request_created', invalidateCache);
+    socket.on('vendor_accepted_request', invalidateCache);
+    socket.on('vendor_declined_request', invalidateCache);
+    socket.on('vendor_accepted_request_global', invalidateCache);
+    socket.on('vendor_accepted_job', invalidateCache);
+    socket.on('vendor_assigned_workforce', invalidateCache);
+    socket.on('work_progress_update', invalidateCache);
+    socket.on('work_completed', invalidateCache);
+    socket.on('payment_status_update', invalidateCache);
+    socket.on('request_status_update', invalidateCache);
+
+    return () => {
+      socket.off('corporate_request_created', invalidateCache);
+      socket.off('vendor_accepted_request', invalidateCache);
+      socket.off('vendor_declined_request', invalidateCache);
+      socket.off('vendor_accepted_request_global', invalidateCache);
+      socket.off('vendor_accepted_job', invalidateCache);
+      socket.off('vendor_assigned_workforce', invalidateCache);
+      socket.off('work_progress_update', invalidateCache);
+      socket.off('work_completed', invalidateCache);
+      socket.off('payment_status_update', invalidateCache);
+      socket.off('request_status_update', invalidateCache);
+    };
+  }, [user, token, dispatch]);
 
   const title = getTitle(pathname)
   const drawerInitials = adminInitials(user)

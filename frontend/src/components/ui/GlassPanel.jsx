@@ -1,4 +1,4 @@
-export function GlassPanel({ children, className = '' }) {
+export function GlassPanel({ children, className = '', ...props }) {
   const hasBg = className.includes('bg-')
   const hasBorder = className.includes('border-')
   const hasShadow = className.includes('shadow-')
@@ -10,6 +10,7 @@ export function GlassPanel({ children, className = '' }) {
   return (
     <div
       className={`rounded-3xl ${defaultBorder} ${defaultBg} ${defaultShadow} ${className}`}
+      {...props}
     >
       {children}
     </div>

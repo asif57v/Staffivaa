@@ -4,6 +4,7 @@ import { ChevronRight, ClipboardList, Search, Filter, MapPin, Calendar, Users, C
 import { AppEmptyState } from '../../../components/app/AppEmptyState.jsx'
 import { useAcceptVendorJobMutation, useGetVendorJobsQuery } from '../../../store/api/workforceApi.js'
 import { markVendorJobsViewed } from '../../../hooks/useVendorNotificationCount.js'
+import { getSocket } from '../../../services/socket.js'
 
 function formatDate(d) {
   if (!d) return '—'
@@ -16,8 +17,26 @@ export function VendorJobsPage() {
   useEffect(() => {
     markVendorJobsViewed()
   }, [])
-  const { data, isLoading, isError } = useGetVendorJobsQuery()
+  const { data, isLoading, isError, refetch } = useGetVendorJobsQuery()
   const [acceptJob] = useAcceptVendorJobMutation()
+
+  useEffect(() => {
+    const socket = getSocket()
+    if (socket) {
+      const handleUpdate = () => refetch()
+      socket.on('request_status_update', handleUpdate)
+      socket.on('payment_status_update', handleUpdate)
+      socket.on('work_progress_update', handleUpdate)
+      socket.on('work_completed', handleUpdate)
+      
+      return () => {
+        socket.off('request_status_update', handleUpdate)
+        socket.off('payment_status_update', handleUpdate)
+        socket.off('work_progress_update', handleUpdate)
+        socket.off('work_completed', handleUpdate)
+      }
+    }
+  }, [refetch])
   const allocations = data?.allocations ?? []
 
   const [activeTab, setActiveTab] = useState('All')
