@@ -164,7 +164,6 @@ export function AppJobsPage() {
         const loc = readAppUserLocation()
         if (!loc?.lat || !loc?.lng) {
           showToast('Please update your Work Area with a valid GPS location first.')
-          setWorkAreaModalOpen(true)
           return
         }
         const res = await respondAssignment({ 
@@ -181,7 +180,8 @@ export function AppJobsPage() {
           return;
         }
       } catch (e) {
-        showToast('Failed to accept offer')
+        console.error('Accept error:', e)
+        showToast(e?.data?.message || e?.message || 'Failed to accept offer')
         return
       }
     } else {

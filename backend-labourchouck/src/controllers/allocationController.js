@@ -272,6 +272,6 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Invalid action', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
   await assignment.save()
-  const updatedRequest = await WorkforceRequest.findById(assignment.requestId);
-  sendSuccess(res, { data: { assignment, request: updatedRequest } })
+  const updatedRequest = await WorkforceRequest.findById(assignment.requestId).lean();
+  sendSuccess(res, { data: { assignment: assignment.toObject(), request: updatedRequest } })
 })
