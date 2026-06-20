@@ -226,9 +226,9 @@ export function LabourAssignmentDetailModal({ open, onClose, job, rawJob, assign
                   <CalendarRange className="h-3.5 w-3.5" aria-hidden />
                   {detail.isMultiDay ? 'Project attendance' : 'Shift attendance'}
                 </h2>
-                <span className="text-[10px] font-semibold text-slate-500">
-                  Linked to check-in / check-out
-                </span>
+                <a href="/app/attendance" className="text-[10px] font-bold text-brand uppercase tracking-wider hover:underline">
+                  View Dashboard
+                </a>
               </div>
               <ul className="space-y-2">
                 {detail.attendanceLog.map((row) => (

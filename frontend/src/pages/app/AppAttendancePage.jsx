@@ -132,9 +132,13 @@ export function AppAttendancePage() {
   const todayStr = getLocalDateStr(new Date())
 
   // Visibility Rule: Show if accepted/on_site AND current date is not past project end date.
-  const apiActiveAssignments = assignments.filter((a) => {
+  const activeAssignments = assignments.filter((a) => {
     if (a.status !== 'accepted' && a.status !== 'on_site') return false
     
+    // Only show attendance for vendor or corporate assignments
+    const source = a.requestId?.sourceType;
+    if (source !== 'vendor' && source !== 'corporate') return false;
+
     // If there is an end date, hide it if today is past the end date
     if (a.requestId?.endDate) {
       const endStr = getLocalDateStr(a.requestId.endDate)
@@ -142,10 +146,6 @@ export function AppAttendancePage() {
     }
     return true
   }).map(a => ({ ...a, isDemo: false }))
-
-  const demoActiveAssignments = localDemo.active.filter(a => !isApiAssignment(a)).map(a => ({ ...a, isDemo: true, _id: a.id }))
-
-  const activeAssignments = [...demoActiveAssignments, ...apiActiveAssignments]
 
   const now = new Date()
   const currentMonth = now.getMonth()
@@ -320,8 +320,8 @@ export function AppAttendancePage() {
       </AnimatePresence>
 
       <div>
-        <h1 className="text-2xl font-extrabold text-slate-900">Attendance</h1>
-        <p className="mt-2 text-sm text-slate-600">Your personal attendance dashboard.</p>
+        <h1 className="text-2xl font-extrabold text-slate-900">Project Attendance</h1>
+        <p className="mt-2 text-sm text-slate-600">Track your attendance for corporate and client projects.</p>
       </div>
 
       {!primaryAssignment ? (
@@ -339,7 +339,7 @@ export function AppAttendancePage() {
           </div>
           <h2 style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', margin: '0 0 8px' }}>📭 No Active Assignment</h2>
           <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 16px', lineHeight: 1.5 }}>
-            You are currently not assigned to any Corporate project.
+            You are currently not assigned to any Corporate or Client projects by your vendor.
           </p>
         </div>
       ) : (
@@ -430,36 +430,7 @@ export function AppAttendancePage() {
               </div>
             </div>
 
-            {!isCompleted && (
-              !isCheckedIn ? (
-                canCheckInToday ? (
-                  <AppPrimaryButton
-                    type="button"
-                    className="w-full py-3.5 rounded-xl shadow-lg shadow-sky-500/20 text-base"
-                    loading={isCheckingIn}
-                    onClick={() => handleCheckIn(primaryAssignment._id, isDemo)}
-                  >
-                    <LogIn className="h-5 w-5 mr-2" />
-                    Check In Now
-                  </AppPrimaryButton>
-                ) : (
-                  <div className="w-full py-3.5 flex items-center justify-center gap-2 rounded-xl bg-slate-50 text-sm font-bold text-slate-500 border border-slate-200">
-                    <CalendarDays className="h-5 w-5" />
-                    Check-in opens on {formatDate(assignedDate)}
-                  </div>
-                )
-              ) : (
-                <button
-                  type="button"
-                  disabled={isCheckingOut}
-                  onClick={() => handleCheckOut(primaryAssignment._id, isDemo)}
-                  className="w-full py-3.5 flex items-center justify-center gap-2 rounded-xl border-2 border-slate-200 bg-white text-base font-bold text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
-                >
-                  <LogOut className="h-5 w-5 text-slate-600" />
-                  Check Out
-                </button>
-              )
-            )}
+            {/* Action buttons removed - Attendance is view-only here */}
           </div>
 
           {/* 4️⃣ Monthly Summary Cards */}

@@ -23,8 +23,8 @@ export function VendorJobAssignPage() {
   const requestedSkills = useMemo(() => {
     if (!req?.lines) return []
     return req.lines.map(line => ({
-      categoryId: line.categoryId._id,
-      categoryName: line.categoryId.name,
+      categoryId: line.categoryId?._id || line.categoryId,
+      categoryName: line.categoryId?.name || 'Unknown Skill',
       quantity: line.quantity
     }))
   }, [req])
@@ -118,9 +118,12 @@ export function VendorJobAssignPage() {
         const isComplete = assignedCount === skill.quantity
         
         // Filter crew that have this skill in their labourProfile
-        const eligibleCrew = crew.filter(w => 
-          w.labourProfile?.categoryIds?.some(cat => cat._id === skill.categoryId || cat === skill.categoryId)
-        )
+        const eligibleCrew = crew.filter(w => {
+          if (!skill.categoryId) return false;
+          return w.labourProfile?.categoryIds?.some(cat => 
+            String(cat?._id || cat) === String(skill.categoryId)
+          )
+        })
 
         return (
           <div key={skill.categoryId} className="space-y-3">

@@ -135,8 +135,8 @@ export function AdminLayout() {
           className={`relative z-10 flex min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-1.5 transition hover:bg-slate-100/50 ${collapsed ? 'md:justify-center' : ''}`}
           title="Dashboard"
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br from-[#FFD100] to-[#FFB300] text-white shadow-[0_8px_20px_-6px_rgba(255,209,0,0.45)] ring-1 ring-white/50">
-            <HardHat className="h-[22px] w-[22px]" strokeWidth={2.5} aria-hidden />
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br from-[#FFD100] to-[#FFB300] text-white shadow-[0_8px_20px_-6px_rgba(255,209,0,0.45)] ring-1 ring-white/50 p-1.5 overflow-hidden">
+            <img src="/logo-transparent.png" alt="Staffivaa Logo" className="h-full w-full object-contain brightness-0 invert" aria-hidden />
           </span>
           <span className={`min-w-0 truncate pt-0.5 ${collapsed ? 'md:sr-only' : ''}`}>
             <span className="block text-[22px] leading-none font-black tracking-tight text-[#FFD100]" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>Staffivaa</span>

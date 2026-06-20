@@ -52,7 +52,7 @@ export function Navbar() {
           className="flex items-center gap-2.5 rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
         >
           <span className={`flex h-10 w-10 items-center justify-center rounded-2xl border transition-colors duration-300 ${scrolled ? 'bg-gradient-to-br from-[#FFD100] to-[#FFB300] border-transparent text-white shadow-[0_8px_30px_-8px_rgba(255,209,0,0.45)]' : 'bg-slate-800/60 border-slate-700/60 text-[#FFD100] backdrop-blur-md'}`}>
-            <HardHat className="h-[22px] w-[22px]" strokeWidth={2.5} aria-hidden />
+            <img src="/logo-transparent.png" alt="Staffivaa" className={`h-[22px] w-[22px] object-contain transition-all duration-300 ${scrolled ? 'brightness-0 invert' : ''}`} aria-hidden />
           </span>
           <span className={`text-[17px] font-extrabold tracking-tight sm:text-lg transition-colors duration-300 ${scrolled ? 'text-slate-900' : 'text-white'}`}>
             {SITE.name}

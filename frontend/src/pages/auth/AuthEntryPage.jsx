@@ -317,7 +317,7 @@ export function AuthEntryPage() {
                     boxShadow: '0 4px 20px rgba(255,209,0,0.35)',
                   }}
                 >
-                  <HardHat style={{ width: 20, height: 20, color: '#fff' }} />
+                  <img src="/logo-transparent.png" alt="Staffivaa Logo" style={{ width: 20, height: 20, objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
                 </div>
                 <span style={{ fontSize: 16, fontWeight: 800, color: '#FFD100', letterSpacing: '-0.01em' }}>
                   Staffivaa

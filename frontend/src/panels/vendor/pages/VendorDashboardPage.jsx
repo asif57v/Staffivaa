@@ -104,7 +104,7 @@ export function VendorDashboardPage() {
   return (
     <div className="space-y-6 bg-[#F8F9FA] min-h-screen pb-6 -mx-4 -mt-4">
       {/* Hero Section */}
-      <section className="relative overflow-hidden rounded-[24px] mx-4 bg-slate-900 pb-8 pt-8 text-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] -mt-2">
+      <section className="relative overflow-hidden rounded-[24px] mx-4 bg-slate-900 pb-8 pt-8 text-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] mt-4">
         {/* Background Image with Dark Overlay */}
         <div
           className="absolute inset-0 bg-cover bg-center opacity-80"

@@ -124,14 +124,6 @@ const QUICK_ACTIONS = [
 
 const FEATURE_CARDS = [
   {
-    to: '/app/attendance',
-    label: 'Mark Attendance',
-    desc: 'Track your daily check-in & check-out',
-    icon: CalendarClock,
-    img: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=600&q=70',
-    accent: '#FFC000',
-  },
-  {
     to: '/app/jobs',
     label: 'Browse Jobs',
     desc: 'Find new work opportunities near you',

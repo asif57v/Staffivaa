@@ -226,8 +226,12 @@ export const listAttendance = asyncHandler(async (req, res) => {
     .limit(200)
     .populate('workerId', 'fullName phone')
     .populate('projectId', 'name')
+    .populate('requestId', 'sourceType')
     .lean()
-  sendSuccess(res, { data: { records } })
+
+  const validRecords = records.filter(r => r.requestId?.sourceType !== 'individual')
+
+  sendSuccess(res, { data: { records: validRecords } })
 })
 
 export const verifyAttendanceAdmin = asyncHandler(async (req, res) => {
