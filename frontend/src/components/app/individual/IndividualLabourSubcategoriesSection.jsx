@@ -50,16 +50,16 @@ export function IndividualLabourSubcategoriesSection({ subcategories, loading, o
       ) : null}
 
       {!loading && subcategories.length > 0 ? (
-        <div className="-mx-1 grid grid-cols-4 gap-2.5 sm:grid-cols-4 md:gap-3">
+        <div className="-mx-1 grid grid-cols-3 gap-x-2 gap-y-4 min-[380px]:grid-cols-4 md:gap-3">
           {subcategories.slice(0, 16).map((cat, idx) => {
             const imgSrc = getCategoryImage(cat.name)
 
             const inner = (
               <>
-                <span className={`relative flex h-[4.25rem] w-full items-center justify-center overflow-hidden rounded-xl bg-slate-100 ring-1 ring-slate-200/60 transition duration-300 group-hover:scale-105`}>
+                <span className={`relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl bg-slate-100 ring-1 ring-slate-200/60 transition duration-300 group-hover:scale-105`}>
                   <img src={imgSrc} alt={cat.name} className="h-full w-full object-cover" loading="lazy" />
                 </span>
-                <span className="line-clamp-2 min-h-[2.25rem] w-full text-center text-[10px] font-medium leading-tight text-slate-800">
+                <span className="line-clamp-2 mt-1 min-h-[2.25rem] w-full text-center text-[10px] font-medium leading-tight text-slate-800 break-words">
                   {cat.name}
                 </span>
               </>

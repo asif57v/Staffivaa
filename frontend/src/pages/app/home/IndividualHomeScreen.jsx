@@ -390,29 +390,29 @@ export function IndividualHomeScreen({ user }) {
 
   return (
     <div
-      className="-mx-4 flex flex-col pb-2"
+      className="w-full max-w-full overflow-x-hidden flex flex-col pb-2"
       aria-label={user?.fullName ? `Home for ${user.fullName}` : 'Discover workers home'}
     >
-      <section className="relative z-10 isolate w-full shrink-0 pb-1 pt-1">
+      <section className="relative z-10 isolate w-full max-w-full shrink-0 pb-1 pt-1">
         <motion.div
           initial={reduce ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
-          className="relative text-slate-900"
+          className="relative text-slate-900 w-full max-w-full"
         >
-          <div className="relative overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-none flex gap-3 pb-2 pt-1 -mx-4 px-4 h-[130px]">
+          <div className="relative overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-none flex gap-3 pb-2 pt-1 -mx-4 px-4 w-[calc(100%+2rem)] min-h-[130px]">
             {HERO_SLIDES.map((slide, i) => (
-              <div key={i} className="w-full sm:w-[90%] shrink-0 snap-center relative overflow-hidden rounded-2xl bg-white border border-slate-200 shadow-sm h-[120px] flex items-stretch">
+              <div key={i} className="w-[85%] sm:w-[90%] shrink-0 snap-center relative overflow-hidden rounded-[20px] bg-white border border-slate-200 shadow-sm min-h-[120px] flex items-stretch">
                 <div className="flex-1 p-3 flex flex-col justify-center relative z-10">
-                  <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900">
+                  <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 break-words">
                     {slide.title}
                   </h2>
-                  <p className="mt-0.5 text-[10px] sm:text-[11px] font-medium leading-tight text-slate-500 line-clamp-2 pr-2">
+                  <p className="mt-0.5 text-[10px] sm:text-[11px] font-medium leading-tight text-slate-500 line-clamp-2 pr-2 break-words">
                     {slide.subtitle}
                   </p>
-                  <div className="mt-2 inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 shadow-sm border border-slate-100 w-max">
-                    <span className="text-[11px] sm:text-xs font-black text-[#F43F5E]">{slide.price}</span>
-                    <span className="ml-1 text-[8px] sm:text-[9px] font-medium text-slate-400">Starting*</span>
+                  <div className="mt-2 inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 shadow-sm border border-slate-100 w-max max-w-full">
+                    <span className="text-[11px] sm:text-xs font-black text-[#F43F5E] truncate">{slide.price}</span>
+                    <span className="ml-1 text-[8px] sm:text-[9px] font-medium text-slate-400 shrink-0">Starting*</span>
                   </div>
                 </div>
                 <div className="w-[45%] relative shrink-0 overflow-hidden">
@@ -429,11 +429,11 @@ export function IndividualHomeScreen({ user }) {
         </motion.div>
       </section>
 
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md px-4 py-3 shadow-sm border-b border-slate-100">
+      <div className="sticky top-0 z-40 w-full max-w-full bg-white/95 backdrop-blur-md py-3 shadow-sm border-b border-slate-100">
         <button
           type="button"
           onClick={() => setCategorySheetOpen(true)}
-          className="flex w-full items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-3.5 text-left shadow-sm transition active:scale-[0.99]"
+          className="flex w-full max-w-full items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-3.5 text-left shadow-sm transition active:scale-[0.99]"
           aria-label="Search by category"
         >
           <Search className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
@@ -444,37 +444,34 @@ export function IndividualHomeScreen({ user }) {
         </button>
       </div>
 
-      <section className="relative z-10 w-full shrink-0 pt-5 pb-2 overflow-hidden">
+      <section className="relative z-10 w-full max-w-full shrink-0 pt-5 pb-2 overflow-hidden px-4">
         <motion.div
           initial={reduce ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+          className="w-full max-w-full"
         >
-          <div className="mb-2 flex items-center justify-between gap-2 px-0.5">
+          <div className="mb-2 flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold tracking-tight text-slate-800">Browse by work area</h3>
             {groupsLoading ? <Loader2 className="h-4 w-4 animate-spin text-slate-400" aria-hidden /> : null}
           </div>
           <div
             ref={categoryScrollRef}
-            onMouseEnter={() => { isCategoryHoveredRef.current = true }}
-            onMouseLeave={() => { isCategoryHoveredRef.current = false }}
-            onTouchStart={() => { isCategoryHoveredRef.current = true }}
-            onTouchEnd={() => { isCategoryHoveredRef.current = false }}
-            className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 pt-1 scrollbar-none [&::-webkit-scrollbar]:hidden w-full"
+            className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 pt-1 scrollbar-none [&::-webkit-scrollbar]:hidden w-[calc(100%+2rem)] -mx-4 px-4"
           >
             <button
               type="button"
               onClick={() => setSelectedGroupId(null)}
-              className={`flex min-w-[4.5rem] w-[4.5rem] shrink-0 snap-start flex-col items-center gap-1.5 rounded-2xl border px-2 pb-2.5 pt-2.5 transition shadow-sm active:scale-[0.98] ${selectedGroupId == null
+              className={`flex min-w-[90px] w-[90px] shrink-0 snap-start flex-col items-center justify-between gap-1.5 rounded-2xl border px-2 pb-2.5 pt-2.5 transition shadow-sm active:scale-[0.98] ${selectedGroupId == null
                 ? 'border-[#FFD100] bg-[#FFD100]/10 ring-1 ring-[#FFD100]'
                 : 'border-slate-200 bg-white hover:bg-slate-50'
                 }`}
             >
-              <span className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${selectedGroupId == null ? 'bg-[#FFD100] text-slate-900' : 'bg-slate-100 text-[#F4CC34]'
+              <span className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${selectedGroupId == null ? 'bg-[#FFD100] text-slate-900' : 'bg-slate-100 text-[#F4CC34]'
                 }`}>
-                <LayoutGrid className="h-4 w-4" aria-hidden />
+                <LayoutGrid className="h-5 w-5" aria-hidden />
               </span>
-              <span className={`w-full text-center text-[9px] font-bold leading-tight line-clamp-2 ${selectedGroupId == null ? 'text-slate-900' : 'text-slate-600'
+              <span className={`w-full text-center text-[10px] font-bold leading-tight line-clamp-2 ${selectedGroupId == null ? 'text-slate-900' : 'text-slate-600'
                 }`}>All Categories</span>
             </button>
             {tradeGroups.map((g, idx) => {
@@ -487,16 +484,16 @@ export function IndividualHomeScreen({ user }) {
                   key={gid}
                   type="button"
                   onClick={() => setSelectedGroupId(gid)}
-                  className={`flex min-w-[4.5rem] w-[4.5rem] shrink-0 snap-start flex-col items-center gap-1.5 rounded-2xl border px-2 pb-2.5 pt-2.5 transition shadow-sm active:scale-[0.98] ${active
+                  className={`flex min-w-[90px] w-[90px] shrink-0 snap-start flex-col items-center justify-between gap-1.5 rounded-2xl border px-2 pb-2.5 pt-2.5 transition shadow-sm active:scale-[0.98] ${active
                     ? 'border-[#FFD100] bg-[#FFD100]/10 ring-1 ring-[#FFD100]'
                     : 'border-slate-200 bg-white hover:bg-slate-50'
                     }`}
                 >
-                  <span className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${active ? 'bg-[#FFD100] text-slate-900' : 'bg-slate-100 text-[#F4CC34]'
+                  <span className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${active ? 'bg-[#FFD100] text-slate-900' : 'bg-slate-100 text-[#F4CC34]'
                     }`}>
-                    <VisIcon className="h-4 w-4" aria-hidden />
+                    <VisIcon className="h-5 w-5" aria-hidden />
                   </span>
-                  <span className={`w-full text-center text-[9px] font-bold leading-tight line-clamp-2 ${active ? 'text-slate-900' : 'text-slate-600'
+                  <span className={`w-full text-center text-[10px] font-bold leading-tight line-clamp-2 ${active ? 'text-slate-900' : 'text-slate-600'
                     }`}>
                     {g.name}
                   </span>
@@ -504,13 +501,13 @@ export function IndividualHomeScreen({ user }) {
               )
             })}
           </div>
-          <p className="mt-2 px-0.5 text-center text-[11px] font-medium text-slate-500 italic">
+          <p className="mt-2 text-center text-[11px] font-medium text-slate-500 italic">
             Tap a tile to filter workers — same catalogue as when you book.
           </p>
         </motion.div>
       </section>
 
-      <section className="relative z-20 -mt-6 flex-1 space-y-5 rounded-t-[1.85rem] bg-[#FAFAFA] px-4 pb-8 pt-5 shadow-sm border-t border-[#e2e8f0]">
+      <section className="relative z-20 -mt-6 flex-1 space-y-5 rounded-t-[1.85rem] bg-[#FAFAFA] px-4 pb-8 pt-5 shadow-sm border-t border-[#e2e8f0] w-full max-w-full overflow-hidden">
         <span
           id="individual-home-scroll-sentinel"
           className="pointer-events-none absolute left-0 right-0 top-0 h-px w-full"
@@ -936,25 +933,25 @@ export function IndividualHomeScreen({ user }) {
         </section>
 
         {/* Support */}
-        <section className="mt-10 mb-28 px-4">
-          <div className="relative h-[100px] w-full rounded-[24px] bg-white border border-slate-100 shadow-[0_12px_30px_rgba(0,0,0,0.06)] flex items-stretch p-2">
-            <div className="w-[85px] h-full shrink-0 relative rounded-[18px] overflow-hidden bg-slate-100">
+        <section className="mt-10 mb-28">
+          <div className="relative min-h-[100px] w-full rounded-[24px] bg-white border border-slate-100 shadow-[0_12px_30px_rgba(0,0,0,0.06)] flex flex-wrap sm:flex-nowrap items-center p-2 gap-3">
+            <div className="w-[85px] h-[85px] shrink-0 relative rounded-[18px] overflow-hidden bg-slate-100">
                <img src="/support_agent_avatar.png" alt="Support" className="h-full w-full object-cover" />
                <div className="absolute bottom-1.5 right-1.5 h-3.5 w-3.5 rounded-full bg-emerald-500 border-[2.5px] border-white shadow-sm" />
             </div>
             
-            <div className="flex-1 flex flex-col justify-center pl-3 pr-2 min-w-0">
-               <h4 className="text-[16px] font-black text-slate-900 leading-tight mb-0.5 tracking-tight">Need Help?</h4>
-               <p className="text-[11px] font-semibold text-slate-500 leading-tight truncate">Chat with our team</p>
-               <div className="flex items-center gap-1.5 mt-2">
-                  <span className="text-[9px] font-extrabold text-emerald-700 tracking-tight bg-emerald-100/80 px-2 py-1 rounded-md">Avg. reply &lt; 2 mins</span>
+            <div className="flex-1 flex flex-col justify-center min-w-[120px]">
+               <h4 className="text-[16px] sm:text-[18px] font-black text-slate-900 leading-tight mb-0.5 tracking-tight break-words">Need Help?</h4>
+               <p className="text-[11px] font-semibold text-slate-500 leading-tight break-words">Chat with our team</p>
+               <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                  <span className="text-[9px] font-extrabold text-emerald-700 tracking-tight bg-emerald-100/80 px-2 py-1 rounded-md inline-block">Avg. reply &lt; 2 mins</span>
                </div>
             </div>
             
-            <div className="shrink-0 flex items-center pr-1">
+            <div className="shrink-0 flex items-center justify-end w-full sm:w-auto">
                <button
                  onClick={() => navigate('/app/support')}
-                 className="h-[44px] px-5 rounded-[16px] bg-[#FFC107] text-slate-900 text-[13px] font-black shadow-[0_4px_12px_rgba(255,193,7,0.3)] transition active:scale-95 flex items-center justify-center"
+                 className="h-[40px] sm:h-[44px] px-4 sm:px-5 w-full sm:w-auto rounded-[16px] bg-[#FFC107] text-slate-900 text-[13px] font-black shadow-[0_4px_12px_rgba(255,193,7,0.3)] transition active:scale-95 flex items-center justify-center whitespace-nowrap"
                >
                  Chat Now
                </button>

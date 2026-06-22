@@ -26,6 +26,15 @@
   --breakpoint-2xl: 9999px;
 }
 
+* {
+  box-sizing: border-box;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
 html {
   scroll-behavior: smooth;
   background-color: #0f172a; /* Dark background on desktop */
@@ -33,6 +42,7 @@ html {
 
 body {
   margin: 0 auto;
+  width: 100%;
   max-width: 430px; /* iPhone Pro Max width */
   min-height: 100vh;
   font-family: var(--font-sans);
@@ -42,6 +52,7 @@ body {
   box-shadow: 0 0 50px rgba(0,0,0,0.5);
   position: relative;
   overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 body.admin-mode {

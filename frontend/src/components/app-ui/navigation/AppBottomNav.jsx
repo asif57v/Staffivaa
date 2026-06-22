@@ -15,7 +15,7 @@ export function AppBottomNav({ items }) {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label="Bottom navigation"
     >
-      <div className="flex h-[64px] w-full max-w-md items-center justify-around px-2">
+      <div className="flex h-[64px] w-full max-w-lg items-center justify-around px-2">
         {items.map(({ id, to, end, label, icon: Icon, premium, badge }) => (
           <NavLink
             key={`${id}-${to}`}

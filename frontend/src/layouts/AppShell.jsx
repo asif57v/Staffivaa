@@ -422,7 +422,7 @@ export function AppShell() {
           <header ref={headerRef} className={`${isIndividualAppHome ? 'relative z-30' : 'sticky top-0 z-30 px-3 pt-3'}`}>
           {isIndividualAppHome ? (
             <div
-              className={`flex items-center gap-2 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top,0px))] transition-all duration-300 ${
+              className={`flex items-center gap-2 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top,0px))] transition-all duration-300 ${
                 solidIndividualHeader
                   ? 'bg-yellow-300/95 shadow-md backdrop-blur-md'
                   : 'bg-yellow-300 shadow-sm'
@@ -435,9 +435,9 @@ export function AppShell() {
                 className="flex min-w-0 flex-1 flex-col items-start text-left outline-none transition active:opacity-70"
               >
                 <span className="text-[9px] font-bold uppercase tracking-wide text-slate-800/70">Location</span>
-                <div className="mt-0.5 flex w-full items-center gap-0.5">
+                <div className="mt-0.5 flex min-w-0 w-full items-center gap-0.5">
                   <MapPin className="h-3 w-3 shrink-0 text-slate-900" fill="currentColor" />
-                  <span className="truncate text-[12px] font-extrabold tracking-tight text-slate-900">
+                  <span className="truncate min-w-0 text-[12px] font-extrabold tracking-tight text-slate-900">
                     {individualLocationTitle}
                   </span>
                   <ChevronDown className="h-3 w-3 shrink-0 text-slate-900/70" />
