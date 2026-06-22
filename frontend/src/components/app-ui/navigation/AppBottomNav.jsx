@@ -11,11 +11,11 @@ export function AppBottomNav({ items }) {
 
   return (
     <nav
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center px-2"
-      style={{ paddingBottom: 'max(0.4rem, env(safe-area-inset-bottom))' }}
+      className="pointer-events-auto fixed inset-x-0 bottom-0 z-50 flex justify-center bg-white/95 backdrop-blur-xl border-t border-slate-200 shadow-[0_-4px_24px_rgba(0,0,0,0.06)]"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label="Bottom navigation"
     >
-      <div className="pointer-events-auto mb-2 flex h-[70px] w-full max-w-[min(100%,24rem)] items-center justify-around gap-1 px-2 shadow-[0_8px_32px_rgba(0,0,0,0.12)] bg-white/95 backdrop-blur-xl border border-slate-100 rounded-[35px]">
+      <div className="flex h-[64px] w-full max-w-md items-center justify-around px-2">
         {items.map(({ id, to, end, label, icon: Icon, premium, badge }) => (
           <NavLink
             key={`${id}-${to}`}
