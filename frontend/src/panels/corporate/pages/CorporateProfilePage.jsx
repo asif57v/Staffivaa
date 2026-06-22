@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { Autocomplete, useLoadScript } from '@react-google-maps/api'
 import {
   Briefcase,
   Building2,
@@ -10,6 +11,7 @@ import {
   FileText,
   HardHat,
   IndianRupee,
+  Navigation,
   RefreshCw,
   ShieldCheck,
   Trash2,
@@ -55,6 +57,8 @@ const labelClass = 'mb-1.5 block text-[11px] font-bold uppercase tracking-wide t
 
 const BENEFIT_ICONS = [Briefcase, HardHat, IndianRupee]
 
+const GMAPS_LIBRARIES = ['places']
+
 function profileToForm(profile, user) {
   return {
     companyName: profile?.companyName || '',
@@ -90,6 +94,104 @@ export function CorporateProfilePage() {
   const [uploading, setUploading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [banner, setBanner] = useState(null)
+  const [autocomplete, setAutocomplete] = useState(null)
+  const [isFetchingLocation, setIsFetchingLocation] = useState(false)
+
+  const { isLoaded } = useLoadScript({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+    libraries: GMAPS_LIBRARIES,
+  })
+
+  const handlePlaceChanged = () => {
+    if (autocomplete !== null) {
+      const place = autocomplete.getPlace()
+      if (place.formatted_address) {
+        setForm((f) => ({ ...f, registeredAddress: place.formatted_address }))
+      }
+      // Extract city, state, pincode from address_components
+      const components = place.address_components || []
+      const updates = {}
+      for (const comp of components) {
+        const types = comp.types || []
+        if (types.includes('locality')) {
+          updates.city = comp.long_name
+        } else if (types.includes('administrative_area_level_3') && !updates.city) {
+          updates.city = comp.long_name
+        }
+        if (types.includes('administrative_area_level_1')) {
+          updates.state = comp.long_name
+        }
+        if (types.includes('postal_code')) {
+          updates.pincode = comp.long_name
+        }
+      }
+      if (Object.keys(updates).length > 0) {
+        setForm((f) => ({ ...f, ...updates }))
+      }
+    }
+  }
+
+  const pickLocation = () => {
+    if (!navigator.geolocation) {
+      setBanner({ variant: 'error', message: 'Location is not supported by your browser.' })
+      return
+    }
+    setIsFetchingLocation(true)
+    setBanner(null)
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords
+        try {
+          const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+          if (!apiKey) {
+            setForm((f) => ({ ...f, registeredAddress: `${lat.toFixed(5)}, ${lng.toFixed(5)}` }))
+            setIsFetchingLocation(false)
+            return
+          }
+          const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`)
+          const data = await res.json()
+          if (data.results && data.results.length > 0) {
+            const result = data.results[0]
+            setForm((f) => ({ ...f, registeredAddress: result.formatted_address }))
+
+            // Parse address_components to auto-fill city, state, pincode
+            const components = result.address_components || []
+            const updates = {}
+            for (const comp of components) {
+              const types = comp.types || []
+              if (types.includes('locality')) {
+                updates.city = comp.long_name
+              } else if (types.includes('administrative_area_level_3') && !updates.city) {
+                updates.city = comp.long_name
+              }
+              if (types.includes('administrative_area_level_1')) {
+                updates.state = comp.long_name
+              }
+              if (types.includes('postal_code')) {
+                updates.pincode = comp.long_name
+              }
+            }
+            if (Object.keys(updates).length > 0) {
+              setForm((f) => ({ ...f, ...updates }))
+            }
+            setBanner({ variant: 'success', message: 'Location fetched successfully!' })
+          } else {
+            setForm((f) => ({ ...f, registeredAddress: `${lat.toFixed(5)}, ${lng.toFixed(5)}` }))
+            setBanner({ variant: 'success', message: 'GPS coordinates captured. Address could not be resolved.' })
+          }
+        } catch {
+          setForm((f) => ({ ...f, registeredAddress: `${lat.toFixed(5)}, ${lng.toFixed(5)}` }))
+          setBanner({ variant: 'success', message: 'GPS coordinates captured.' })
+        }
+        setIsFetchingLocation(false)
+      },
+      () => {
+        setBanner({ variant: 'error', message: 'Unable to retrieve your location. Please allow location permission.' })
+        setIsFetchingLocation(false)
+      },
+      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 },
+    )
+  }
 
   const [patchCorporateMe] = usePatchCorporateMeMutation()
   const [addDocument] = useAddCorporateDocumentMutation()
@@ -387,15 +489,53 @@ export function CorporateProfilePage() {
             <label className={labelClass} htmlFor="registeredAddress">
               Registered office address *
             </label>
-            <textarea
-              id="registeredAddress"
-              rows={2}
-              className={inputClass}
-              value={form.registeredAddress}
-              onChange={setField('registeredAddress')}
-              disabled={!canEdit}
-              placeholder="Street, area, landmark"
-            />
+            {isLoaded ? (
+              <Autocomplete
+                onLoad={(auto) => setAutocomplete(auto)}
+                onPlaceChanged={handlePlaceChanged}
+                options={{
+                  componentRestrictions: { country: 'in' },
+                  fields: ['formatted_address', 'address_components'],
+                }}
+              >
+                <input
+                  id="registeredAddress"
+                  type="text"
+                  className={inputClass}
+                  value={form.registeredAddress}
+                  onChange={setField('registeredAddress')}
+                  disabled={!canEdit}
+                  placeholder="Street, area, landmark"
+                />
+              </Autocomplete>
+            ) : (
+              <input
+                id="registeredAddress"
+                type="text"
+                className={inputClass}
+                value={form.registeredAddress}
+                onChange={setField('registeredAddress')}
+                disabled={!canEdit}
+                placeholder="Street, area, landmark"
+              />
+            )}
+            {canEdit ? (
+              <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={pickLocation}
+                  disabled={isFetchingLocation}
+                  className="flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/5 px-3 py-2 text-xs font-bold text-brand shadow-sm transition hover:bg-brand/10 active:scale-95 disabled:opacity-70"
+                >
+                  {isFetchingLocation ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Navigation className="h-3.5 w-3.5" />
+                  )}
+                  {isFetchingLocation ? 'Fetching location...' : '📍 Fetch live location'}
+                </button>
+              </div>
+            ) : null}
           </div>
           <div>
             <label className={labelClass} htmlFor="city">

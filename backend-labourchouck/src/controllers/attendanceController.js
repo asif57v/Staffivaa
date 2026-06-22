@@ -374,6 +374,8 @@ export const monitorAttendance = asyncHandler(async (req, res) => {
         corporateName,
         projectLocation,
         projectStatus: status,
+        startDate: reqData.startDate,
+        endDate: reqData.endDate,
         requiredWorkers,
         assignedWorkers: 0,
         present: 0,
@@ -405,6 +407,7 @@ export const monitorAttendance = asyncHandler(async (req, res) => {
         workerName: assignment.labourId?.fullName || 'Unknown Worker',
         role: assignment.categoryId?.name || 'Worker',
         status: 'Absent',
+        assignedAt: assignment.acceptedAt || assignment.createdAt,
         records: []
       })
     } else {
@@ -423,6 +426,7 @@ export const monitorAttendance = asyncHandler(async (req, res) => {
         workerName: assignment.labourId?.fullName || 'Unknown Worker',
         role: assignment.categoryId?.name || 'Worker',
         status: latestRecord.attendanceStatus || latestRecord.projectStatus,
+        assignedAt: assignment.acceptedAt || assignment.createdAt,
         records: workerRecords
       })
     }

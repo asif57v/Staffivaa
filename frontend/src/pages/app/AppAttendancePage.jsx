@@ -14,7 +14,7 @@ import {
   nowIso,
 } from '../../lib/labourJobDemoStorage.js'
 import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
-import { LogIn, LogOut, MapPin, Clock, Building2, Briefcase, UserCircle, CalendarDays, History } from 'lucide-react'
+import { LogIn, LogOut, MapPin, Clock, Building2, Briefcase, UserCircle, CalendarDays, History, Navigation, AlertTriangle } from 'lucide-react'
 
 function isApiAssignment(job) {
   return Boolean(job?.requestId) && /^[a-f0-9]{24}$/i.test(String(job.id))
@@ -55,6 +55,20 @@ function LiveDuration({ checkInAt }) {
   return <span className="font-bold text-slate-900">{elapsedStr}</span>
 }
 
+// Haversine distance in meters
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null
+  const R = 6371e3
+  const φ1 = (lat1 * Math.PI) / 180
+  const φ2 = (lat2 * Math.PI) / 180
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180
+  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+const GEOFENCE_RADIUS = 120 // meters
+
 export function AppAttendancePage() {
   const reduce = useReducedMotion()
   const [toast, setToast] = useState('')
@@ -71,6 +85,12 @@ export function AppAttendancePage() {
   const [checkIn, { isLoading: isCheckingIn }] = useCheckInMutation()
   const [checkOut, { isLoading: isCheckingOut }] = useCheckOutMutation()
 
+  // Live GPS distance tracking
+  const [userLat, setUserLat] = useState(null)
+  const [userLng, setUserLng] = useState(null)
+  const [distanceToSite, setDistanceToSite] = useState(null)
+  const [gpsStatus, setGpsStatus] = useState('idle') // idle | watching | error
+
   const assignments = assignmentsData?.assignments ?? []
   const records = attendanceData?.records ?? []
 
@@ -84,6 +104,49 @@ export function AppAttendancePage() {
     setLocalDemo(next)
   }, [])
 
+  // Watch user GPS and calculate distance to site
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setGpsStatus('error')
+      return
+    }
+    // We need assignment data loaded to know site coordinates
+    if (!assignmentsData) return
+
+    const activeAssigns = (assignmentsData?.assignments ?? []).filter((a) => {
+      if (a.status !== 'accepted' && a.status !== 'on_site') return false
+      const source = a.requestId?.sourceType
+      return source === 'vendor' || source === 'corporate'
+    })
+    const primary = activeAssigns[0]
+    const siteReq = primary?.requestId
+    const siteLat = siteReq?.locationLat
+    const siteLng = siteReq?.locationLng
+
+    if (siteLat == null || siteLng == null) {
+      // No site coordinates — skip distance tracking
+      setDistanceToSite(null)
+      return
+    }
+
+    setGpsStatus('watching')
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords
+        setUserLat(latitude)
+        setUserLng(longitude)
+        const dist = haversineDistance(latitude, longitude, siteLat, siteLng)
+        setDistanceToSite(dist != null ? Math.round(dist) : null)
+        setGpsStatus('watching')
+      },
+      () => {
+        setGpsStatus('error')
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 },
+    )
+    return () => navigator.geolocation.clearWatch(watchId)
+  }, [assignmentsData])
+
   const handleCheckIn = async (assignmentId, isDemo) => {
     if (isDemo) {
       persistDemo({
@@ -93,13 +156,28 @@ export function AppAttendancePage() {
       showToast('Checked in successfully.')
       return
     }
-    try {
-      await checkIn({ assignmentId, lat: 28.5355, lng: 77.3910 }).unwrap()
-      refetch()
-      showToast('Checked in successfully.')
-    } catch (err) {
-      showToast(err?.data?.message || 'Failed to check in.')
+    // Use real GPS location
+    if (!navigator.geolocation) {
+      showToast('Location is not supported by your browser.')
+      return
     }
+    showToast('Fetching your location...')
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords
+        try {
+          await checkIn({ assignmentId, lat, lng }).unwrap()
+          refetch()
+          showToast('Checked in successfully.')
+        } catch (err) {
+          showToast(err?.data?.message || 'Failed to check in.')
+        }
+      },
+      (geoErr) => {
+        showToast('Could not get your location. Please allow location permission and try again.')
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    )
   }
 
   const handleCheckOut = async (assignmentId, isDemo) => {
@@ -154,28 +232,38 @@ export function AppAttendancePage() {
 
   // Primary Assignment Data
   const primaryAssignment = activeAssignments[0]
-  const isDemo = primaryAssignment?.isDemo
-  const req = primaryAssignment?.requestId || {}
+  
+  // Find the most recent completed assignment if no active one
+  const completedAssignments = (assignmentsData?.assignments ?? []).filter((a) => {
+    if (a.status !== 'completed' && a.status !== 'closed') return false
+    const source = a.requestId?.sourceType
+    return source === 'vendor' || source === 'corporate'
+  })
+  const latestCompleted = completedAssignments.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))[0]
+
+  const displayAssignment = primaryAssignment || latestCompleted
+  const isDemo = displayAssignment?.isDemo
+  const req = displayAssignment?.requestId || {}
 
   let corporateName, vendorName, roleName, locationStr, shiftStr
-  if (primaryAssignment) {
+  if (displayAssignment) {
     if (isDemo) {
-      corporateName = primaryAssignment.contractor || 'Corporate Client'
-      vendorName = primaryAssignment.vendorName || 'Vendor'
-      roleName = primaryAssignment.trade || 'Worker'
-      locationStr = primaryAssignment.location || primaryAssignment.site || 'Location not specified'
-      shiftStr = primaryAssignment.shiftWindow || '08:00 AM - 06:00 PM'
+      corporateName = displayAssignment.contractor || 'Corporate Client'
+      vendorName = displayAssignment.vendorName || 'Vendor'
+      roleName = displayAssignment.trade || 'Worker'
+      locationStr = displayAssignment.location || displayAssignment.site || 'Location not specified'
+      shiftStr = displayAssignment.shiftWindow || '08:00 AM - 06:00 PM'
     } else {
       corporateName = req.clientId?.corporateProfile?.companyName || req.clientId?.fullName || 'Corporate Client'
-      vendorName = primaryAssignment.vendorId?.contractorProfile?.businessName || primaryAssignment.vendorId?.fullName || 'Vendor'
-      roleName = primaryAssignment.categoryId?.name || req.lines?.[0]?.categoryId?.name || 'Worker'
+      vendorName = displayAssignment.vendorId?.contractorProfile?.businessName || displayAssignment.vendorId?.fullName || 'Vendor'
+      roleName = displayAssignment.categoryId?.name || req.lines?.[0]?.categoryId?.name || 'Worker'
       locationStr = req.locationText || req.siteId?.address || 'Location not specified'
       shiftStr = (req.shiftStart && req.shiftEnd) ? `${req.shiftStart} - ${req.shiftEnd}` : '08:00 AM - 06:00 PM'
     }
   }
 
   let durationStr = '—'
-  if (primaryAssignment) {
+  if (displayAssignment) {
     if (isDemo) {
       durationStr = '23 Jun 2026 – 30 Jun 2026'
     } else if (req.startDate) {
@@ -187,9 +275,9 @@ export function AppAttendancePage() {
 
   // Determine Assignment Date
   let assignedDate = new Date(currentYear, currentMonth, 1)
-  if (primaryAssignment) {
-    const created = primaryAssignment.createdAt ? new Date(primaryAssignment.createdAt) : null
-    const accepted = primaryAssignment.acceptedAt ? new Date(primaryAssignment.acceptedAt) : null
+  if (displayAssignment) {
+    const created = displayAssignment.createdAt ? new Date(displayAssignment.createdAt) : null
+    const accepted = displayAssignment.acceptedAt ? new Date(displayAssignment.acceptedAt) : null
     const start = req.startDate ? new Date(req.startDate) : null
     
     const validDates = [created, accepted, start].filter(Boolean)
@@ -209,10 +297,8 @@ export function AppAttendancePage() {
     records.forEach(r => {
       const d = new Date(r.shiftDate)
       d.setHours(0, 0, 0, 0)
-      if (d.getTime() >= assignedDate.getTime()) {
-        if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
-          recordMap[d.getDate()] = r
-        }
+      if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+        recordMap[d.getDate()] = r
       }
     })
   }
@@ -228,25 +314,37 @@ export function AppAttendancePage() {
   const calendarDays = Array.from({ length: daysInMonth }, (_, i) => i + 1)
 
   const getDayStatus = (d) => {
-    if (!primaryAssignment) return { type: 'Not Assigned', color: '#CBD5E1' }
     const iterDate = new Date(currentYear, currentMonth, d)
-    if (iterDate < assignedDate) return { type: 'Not Assigned', color: '#CBD5E1' }
     if (iterDate > now) return null // future
     
     const r = recordMap[d]
     if (r) {
-      let st = r.attendanceStatus || (r.projectStatus === 'completed' || r.projectStatus === 'working' ? 'Present' : 'Absent')
-      if (st === 'working') st = 'Present'
+      let st = r.attendanceStatus
+      if (!st) {
+        if (r.checkInAt && r.checkOutAt) {
+          st = 'Present'
+        } else if (r.checkInAt && !r.checkOutAt) {
+          const shiftDateStr = getLocalDateStr(r.shiftDate)
+          st = shiftDateStr === todayStr ? 'Working' : 'Incomplete'
+        } else {
+          st = 'Absent'
+        }
+      }
+      if (st === 'working' || st === 'Working') st = 'Present'
       
       if (st === 'Present' || st === 'Half Day') return { type: 'Present', color: '#10B981' }
       if (st === 'Absent') return { type: 'Absent', color: '#EF4444' }
-      if (st === 'Late') return { type: 'Late', color: '#F59E0B' }
+      if (st === 'Late' || st === 'Incomplete') return { type: 'Late', color: '#F59E0B' }
       if (st === 'Weekly Off') return { type: 'Off', color: '#8B5CF6' }
       return { type: 'Present', color: '#10B981' }
     }
     
-    // Past day, >= assignedDate, no record -> Absent
-    return { type: 'Absent', color: '#EF4444' }
+    // Past day, no record
+    if (primaryAssignment && iterDate >= assignedDate) {
+      return { type: 'Absent', color: '#EF4444' }
+    }
+    
+    return { type: 'Not Assigned', color: '#CBD5E1' }
   }
 
   calendarDays.forEach(d => {
@@ -292,7 +390,6 @@ export function AppAttendancePage() {
     .filter(r => {
       const d = new Date(r.shiftDate)
       d.setHours(0, 0, 0, 0)
-      if (d.getTime() < assignedDate.getTime()) return false
       
       const localStr = getLocalDateStr(r.shiftDate)
       if (localStr < todayStr) return true
@@ -327,20 +424,45 @@ export function AppAttendancePage() {
       {!primaryAssignment ? (
         <div style={{
           background: '#FFFFFF', borderRadius: 20, padding: '24px',
-          border: '1px solid #F1F5F9', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-          textAlign: 'center'
+          border: '1px solid #F1F5F9', boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
         }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: '50%', background: '#F8FAFC',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 16px'
-          }}>
-            <Building2 style={{ width: 24, height: 24, color: '#94A3B8' }} />
+          <div style={{ textAlign: 'center' }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: '50%', background: '#F8FAFC',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 16px'
+            }}>
+              <Building2 style={{ width: 24, height: 24, color: '#94A3B8' }} />
+            </div>
+            <h2 style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', margin: '0 0 8px' }}>📭 No Active Assignment</h2>
+            <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 16px', lineHeight: 1.5 }}>
+              You are currently not assigned to any Corporate or Client projects by your vendor.
+            </p>
           </div>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', margin: '0 0 8px' }}>📭 No Active Assignment</h2>
-          <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 16px', lineHeight: 1.5 }}>
-            You are currently not assigned to any Corporate or Client projects by your vendor.
-          </p>
+
+          {displayAssignment && (
+            <div style={{ marginTop: 24, borderTop: '1px solid #F1F5F9', paddingTop: 20 }}>
+               <h4 style={{ fontSize: 11, fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 12 }}>
+                 Latest Completed Project
+               </h4>
+               <div style={{ background: '#F8FAFC', borderRadius: 16, padding: '16px', border: '1px solid #E2E8F0' }}>
+                 <p style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', margin: '0 0 4px' }}>{corporateName}</p>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#475569', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+                   <MapPin style={{ width: 14, height: 14 }} /> {locationStr}
+                 </div>
+                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 2 }}>Duration</p>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: '#334155', margin: 0 }}>{durationStr}</p>
+                    </div>
+                    <div>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 2 }}>Role</p>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: '#334155', margin: 0 }}>{roleName}</p>
+                    </div>
+                 </div>
+               </div>
+            </div>
+          )}
         </div>
       ) : (
         <>
@@ -430,8 +552,103 @@ export function AppAttendancePage() {
               </div>
             </div>
 
-            {/* Action buttons removed - Attendance is view-only here */}
+            {/* Live Distance & Check In / Check Out Actions */}
+            {canCheckInToday && !isCheckedIn && !isCompleted ? (
+              <>
+                {/* Live distance indicator */}
+                {req?.locationLat != null && req?.locationLng != null ? (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
+                    borderRadius: 12, marginBottom: 10,
+                    background: distanceToSite != null && distanceToSite <= GEOFENCE_RADIUS ? '#ECFDF5' : distanceToSite != null && distanceToSite <= 300 ? '#FFFBEB' : '#FEF2F2',
+                    border: `1px solid ${distanceToSite != null && distanceToSite <= GEOFENCE_RADIUS ? '#A7F3D0' : distanceToSite != null && distanceToSite <= 300 ? '#FDE68A' : '#FECACA'}`,
+                  }}>
+                    <Navigation style={{
+                      width: 16, height: 16, flexShrink: 0,
+                      color: distanceToSite != null && distanceToSite <= GEOFENCE_RADIUS ? '#10B981' : distanceToSite != null && distanceToSite <= 300 ? '#F59E0B' : '#EF4444',
+                    }} />
+                    <div style={{ flex: 1 }}>
+                      {gpsStatus === 'error' ? (
+                        <p style={{ fontSize: 11, fontWeight: 700, color: '#DC2626', margin: 0 }}>
+                          ⚠️ Location access denied. Enable GPS to check in.
+                        </p>
+                      ) : distanceToSite == null ? (
+                        <p style={{ fontSize: 11, fontWeight: 700, color: '#64748B', margin: 0 }}>
+                          📡 Getting your location...
+                        </p>
+                      ) : distanceToSite <= GEOFENCE_RADIUS ? (
+                        <p style={{ fontSize: 11, fontWeight: 700, color: '#059669', margin: 0 }}>
+                          ✅ You are {distanceToSite}m from the site — ready to check in!
+                        </p>
+                      ) : (
+                        <p style={{ fontSize: 11, fontWeight: 700, color: distanceToSite <= 300 ? '#B45309' : '#DC2626', margin: 0 }}>
+                          📍 You are <strong>{distanceToSite >= 1000 ? `${(distanceToSite / 1000).toFixed(1)}km` : `${distanceToSite}m`}</strong> away. Move within {GEOFENCE_RADIUS}m to check in.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => handleCheckIn(primaryAssignment._id || primaryAssignment.id, isDemo)}
+                  disabled={isCheckingIn || (req?.locationLat != null && req?.locationLng != null && (distanceToSite == null || distanceToSite > GEOFENCE_RADIUS))}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    padding: '14px 0', borderRadius: 14, border: 'none', cursor: 'pointer',
+                    background: (req?.locationLat != null && (distanceToSite == null || distanceToSite > GEOFENCE_RADIUS))
+                      ? '#94A3B8' : 'linear-gradient(135deg, #10B981, #059669)',
+                    color: '#FFFFFF',
+                    fontSize: 14, fontWeight: 800, letterSpacing: '0.3px',
+                    boxShadow: (req?.locationLat != null && (distanceToSite == null || distanceToSite > GEOFENCE_RADIUS))
+                      ? 'none' : '0 4px 14px rgba(16,185,129,0.35)',
+                    opacity: isCheckingIn ? 0.7 : 1, transition: 'all 0.2s',
+                  }}
+                >
+                  <LogIn style={{ width: 18, height: 18 }} />
+                  {isCheckingIn ? 'Checking In...' : (req?.locationLat != null && (distanceToSite == null || distanceToSite > GEOFENCE_RADIUS)) ? 'Move closer to check in' : 'Check In'}
+                </button>
+              </>
+            ) : isCheckedIn && !isCompleted ? (
+              <button
+                type="button"
+                onClick={() => handleCheckOut(primaryAssignment._id || primaryAssignment.id, isDemo)}
+                disabled={isCheckingOut}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  padding: '14px 0', borderRadius: 14, border: 'none', cursor: 'pointer',
+                  background: 'linear-gradient(135deg, #EF4444, #DC2626)', color: '#FFFFFF',
+                  fontSize: 14, fontWeight: 800, letterSpacing: '0.3px',
+                  boxShadow: '0 4px 14px rgba(239,68,68,0.35)',
+                  opacity: isCheckingOut ? 0.7 : 1, transition: 'all 0.2s',
+                }}
+              >
+                <LogOut style={{ width: 18, height: 18 }} />
+                {isCheckingOut ? 'Checking Out...' : 'Check Out'}
+              </button>
+            ) : isCompleted ? (
+              <div style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                padding: '14px 0', borderRadius: 14,
+                background: '#F0FDF4', border: '1px solid #BBF7D0',
+                fontSize: 13, fontWeight: 800, color: '#15803D',
+              }}>
+                ✅ Shift completed for today
+              </div>
+            ) : !canCheckInToday ? (
+              <div style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                padding: '14px 0', borderRadius: 14,
+                background: '#FFF7ED', border: '1px solid #FED7AA',
+                fontSize: 12, fontWeight: 700, color: '#9A3412',
+              }}>
+                ⏳ Assignment starts on {formatDate(assignedDate)}
+              </div>
+            ) : null}
           </div>
+
+        </>
+      )}
 
           {/* 4️⃣ Monthly Summary Cards */}
           <div>
@@ -486,12 +703,50 @@ export function AppAttendancePage() {
                 else if (d > now.getDate()) txtColor = '#CBD5E1'
                 if (isSelected) txtColor = '#FFFFFF'
 
+                // Project start/end day range calculation
+                const iterDate = new Date(currentYear, currentMonth, d)
+                iterDate.setHours(0, 0, 0, 0)
+                
+                let isStartDay = false
+                let isEndDay = false
+                let isInRange = false
+                
+                if (req?.startDate) {
+                  const sDate = new Date(req.startDate)
+                  sDate.setHours(0, 0, 0, 0)
+                  if (iterDate.getTime() === sDate.getTime()) isStartDay = true
+                  
+                  if (req?.endDate) {
+                    const eDate = new Date(req.endDate)
+                    eDate.setHours(0, 0, 0, 0)
+                    if (iterDate.getTime() === eDate.getTime()) isEndDay = true
+                    if (iterDate > sDate && iterDate < eDate) isInRange = true
+                  }
+                }
+
+                // Range highlight styling
+                const rangeBg = (isStartDay || isEndDay || isInRange) ? '#F1F5F9' : 'transparent'
+                const borderRadius = isStartDay ? '12px 0 0 12px' : isEndDay ? '0 12px 12px 0' : isInRange ? '0' : '12px'
+
                 return (
-                  <div key={d} onClick={() => d <= now.getDate() && setSelectedDay(d)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2px 0', gap: 3, cursor: d <= now.getDate() ? 'pointer' : 'default' }}>
-                    <div style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: isSelected ? 800 : 600, background: isSelected ? '#0F172A' : (d <= now.getDate() && sObj?.type !== 'Not Assigned') ? '#F8FAFC' : 'transparent', color: txtColor, border: isSelected ? 'none' : (d <= now.getDate() && sObj?.type !== 'Not Assigned') ? '1px solid #F1F5F9' : '1px solid transparent', transition: 'all 0.2s' }}>
+                  <div key={d} onClick={() => d <= now.getDate() && setSelectedDay(d)} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4px 0', cursor: d <= now.getDate() ? 'pointer' : 'default', background: rangeBg, borderRadius, margin: '0 -2px' }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: isSelected ? 800 : 600, background: isSelected ? '#0F172A' : 'transparent', color: txtColor, border: isSelected ? 'none' : isStartDay ? '1px solid #10B981' : isEndDay ? '1px solid #F97316' : (d <= now.getDate() && sObj?.type !== 'Not Assigned') ? '1px solid #E2E8F0' : '1px solid transparent', transition: 'all 0.2s', zIndex: 2 }}>
                       {d}
                     </div>
-                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: dotColor }} />
+                    
+                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: dotColor, marginTop: 4, zIndex: 2 }} />
+                    
+                    {/* Absolutely positioned badges to prevent grid jumping */}
+                    {isStartDay && (
+                      <div style={{ position: 'absolute', top: -6, left: '50%', transform: 'translateX(-50%)', background: '#10B981', color: '#FFFFFF', fontSize: 7, fontWeight: 800, padding: '2px 4px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.5px', zIndex: 3, boxShadow: '0 2px 4px rgba(16,185,129,0.2)' }}>
+                        Start
+                      </div>
+                    )}
+                    {isEndDay && (
+                      <div style={{ position: 'absolute', top: -6, left: '50%', transform: 'translateX(-50%)', background: '#F97316', color: '#FFFFFF', fontSize: 7, fontWeight: 800, padding: '2px 4px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.5px', zIndex: 3, boxShadow: '0 2px 4px rgba(249,115,22,0.2)' }}>
+                        End
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -592,11 +847,21 @@ export function AppAttendancePage() {
                 {historyRecords.map((r, i) => {
                   const d = new Date(r.shiftDate)
                   const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-                  let st = r.attendanceStatus || (r.projectStatus === 'completed' || r.projectStatus === 'working' ? 'Present' : 'Absent')
+                  let st = r.attendanceStatus
+                  if (!st) {
+                    if (r.checkInAt && r.checkOutAt) {
+                      st = 'Present'
+                    } else if (r.checkInAt && !r.checkOutAt) {
+                      const shiftDateStr = getLocalDateStr(r.shiftDate)
+                      st = shiftDateStr === todayStr ? 'Working' : 'Incomplete'
+                    } else {
+                      st = 'Absent'
+                    }
+                  }
                   if (st === 'working') st = 'Working'
 
-                  const rColor = st === 'Present' || st === 'Working' ? '#10B981' : st === 'Late' ? '#F59E0B' : '#EF4444'
-                  const rBg = st === 'Present' || st === 'Working' ? '#ECFDF5' : st === 'Late' ? '#FFFBEB' : '#FEF2F2'
+                  const rColor = (st === 'Present' || st === 'Working') ? '#10B981' : (st === 'Late' || st === 'Incomplete') ? '#F59E0B' : '#EF4444'
+                  const rBg = (st === 'Present' || st === 'Working') ? '#ECFDF5' : (st === 'Late' || st === 'Incomplete') ? '#FFFBEB' : '#FEF2F2'
 
                   return (
                     <div key={r._id || i} style={{ background: '#FFFFFF', borderRadius: 16, padding: '16px', border: '1px solid #F1F5F9', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
@@ -630,8 +895,6 @@ export function AppAttendancePage() {
               </div>
             </div>
           )}
-        </>
-      )}
     </div>
   )
 }

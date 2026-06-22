@@ -110,8 +110,15 @@ export function WorkerAttendanceHistoryView({ basePath = '/vendor' }) {
   }
 
   // Determine Assignment Date
-  const assignedDate = worker.assignedAt ? new Date(worker.assignedAt) : project.startDate ? new Date(project.startDate) : new Date(currentYear, currentMonth, 1)
+  const validDates = [
+    worker.assignedAt ? new Date(worker.assignedAt) : null,
+    project.startDate ? new Date(project.startDate) : null
+  ].filter(Boolean)
+  const assignedDate = validDates.length > 0 ? new Date(Math.max(...validDates.map(d => d.getTime()))) : new Date(currentYear, currentMonth, 1)
   assignedDate.setHours(0, 0, 0, 0)
+  
+  const startDateObj = project.startDate ? new Date(project.startDate) : null
+  const endDateObj = project.endDate ? new Date(project.endDate) : null
   
   let totalPresent = 0
   let totalAbsent = 0
@@ -131,14 +138,24 @@ export function WorkerAttendanceHistoryView({ basePath = '/vendor' }) {
     
     const r = recordMap[d]
     if (r) {
-      let st = r.attendanceStatus || (r.projectStatus === 'completed' || r.projectStatus === 'working' ? 'Present' : 'Absent')
-      if (st === 'working') st = 'Present'
+      let st = r.attendanceStatus
+      if (!st) {
+        if (r.checkInAt && r.checkOutAt) {
+          st = 'Present'
+        } else if (r.checkInAt && !r.checkOutAt) {
+          const shiftDateStr = new Date(r.shiftDate).toLocaleDateString()
+          st = shiftDateStr === todayStr ? 'Working' : 'Incomplete'
+        } else {
+          st = 'Absent'
+        }
+      }
+      if (st === 'working' || st === 'Working') st = 'Present'
       
       if (st === 'Present' || st === 'Half Day') return { type: 'Present', color: '#10B981' }
       if (st === 'Absent') return { type: 'Absent', color: '#EF4444' }
-      if (st === 'Late') return { type: 'Late', color: '#F59E0B' }
+      if (st === 'Late' || st === 'Incomplete') return { type: 'Late', color: '#F59E0B' }
       if (st === 'Weekly Off') return { type: 'Off', color: '#8B5CF6' }
-      return { type: 'Present', color: '#10B981' } // Fallback if check in exists but no explicit status
+      return { type: 'Present', color: '#10B981' }
     }
     
     // Past day, >= assignedDate, no record -> Absent
@@ -377,6 +394,25 @@ export function WorkerAttendanceHistoryView({ basePath = '/vendor' }) {
               const dotColor = sObj?.color || 'transparent'
               const isSelected = selectedDay === d
               
+              let isStartDay = false
+              let isEndDay = false
+              let isInRange = false
+              
+              if (startDateObj) {
+                const iter = new Date(currentYear, currentMonth, d)
+                iter.setHours(0, 0, 0, 0)
+                const st = new Date(startDateObj)
+                st.setHours(0, 0, 0, 0)
+                if (iter.getTime() === st.getTime()) isStartDay = true
+                
+                if (endDateObj) {
+                  const en = new Date(endDateObj)
+                  en.setHours(0, 0, 0, 0)
+                  if (iter.getTime() === en.getTime()) isEndDay = true
+                  if (iter > st && iter < en) isInRange = true
+                }
+              }
+
               let txtColor = '#334155'
               if (sObj?.type === 'Not Assigned') txtColor = '#CBD5E1'
               else if (d > now.getDate()) txtColor = '#CBD5E1'
@@ -386,20 +422,43 @@ export function WorkerAttendanceHistoryView({ basePath = '/vendor' }) {
                 <div 
                   key={d} 
                   onClick={() => d <= now.getDate() && setSelectedDay(d)}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2px 0', gap: 3, cursor: d <= now.getDate() ? 'pointer' : 'default' }}
+                  style={{ 
+                    position: 'relative',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
+                    padding: '2px 0', gap: 3, cursor: d <= now.getDate() ? 'pointer' : 'default',
+                    background: (isInRange || isStartDay || isEndDay) ? '#F8FAFC' : 'transparent',
+                    borderTopLeftRadius: isStartDay ? 16 : 0,
+                    borderBottomLeftRadius: isStartDay ? 16 : 0,
+                    borderTopRightRadius: isEndDay ? 16 : 0,
+                    borderBottomRightRadius: isEndDay ? 16 : 0,
+                    margin: '4px 0',
+                    zIndex: isSelected ? 10 : 1
+                  }}
                 >
                   <div style={{
                     width: 32, height: 32, borderRadius: 10,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 12, fontWeight: isSelected ? 800 : 600,
-                    background: isSelected ? '#0F172A' : (d <= now.getDate() && sObj?.type !== 'Not Assigned') ? '#F8FAFC' : 'transparent',
+                    background: isSelected ? '#0F172A' : 'transparent',
                     color: txtColor,
-                    border: isSelected ? 'none' : (d <= now.getDate() && sObj?.type !== 'Not Assigned') ? '1px solid #F1F5F9' : '1px solid transparent',
-                    transition: 'all 0.2s'
+                    border: isSelected ? 'none' : '1px solid transparent',
+                    transition: 'all 0.2s',
+                    position: 'relative', zIndex: 2
                   }}>
                     {d}
                   </div>
-                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: dotColor }} />
+                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: dotColor, position: 'relative', zIndex: 2 }} />
+                  
+                  {isStartDay && (
+                     <div style={{ position: 'absolute', bottom: -12, fontSize: 7, fontWeight: 800, color: '#FFFFFF', background: '#10B981', padding: '1px 5px', borderRadius: 4, letterSpacing: '0.5px' }}>
+                       START
+                     </div>
+                  )}
+                  {isEndDay && (
+                     <div style={{ position: 'absolute', bottom: -12, fontSize: 7, fontWeight: 800, color: '#FFFFFF', background: '#F97316', padding: '1px 5px', borderRadius: 4, letterSpacing: '0.5px' }}>
+                       END
+                     </div>
+                  )}
                 </div>
               )
             })}
@@ -550,11 +609,21 @@ export function WorkerAttendanceHistoryView({ basePath = '/vendor' }) {
                     const d = new Date(r.shiftDate)
                     const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
 
-                    let st = r.attendanceStatus || (r.projectStatus === 'completed' || r.projectStatus === 'working' ? 'Present' : 'Absent')
+                    let st = r.attendanceStatus
+                    if (!st) {
+                      if (r.checkInAt && r.checkOutAt) {
+                        st = 'Present'
+                      } else if (r.checkInAt && !r.checkOutAt) {
+                        const shiftDateStr = new Date(r.shiftDate).toLocaleDateString()
+                        st = shiftDateStr === todayStr ? 'Working' : 'Incomplete'
+                      } else {
+                        st = 'Absent'
+                      }
+                    }
                     if (st === 'working') st = 'Working'
 
-                    const rColor = st === 'Present' || st === 'Working' ? '#10B981' : '#EF4444'
-                    const rBg = st === 'Present' || st === 'Working' ? '#ECFDF5' : '#FEF2F2'
+                    const rColor = (st === 'Present' || st === 'Working') ? '#10B981' : (st === 'Late' || st === 'Incomplete') ? '#F59E0B' : '#EF4444'
+                    const rBg = (st === 'Present' || st === 'Working') ? '#ECFDF5' : (st === 'Late' || st === 'Incomplete') ? '#FFFBEB' : '#FEF2F2'
 
                     return (
                       <tr key={r._id || i} style={{ borderBottom: '1px solid #F8FAFC' }}>
