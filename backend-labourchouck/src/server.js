@@ -4,11 +4,13 @@ import app from './app.js'
 import { connectDb } from './config/db.js'
 import { initSocket } from './utils/socket.js'
 import { startBookingExpirationJob } from './utils/bookingExpiration.js'
+import { initializeFirebaseAdmin } from './config/firebase.js'
 
 const port = Number(process.env.PORT) || 5000
 
 async function main() {
   await connectDb()
+  initializeFirebaseAdmin()
   
   const server = http.createServer(app)
   initSocket(server)

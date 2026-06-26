@@ -8,6 +8,7 @@ import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { USER_ROLES } from '../constants/roles.js'
 import { emitRequestStatusUpdate, emitToVendor } from '../utils/socket.js'
+import { sendNotificationToUser } from '../services/notificationService.js'
 
 // Cache the instance
 let razorpayInstance = null
@@ -106,6 +107,7 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
     else request.paymentStatus = 'failed';
 
     await request.save()
+    sendNotificationToUser(req.user._id.toString(), 'Payment Failed', 'Your recent payment transaction failed. Please try again.', { url: '/app/wallet' })
     return sendError(res, { message: 'Payment verification failed', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
 
@@ -127,6 +129,8 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
   }
 
   await request.save()
+  
+  sendNotificationToUser(req.user._id.toString(), 'Payment Successful', 'Your payment was successfully processed.', { url: '/app/wallet' })
 
   if (isUserOrder && request.sourceType === 'corporate') {
     // Notify vendor if payment was from Corporate

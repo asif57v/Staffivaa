@@ -48,6 +48,10 @@ const workforceRequestSchema = new mongoose.Schema(
     labourCharge: { type: Number },
     userPlatformFee: { type: Number, default: 49 },
     labourPlatformFee: { type: Number },
+    userGstRate: { type: Number },
+    convenienceFee: { type: Number },
+    platformFeeType: { type: String },
+    platformFeeValue: { type: Number },
     distanceKm: { type: Number },
     paymentStatus: {
       type: String,

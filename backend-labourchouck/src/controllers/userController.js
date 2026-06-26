@@ -8,6 +8,7 @@ import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { populateLabourCategories } from '../utils/populateLabourCategories.js'
 import { isValidAadhaarLength, maskAadhaarLast4, normalizeAadhaar } from '../utils/aadhaar.js'
 import { normalizeStoredMediaUrl } from '../utils/mediaUrl.js'
+import { sendNotificationToUser } from '../services/notificationService.js'
 
 const MAX_KYC_IMAGE_CHARS = 750_000
 
@@ -280,6 +281,13 @@ export const reviewLabourKyc = asyncHandler(async (req, res) => {
   }
 
   await user.save()
+  
+  if (decision === 'approved') {
+    sendNotificationToUser(user._id.toString(), 'KYC Verified!', 'Your Aadhaar/PAN KYC has been approved. You are ready to receive jobs.', { url: '/app/profile' })
+  } else {
+    sendNotificationToUser(user._id.toString(), 'Action Required', 'Your KYC was rejected. Please review and re-submit your documents.', { url: '/app/kyc' })
+  }
+  
   await populateLabourCategories(user)
 
   return sendSuccess(res, {
@@ -600,4 +608,22 @@ export const getDiscoverLabour = asyncHandler(async (req, res) => {
   }
 
   return sendSuccess(res, { data: { labour: detail } })
+})
+
+/** POST /users/me/fcm-token — save FCM token for push notifications */
+export const saveFcmToken = asyncHandler(async (req, res) => {
+  const { token } = req.body
+  if (!token || typeof token !== 'string') {
+    return sendError(res, {
+      message: 'FCM token is required',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+      code: 'INVALID_TOKEN'
+    })
+  }
+
+  await User.findByIdAndUpdate(req.user._id, {
+    $addToSet: { fcmTokens: token }
+  })
+
+  return sendSuccess(res, { message: 'Token saved' })
 })

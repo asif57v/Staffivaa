@@ -182,7 +182,73 @@ export const getReports = asyncHandler(async (req, res) => {
   const monthlyRevenue = await getRevenue(startOfMonth)
   const yearlyRevenue = await getRevenue(startOfYear)
 
-  // Trend (last 6 months)
+  // Dynamic segment aggregator helper
+  const getSegmentAnalytics = async (matchQuery, distGroupField = 'type') => {
+    const runSum = async (startDate, endDate = null) => {
+      const match = { ...matchQuery, status: 'Completed' }
+      if (startDate || endDate) {
+        match.createdAt = {}
+        if (startDate) match.createdAt.$gte = startDate
+        if (endDate) match.createdAt.$lte = endDate
+      }
+      const res = await WalletTransaction.aggregate([
+        { $match: match },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ])
+      return res[0]?.total || 0
+    }
+
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
+
+    const today = await runSum(startOfToday)
+    const weekly = await runSum(startOfWeek)
+    const monthly = await runSum(startOfMonth)
+    const lastMonth = await runSum(startOfLastMonth, endOfLastMonth)
+
+    // Trend (6 months)
+    const trend = []
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const nextD = new Date(now.getFullYear(), now.getMonth() - i + 1, 1)
+      const sum = await runSum(d, new Date(nextD.getTime() - 1))
+      trend.push({
+        name: d.toLocaleString('default', { month: 'short' }),
+        value: sum
+      })
+    }
+
+    // Distribution donut
+    const distRaw = await WalletTransaction.aggregate([
+      { $match: { ...matchQuery, status: 'Completed' } },
+      { $group: { _id: `$${distGroupField}`, value: { $sum: '$amount' } } }
+    ])
+
+    const distribution = distRaw.map(item => ({
+      name: item._id ? String(item._id).charAt(0).toUpperCase() + String(item._id).slice(1) : 'General',
+      value: item.value
+    }))
+
+    // Fill placeholder donut data if empty to keep charts beautiful
+    if (distribution.length === 0) {
+      distribution.push({ name: 'Transactions', value: 0 })
+    }
+
+    return {
+      stats: { today, weekly, monthly, lastMonth },
+      trend,
+      distribution
+    }
+  }
+
+  // Define segments
+  const platform = await getSegmentAnalytics({ $or: [{ platform_fee: true }, { type: 'Commission' }] }, 'source')
+  const user = await getSegmentAnalytics({ payerType: 'user' }, 'type')
+  const corporate = await getSegmentAnalytics({ payerType: 'corporate' }, 'type')
+  const vendor = await getSegmentAnalytics({ payerType: 'vendor' }, 'type')
+  const labour = await getSegmentAnalytics({ payerType: 'labour' }, 'type')
+
+  // Overall charts (backward compatibility)
   const trend = []
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
@@ -197,7 +263,6 @@ export const getReports = asyncHandler(async (req, res) => {
     })
   }
 
-  // Credits vs Debits overall
   const overall = await WalletTransaction.aggregate([
     { $match: { status: 'Completed' } },
     { $group: { 
@@ -210,7 +275,7 @@ export const getReports = asyncHandler(async (req, res) => {
   let debits = 0
   overall.forEach(item => {
     if (item._id === 'Credit') credits += item.total
-    else debits += item.total // Withdrawals, Settlements, Refunds
+    else debits += item.total
   })
 
   const creditsVsDebits = [
@@ -218,7 +283,6 @@ export const getReports = asyncHandler(async (req, res) => {
     { name: 'Debits', value: debits }
   ]
 
-  // Revenue by Payer Type
   const payerBreakdown = await WalletTransaction.aggregate([
     { $match: { status: 'Completed', platform_fee: true } },
     { $group: {
@@ -244,6 +308,13 @@ export const getReports = asyncHandler(async (req, res) => {
         revenueTrend: trend,
         creditsVsDebits,
         revenueByPayerType
+      },
+      segments: {
+        platform,
+        user,
+        corporate,
+        vendor,
+        labour
       }
     }
   })

@@ -36,6 +36,7 @@ export const baseApi = createApi({
     'Attendance',
     'AdminRequests',
     'AdminPricing',
+    'SystemPricing',
     'BusinessVerification',
   ],
   endpoints: () => ({}),

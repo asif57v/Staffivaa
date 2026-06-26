@@ -11,6 +11,7 @@ const router = Router()
 router.use(protect)
 
 router.get('/me', user.getProfile)
+router.post('/me/fcm-token', user.saveFcmToken)
 router.patch(
   '/me',
   [

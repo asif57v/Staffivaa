@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { toast } from 'react-hot-toast'
+import { requestForToken } from '../../../lib/firebase.js'
+import { apiClient } from '../../../api/http.js'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   ArrowRight,
@@ -388,6 +391,27 @@ export function IndividualHomeScreen({ user }) {
     setDetailLoading(false)
   }, [])
 
+  const handleTestNotification = async () => {
+    toast.loading('Requesting permission...', { id: 'test-notification' })
+    try {
+      const token = await requestForToken()
+      if (token) {
+        toast.loading('Saving token & sending test...', { id: 'test-notification' })
+        // Save the token to DB
+        await apiClient.post('/users/me/fcm-token', { token })
+        
+        // Trigger the backend test endpoint
+        await apiClient.post('/notifications/test', { token })
+        
+        toast.success('Notification sent!', { id: 'test-notification' })
+      } else {
+        toast.error('Permission denied or token missing.', { id: 'test-notification' })
+      }
+    } catch (e) {
+      toast.error('Failed to process token', { id: 'test-notification' })
+    }
+  }
+
   return (
     <div
       className="w-full max-w-full overflow-x-hidden flex flex-col pb-2"
@@ -429,7 +453,13 @@ export function IndividualHomeScreen({ user }) {
         </motion.div>
       </section>
 
-      <div className="sticky top-0 z-40 w-full max-w-full bg-white/95 backdrop-blur-md py-3 shadow-sm border-b border-slate-100">
+      <div className="sticky top-0 z-40 w-full max-w-full bg-white/95 backdrop-blur-md py-3 px-4 shadow-sm border-b border-slate-100 flex flex-col gap-2">
+        <button
+          onClick={handleTestNotification}
+          className="w-full bg-[#3730A3] text-white font-bold py-2 px-4 rounded-full shadow-md active:scale-95 transition"
+        >
+          Test Notification
+        </button>
         <button
           type="button"
           onClick={() => setCategorySheetOpen(true)}
@@ -507,7 +537,7 @@ export function IndividualHomeScreen({ user }) {
         </motion.div>
       </section>
 
-      <section className="relative z-20 -mt-6 flex-1 space-y-5 rounded-t-[1.85rem] bg-[#FAFAFA] px-4 pb-8 pt-5 shadow-sm border-t border-[#e2e8f0] w-full max-w-full overflow-hidden">
+      <section className="relative z-20 -mt-6 flex-1 space-y-5 rounded-t-2xl bg-[#FAFAFA] px-2 pb-8 pt-5 shadow-sm border-t border-[#e2e8f0] w-full max-w-full overflow-hidden">
         <span
           id="individual-home-scroll-sentinel"
           className="pointer-events-none absolute left-0 right-0 top-0 h-px w-full"

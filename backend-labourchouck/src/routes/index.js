@@ -11,6 +11,7 @@ import vendorRoutes from './vendorRoutes.js'
 import workforceRoutes from './workforceRoutes.js'
 import adminWorkforceRoutes from './adminWorkforceRoutes.js'
 import adminWalletRoutes from './adminWalletRoutes.js'
+import notificationRoutes from './notificationRoutes.js'
 
 const router = Router()
 
@@ -26,5 +27,6 @@ router.use('/admin', adminLabourCategoryRoutes)
 router.use('/admin', adminBuildmartRoutes)
 router.use('/admin/workforce', adminWorkforceRoutes)
 router.use('/admin/wallet', adminWalletRoutes)
+router.use('/notifications', notificationRoutes)
 
 export default router

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ChevronDown, LogOut, MapPin, Menu, Sparkles, X, ShoppingCart, Bell } from 'lucide-react'
@@ -82,6 +83,63 @@ export function AppShell() {
     };
   }, [user, token, dispatch]);
   // ------------------------------------------
+
+  // --- FCM Token Auto-sync & Foreground Listener ---
+  useEffect(() => {
+    if (!user || !token) return;
+    
+    if (Notification.permission === 'granted') {
+      import('../lib/firebase.js').then(({ requestForToken }) => {
+        requestForToken().then(fcmToken => {
+          if (fcmToken) {
+            import('../api/http.js').then(({ apiClient }) => {
+              apiClient.post('/users/me/fcm-token', { token: fcmToken })
+                .catch(err => console.error('Failed to sync FCM token:', err));
+            });
+          }
+        });
+      }).catch(err => console.error('Firebase not available', err));
+    }
+
+    const handleFcmMessage = (event) => {
+      const payload = event.detail;
+      if (payload?.notification && Notification.permission === 'granted') {
+        // Use service worker showNotification so it appears as native OS popup
+        // even when the app tab is currently focused (Chrome blocks new Notification() in foreground)
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.showNotification(payload.notification.title || 'Staffivaa', {
+              body: payload.notification.body || '',
+              icon: '/vite.svg',
+              badge: '/vite.svg',
+              requireInteraction: false,
+              data: payload.data || {},
+            });
+          });
+        }
+      }
+    };
+
+    window.addEventListener('fcm-foreground-message', handleFcmMessage);
+    
+    const handleServiceWorkerMessage = (event) => {
+      if (event.data && event.data.type === 'NAVIGATE_TO_URL' && event.data.url) {
+        navigate(event.data.url);
+      }
+    };
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+    }
+
+    return () => {
+      window.removeEventListener('fcm-foreground-message', handleFcmMessage);
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+      }
+    };
+  }, [user, token]);
+  // ---------------------------
 
   const pendingJobsCount = useMemo(() => {
     let count = 0
@@ -297,117 +355,120 @@ export function AppShell() {
     <div className="relative min-h-dvh w-full text-slate-900">
       <AppAmbientBackground />
 
-      <AnimatePresence>
-        {drawerOpen ? (
-          <>
-            <motion.button
-              key="drawer-overlay"
-              type="button"
-              className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-md"
-              aria-label="Close menu"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.22 }}
-              onClick={() => setDrawerOpen(false)}
-            />
-            <motion.aside
-              key="drawer-panel"
-              className="fixed inset-y-0 left-0 z-50 flex w-[min(88vw,19.5rem)] flex-col border-r border-slate-200/80 bg-white shadow-[8px_0_40px_-12px_rgba(15,23,42,0.14)]"
-              initial={{ x: '-105%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-105%' }}
-              transition={reduce ? { duration: 0.2 } : appSpring}
-              aria-hidden={!drawerOpen}
-            >
-              <div className="relative border-b border-slate-200/70 bg-linear-to-b from-slate-50/90 to-white px-4 pb-4 pt-4">
-                <div className="pointer-events-none absolute inset-x-4 bottom-0 h-px bg-linear-to-r from-[#0f172a]/30 via-slate-200/50 to-transparent" aria-hidden />
-                <div className="relative flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-[#0f172a] to-[#3730A3] text-xs font-black text-white shadow-[0_8px_22px_-8px_rgba(79,70,229,0.4)] ring-2 ring-white">
-                      {drawerInitials}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#0f172a]">Staffivaa</p>
-                      <p className="truncate text-sm font-extrabold text-slate-900">Menu</p>
-                      <p className="mt-0.5 truncate text-xs font-medium text-slate-500">
-                        {ROLE_LABELS[user?.role] || 'Account'}
-                      </p>
+      {createPortal(
+        <AnimatePresence>
+          {drawerOpen ? (
+            <>
+              <motion.button
+                key="drawer-overlay"
+                type="button"
+                className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-md"
+                aria-label="Close menu"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.22 }}
+                onClick={() => setDrawerOpen(false)}
+              />
+              <motion.aside
+                key="drawer-panel"
+                className="fixed inset-y-0 left-0 z-50 flex w-[min(88vw,19.5rem)] flex-col border-r border-slate-200/80 bg-white shadow-[8px_0_40px_-12px_rgba(15,23,42,0.14)]"
+                initial={{ x: '-105%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '-105%' }}
+                transition={reduce ? { duration: 0.2 } : appSpring}
+                aria-hidden={!drawerOpen}
+              >
+                <div className="relative border-b border-slate-200/70 bg-linear-to-b from-slate-50/90 to-white px-4 pb-4 pt-4">
+                  <div className="pointer-events-none absolute inset-x-4 bottom-0 h-px bg-linear-to-r from-[#0f172a]/30 via-slate-200/50 to-transparent" aria-hidden />
+                  <div className="relative flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-[#0f172a] to-[#3730A3] text-xs font-black text-white shadow-[0_8px_22px_-8px_rgba(79,70,229,0.4)] ring-2 ring-white">
+                        {drawerInitials}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#0f172a]">Staffivaa</p>
+                        <p className="truncate text-sm font-extrabold text-slate-900">Menu</p>
+                        <p className="mt-0.5 truncate text-xs font-medium text-slate-500">
+                          {ROLE_LABELS[user?.role] || 'Account'}
+                        </p>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setDrawerOpen(false)}
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200/90 bg-white text-slate-600 shadow-sm transition hover:border-[#0f172a]/30 hover:text-slate-900"
+                      aria-label="Close menu"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
                   </div>
+                  {headerBadge ? (
+                    <div className="relative mt-3">
+                      <AppBadge variant={headerBadge.variant}>{headerBadge.label}</AppBadge>
+                    </div>
+                  ) : null}
+                </div>
+                <nav
+                  className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4 scrollbar-thin [scrollbar-color:rgba(148,163,184,0.45)_transparent]"
+                  aria-label="Main"
+                >
+                  {drawerNav.map(({ id, to, end, label, icon: Icon }) => (
+                    <NavLink
+                      key={`${id}-${to}`}
+                      to={to}
+                      end={Boolean(end)}
+                      onClick={() => setDrawerOpen(false)}
+                      className={({ isActive }) =>
+                        `group relative flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition duration-200 ${
+                          isActive
+                            ? 'bg-linear-to-r from-[#0f172a]/10 to-white text-slate-900 shadow-[inset_0_0_0_1px_rgba(79,70,229,0.15)] before:absolute before:left-0 before:top-1/2 before:z-10 before:h-9 before:w-1 before:-translate-y-1/2 before:rounded-r-full before:bg-[#0f172a] before:shadow-[2px_0_10px_-2px_rgba(79,70,229,0.4)]'
+                            : 'text-slate-700 hover:bg-slate-50'
+                        }`
+                      }
+                    >
+                      {({ isActive }) => (
+                        <>
+                          <span
+                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm ring-1 transition ${
+                              isActive
+                                ? 'bg-[#0f172a] text-white ring-[#0f172a]/20'
+                                : 'bg-white text-slate-500 ring-slate-200/80 group-hover:text-[#0f172a] group-hover:ring-[#0f172a]/15'
+                            }`}
+                          >
+                            <Icon className="h-[18px] w-[18px]" aria-hidden />
+                          </span>
+                          <span className="min-w-0 flex-1 leading-snug">{label}</span>
+                        </>
+                      )}
+                    </NavLink>
+                  ))}
+                </nav>
+                <div className="border-t border-slate-200/70 bg-linear-to-t from-slate-50/50 to-white p-3">
+                  <Link
+                    to="/"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200/90 bg-white py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[#0f172a]/25 hover:text-[#0f172a]"
+                  >
+                    Visit website
+                  </Link>
                   <button
                     type="button"
-                    onClick={() => setDrawerOpen(false)}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200/90 bg-white text-slate-600 shadow-sm transition hover:border-[#0f172a]/30 hover:text-slate-900"
-                    aria-label="Close menu"
+                    onClick={() => {
+                      logout()
+                      navigate('/auth', { replace: true })
+                    }}
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200/90 bg-rose-50 py-3 text-sm font-semibold text-rose-800 shadow-sm transition hover:bg-rose-50/90"
                   >
-                    <X className="h-5 w-5" />
+                    <LogOut className="h-4 w-4" aria-hidden />
+                    Sign out
                   </button>
                 </div>
-                {headerBadge ? (
-                  <div className="relative mt-3">
-                    <AppBadge variant={headerBadge.variant}>{headerBadge.label}</AppBadge>
-                  </div>
-                ) : null}
-              </div>
-              <nav
-                className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4 scrollbar-thin [scrollbar-color:rgba(148,163,184,0.45)_transparent]"
-                aria-label="Main"
-              >
-                {drawerNav.map(({ id, to, end, label, icon: Icon }) => (
-                  <NavLink
-                    key={`${id}-${to}`}
-                    to={to}
-                    end={Boolean(end)}
-                    onClick={() => setDrawerOpen(false)}
-                    className={({ isActive }) =>
-                      `group relative flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition duration-200 ${
-                        isActive
-                          ? 'bg-linear-to-r from-[#0f172a]/10 to-white text-slate-900 shadow-[inset_0_0_0_1px_rgba(79,70,229,0.15)] before:absolute before:left-0 before:top-1/2 before:z-10 before:h-9 before:w-1 before:-translate-y-1/2 before:rounded-r-full before:bg-[#0f172a] before:shadow-[2px_0_10px_-2px_rgba(79,70,229,0.4)]'
-                          : 'text-slate-700 hover:bg-slate-50'
-                      }`
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        <span
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm ring-1 transition ${
-                            isActive
-                              ? 'bg-[#0f172a] text-white ring-[#0f172a]/20'
-                              : 'bg-white text-slate-500 ring-slate-200/80 group-hover:text-[#0f172a] group-hover:ring-[#0f172a]/15'
-                          }`}
-                        >
-                          <Icon className="h-[18px] w-[18px]" aria-hidden />
-                        </span>
-                        <span className="min-w-0 flex-1 leading-snug">{label}</span>
-                      </>
-                    )}
-                  </NavLink>
-                ))}
-              </nav>
-              <div className="border-t border-slate-200/70 bg-linear-to-t from-slate-50/50 to-white p-3">
-                <Link
-                  to="/"
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200/90 bg-white py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[#0f172a]/25 hover:text-[#0f172a]"
-                >
-                  Visit website
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => {
-                    logout()
-                    navigate('/auth', { replace: true })
-                  }}
-                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200/90 bg-rose-50 py-3 text-sm font-semibold text-rose-800 shadow-sm transition hover:bg-rose-50/90"
-                >
-                  <LogOut className="h-4 w-4" aria-hidden />
-                  Sign out
-                </button>
-              </div>
-            </motion.aside>
-          </>
-        ) : null}
-      </AnimatePresence>
+              </motion.aside>
+            </>
+          ) : null}
+        </AnimatePresence>,
+        document.body
+      )}
 
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-lg flex-col">
         {isIndividualAppHome || isLabourAppHome || isLabourNotifications ? (
@@ -494,7 +555,7 @@ export function AppShell() {
         ) : null}
 
         <main
-          className={`relative z-10 flex-1 px-4 pb-32 ${
+          className={`relative z-10 flex-1 px-4 pb-36 ${
             hideShellHeader
               ? isLabourAppHome
                 ? 'pt-0'

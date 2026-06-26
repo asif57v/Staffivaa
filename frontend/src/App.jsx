@@ -1,5 +1,6 @@
 import React, { Suspense, lazy } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from './context/AuthProvider.jsx'
 import { ProtectedRoute } from './components/auth/ProtectedRoute.jsx'
 import { GuestRoute } from './components/auth/GuestRoute.jsx'
@@ -39,6 +40,7 @@ const AdminModulePlaceholder = lazy(() => import('./components/admin/AdminModule
 function App() {
   return (
     <BrowserRouter>
+      <Toaster position="top-center" />
       <AuthProvider>
         <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-50"><div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-500"></div></div>}>
           <Routes>

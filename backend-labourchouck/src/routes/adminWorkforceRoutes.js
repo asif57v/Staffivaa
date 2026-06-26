@@ -25,6 +25,19 @@ import {
   generateInvoiceAdmin,
   patchInvoiceStatusAdmin,
 } from '../controllers/billingController.js'
+import {
+  getSystemPricing,
+  updateSystemPricing,
+  getSettlementRules,
+  updateSettlementRules,
+  getPricingHistory
+} from '../controllers/systemPricingController.js'
+import {
+  createQuotation,
+  getQuotations,
+  approveQuotation,
+  rejectQuotation
+} from '../controllers/quotationController.js'
 
 const router = Router()
 
@@ -47,7 +60,17 @@ router.patch('/attendance/:id/verify', verifyAttendanceAdmin)
 
 router.get('/pricing', listPricingRatesAdmin)
 router.post('/pricing', upsertPricingRateAdmin)
+router.get('/system-pricing', getSystemPricing)
+router.post('/system-pricing', updateSystemPricing)
+router.get('/settlement-rules', getSettlementRules)
+router.post('/settlement-rules', updateSettlementRules)
+router.get('/pricing-history', getPricingHistory)
+router.post('/quotations', createQuotation)
+router.get('/quotations', getQuotations)
+router.patch('/quotations/:id/approve', approveQuotation)
+router.patch('/quotations/:id/reject', rejectQuotation)
 router.post('/invoices/generate', generateInvoiceAdmin)
 router.patch('/invoices/:id', patchInvoiceStatusAdmin)
 
 export default router
+

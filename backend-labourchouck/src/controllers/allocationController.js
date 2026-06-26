@@ -8,6 +8,7 @@ import { User } from '../models/User.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { emitRequestStatusUpdate, getIO, emitToUser } from '../utils/socket.js'
+import { sendNotificationToUser } from '../services/notificationService.js'
 
 export const createAllocationAdmin = asyncHandler(async (req, res) => {
   const { requestId, vendorId, labourIds, notes } = req.body
@@ -54,6 +55,7 @@ export const createAllocationAdmin = asyncHandler(async (req, res) => {
     })
     assignments.push(assignment)
     emitToUser('labour', labourId.toString(), 'assignment_assigned', { assignmentId: assignment._id.toString() })
+    sendNotificationToUser(labourId.toString(), 'New Job Assigned', 'You have been assigned to a new job. Please check your schedule.', { url: '/app/jobs' })
   }
 
   if (request.status === REQUEST_STATUS.PENDING_REVIEW || request.status === REQUEST_STATUS.CONFIRMED) {
@@ -91,7 +93,9 @@ export const replaceAssignmentAdmin = asyncHandler(async (req, res) => {
   })
   
   emitToUser('labour', newLabourId.toString(), 'assignment_assigned', { assignmentId: assignment._id.toString() })
+  sendNotificationToUser(newLabourId.toString(), 'New Job Assigned', 'You have been reassigned to a new job.', { url: '/app/jobs' })
   emitToUser('labour', old.labourId.toString(), 'assignment_cancelled', { assignmentId: old._id.toString() })
+  sendNotificationToUser(old.labourId.toString(), 'Job Cancelled', 'Your previous assignment has been cancelled.', { url: '/app/jobs' })
   
   sendSuccess(res, { data: { assignment, replaced: old } })
 })
@@ -245,6 +249,7 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
         const io = getIO()
         io.emit('bookingAcceptedGlobal', { requestId: request._id.toString() })
         emitToUser('individual', request.clientId?.toString(), 'request_updated', { requestId: request._id.toString() })
+        sendNotificationToUser(request.clientId?.toString(), 'Worker Found!', `${req.user.fullName} has accepted your job request.`, { url: `/app/booking/${request._id}` })
         emitToUser('labour', req.user._id.toString(), 'assignment_accepted', { assignmentId: assignment._id.toString() })
         io.to(`request_${request._id.toString()}`).emit('bookingAccepted', {
           status: request.status,

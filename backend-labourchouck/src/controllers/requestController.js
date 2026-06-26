@@ -11,9 +11,11 @@ import { Assignment } from '../models/Assignment.js'
 import { Allocation } from '../models/Allocation.js'
 import { User } from '../models/User.js'
 import { ExtraWorkRequest } from '../models/ExtraWorkRequest.js'
+import { SystemPricing } from '../models/SystemPricing.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { emitToUser, emitToRole, emitToCorporate, emitToVendor } from '../utils/socket.js'
+import { sendNotificationToUser } from '../services/notificationService.js'
 
 function parseLines(lines) {
   if (!Array.isArray(lines) || !lines.length) return null
@@ -63,7 +65,7 @@ export const createRequest = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Start date required', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
 
-  // Calculate dynamic platform fee based on duration
+  // Calculate dynamic platform fee based on duration and backend settings
   let totalDurationInDays = 1;
   if (endDate && startDate) {
     const start = new Date(startDate)
@@ -72,11 +74,98 @@ export const createRequest = asyncHandler(async (req, res) => {
     totalDurationInDays = Math.max(1, diffDays + 1)
   }
 
-  let calculatedFee = 20;
-  if (totalDurationInDays === 1) calculatedFee = 20;
-  else if (totalDurationInDays <= 3) calculatedFee = 30;
-  else if (totalDurationInDays <= 7) calculatedFee = 50;
-  else calculatedFee = 100;
+  // Load backend pricing configuration
+  let pricing = await SystemPricing.findOne()
+  if (!pricing) {
+    pricing = await SystemPricing.create({})
+  }
+
+  // Estimate total labor cost to compute percentage fees
+  const LabourCategory = mongoose.model('LabourCategory')
+  const categoryIds = parsedLines.map((l) => l.categoryId)
+  const categories = await LabourCategory.find({ _id: { $in: categoryIds } }).lean()
+  const categoryMap = {}
+  categories.forEach((c) => {
+    categoryMap[c._id.toString()] = c.baseRate || 800
+  })
+
+  let totalWorkers = 0
+  let estimatedLabourCostPerDay = 0
+  parsedLines.forEach((l) => {
+    const qty = l.quantity || 1
+    const rate = categoryMap[l.categoryId.toString()] || 800
+    totalWorkers += qty
+    estimatedLabourCostPerDay += qty * rate
+  })
+  const estimatedTotalLabourCost = estimatedLabourCostPerDay * totalDurationInDays
+
+  let userPlatformFee = 20
+  let userGstRate = 18
+  let convFee = 0
+  let platformFeeType = 'fixed'
+  let platformFeeValue = 20
+
+  if (sourceType === REQUEST_SOURCE.INDIVIDUAL) {
+    const pfConfig = pricing.userBooking.platformFee
+    platformFeeType = pfConfig.type || 'percentage'
+    platformFeeValue = pfConfig.value || 10
+    
+    if (pfConfig.status === 'disabled') {
+      userPlatformFee = 0
+    } else {
+      if (platformFeeType === 'percentage') {
+        userPlatformFee = (estimatedTotalLabourCost * platformFeeValue) / 100
+      } else {
+        userPlatformFee = platformFeeValue
+      }
+      // Bounding
+      if (pfConfig.minFee !== undefined && userPlatformFee < pfConfig.minFee) {
+        userPlatformFee = pfConfig.minFee
+      }
+      if (pfConfig.maxFee !== undefined && userPlatformFee > pfConfig.maxFee) {
+        userPlatformFee = pfConfig.maxFee
+      }
+    }
+
+    if (pricing.userBooking.gst?.enabled) {
+      userGstRate = pricing.userBooking.gst.rate || 18
+    } else {
+      userGstRate = 0
+    }
+
+    if (pricing.userBooking.convenienceFee?.enabled) {
+      convFee = pricing.userBooking.convenienceFee.amount || 20
+    }
+  } else {
+    // Corporate
+    const pfConfig = pricing.corporate.platformFee
+    platformFeeType = pfConfig.type || 'perWorkerPerDay'
+    platformFeeValue = pfConfig.value || 25
+
+    if (platformFeeType === 'percentage') {
+      userPlatformFee = (estimatedTotalLabourCost * platformFeeValue) / 100
+    } else if (platformFeeType === 'fixed') {
+      userPlatformFee = platformFeeValue
+    } else if (platformFeeType === 'perWorker') {
+      userPlatformFee = platformFeeValue * totalWorkers
+    } else if (platformFeeType === 'perWorkerPerDay') {
+      userPlatformFee = platformFeeValue * totalWorkers * totalDurationInDays
+    }
+
+    // Bounding
+    if (pfConfig.minFee !== undefined && pfConfig.minFee > 0 && userPlatformFee < pfConfig.minFee) {
+      userPlatformFee = pfConfig.minFee
+    }
+    if (pfConfig.maxFee !== undefined && pfConfig.maxFee > 0 && userPlatformFee > pfConfig.maxFee) {
+      userPlatformFee = pfConfig.maxFee
+    }
+
+    if (pricing.corporate.gst?.enabled) {
+      userGstRate = pricing.corporate.gst.rate || 18
+    } else {
+      userGstRate = 0
+    }
+  }
 
   const request = await WorkforceRequest.create({
     reference: generateRequestReference(sourceType === REQUEST_SOURCE.CORPORATE ? 'CR' : 'IR'),
@@ -96,8 +185,12 @@ export const createRequest = asyncHandler(async (req, res) => {
     notes,
     billingMode,
     bookingType,
-    userPlatformFee: calculatedFee,
-    labourPlatformFee: calculatedFee,
+    userPlatformFee: Math.round(userPlatformFee),
+    labourPlatformFee: Math.round(userPlatformFee),
+    userGstRate,
+    convenienceFee: convFee,
+    platformFeeType,
+    platformFeeValue,
     status: sourceType === REQUEST_SOURCE.INDIVIDUAL ? REQUEST_STATUS.SEARCHING : REQUEST_STATUS.ALLOCATING,
     ...(sourceType === REQUEST_SOURCE.INDIVIDUAL && { expiresAt: new Date(Date.now() + 3 * 60 * 1000) }),
   })
@@ -137,6 +230,7 @@ export const createRequest = asyncHandler(async (req, res) => {
       // Notify all matching workers instantly
       createdAssignments.forEach((assignment) => {
         emitToUser('labour', assignment.labourId.toString(), 'assignment_assigned', { assignmentId: assignment._id.toString() })
+        sendNotificationToUser(assignment.labourId.toString(), 'New Job Available!', 'A new job matching your skills is available. Tap to view.', { url: '/app/jobs' })
       })
     }
   }
@@ -216,16 +310,21 @@ export const getRequest = asyncHandler(async (req, res) => {
   else platformFee = 100;
 
   const totalLabourCost = allocation?.totalLabourCost || 0;
-  const grandTotal = totalLabourCost + platformFee + extraCost;
-
-  const userPlatformFee = request.userPlatformFee || platformFee;
-  const labourPlatformFee = request.labourPlatformFee || 0;
+  const userPlatformFee = request.userPlatformFee !== undefined ? request.userPlatformFee : platformFee;
+  const labourPlatformFee = request.labourPlatformFee !== undefined ? request.labourPlatformFee : 0;
+  const convenienceFee = request.convenienceFee !== undefined ? request.convenienceFee : 0;
+  const gstRate = request.userGstRate !== undefined ? request.userGstRate : 18;
+  const gstAmount = Math.round((userPlatformFee * gstRate) / 100);
+  const grandTotal = totalLabourCost + userPlatformFee + gstAmount + convenienceFee + extraCost;
   
   const paymentSummary = {
     serviceCost,
     extraCost,
     userPlatformFee,
     labourPlatformFee,
+    convenienceFee,
+    gstRate,
+    gstAmount,
     totalDurationInDays,
     totalLabourCost,
     platformFee,
@@ -262,6 +361,7 @@ export const patchRequestStatusAdmin = asyncHandler(async (req, res) => {
   await request.save()
   
   emitToUser('individual', request.clientId?.toString(), 'request_updated', { requestId: request._id.toString() })
+  sendNotificationToUser(request.clientId?.toString(), 'Booking Update', `Your booking status has been updated to ${status}.`, { url: `/app/booking/${request._id}` })
   
   if (request.sourceType === REQUEST_SOURCE.CORPORATE) {
     emitToCorporate(request.clientId?.toString(), 'request_status_update', { requestId: request._id.toString(), status: request.status })

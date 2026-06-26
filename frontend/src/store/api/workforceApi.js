@@ -284,6 +284,31 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       invalidatesTags: ['AdminPricing'],
     }),
+    getSystemPricing: build.query({
+      query: () => '/admin/workforce/system-pricing',
+      transformResponse: unwrap,
+      providesTags: ['SystemPricing'],
+    }),
+    updateSystemPricing: build.mutation({
+      query: (body) => ({ url: '/admin/workforce/system-pricing', method: 'POST', body }),
+      transformResponse: unwrap,
+      invalidatesTags: ['SystemPricing'],
+    }),
+    getSettlementRules: build.query({
+      query: () => '/admin/workforce/settlement-rules',
+      transformResponse: unwrap,
+      providesTags: ['SystemPricing'],
+    }),
+    updateSettlementRules: build.mutation({
+      query: (body) => ({ url: '/admin/workforce/settlement-rules', method: 'POST', body }),
+      transformResponse: unwrap,
+      invalidatesTags: ['SystemPricing'],
+    }),
+    getPricingHistory: build.query({
+      query: () => '/admin/workforce/pricing-history',
+      transformResponse: unwrap,
+      providesTags: ['SystemPricing'],
+    }),
     verifyAttendance: build.mutation({
       query: ({ id, ...body }) => ({
         url: `/admin/workforce/attendance/${id}/verify`,
@@ -348,5 +373,10 @@ export const {
   useGenerateInvoiceMutation,
   useGetAdminPricingQuery,
   useUpsertPricingMutation,
+  useGetSystemPricingQuery,
+  useUpdateSystemPricingMutation,
+  useGetSettlementRulesQuery,
+  useUpdateSettlementRulesMutation,
+  useGetPricingHistoryQuery,
   useVerifyAttendanceMutation,
 } = workforceApi

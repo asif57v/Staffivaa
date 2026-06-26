@@ -88,7 +88,7 @@ export const ADMIN_NAV_SECTIONS = [
     items: [
       { to: '/admin/wallet', label: 'Admin Wallet', icon: Wallet },
       { to: '/admin/billing', label: 'Payments & billing', icon: ClipboardList },
-      { to: '/admin/pricing', label: 'Pricing & rates', icon: BadgeIndianRupee },
+      { to: '/admin/pricing', label: 'Pricing Management', icon: BadgeIndianRupee },
     ],
   },
   {
@@ -108,7 +108,7 @@ const ROUTE_TITLES = [
   { prefix: '/admin/user', title: 'User Details' },
   { prefix: '/admin/settings', title: 'Settings' },
   { prefix: '/admin/reports', title: 'Reports & analytics' },
-  { prefix: '/admin/pricing', title: 'Pricing & rates' },
+  { prefix: '/admin/pricing', title: 'Pricing Management' },
   { prefix: '/admin/billing', title: 'Payments & billing' },
   { prefix: '/admin/wallet', title: 'Admin Wallet' },
   { prefix: '/admin/attendance', title: 'Attendance' },

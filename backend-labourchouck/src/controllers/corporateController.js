@@ -19,6 +19,7 @@ import {
   normalizeCorporateProfilePatch,
   validateCorporateProfileForSubmit,
 } from '../utils/corporateVerification.js'
+import { sendNotificationToUser } from '../services/notificationService.js'
 
 function requireApprovedCorporate(user) {
   if (user.role !== USER_ROLES.CORPORATE) return 'Corporate account required'
@@ -331,6 +332,13 @@ export const reviewCorporateAdmin = asyncHandler(async (req, res) => {
   user.corporateProfile.status = resolved
   user.corporateProfile.reviewedAt = new Date()
   await user.save()
+  
+  if (resolved === CORPORATE_STATUS.APPROVED) {
+    sendNotificationToUser(user._id.toString(), 'Account Approved', 'Your corporate account has been verified!', { url: '/app/dashboard' })
+  } else if (resolved === CORPORATE_STATUS.REJECTED) {
+    sendNotificationToUser(user._id.toString(), 'Action Required', 'Your corporate verification was rejected. Please review your documents.', { url: '/app/profile' })
+  }
+  
   sendSuccess(res, {
     message: resolved === CORPORATE_STATUS.APPROVED ? 'Corporate account approved' : 'Corporate verification rejected',
     data: { user: user.toSafeObject() },
@@ -372,6 +380,13 @@ export const reviewContractorAdmin = asyncHandler(async (req, res) => {
   user.contractorProfile.verificationStatus = resolved
   user.contractorProfile.reviewedAt = new Date()
   await user.save()
+  
+  if (resolved === 'approved') {
+    sendNotificationToUser(user._id.toString(), 'Account Approved', 'Your vendor account has been verified!', { url: '/app/dashboard' })
+  } else if (resolved === 'rejected') {
+    sendNotificationToUser(user._id.toString(), 'Action Required', 'Your vendor verification was rejected. Please review your documents.', { url: '/app/profile' })
+  }
+  
   sendSuccess(res, {
     message: resolved === 'approved' ? 'Vendor account verified' : 'Vendor verification rejected',
     data: { user: user.toSafeObject() },
