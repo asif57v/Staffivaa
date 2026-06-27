@@ -110,8 +110,8 @@ export function AppShell() {
           navigator.serviceWorker.ready.then((registration) => {
             registration.showNotification(payload.notification.title || 'Staffivaa', {
               body: payload.notification.body || '',
-              icon: '/vite.svg',
-              badge: '/vite.svg',
+              icon: '/favicon.svg',
+              badge: '/favicon.svg',
               requireInteraction: false,
               data: payload.data || {},
             });

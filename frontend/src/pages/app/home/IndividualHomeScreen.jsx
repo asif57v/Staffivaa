@@ -131,48 +131,69 @@ export function IndividualHomeScreen({ user }) {
       image: '/home_service_hero.png',
       title: `Welcome, ${user?.fullName || 'User'}! 👋`,
       subtitle: 'Book verified experts for reliable, fast, and quality service.',
-      price: '₹99/hr'
+      price: '₹99/hr',
+      actionType: 'search'
     },
     {
       image: '/service_ac.png',
       title: 'AC Technician',
       subtitle: 'Expert AC repair, servicing, and installation.',
-      price: '₹149/hr'
+      price: '₹149/hr',
+      slug: 'ac-technician'
     },
     {
       image: '/service_cook.png',
       title: 'Professional Cook',
       subtitle: 'Delicious home-cooked meals by verified chefs.',
-      price: '₹199/hr'
+      price: '₹199/hr',
+      slug: 'cook'
     },
     {
       image: '/service_electrician.png',
       title: 'Expert Electrician',
       subtitle: 'Safe and reliable electrical repairs and wiring.',
-      price: '₹99/hr'
+      price: '₹99/hr',
+      slug: 'electrician'
     },
     {
       image: '/service_plumber.png',
       title: 'Skilled Plumber',
       subtitle: 'Fix leaks, blockages, and pipe installations.',
-      price: '₹99/hr'
+      price: '₹99/hr',
+      slug: 'plumber'
     },
     {
       image: '/service_painter.png',
       title: 'House Painter',
       subtitle: 'Professional home painting and touch-ups.',
-      price: '₹120/hr'
+      price: '₹120/hr',
+      slug: 'paint'
     }
   ], [user?.fullName])
   
   const [heroSlideIndex, setHeroSlideIndex] = useState(0)
+  const heroScrollRef = useRef(null)
+  const isHeroHoveredRef = useRef(false)
 
   useEffect(() => {
     const interval = setInterval(() => {
+      if (isHeroHoveredRef.current) return
       setHeroSlideIndex((prev) => (prev + 1) % HERO_SLIDES.length)
     }, 3000)
     return () => clearInterval(interval)
   }, [HERO_SLIDES.length])
+
+  useEffect(() => {
+    const container = heroScrollRef.current
+    if (!container) return
+    const slide = container.children[heroSlideIndex]
+    if (slide) {
+      container.scrollTo({
+        left: slide.offsetLeft - 16,
+        behavior: 'smooth'
+      })
+    }
+  }, [heroSlideIndex])
 
   const categoryScrollRef = useRef(null)
   const isCategoryHoveredRef = useRef(false)
@@ -303,6 +324,27 @@ export function IndividualHomeScreen({ user }) {
     [navigate, quickBookCategory],
   )
 
+  const handleHeroSlideClick = useCallback((slide) => {
+    if (slide.actionType === 'search') {
+      setCategorySheetOpen(true)
+      return
+    }
+
+    const key = slide.slug || ''
+    const match = tradeSubcategories.find(
+      (cat) =>
+        String(cat.slug).toLowerCase().includes(key.toLowerCase()) ||
+        String(cat.name).toLowerCase().includes(key.toLowerCase()) ||
+        String(cat.name).toLowerCase().includes(slide.title.toLowerCase())
+    )
+
+    if (match) {
+      handleQuickBookCategory(match)
+    } else {
+      setCategorySheetOpen(true)
+    }
+  }, [tradeSubcategories, handleQuickBookCategory])
+
   useEffect(() => {
     let cancelled = false
     fetchLabourCategoriesGrouped()
@@ -424,9 +466,20 @@ export function IndividualHomeScreen({ user }) {
           transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
           className="relative text-slate-900 w-full max-w-full"
         >
-          <div className="relative overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-none flex gap-3 pb-2 pt-1 -mx-4 px-4 w-[calc(100%+2rem)] min-h-[130px]">
+          <div
+            ref={heroScrollRef}
+            onMouseEnter={() => { isHeroHoveredRef.current = true }}
+            onMouseLeave={() => { isHeroHoveredRef.current = false }}
+            onTouchStart={() => { isHeroHoveredRef.current = true }}
+            onTouchEnd={() => { isHeroHoveredRef.current = false }}
+            className="relative overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-none flex gap-3 pb-2 pt-1 -mx-4 px-4 w-[calc(100%+2rem)] min-h-[130px]"
+          >
             {HERO_SLIDES.map((slide, i) => (
-              <div key={i} className="w-[85%] sm:w-[90%] shrink-0 snap-center relative overflow-hidden rounded-[20px] bg-white border border-slate-200 shadow-sm min-h-[120px] flex items-stretch">
+              <div
+                key={i}
+                onClick={() => handleHeroSlideClick(slide)}
+                className="w-[85%] sm:w-[90%] shrink-0 snap-center relative overflow-hidden rounded-[20px] bg-white border border-slate-200 shadow-sm min-h-[120px] flex items-stretch cursor-pointer hover:border-[#FFD100]/60 active:scale-[0.99] transition-all"
+              >
                 <div className="flex-1 p-3 flex flex-col justify-center relative z-10">
                   <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 break-words">
                     {slide.title}
