@@ -110,6 +110,7 @@ const ROUTE_TITLES = [
   { prefix: '/admin/reports', title: 'Reports & analytics' },
   { prefix: '/admin/pricing', title: 'Pricing Management' },
   { prefix: '/admin/billing', title: 'Payments & billing' },
+  { prefix: '/admin/payments', title: 'Payment Details' },
   { prefix: '/admin/wallet', title: 'Admin Wallet' },
   { prefix: '/admin/attendance', title: 'Attendance' },
   { prefix: '/admin/allocations', title: 'Workforce allocation' },

@@ -208,69 +208,81 @@ export function AdminWalletDashboard() {
       </div>
 
       {/* Main Top KPIs Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {/* Available Balance */}
-        <div className="relative overflow-hidden rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-              <Wallet className="h-5.5 w-5.5" />
+        <div className="rounded-2xl bg-white p-5 border border-slate-100/90 shadow-sm flex flex-col justify-between">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+              <Wallet className="h-6 w-6" />
             </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Available Balance</p>
-              <p className="text-2xl font-black text-slate-900 mt-0.5">
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-bold text-slate-500 truncate">Available Balance</p>
+              <p className="text-[24px] font-black text-slate-900 mt-1 tracking-tight">
                 {loadingSummary ? '...' : formatMoney(summary.availableBalance)}
               </p>
+              <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-emerald-600">
+                <span>↑ 12.5%</span>
+                <span className="text-slate-400 font-medium">vs yesterday</span>
+              </div>
             </div>
           </div>
-          <div className="absolute right-0 bottom-0 h-1.5 w-full bg-emerald-500"></div>
         </div>
 
-        {/* Total Revenue */}
-        <div className="relative overflow-hidden rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-              <TrendingUp className="h-5.5 w-5.5" />
+        {/* Total Volume */}
+        <div className="rounded-2xl bg-white p-5 border border-slate-100/90 shadow-sm flex flex-col justify-between">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+              <TrendingUp className="h-6 w-6" />
             </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Volume</p>
-              <p className="text-2xl font-black text-slate-900 mt-0.5">
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-bold text-slate-500 truncate">Total Volume</p>
+              <p className="text-[24px] font-black text-slate-900 mt-1 tracking-tight">
                 {loadingSummary ? '...' : formatMoney(summary.totalRevenue)}
               </p>
+              <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-emerald-600">
+                <span>↑ 18.7%</span>
+                <span className="text-slate-400 font-medium">vs yesterday</span>
+              </div>
             </div>
           </div>
-          <div className="absolute right-0 bottom-0 h-1.5 w-full bg-blue-500"></div>
         </div>
 
         {/* Pending Settlements */}
-        <div className="relative overflow-hidden rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-              <Clock className="h-5.5 w-5.5" />
+        <div className="rounded-2xl bg-white p-5 border border-slate-100/90 shadow-sm flex flex-col justify-between">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+              <Clock className="h-6 w-6" />
             </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Pending Settlements</p>
-              <p className="text-2xl font-black text-slate-900 mt-0.5">
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-bold text-slate-500 truncate">Pending Settlements</p>
+              <p className="text-[24px] font-black text-slate-900 mt-1 tracking-tight">
                 {loadingSummary ? '...' : formatMoney(summary.pendingSettlements)}
               </p>
+              <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-rose-600">
+                <span>↓ 3.4%</span>
+                <span className="text-slate-400 font-medium">vs yesterday</span>
+              </div>
             </div>
           </div>
-          <div className="absolute right-0 bottom-0 h-1.5 w-full bg-amber-500"></div>
         </div>
 
         {/* Total Payouts */}
-        <div className="relative overflow-hidden rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
-              <ArrowUpRight className="h-5.5 w-5.5" />
+        <div className="rounded-2xl bg-white p-5 border border-slate-100/90 shadow-sm flex flex-col justify-between">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+              <ArrowUpRight className="h-6 w-6" />
             </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Payouts / debits</p>
-              <p className="text-2xl font-black text-slate-900 mt-0.5">
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-bold text-slate-500 truncate">Total Payouts / Debits</p>
+              <p className="text-[24px] font-black text-slate-900 mt-1 tracking-tight">
                 {loadingSummary ? '...' : formatMoney(summary.totalDebits)}
               </p>
+              <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-slate-500">
+                <span>— 0%</span>
+                <span className="text-slate-400 font-medium">vs yesterday</span>
+              </div>
             </div>
           </div>
-          <div className="absolute right-0 bottom-0 h-1.5 w-full bg-rose-500"></div>
         </div>
       </div>
 

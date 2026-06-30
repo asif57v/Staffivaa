@@ -281,12 +281,12 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
                 <span className="font-bold text-slate-900">₹{request.userPlatformFee || 49}</span>
               </div>
               <div className="mt-3 flex justify-between items-center pb-2">
-                <span className="text-xs font-semibold text-slate-500">Estimated Labour Charge</span>
+                <span className="text-xs font-semibold text-slate-500">Visiting Charge</span>
                 <span className="text-sm font-bold text-slate-800">₹{paymentSummary?.serviceCost || booking?.estimate?.estimatedSubtotal || 0}</span>
               </div>
               <div className="mt-2 rounded-lg bg-amber-50 p-3 text-[10px] font-medium leading-relaxed text-amber-800 ring-1 ring-amber-200/50">
                 <AlertCircle className="inline h-3 w-3 mr-1 mb-0.5" />
-                Staffivaa only collects platform fees. The estimated labour charge is to be paid directly to the labour outside the platform after work is completed.
+                Staffivaa only collects platform fees. The visiting charge is to be paid directly to the labour outside the platform after work is completed.
               </div>
             </div>
 
@@ -561,7 +561,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
                 <span>₹{(paymentSummary?.userPlatformFee || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-slate-600">
-                <span>Estimated Labour Charge</span>
+                <span>Visiting Charge</span>
                 <span>₹{((paymentSummary?.serviceCost || 0) + (paymentSummary?.extraCost || 0)).toFixed(2)}</span>
               </div>
               <div className="border-t border-slate-100 pt-3 mt-1 flex justify-between font-black text-slate-900 text-lg">
@@ -571,7 +571,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
             </div>
             <div className="mt-4 rounded-lg bg-amber-50 p-3 text-[10px] font-medium leading-relaxed text-amber-800 ring-1 ring-amber-200/50">
               <AlertCircle className="inline h-3 w-3 mr-1" />
-              Staffivaa only collects platform fees. The labour charge is to be paid directly to the labour.
+              Staffivaa only collects platform fees. The visiting charge is to be paid directly to the labour.
             </div>
 
             {currentStatus === 'completed' ? (

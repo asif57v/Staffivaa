@@ -17,7 +17,13 @@ import {
   acceptVendorMarketplaceRequest,
   declineVendorMarketplaceRequest,
   assignWorkforce,
+  getVendorWallet,
+  requestVendorWithdrawal,
 } from '../controllers/vendorController.js'
+import {
+  submitQuotationVendor,
+  getQuotationForRequest,
+} from '../controllers/quotationController.js'
 
 const router = Router()
 
@@ -38,5 +44,12 @@ router.get('/settlements', listVendorSettlements)
 router.get('/requests', listVendorMarketplaceRequests)
 router.post('/requests/:id/accept', acceptVendorMarketplaceRequest)
 router.post('/requests/:id/decline', declineVendorMarketplaceRequest)
+router.get('/wallet', getVendorWallet)
+router.post('/wallet/withdraw', requestVendorWithdrawal)
+
+// Quotation endpoints
+router.post('/jobs/:id/quotation', submitQuotationVendor)
+router.get('/jobs/:id/quotation', getQuotationForRequest)
 
 export default router
+

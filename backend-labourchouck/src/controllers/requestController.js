@@ -12,6 +12,7 @@ import { Allocation } from '../models/Allocation.js'
 import { User } from '../models/User.js'
 import { ExtraWorkRequest } from '../models/ExtraWorkRequest.js'
 import { SystemPricing } from '../models/SystemPricing.js'
+import { Quotation } from '../models/Quotation.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { emitToUser, emitToRole, emitToCorporate, emitToVendor } from '../utils/socket.js'
@@ -167,6 +168,16 @@ export const createRequest = asyncHandler(async (req, res) => {
     }
   }
 
+  let labourPlatformFeeValue = 20
+  if (pricing?.labour?.platformFee) {
+    const pf = pricing.labour.platformFee
+    if (pf.type === 'percentage') {
+      labourPlatformFeeValue = (estimatedTotalLabourCost * (pf.value ?? 10)) / 100
+    } else {
+      labourPlatformFeeValue = pf.value ?? 20
+    }
+  }
+
   const request = await WorkforceRequest.create({
     reference: generateRequestReference(sourceType === REQUEST_SOURCE.CORPORATE ? 'CR' : 'IR'),
     sourceType,
@@ -186,7 +197,7 @@ export const createRequest = asyncHandler(async (req, res) => {
     billingMode,
     bookingType,
     userPlatformFee: Math.round(userPlatformFee),
-    labourPlatformFee: Math.round(userPlatformFee),
+    labourPlatformFee: Math.round(labourPlatformFeeValue),
     userGstRate,
     convenienceFee: convFee,
     platformFeeType,
@@ -267,18 +278,22 @@ export const getRequest = asyncHandler(async (req, res) => {
     .lean()
   if (!request) return sendError(res, { message: 'Not found', statusCode: HTTP_STATUS.NOT_FOUND })
 
-  const isOwner = request.clientId && String(request.clientId._id || request.clientId) === String(req.user._id)
-  const isAdmin = req.user.role === USER_ROLES.ADMIN
-  if (!isOwner && !isAdmin) {
-    return sendError(res, { message: 'Forbidden', statusCode: HTTP_STATUS.FORBIDDEN })
-  }
-
   const allocation = await Allocation.findOne({ requestId: request._id })
     .populate('vendorId', 'fullName phone email contractorProfile.companyName contractorProfile.businessAddress')
     .lean()
   const assignments = await Assignment.find({ requestId: request._id })
     .populate('labourId', 'fullName phone profileImageUrl labourProfile.kycStatus corporateProfile.registeredAddress contractorProfile.businessAddress')
     .lean()
+
+  const quotation = await Quotation.findOne({ requestId: request._id }).lean()
+
+  const isOwner = request.clientId && String(request.clientId._id || request.clientId) === String(req.user._id)
+  const isAdmin = req.user.role === USER_ROLES.ADMIN
+  const isAllocatedVendor = allocation && allocation.vendorId && String(allocation.vendorId._id || allocation.vendorId) === String(req.user._id)
+
+  if (!isOwner && !isAdmin && !isAllocatedVendor) {
+    return sendError(res, { message: 'Forbidden', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
     
   // Calculate a basic payment summary based on lines
   let serviceCost = request.labourCharge || 0;
@@ -309,14 +324,25 @@ export const getRequest = asyncHandler(async (req, res) => {
   else if (totalDurationInDays <= 7) platformFee = 50;
   else platformFee = 100;
 
-  const totalLabourCost = allocation?.totalLabourCost || 0;
+  // Use quotation's grand total as the totalLabourCost if quotation is approved
+  let totalLabourCost = allocation?.totalLabourCost || 0;
+  if (quotation && quotation.status === 'approved') {
+    totalLabourCost = quotation.grandTotal;
+  }
+
   const userPlatformFee = request.userPlatformFee !== undefined ? request.userPlatformFee : platformFee;
   const labourPlatformFee = request.labourPlatformFee !== undefined ? request.labourPlatformFee : 0;
   const convenienceFee = request.convenienceFee !== undefined ? request.convenienceFee : 0;
-  const gstRate = request.userGstRate !== undefined ? request.userGstRate : 18;
+  const gstRate = request.sourceType === 'individual' ? 0 : (request.userGstRate !== undefined ? request.userGstRate : 18);
   const gstAmount = Math.round((userPlatformFee * gstRate) / 100);
   const grandTotal = totalLabourCost + userPlatformFee + gstAmount + convenienceFee + extraCost;
   
+  const { SystemPricing } = await import('../models/SystemPricing.js')
+  const pricingDoc = await SystemPricing.findOne().lean()
+  const advancePercentage = pricingDoc?.corporate?.advancePercentage || 30
+  const advanceAmount = Math.round((grandTotal * advancePercentage) / 100)
+  const remainingAmount = grandTotal - advanceAmount
+
   const paymentSummary = {
     serviceCost,
     extraCost,
@@ -329,10 +355,13 @@ export const getRequest = asyncHandler(async (req, res) => {
     totalLabourCost,
     platformFee,
     grandTotal,
+    advancePercentage,
+    advanceAmount,
+    remainingAmount,
     totalAmount: grandTotal
   }
 
-  sendSuccess(res, { data: { request, allocation, assignments, paymentSummary } })
+  sendSuccess(res, { data: { request, allocation, assignments, paymentSummary, quotation } })
 })
 
 export const listAdminRequests = asyncHandler(async (req, res) => {
@@ -356,6 +385,9 @@ export const patchRequestStatusAdmin = asyncHandler(async (req, res) => {
   }
   request.status = status
   if (adminNote != null) request.adminNote = String(adminNote).trim()
+  if (req.body.paymentDeadlineExtendedAt !== undefined) {
+    request.paymentDeadlineExtendedAt = req.body.paymentDeadlineExtendedAt ? new Date(req.body.paymentDeadlineExtendedAt) : null
+  }
   request.reviewedBy = req.user._id
   request.reviewedAt = new Date()
   await request.save()
@@ -375,4 +407,125 @@ export const patchRequestStatusAdmin = asyncHandler(async (req, res) => {
   }
   
   sendSuccess(res, { data: { request } })
+})
+
+export const sendPaymentReminderAdmin = asyncHandler(async (req, res) => {
+  const request = await WorkforceRequest.findById(req.params.id)
+  if (!request) return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
+
+  // Send notification to corporate client
+  sendNotificationToUser(
+    request.clientId.toString(),
+    'Payment Reminder',
+    `This is a reminder to complete your pending payment for project "${request.projectId?.name || request.reference}".`,
+    { url: `/corporate/requests/${request._id}` }
+  )
+
+  sendSuccess(res, { message: 'Payment reminder sent successfully' })
+})
+
+export const recordOfflinePaymentAdmin = asyncHandler(async (req, res) => {
+  const request = await WorkforceRequest.findById(req.params.id)
+  if (!request) return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
+
+  if (request.status === 'payment_pending') {
+    request.advancePaymentStatus = 'paid'
+    request.status = 'advance_paid'
+    const startDate = new Date(request.startDate)
+    if (new Date() >= startDate) {
+      request.status = 'project_active'
+    }
+  } else if (request.status === 'completed' || request.status === 'settlement_pending') {
+    request.finalPaymentStatus = 'paid'
+    request.status = 'settlement_completed'
+  } else {
+    return sendError(res, { message: `Payment is not pending for current status: ${request.status}`, statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  await request.save()
+  
+  if (request.sourceType === REQUEST_SOURCE.CORPORATE) {
+    emitToCorporate(request.clientId?.toString(), 'request_status_update', { requestId: request._id.toString(), status: request.status })
+    Allocation.findOne({ requestId: request._id }).then(allocation => {
+      if (allocation && allocation.vendorId) {
+        emitToVendor(allocation.vendorId.toString(), 'request_status_update', { requestId: request._id.toString(), status: request.status })
+      }
+    }).catch(err => console.error(err))
+  }
+
+  sendSuccess(res, { message: 'Offline payment recorded successfully', request })
+})
+
+export const releaseVendorSettlementAdmin = asyncHandler(async (req, res) => {
+  const request = await WorkforceRequest.findById(req.params.id)
+  if (!request) return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
+
+  if (request.status !== 'completed' && request.status !== 'settlement_pending' && request.status !== 'settlement_completed') {
+    return sendError(res, { message: 'Project must be completed or pending settlement to release payout', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const pricing = await SystemPricing.findOne().lean()
+  const commissionConfig = pricing?.vendor?.platformCommission || { type: 'percentage', value: 2 }
+
+  const allocation = await Allocation.findOne({ requestId: request._id }).lean()
+  if (!allocation) {
+    return sendError(res, { message: 'No workforce allocation found for this project', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const totalLabourCost = allocation.totalLabourCost || 0
+  let vendorPlatformFee = 0
+  if (commissionConfig.type === 'percentage') {
+    vendorPlatformFee = Math.round((totalLabourCost * (commissionConfig.value ?? 2)) / 100)
+  } else {
+    vendorPlatformFee = commissionConfig.value ?? 20
+  }
+
+  const extraWorkRequests = await ExtraWorkRequest.find({ bookingId: request._id, status: 'accepted' }).lean()
+  let extraCost = 0
+  extraWorkRequests.forEach(ew => {
+    extraCost += ew.revisedAmount != null ? ew.revisedAmount : ew.extraAmount
+  })
+
+  const netAmountToVendor = totalLabourCost + extraCost - vendorPlatformFee
+
+  if (allocation.vendorId) {
+    const { WalletTransaction } = await import('../models/WalletTransaction.js')
+
+    const existingTx = await WalletTransaction.findOne({
+      bookingId: request._id,
+      type: 'Settlement'
+    })
+
+    if (existingTx) {
+      return sendError(res, { message: 'Settlement already released for this project', statusCode: HTTP_STATUS.BAD_REQUEST })
+    }
+
+    await User.findByIdAndUpdate(allocation.vendorId, {
+      $inc: { walletBalance: netAmountToVendor }
+    })
+
+    await WalletTransaction.create({
+      transactionId: `TXN-VND-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      bookingId: request._id,
+      payerId: request.clientId,
+      payerName: 'System Release',
+      payerType: 'corporate',
+      labourId: allocation.vendorId,
+      type: 'Settlement',
+      source: 'Admin Final Settlement Manual Release',
+      amount: netAmountToVendor,
+      status: 'Completed'
+    })
+  }
+
+  request.finalPaymentStatus = 'paid'
+  request.status = 'settlement_completed'
+  await request.save()
+
+  if (request.sourceType === REQUEST_SOURCE.CORPORATE) {
+    emitToCorporate(request.clientId?.toString(), 'request_status_update', { requestId: request._id.toString(), status: request.status })
+    emitToVendor(allocation.vendorId.toString(), 'request_status_update', { requestId: request._id.toString(), status: request.status })
+  }
+
+  sendSuccess(res, { message: 'Settlement released to vendor wallet successfully', request })
 })

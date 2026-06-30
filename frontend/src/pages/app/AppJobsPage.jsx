@@ -94,11 +94,17 @@ export function AppJobsPage() {
       refetch()
     })
 
+    socket.on('platformFeeConfigurationUpdated', (data) => {
+      console.log('[LabourJobs] Platform fee config updated:', data)
+      refetch()
+    })
+
     return () => {
       socket.off('connect')
       socket.off('connect_error')
       socket.off('disconnect')
       socket.off('bookingAcceptedGlobal')
+      socket.off('platformFeeConfigurationUpdated')
       socket.disconnect()
     }
   }, [refetch])

@@ -17,6 +17,11 @@ export const REQUEST_STATUS = {
   BILLING: 'billing',
   COMPLETED: 'completed',
   CANCELLED: 'cancelled',
+  PAYMENT_PENDING: 'payment_pending',
+  ADVANCE_PAID: 'advance_paid',
+  PROJECT_ACTIVE: 'project_active',
+  SETTLEMENT_PENDING: 'settlement_pending',
+  SETTLEMENT_COMPLETED: 'settlement_completed',
 }
 
 export const SCHEDULE_TYPE = {

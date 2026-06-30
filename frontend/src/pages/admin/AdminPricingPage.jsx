@@ -22,7 +22,8 @@ import {
   FileText,
   Calendar,
   Sliders,
-  DollarSign
+  DollarSign,
+  Trash2
 } from 'lucide-react'
 import {
   useGetSystemPricingQuery,
@@ -193,6 +194,49 @@ export function AdminPricingPage() {
     checkNeg(lab.verificationFee, 'labour.verificationFee', 'Verification fee')
     checkNeg(lab.walletWithdrawalFee, 'labour.walletWithdrawalFee', 'Withdrawal fee')
     checkNeg(lab.walletTransferFee, 'labour.walletTransferFee', 'Wallet transfer fee')
+    if (lab.platformFee) {
+      if (lab.platformFee.type === 'distance') {
+        const slabs = lab.platformFee.slabs || []
+        if (slabs.length === 0) {
+          errs['labour.platformFee.slabs'] = 'Distance slabs cannot be empty when Distance Based mode is active'
+        } else {
+          const sorted = [...slabs].sort((a, b) => Number(a.minDistance || 0) - Number(b.minDistance || 0))
+          for (let i = 0; i < sorted.length; i++) {
+            const s = sorted[i]
+            const min = Number(s.minDistance || 0)
+            const fee = Number(s.fee || 0)
+            if (min < 0) {
+              errs[`labour.platformFee.slabs.${i}.minDistance`] = 'Min distance cannot be negative'
+            }
+            if (fee < 0) {
+              errs[`labour.platformFee.slabs.${i}.fee`] = 'Fee cannot be negative'
+            }
+            if (s.maxDistance !== null && s.maxDistance !== undefined && s.maxDistance !== '') {
+              const max = Number(s.maxDistance)
+              if (min >= max) {
+                errs[`labour.platformFee.slabs.${i}.maxDistance`] = 'Max distance must be greater than min'
+              }
+            }
+            if (i > 0) {
+              const prev = sorted[i - 1]
+              if (prev.maxDistance === null || prev.maxDistance === undefined || prev.maxDistance === '') {
+                errs[`labour.platformFee.slabs.${i}.minDistance`] = 'Only the last slab can be unlimited'
+              } else if (Number(prev.maxDistance) !== min) {
+                errs[`labour.platformFee.slabs.${i}.minDistance`] = `Slabs must be continuous. Gap detected from ${prev.maxDistance} to ${min} km.`
+              }
+            }
+          }
+          const last = sorted[sorted.length - 1]
+          if (last && last.maxDistance !== null && last.maxDistance !== undefined && last.maxDistance !== '') {
+            errs[`labour.platformFee.slabs.${sorted.length - 1}.maxDistance`] = 'The last slab must have an unlimited end range'
+          }
+        }
+      } else if (lab.platformFee.type === 'percentage') {
+        checkPct(lab.platformFee.value, 'labour.platformFee.value', 'Labour Platform Fee percentage')
+      } else {
+        checkNeg(lab.platformFee.value, 'labour.platformFee.value', 'Labour Platform Fee value')
+      }
+    }
     if (lab.gst) checkPct(lab.gst.rate, 'labour.gst.rate', 'Labour GST rate')
 
     // GST Settings
@@ -360,16 +404,20 @@ export function AdminPricingPage() {
           <button
             onClick={() => {
               if (!isValid) {
-                toast.error('Cannot save. Please fix validation errors.')
+                const errorList = Object.values(errors)
+                if (errorList.length > 0) {
+                  toast.error(`Validation Error: ${errorList[0]}`)
+                } else {
+                  toast.error('Cannot save. Please fix validation errors.')
+                }
               } else {
                 setShowSaveModal(true)
               }
             }}
-            disabled={!isValid}
-            className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold shadow-sm transition active:scale-95 ${
+            className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold shadow-sm transition active:scale-95 border ${
               isValid
-                ? 'bg-yellow-400 text-slate-950 hover:bg-yellow-505'
-                : 'cursor-not-allowed bg-slate-150 text-slate-400'
+                ? 'bg-yellow-400 text-slate-950 border-yellow-400 hover:bg-yellow-500'
+                : 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100'
             }`}
           >
             <Save className="h-4.5 w-4.5" />
@@ -450,6 +498,7 @@ export function AdminPricingPage() {
         ].map((tab) => {
           const Icon = tab.icon
           const isSelected = activeTab === tab.id
+          const hasTabError = Object.keys(errors).some(k => k.startsWith(tab.id) || (tab.id === 'gstTaxes' && k.startsWith('gstSettings')))
           return (
             <button
               key={tab.id}
@@ -462,6 +511,12 @@ export function AdminPricingPage() {
             >
               <Icon className={`h-4.5 w-4.5 ${isSelected ? 'text-yellow-500' : 'text-slate-400'}`} />
               {tab.label}
+              {hasTabError && (
+                <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                </span>
+              )}
             </button>
           )
         })}
@@ -483,38 +538,25 @@ export function AdminPricingPage() {
                   </div>
 
                   <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="text-xs font-bold text-slate-600 block mb-1.5">Fee Mode</label>
-                      <div className="flex gap-2">
-                        {['percentage', 'fixed'].map((m) => (
-                          <button
-                            key={m}
-                            type="button"
-                            onClick={() => updateField('userBooking.platformFee.type', m)}
-                            className={`flex-1 rounded-xl border py-2.5 text-xs font-bold capitalize transition ${
-                              config.userBooking?.platformFee?.type === m
-                                ? 'border-yellow-400 bg-yellow-50/20 text-slate-950'
-                                : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                            }`}
-                          >
-                            {m}
-                          </button>
-                        ))}
+                    <div className="sm:col-span-2">
+                      <label className="text-xs font-bold text-slate-600 block mb-1.5">Platform Fee</label>
+                      <div className="flex rounded-xl border border-slate-200 bg-white focus-within:ring-2 focus-within:ring-yellow-400/40 focus-within:border-yellow-400 overflow-hidden shadow-sm">
+                        <input
+                          type="number"
+                          value={config.userBooking?.platformFee?.value ?? ''}
+                          onChange={(e) => updateField('userBooking.platformFee.value', e.target.value)}
+                          className="flex-1 bg-transparent py-2.5 px-4 text-sm font-medium outline-none border-none"
+                          placeholder="0"
+                        />
+                        <select
+                          value={config.userBooking?.platformFee?.type || 'fixed'}
+                          onChange={(e) => updateField('userBooking.platformFee.type', e.target.value)}
+                          className="bg-slate-50 border-l border-slate-200 px-3 text-xs font-bold text-slate-700 outline-none cursor-pointer hover:bg-slate-100"
+                        >
+                          <option value="fixed">₹ Fixed</option>
+                          <option value="percentage">% Percent</option>
+                        </select>
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-slate-600 block mb-1.5">
-                        Value ({config.userBooking?.platformFee?.type === 'percentage' ? '%' : '₹'})
-                      </label>
-                      <input
-                        type="number"
-                        value={config.userBooking?.platformFee?.value ?? ''}
-                        onChange={(e) => updateField('userBooking.platformFee.value', e.target.value)}
-                        className={`w-full rounded-xl border py-2.5 px-4 text-sm font-medium outline-none ${
-                          errors['userBooking.platformFee.value'] ? 'border-red-400 focus:ring-1 focus:ring-red-150' : 'border-slate-200 focus:ring-1 focus:ring-yellow-400'
-                        }`}
-                      />
                       {errors['userBooking.platformFee.value'] && (
                         <p className="mt-1 text-xs text-red-500 font-semibold flex items-center gap-1">
                           <AlertCircle className="h-3 w-3" /> {errors['userBooking.platformFee.value']}
@@ -628,40 +670,29 @@ export function AdminPricingPage() {
 
                 <div className="mt-5 space-y-4">
                   <div>
-                    <label className="text-xs font-bold text-slate-600 block mb-1.5">Calculations Schema</label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {[
-                        { id: 'percentage', label: 'Percentage (%)' },
-                        { id: 'fixed', label: 'Fixed (₹)' },
-                        { id: 'perWorker', label: 'Per Worker (₹)' },
-                        { id: 'perWorkerPerDay', label: 'Per Worker Per Day (₹)' }
-                      ].map((sc) => (
-                        <button
-                          key={sc.id}
-                          type="button"
-                          onClick={() => updateField('corporate.platformFee.type', sc.id)}
-                          className={`rounded-xl border py-2.5 px-2 text-xs font-bold text-center capitalize transition ${
-                            config.corporate?.platformFee?.type === sc.id
-                              ? 'border-yellow-400 bg-yellow-50/20 text-slate-950'
-                              : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          {sc.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <div>
-                      <label className="text-xs font-bold text-slate-600 block mb-1.5">Platform Fee Value</label>
+                    <label className="text-xs font-bold text-slate-600 block mb-1.5">Platform Fee</label>
+                    <div className="flex rounded-xl border border-slate-200 bg-white focus-within:ring-2 focus-within:ring-yellow-400/40 focus-within:border-yellow-400 overflow-hidden shadow-sm">
                       <input
                         type="number"
                         value={config.corporate?.platformFee?.value ?? ''}
                         onChange={(e) => updateField('corporate.platformFee.value', e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 py-2.5 px-4 text-sm font-medium outline-none"
+                        className="flex-1 bg-transparent py-2.5 px-4 text-sm font-medium outline-none border-none"
+                        placeholder="0"
                       />
+                      <select
+                        value={config.corporate?.platformFee?.type || 'perWorkerPerDay'}
+                        onChange={(e) => updateField('corporate.platformFee.type', e.target.value)}
+                        className="bg-slate-50 border-l border-slate-200 px-3 text-xs font-bold text-slate-700 outline-none cursor-pointer hover:bg-slate-100"
+                      >
+                        <option value="perWorkerPerDay">₹ Per Worker / Day</option>
+                        <option value="perWorker">₹ Per Worker</option>
+                        <option value="fixed">₹ Fixed</option>
+                        <option value="percentage">% Percent</option>
+                      </select>
                     </div>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
 
                     <div>
                       <label className="text-xs font-bold text-slate-600 block mb-1.5">Minimum Fee (₹)</label>
@@ -744,6 +775,31 @@ export function AdminPricingPage() {
                         className="w-full rounded-xl border border-slate-200 py-2.5 px-4 text-sm font-medium outline-none"
                       />
                     </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 block mb-1.5">Payment Due Before Start Date</label>
+                      <select
+                        value={config.corporate?.paymentDueBeforeStartHours || 48}
+                        onChange={(e) => updateField('corporate.paymentDueBeforeStartHours', Number(e.target.value))}
+                        className="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-3.5 text-sm font-semibold text-slate-700 outline-none"
+                      >
+                        <option value={24}>24 Hours</option>
+                        <option value={48}>48 Hours</option>
+                        <option value={72}>72 Hours</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 block mb-1.5">Auto Reminder Notifications</label>
+                      <select
+                        value={config.corporate?.autoReminder !== false ? 'true' : 'false'}
+                        onChange={(e) => updateField('corporate.autoReminder', e.target.value === 'true')}
+                        className="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-3.5 text-sm font-semibold text-slate-700 outline-none"
+                      >
+                        <option value="true">Enabled</option>
+                        <option value="false">Disabled</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -780,34 +836,25 @@ export function AdminPricingPage() {
                     />
                   </div>
 
-                  <div>
-                    <label className="text-xs font-bold text-slate-600 block mb-1.5">Commission type</label>
-                    <div className="flex gap-2">
-                      {['percentage', 'fixed'].map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => updateField('vendor.platformCommission.type', c)}
-                          className={`flex-1 rounded-xl border py-2.5 text-xs font-bold capitalize transition ${
-                            config.vendor?.platformCommission?.type === c
-                              ? 'border-yellow-400 bg-yellow-50/20 text-slate-950'
-                              : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          {c}
-                        </button>
-                      ))}
+                  <div className="sm:col-span-2">
+                    <label className="text-xs font-bold text-slate-600 block mb-1.5">Platform Commission</label>
+                    <div className="flex rounded-xl border border-slate-200 bg-white focus-within:ring-2 focus-within:ring-yellow-400/40 focus-within:border-yellow-400 overflow-hidden shadow-sm">
+                      <input
+                        type="number"
+                        value={config.vendor?.platformCommission?.value ?? ''}
+                        onChange={(e) => updateField('vendor.platformCommission.value', e.target.value)}
+                        className="flex-1 bg-transparent py-2.5 px-4 text-sm font-medium outline-none border-none"
+                        placeholder="0"
+                      />
+                      <select
+                        value={config.vendor?.platformCommission?.type || 'percentage'}
+                        onChange={(e) => updateField('vendor.platformCommission.type', e.target.value)}
+                        className="bg-slate-50 border-l border-slate-200 px-3 text-xs font-bold text-slate-700 outline-none cursor-pointer hover:bg-slate-100"
+                      >
+                        <option value="percentage">% Percent</option>
+                        <option value="fixed">₹ Fixed</option>
+                      </select>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-600 block mb-1.5">Platform Commission Rate</label>
-                    <input
-                      type="number"
-                      value={config.vendor?.platformCommission?.value ?? ''}
-                      onChange={(e) => updateField('vendor.platformCommission.value', e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 py-2.5 px-4 text-sm font-medium outline-none"
-                    />
                   </div>
 
                   <div>
@@ -884,6 +931,45 @@ export function AdminPricingPage() {
                     />
                   </div>
 
+                  <div className="sm:col-span-2">
+                    <label className="text-xs font-bold text-slate-600 block mb-1.5">Platform Fee Mode</label>
+                    <div className="flex rounded-xl border border-slate-200 bg-white focus-within:ring-2 focus-within:ring-yellow-400/40 focus-within:border-yellow-400 overflow-hidden shadow-sm">
+                      {config.labour?.platformFee?.type !== 'distance' && (
+                        <input
+                          type="number"
+                          value={config.labour?.platformFee?.value ?? ''}
+                          onChange={(e) => updateField('labour.platformFee.value', e.target.value)}
+                          className="flex-1 bg-transparent py-2.5 px-4 text-sm font-medium outline-none border-none"
+                          placeholder="0"
+                        />
+                      )}
+                      {config.labour?.platformFee?.type === 'distance' && (
+                        <div className="flex-1 py-2.5 px-4 text-xs font-bold text-slate-500 bg-slate-50 select-none">
+                          🛣️ Managed via Distance Slab table below
+                        </div>
+                      )}
+                      <select
+                        value={config.labour?.platformFee?.type || 'fixed'}
+                        onChange={(e) => updateField('labour.platformFee.type', e.target.value)}
+                        className="bg-slate-50 border-l border-slate-200 px-3 text-xs font-bold text-slate-700 outline-none cursor-pointer hover:bg-slate-100"
+                      >
+                        <option value="fixed">₹ Fixed</option>
+                        <option value="percentage">% Percent</option>
+                        <option value="distance">Distance Based</option>
+                      </select>
+                    </div>
+                    {config.labour?.platformFee?.type !== 'distance' && errors['labour.platformFee.value'] && (
+                      <p className="mt-1 text-xs text-red-500 font-semibold flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" /> {errors['labour.platformFee.value']}
+                      </p>
+                    )}
+                    {config.labour?.platformFee?.type === 'distance' && errors['labour.platformFee.slabs'] && (
+                      <p className="mt-1 text-xs text-red-500 font-semibold flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" /> {errors['labour.platformFee.slabs']}
+                      </p>
+                    )}
+                  </div>
+
                   <div>
                     <label className="text-xs font-bold text-slate-600 block mb-1.5">GST Rate (%)</label>
                     <input
@@ -895,6 +981,131 @@ export function AdminPricingPage() {
                   </div>
                 </div>
               </div>
+
+              {config.labour?.platformFee?.type === 'distance' && (
+                <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+                  <div className="border-b border-slate-100 pb-4 flex justify-between items-center">
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-950">Distance Slabs Configuration</h3>
+                      <p className="text-xs text-slate-500 mt-0.5 font-semibold">Configure platform fees based on the travel distance to the site.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const slabs = [...(config.labour?.platformFee?.slabs || [])]
+                        const lastSlab = slabs[slabs.length - 1]
+                        const lastMax = lastSlab ? (lastSlab.maxDistance === null || lastSlab.maxDistance === undefined ? Number(lastSlab.minDistance || 0) + 5 : Number(lastSlab.maxDistance)) : 0
+                        slabs.push({
+                          minDistance: lastMax,
+                          maxDistance: lastMax + 5,
+                          fee: 10
+                        })
+                        updateField('labour.platformFee.slabs', slabs)
+                      }}
+                      className="rounded-xl bg-slate-950 text-white hover:bg-slate-900 px-4 py-2 text-xs font-bold shadow-sm transition active:scale-95 flex items-center gap-1"
+                    >
+                      + Add Slab
+                    </button>
+                  </div>
+
+                  <div className="mt-5 overflow-x-auto">
+                    <table className="w-full border-collapse text-left">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                          <th className="py-3 px-2">From Distance</th>
+                          <th className="py-3 px-2">To Distance</th>
+                          <th className="py-3 px-2">Platform Fee</th>
+                          <th className="py-3 px-2 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {(config.labour?.platformFee?.slabs || []).map((slab, index) => {
+                          return (
+                            <tr key={index} className="group hover:bg-slate-50/50 transition">
+                              <td className="py-3 px-2">
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    value={slab.minDistance ?? ''}
+                                    onChange={(e) => {
+                                      const slabs = [...(config.labour?.platformFee?.slabs || [])]
+                                      slabs[index] = { ...slabs[index], minDistance: e.target.value === '' ? '' : Number(e.target.value) }
+                                      updateField('labour.platformFee.slabs', slabs)
+                                    }}
+                                    className={`w-24 rounded-lg border py-1.5 px-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-1 focus:ring-yellow-400 ${
+                                      errors[`labour.platformFee.slabs.${index}.minDistance`] ? 'border-red-400' : 'border-slate-200'
+                                    }`}
+                                    placeholder="0"
+                                  />
+                                  <span className="text-xs font-bold text-slate-400">km</span>
+                                </div>
+                                {errors[`labour.platformFee.slabs.${index}.minDistance`] && (
+                                  <p className="mt-1 text-[10px] text-red-500 font-semibold">{errors[`labour.platformFee.slabs.${index}.minDistance`]}</p>
+                                )}
+                              </td>
+                              <td className="py-3 px-2">
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    value={slab.maxDistance ?? ''}
+                                    onChange={(e) => {
+                                      const slabs = [...(config.labour?.platformFee?.slabs || [])]
+                                      slabs[index] = { ...slabs[index], maxDistance: e.target.value === '' ? null : Number(e.target.value) }
+                                      updateField('labour.platformFee.slabs', slabs)
+                                    }}
+                                    className={`w-24 rounded-lg border py-1.5 px-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-1 focus:ring-yellow-400 ${
+                                      errors[`labour.platformFee.slabs.${index}.maxDistance`] ? 'border-red-400' : 'border-slate-200'
+                                    }`}
+                                    placeholder="Unlimited"
+                                  />
+                                  <span className="text-xs font-bold text-slate-400">km</span>
+                                </div>
+                                {errors[`labour.platformFee.slabs.${index}.maxDistance`] && (
+                                  <p className="mt-1 text-[10px] text-red-500 font-semibold">{errors[`labour.platformFee.slabs.${index}.maxDistance`]}</p>
+                                )}
+                              </td>
+                              <td className="py-3 px-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-bold text-slate-400">₹</span>
+                                  <input
+                                    type="number"
+                                    value={slab.fee ?? ''}
+                                    onChange={(e) => {
+                                      const slabs = [...(config.labour?.platformFee?.slabs || [])]
+                                      slabs[index] = { ...slabs[index], fee: e.target.value === '' ? '' : Number(e.target.value) }
+                                      updateField('labour.platformFee.slabs', slabs)
+                                    }}
+                                    className={`w-24 rounded-lg border py-1.5 px-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-1 focus:ring-yellow-400 ${
+                                      errors[`labour.platformFee.slabs.${index}.fee`] ? 'border-red-400' : 'border-slate-200'
+                                    }`}
+                                    placeholder="0"
+                                  />
+                                </div>
+                                {errors[`labour.platformFee.slabs.${index}.fee`] && (
+                                  <p className="mt-1 text-[10px] text-red-500 font-semibold">{errors[`labour.platformFee.slabs.${index}.fee`]}</p>
+                                )}
+                              </td>
+                              <td className="py-3 px-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const slabs = (config.labour?.platformFee?.slabs || []).filter((_, i) => i !== index)
+                                    updateField('labour.platformFee.slabs', slabs)
+                                  }}
+                                  className="rounded-lg bg-red-50 text-red-600 hover:bg-red-100 p-2 transition active:scale-95"
+                                  title="Delete Slab"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

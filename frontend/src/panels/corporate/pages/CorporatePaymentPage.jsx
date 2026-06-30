@@ -120,7 +120,9 @@ export function CorporatePaymentPage() {
         <Link to={`/corporate/requests/${id}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black/10 transition active:scale-95">
           <ArrowLeft className="h-5 w-5 text-slate-900" />
         </Link>
-        <h1 className="text-base font-extrabold text-slate-900">Final Checkout</h1>
+        <h1 className="text-base font-extrabold text-slate-900">
+          {request.status === 'payment_pending' ? 'Advance Payment Checkout' : 'Final Settlement Checkout'}
+        </h1>
       </header>
 
       <div className="p-4 space-y-4 max-w-md mx-auto">
@@ -194,42 +196,60 @@ export function CorporatePaymentPage() {
         <AppSurface className="rounded-[24px] p-5 bg-slate-900 text-white shadow-xl shadow-slate-900/10">
           <div className="flex items-center gap-2 mb-6">
             <Banknote className="h-5 w-5 text-[#FFC107]" />
-            <h2 className="text-[16px] font-extrabold text-white">Invoice Totals</h2>
+            <h2 className="text-[16px] font-extrabold text-white">
+              {request.status === 'payment_pending' ? 'Advance Invoice Details' : 'Final Invoice Details'}
+            </h2>
           </div>
 
           <div className="space-y-3 mb-4">
             <div className="flex justify-between items-center text-[14px]">
-              <span className="font-medium text-slate-300">Total Labour Cost</span>
-              <span className="font-bold text-white">₹{summary.totalLabourCost}</span>
+              <span className="font-medium text-slate-300">Total Project Value</span>
+              <span className="font-bold text-white">₹{summary.grandTotal}</span>
             </div>
-            {summary.extraCost > 0 && (
-              <div className="flex justify-between items-center text-[14px]">
-                <span className="font-medium text-slate-300">Extra Allowances</span>
-                <span className="font-bold text-white">₹{summary.extraCost}</span>
-              </div>
+            {request.status === 'payment_pending' && (
+              <>
+                <div className="flex justify-between items-center text-[14px] text-yellow-400 font-bold">
+                  <span>Advance Payment ({summary.advancePercentage || 30}%)</span>
+                  <span>₹{summary.advanceAmount}</span>
+                </div>
+                <div className="flex justify-between items-center text-[13px] text-slate-400">
+                  <span>Remaining Due (at end)</span>
+                  <span>₹{summary.remainingAmount}</span>
+                </div>
+              </>
             )}
-            <div className="flex justify-between items-center text-[14px]">
-              <span className="font-medium text-slate-300">Platform Service Fee</span>
-              <span className="font-bold text-white">₹{summary.platformFee}</span>
-            </div>
+            {(request.status === 'completed' || request.status === 'settlement_pending' || request.status === 'settlement_completed') && (
+              <>
+                <div className="flex justify-between items-center text-[14px] text-emerald-400">
+                  <span>Advance Paid ({summary.advancePercentage || 30}%)</span>
+                  <span>- ₹{summary.advanceAmount}</span>
+                </div>
+                <div className="flex justify-between items-center text-[14px] text-yellow-400 font-extrabold">
+                  <span>Remaining Balance Due</span>
+                  <span>₹{summary.remainingAmount}</span>
+                </div>
+              </>
+            )}
           </div>
           
           <div className="pt-4 border-t border-slate-700/50 flex justify-between items-center">
-            <span className="text-[16px] font-bold text-slate-200">Grand Total</span>
-            <span className="text-[24px] font-black text-[#FFC107]">₹{summary.grandTotal}</span>
+            <span className="text-[16px] font-bold text-slate-200">Amount to Pay</span>
+            <span className="text-[24px] font-black text-[#FFC107]">
+              ₹{request.status === 'payment_pending' ? summary.advanceAmount : summary.remainingAmount}
+            </span>
           </div>
         </AppSurface>
 
       </div>
 
       {/* Sticky Bottom Pay Now */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 p-4 pb-6 shadow-[0_-10px_30px_-10px_rgba(0,0,0,0.05)] z-40 max-w-md mx-auto">
+      <div className="fixed bottom-[calc(68px+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-slate-100 p-4 pb-4 shadow-[0_-10px_30px_-10px_rgba(0,0,0,0.05)] z-40">
         <button 
           onClick={handlePayment}
-          disabled={isCreatingOrder || isVerifying || request.userPaymentStatus === 'paid'}
+          disabled={isCreatingOrder || isVerifying || (request.status === 'payment_pending' && request.advancePaymentStatus === 'paid') || (request.status !== 'payment_pending' && request.finalPaymentStatus === 'paid')}
           className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#FFC107] py-4 text-[16px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm disabled:opacity-50"
         >
-          {isCreatingOrder || isVerifying ? 'Processing...' : `Pay ₹${summary.grandTotal} Securely`}
+          {isCreatingOrder || isVerifying ? 'Processing...' : `Pay ₹${request.status === 'payment_pending' ? summary.advanceAmount : summary.remainingAmount} Securely`}
         </button>
       </div>
 

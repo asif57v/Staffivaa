@@ -116,6 +116,37 @@ export function AdminBookingsPage() {
                 </div>
               </div>
               <PipelineTimeline status={r.status} title="Request pipeline" />
+              {r.status === 'payment_pending' && (
+                <div className="mt-3 p-3 bg-amber-50/50 rounded-xl border border-amber-200/60 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold text-amber-800">⚠️ Advance Payment Pending</p>
+                    <p className="text-[10px] text-amber-600 font-bold">Extend deadline to allow workers to check in temporarily.</p>
+                  </div>
+                  <div className="flex gap-1.5">
+                    {[24, 48, 72].map((hours) => (
+                      <button
+                        key={hours}
+                        type="button"
+                        onClick={async () => {
+                          const newDeadline = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString()
+                          try {
+                            await patchStatus({
+                              id: r._id,
+                              status: 'assigned',
+                              paymentDeadlineExtendedAt: newDeadline
+                            }).unwrap()
+                          } catch (err) {
+                            alert('Failed to extend deadline')
+                          }
+                        }}
+                        className="bg-white hover:bg-amber-100 border border-amber-200 text-amber-800 text-[10px] font-bold px-2 py-1 rounded-lg transition"
+                      >
+                        +{hours}h
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </GlassPanel>
           </li>
         ))}

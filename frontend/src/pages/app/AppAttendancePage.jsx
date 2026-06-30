@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import {
@@ -6,7 +7,9 @@ import {
   useCheckInMutation,
   useCheckOutMutation,
   useGetAttendanceQuery,
+  useVerifyCheckInOtpMutation,
 } from '../../store/api/workforceApi.js'
+import { getSocket } from '../../services/socket.js'
 import {
   loadJobDemoState,
   subscribeJobDemo,
@@ -14,7 +17,7 @@ import {
   nowIso,
 } from '../../lib/labourJobDemoStorage.js'
 import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
-import { LogIn, LogOut, MapPin, Clock, Building2, Briefcase, UserCircle, CalendarDays, History, Navigation, AlertTriangle } from 'lucide-react'
+import { LogIn, LogOut, MapPin, Clock, Building2, Briefcase, UserCircle, CalendarDays, History, Navigation, AlertTriangle, KeyRound, CheckCircle } from 'lucide-react'
 
 function isApiAssignment(job) {
   return Boolean(job?.requestId) && /^[a-f0-9]{24}$/i.test(String(job.id))
@@ -84,6 +87,72 @@ export function AppAttendancePage() {
   
   const [checkIn, { isLoading: isCheckingIn }] = useCheckInMutation()
   const [checkOut, { isLoading: isCheckingOut }] = useCheckOutMutation()
+  const [verifyCheckInOtp] = useVerifyCheckInOtpMutation()
+
+  // OTP States
+  const [showOtpModal, setShowOtpModal] = useState(false)
+  const [otpValue, setOtpValue] = useState('')
+  const [otpAttendanceId, setOtpAttendanceId] = useState(null)
+  const [otpExpiresAt, setOtpExpiresAt] = useState(null)
+  const [otpCountdown, setOtpCountdown] = useState(0)
+  const [otpError, setOtpError] = useState('')
+  const [otpSuccess, setOtpSuccess] = useState(false)
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false)
+
+  const showToast = useCallback((msg) => {
+    setToast(msg)
+    window.setTimeout(() => setToast(''), 2400)
+  }, [])
+
+  // Listen to Socket events for OTP updates
+  useEffect(() => {
+    const socket = getSocket()
+    if (!socket || !showOtpModal || !otpAttendanceId) return
+
+    const handleOtpGenerated = (data) => {
+      if (data.attendanceId === otpAttendanceId) {
+        setOtpExpiresAt(data.expiresAt)
+        setOtpCountdown(Math.max(0, Math.ceil((new Date(data.expiresAt) - new Date()) / 1000)))
+        setOtpError('')
+        showToast('New OTP generated. Please ask supervisor.')
+      }
+    }
+
+    const handleCheckedIn = (data) => {
+      if (data.attendanceId === otpAttendanceId) {
+        setOtpSuccess(true)
+        setOtpError('')
+        showToast('Checked in successfully.')
+        setTimeout(() => {
+          setShowOtpModal(false)
+          setOtpSuccess(false)
+          refetch()
+        }, 1500)
+      }
+    }
+
+    socket.on('attendance:otpGenerated', handleOtpGenerated)
+    socket.on('attendance:checkedIn', handleCheckedIn)
+
+    return () => {
+      socket.off('attendance:otpGenerated', handleOtpGenerated)
+      socket.off('attendance:checkedIn', handleCheckedIn)
+    }
+  }, [showOtpModal, otpAttendanceId, refetch, showToast])
+
+  // Count down effect for OTP timer
+  useEffect(() => {
+    if (!showOtpModal || !otpExpiresAt) return
+
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((new Date(otpExpiresAt) - new Date()) / 1000))
+      setOtpCountdown(remaining)
+    }
+
+    tick()
+    const interval = setInterval(tick, 1000)
+    return () => clearInterval(interval)
+  }, [showOtpModal, otpExpiresAt])
 
   // Live GPS distance tracking
   const [userLat, setUserLat] = useState(null)
@@ -93,11 +162,6 @@ export function AppAttendancePage() {
 
   const assignments = assignmentsData?.assignments ?? []
   const records = attendanceData?.records ?? []
-
-  const showToast = useCallback((msg) => {
-    setToast(msg)
-    window.setTimeout(() => setToast(''), 2400)
-  }, [])
 
   const persistDemo = useCallback((next) => {
     saveJobDemoState(next)
@@ -166,9 +230,20 @@ export function AppAttendancePage() {
       async (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords
         try {
-          await checkIn({ assignmentId, lat, lng }).unwrap()
-          refetch()
-          showToast('Checked in successfully.')
+          const res = await checkIn({ assignmentId, lat, lng }).unwrap()
+          if (res?.requiresOtp || res?.data?.requiresOtp) {
+            const dataObj = res?.data || res
+            setOtpAttendanceId(dataObj.record?._id)
+            setOtpExpiresAt(dataObj.expiresAt)
+            setOtpValue('')
+            setOtpError('')
+            setOtpSuccess(false)
+            setShowOtpModal(true)
+            showToast('OTP verification required.')
+          } else {
+            refetch()
+            showToast('Checked in successfully.')
+          }
         } catch (err) {
           showToast(err?.data?.message || 'Failed to check in.')
         }
@@ -201,6 +276,36 @@ export function AppAttendancePage() {
     } catch (err) {
       showToast(err?.data?.message || 'Failed to check out.')
     }
+  }
+
+  const handleVerifyOtp = async () => {
+    if (!otpValue || otpValue.trim().length !== 6) {
+      setOtpError('Please enter a valid 6-digit OTP.')
+      return
+    }
+    setIsVerifyingOtp(true)
+    setOtpError('')
+    try {
+      await verifyCheckInOtp({ attendanceId: otpAttendanceId, otp: otpValue.trim() }).unwrap()
+      setOtpSuccess(true)
+      showToast('Checked in successfully.')
+      setTimeout(() => {
+        setShowOtpModal(false)
+        setOtpSuccess(false)
+        refetch()
+      }, 1500)
+    } catch (err) {
+      setOtpError(err?.data?.message || 'Verification failed. Please try again.')
+    } finally {
+      setIsVerifyingOtp(false)
+    }
+  }
+
+  const handleCancelOtp = () => {
+    setShowOtpModal(false)
+    setOtpValue('')
+    setOtpError('')
+    setOtpSuccess(false)
   }
 
   if (loadingAssignments || loadingAttendance) {
@@ -371,8 +476,9 @@ export function AppAttendancePage() {
 
   // Today's Check In Status
   const todayRecord = recordMap[now.getDate()] || (isDemo && primaryAssignment?.status === 'on_site' ? { checkInAt: primaryAssignment.onSiteAt || nowIso(), projectStatus: 'working' } : null)
-  const isCheckedIn = todayRecord && (todayRecord.projectStatus === 'working' || (todayRecord.checkInAt && !todayRecord.checkOutAt))
-  const isCompleted = todayRecord && (todayRecord.projectStatus === 'completed' || (todayRecord.checkInAt && todayRecord.checkOutAt))
+  const isPendingOtp = todayRecord && todayRecord.status === 'otp_pending'
+  const isCheckedIn = todayRecord && todayRecord.status !== 'otp_pending' && (todayRecord.projectStatus === 'working' || (todayRecord.checkInAt && !todayRecord.checkOutAt))
+  const isCompleted = todayRecord && (todayRecord.status === 'completed' || todayRecord.projectStatus === 'completed' || (todayRecord.checkInAt && todayRecord.checkOutAt))
   
   // Selected Day specific data
   const selectedRecord = recordMap[selectedDay]
@@ -521,10 +627,10 @@ export function AppAttendancePage() {
                 <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4 }}>Status</p>
                 <span style={{
                   display: 'inline-block', padding: '4px 12px', borderRadius: 8, fontSize: 13, fontWeight: 800,
-                  background: isCompleted ? '#ECFDF5' : isCheckedIn ? '#EFF6FF' : '#F1F5F9',
-                  color: isCompleted ? '#10B981' : isCheckedIn ? '#3B82F6' : '#64748B',
+                  background: isCompleted ? '#ECFDF5' : isPendingOtp ? '#FFFBEB' : isCheckedIn ? '#EFF6FF' : '#F1F5F9',
+                  color: isCompleted ? '#10B981' : isPendingOtp ? '#D97706' : isCheckedIn ? '#3B82F6' : '#64748B',
                 }}>
-                  {isCompleted ? '🟢 Present' : isCheckedIn ? '🔵 Working' : '⚪ Not Checked In'}
+                  {isCompleted ? '🟢 Present' : isPendingOtp ? '🟡 OTP Verification Pending' : isCheckedIn ? '🔵 Working' : '⚪ Not Checked In'}
                 </span>
               </div>
               <div style={{ textAlign: 'right' }}>
@@ -553,7 +659,30 @@ export function AppAttendancePage() {
             </div>
 
             {/* Live Distance & Check In / Check Out Actions */}
-            {canCheckInToday && !isCheckedIn && !isCompleted ? (
+            {isPendingOtp ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpAttendanceId(todayRecord._id)
+                  setOtpExpiresAt(todayRecord.expiresAt || new Date(Date.now() + 5 * 60 * 1000))
+                  setOtpValue('')
+                  setOtpError('')
+                  setOtpSuccess(false)
+                  setShowOtpModal(true)
+                }}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  padding: '14px 0', borderRadius: 14, border: 'none', cursor: 'pointer',
+                  background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: '#FFFFFF',
+                  fontSize: 14, fontWeight: 800, letterSpacing: '0.3px',
+                  boxShadow: '0 4px 14px rgba(245,158,11,0.35)',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <KeyRound style={{ width: 18, height: 18 }} />
+                Enter OTP to Check In
+              </button>
+            ) : canCheckInToday && !isCheckedIn && !isCompleted ? (
               <>
                 {/* Live distance indicator */}
                 {req?.locationLat != null && req?.locationLng != null ? (
@@ -895,6 +1024,128 @@ export function AppAttendancePage() {
               </div>
             </div>
           )}
+
+      {createPortal(
+        <AnimatePresence>
+          {showOtpModal && (
+            <div style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)',
+              display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+              zIndex: 9999
+            }}>
+              <motion.div
+                initial={reduce ? false : { y: '100%' }}
+                animate={{ y: 0 }}
+                exit={reduce ? undefined : { y: '100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+                style={{
+                  width: '100%', maxWidth: '480px', background: '#FFFFFF',
+                  borderRadius: '30px 30px 0 0', padding: '24px 24px max(24px, env(safe-area-inset-bottom))',
+                  boxShadow: '0 -8px 30px rgba(0, 0, 0, 0.15)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center'
+                }}
+              >
+                <div style={{ width: 48, height: 5, background: '#E2E8F0', borderRadius: 10, marginBottom: 20 }} />
+
+                {otpSuccess ? (
+                  <div style={{ textAlign: 'center', padding: '30px 0' }}>
+                    <div style={{
+                      width: 64, height: 64, borderRadius: '50%', background: '#ECFDF5',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      margin: '0 auto 16px', border: '2.5px solid #10B981'
+                    }}>
+                      <CheckCircle style={{ width: 32, height: 32, color: '#10B981' }} />
+                    </div>
+                    <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', margin: '0 0 8px' }}>Verified!</h3>
+                    <p style={{ fontSize: 14, color: '#64748B', margin: 0 }}>Check-in verified successfully.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ textAlign: 'center', width: '100%' }}>
+                      <h3 style={{ fontSize: 18, fontWeight: 900, color: '#0F172A', margin: '0 0 6px' }}>Verify Check In</h3>
+                      <p style={{ fontSize: 13, color: '#64748B', margin: '0 0 20px', lineHeight: 1.5 }}>
+                        Ask your Corporate representative for the 6-digit verification code.
+                      </p>
+                    </div>
+
+                    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                      <div style={{ position: 'relative', width: '100%' }}>
+                        <input
+                          type="text"
+                          maxLength={6}
+                          pattern="\d*"
+                          placeholder="Enter 6-digit OTP"
+                          value={otpValue}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '')
+                            setOtpValue(val)
+                            if (val.length === 6) setOtpError('')
+                          }}
+                          style={{
+                            width: '100%', padding: '14px', borderRadius: 16,
+                            border: `2px solid ${otpError ? '#EF4444' : '#E2E8F0'}`,
+                            textAlign: 'center', fontSize: 20, fontWeight: 800,
+                            letterSpacing: '6px', outline: 'none',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      </div>
+
+                      {otpError && (
+                        <p style={{ fontSize: 12, fontWeight: 700, color: '#EF4444', margin: 0, textAlign: 'center' }}>
+                          ❌ {otpError}
+                        </p>
+                      )}
+
+                      {/* Countdown Timer */}
+                      <div style={{ fontSize: 12, fontWeight: 800, color: otpCountdown > 0 ? '#64748B' : '#EF4444', display: 'flex', alignItems: 'center', gap: 6, margin: '4px 0' }}>
+                        <Clock style={{ width: 14, height: 14 }} />
+                        {otpCountdown > 0 ? (
+                          <span>Expires in {Math.floor(otpCountdown / 60)}:{(otpCountdown % 60).toString().padStart(2, '0')}</span>
+                        ) : (
+                          <span>OTP Expired. Please request a new OTP.</span>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, width: '100%', marginTop: 8 }}>
+                        <button
+                          type="button"
+                          onClick={handleCancelOtp}
+                          style={{
+                            padding: '14px 0', borderRadius: 14, border: '1.5px solid #E2E8F0',
+                            background: '#FFFFFF', color: '#475569', fontSize: 13, fontWeight: 800,
+                            cursor: 'pointer', transition: 'all 0.2s'
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleVerifyOtp}
+                          disabled={isVerifyingOtp || otpCountdown === 0 || otpValue.length !== 6}
+                          style={{
+                            padding: '14px 0', borderRadius: 14, border: 'none',
+                            background: (otpCountdown === 0 || otpValue.length !== 6) ? '#CBD5E1' : 'linear-gradient(135deg, #10B981, #059669)',
+                            color: '#FFFFFF', fontSize: 13, fontWeight: 800,
+                            cursor: (otpCountdown === 0 || otpValue.length !== 6) ? 'default' : 'pointer',
+                            boxShadow: (otpCountdown === 0 || otpValue.length !== 6) ? 'none' : '0 4px 12px rgba(16, 185, 129, 0.3)',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          {isVerifyingOtp ? 'Verifying...' : 'Confirm'}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   )
 }

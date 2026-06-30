@@ -2,6 +2,7 @@ import { SystemPricing } from '../models/SystemPricing.js'
 import { SystemPricingHistory } from '../models/SystemPricingHistory.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
+import { getIO } from '../utils/socket.js'
 
 // Deep helper to find changes between two plain objects
 function getObjectDiff(oldObj, newObj, prefix = '') {
@@ -166,6 +167,15 @@ export const updateSystemPricing = asyncHandler(async (req, res) => {
     validateField(corp.latePenalty, 100, 'Corporate Penalty')
     if (corp.gst) validateField(corp.gst.rate, 100, 'Corporate GST')
 
+    if (corp.paymentDueBeforeStartHours !== undefined && corp.paymentDueBeforeStartHours !== null) {
+      if (![24, 48, 72].includes(Number(corp.paymentDueBeforeStartHours))) {
+        throw new Error('Corporate payment due hours must be 24, 48, or 72 hours')
+      }
+    }
+    if (corp.autoReminder !== undefined && corp.autoReminder !== null) {
+      corp.autoReminder = Boolean(corp.autoReminder)
+    }
+
     // Vendor
     const vend = config.vendor || {}
     validateField(vend.registrationFee, null, 'Vendor Registration Fee')
@@ -182,6 +192,47 @@ export const updateSystemPricing = asyncHandler(async (req, res) => {
     validateField(lab.verificationFee, null, 'Labour Verification Fee')
     validateField(lab.walletWithdrawalFee, null, 'Labour Withdrawal Fee')
     validateField(lab.walletTransferFee, null, 'Labour Wallet Transfer Fee')
+    if (lab.platformFee) {
+      if (lab.platformFee.type === 'distance') {
+        const slabs = lab.platformFee.slabs || [];
+        if (slabs.length === 0) {
+          throw new Error('Distance slabs cannot be empty when Distance Based mode is selected');
+        }
+        const sortedSlabs = [...slabs].sort((a, b) => Number(a.minDistance || 0) - Number(b.minDistance || 0));
+        
+        for (let i = 0; i < sortedSlabs.length; i++) {
+          const slab = sortedSlabs[i];
+          const min = Number(slab.minDistance || 0);
+          const fee = Number(slab.fee || 0);
+          if (min < 0) throw new Error('Min distance cannot be negative');
+          if (fee < 0) throw new Error('Slab fee cannot be negative');
+          
+          if (slab.maxDistance !== null && slab.maxDistance !== undefined && slab.maxDistance !== '') {
+            const max = Number(slab.maxDistance);
+            if (min >= max) {
+              throw new Error(`Invalid slab range: ${min} km to ${max} km`);
+            }
+          }
+          
+          if (i > 0) {
+            const prev = sortedSlabs[i - 1];
+            if (prev.maxDistance === null || prev.maxDistance === undefined || prev.maxDistance === '') {
+              throw new Error('Only the last distance slab can have an unlimited end range');
+            }
+            if (Number(prev.maxDistance) !== min) {
+              throw new Error(`Distance slabs must be continuous. Gap detected between ${prev.maxDistance} km and ${min} km`);
+            }
+          }
+        }
+        
+        const lastSlab = sortedSlabs[sortedSlabs.length - 1];
+        if (lastSlab.maxDistance !== null && lastSlab.maxDistance !== undefined && lastSlab.maxDistance !== '') {
+          throw new Error('The last distance slab must have an unlimited end range (To Distance left blank)');
+        }
+      } else {
+        validateField(lab.platformFee.value, lab.platformFee.type === 'percentage' ? 100 : null, 'Labour Platform Fee')
+      }
+    }
     if (lab.gst) validateField(lab.gst.rate, 100, 'Labour GST')
 
     // GST Settings
@@ -229,6 +280,14 @@ export const updateSystemPricing = asyncHandler(async (req, res) => {
       changes,
       snapshot: newObject
     })
+
+    try {
+      const io = getIO()
+      io.emit('platformFeeConfigurationUpdated', { pricing: newObject })
+      console.log('[Socket.io] Emitted platformFeeConfigurationUpdated')
+    } catch (err) {
+      console.error('Socket emit platformFeeConfigurationUpdated failed:', err.message)
+    }
   }
 
   const history = await SystemPricingHistory.find()

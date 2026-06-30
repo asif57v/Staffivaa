@@ -30,6 +30,8 @@ const CorporatePricingSchema = new mongoose.Schema({
     maxFee: { type: Number, default: 0, min: 0 }
   },
   advancePercentage: { type: Number, default: 30, min: 0, max: 100 },
+  paymentDueBeforeStartHours: { type: Number, enum: [24, 48, 72], default: 48 },
+  autoReminder: { type: Boolean, default: true },
   settlementCycle: { type: String, enum: ['weekly', 'fortnightly', 'monthly'], default: 'weekly' },
   latePenalty: { type: Number, default: 2, min: 0, max: 100 },
   gst: {
@@ -57,6 +59,24 @@ const LabourPricingSchema = new mongoose.Schema({
   verificationFee: { type: Number, default: 99, min: 0 },
   walletWithdrawalFee: { type: Number, default: 10, min: 0 },
   walletTransferFee: { type: Number, default: 5, min: 0 },
+  platformFee: {
+    type: { type: String, enum: ['percentage', 'fixed', 'distance'], default: 'fixed' },
+    value: { type: Number, default: 20, min: 0 },
+    slabs: {
+      type: [{
+        minDistance: { type: Number, default: 0, min: 0 },
+        maxDistance: { type: Number, default: null },
+        fee: { type: Number, default: 0, min: 0 }
+      }],
+      default: () => [
+        { minDistance: 0, maxDistance: 2, fee: 20 },
+        { minDistance: 2, maxDistance: 5, fee: 15 },
+        { minDistance: 5, maxDistance: 10, fee: 10 },
+        { minDistance: 10, maxDistance: 15, fee: 5 },
+        { minDistance: 15, maxDistance: null, fee: 0 }
+      ]
+    }
+  },
   gst: {
     enabled: { type: Boolean, default: true },
     rate: { type: Number, default: 18, min: 0, max: 100 }

@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import {
   ChevronLeft, ChevronRight, Search, MapPin, UserCircle,
-  Clock, CheckCircle2, AlertCircle, CalendarDays, Building2, Users
+  Clock, CheckCircle2, AlertCircle, CalendarDays, Building2, Users, KeyRound
 } from 'lucide-react'
-import { useGetAttendanceMonitorQuery } from '../../../store/api/workforceApi.js'
+import { useGetAttendanceMonitorQuery, useRegenerateCheckInOtpMutation } from '../../../store/api/workforceApi.js'
+import { getSocket } from '../../../services/socket.js'
 
 function formatDate(d) {
   if (!d) return '—'
@@ -28,9 +29,109 @@ export function ProjectWorkersListView({ basePath = '/vendor' }) {
     return { date: today }
   }, [today])
 
-  const { data: monitorData, isLoading } = useGetAttendanceMonitorQuery(queryParams)
+  const { data: monitorData, isLoading, refetch } = useGetAttendanceMonitorQuery(queryParams)
+  const [regenerateCheckInOtp] = useRegenerateCheckInOtpMutation()
+
   const projects = monitorData?.projects ?? []
   const project = projects.find(p => p.projectId === projectId)
+
+  // OTP Verification requests state
+  const [otpRequests, setOtpRequests] = useState({})
+
+  // Initialize/sync otpRequests from fetched monitorData
+  useEffect(() => {
+    if (!project?.workers) return
+    const reqs = {}
+    project.workers.forEach(w => {
+      if (w.status === 'otp_pending' && w.otp) {
+        const isExpired = new Date() > new Date(w.otpExpiresAt)
+        reqs[w.workerId] = {
+          attendanceId: w.records?.[0]?._id,
+          otp: w.otp,
+          expiresAt: w.otpExpiresAt,
+          workerName: w.workerName,
+          isExpired
+        }
+      }
+    })
+    setOtpRequests(reqs)
+  }, [monitorData, projectId, project])
+
+  // Socket listener for real-time OTP verification cards
+  useEffect(() => {
+    const socket = getSocket()
+    if (!socket) return
+
+    if (projectId) {
+      socket.emit('join_request', projectId)
+    }
+
+    const handleOtpGenerated = (data) => {
+      // Find worker name
+      const worker = project?.workers?.find(w => w.workerId === data.labourId)
+      const workerName = worker?.workerName || 'Labourer'
+
+      setOtpRequests(prev => ({
+        ...prev,
+        [data.labourId]: {
+          attendanceId: data.attendanceId,
+          otp: data.otp,
+          expiresAt: data.expiresAt,
+          workerName,
+          isExpired: false
+        }
+      }))
+    }
+
+    const handleOtpExpired = (data) => {
+      setOtpRequests(prev => {
+        if (!prev[data.labourId]) return prev
+        return {
+          ...prev,
+          [data.labourId]: {
+            ...prev[data.labourId],
+            isExpired: true
+          }
+        }
+      })
+    }
+
+    const handleCheckedIn = (data) => {
+      setOtpRequests(prev => {
+        const next = { ...prev }
+        delete next[data.labourId]
+        return next
+      })
+      refetch()
+    }
+
+    const handleCheckOut = () => {
+      refetch()
+    }
+
+    socket.on('attendance:otpGenerated', handleOtpGenerated)
+    socket.on('attendance:otpExpired', handleOtpExpired)
+    socket.on('attendance:checkedIn', handleCheckedIn)
+    socket.on('attendance:checkOut', handleCheckOut)
+
+    return () => {
+      if (projectId) {
+        socket.emit('leave_request', projectId)
+      }
+      socket.off('attendance:otpGenerated', handleOtpGenerated)
+      socket.off('attendance:otpExpired', handleOtpExpired)
+      socket.off('attendance:checkedIn', handleCheckedIn)
+      socket.off('attendance:checkOut', handleCheckOut)
+    }
+  }, [projectId, project, refetch])
+
+  const handleRegenerateOtp = async (attendanceId) => {
+    try {
+      await regenerateCheckInOtp({ attendanceId }).unwrap()
+    } catch (err) {
+      alert(err?.data?.message || 'Failed to regenerate OTP.')
+    }
+  }
 
   const assignedCount = project?.assignedWorkers || 0
   const presentCount = project?.present || 0
@@ -54,7 +155,7 @@ export function ProjectWorkersListView({ basePath = '/vendor' }) {
     if (statusFilter !== 'all') {
       list = list.filter(w => {
         const st = w.status
-        if (statusFilter === 'present') return st === 'Present' || st === 'working' || st === 'completed'
+        if (statusFilter === 'present') return st === 'Present' || st === 'working' || st === 'completed' || st === 'checked_in'
         if (statusFilter === 'absent') return st === 'Absent'
         if (statusFilter === 'late') return st === 'Late'
         if (statusFilter === 'off') return st === 'Weekly Off'
@@ -230,6 +331,25 @@ export function ProjectWorkersListView({ basePath = '/vendor' }) {
           </div>
         </div>
 
+        {/* ──── Verification Requests (Corporate Only) ──── */}
+        {basePath === '/corporate' && Object.keys(otpRequests).length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <h4 style={{ fontSize: 11, fontWeight: 800, color: '#64748B', margin: '0 0 10px 2px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+              Pending Verifications
+            </h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {Object.entries(otpRequests).map(([labourId, req]) => (
+                <OtpRequestCard
+                  key={labourId}
+                  labourId={labourId}
+                  req={req}
+                  onRegenerate={handleRegenerateOtp}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ──── Section Header + Search ──── */}
         <div style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -302,14 +422,15 @@ export function ProjectWorkersListView({ basePath = '/vendor' }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {filteredWorkers.map((w) => {
             const status = w.status
-            const isPresent = status === 'Present' || status === 'working' || status === 'completed'
+            const isPendingOtp = status === 'otp_pending'
+            const isPresent = status === 'Present' || status === 'working' || status === 'completed' || status === 'checked_in'
             const isAbsent = status === 'Absent'
             const isLate = status === 'Late'
 
-            const stColor = isPresent ? '#10B981' : isAbsent ? '#EF4444' : isLate ? '#F59E0B' : '#8B5CF6'
-            const stBg = isPresent ? '#ECFDF5' : isAbsent ? '#FEF2F2' : isLate ? '#FFFBEB' : '#F5F3FF'
-            const stText = isPresent ? 'Present' : isAbsent ? 'Absent' : isLate ? 'Late' : status || 'Off'
-            const StatusIcon = isPresent ? CheckCircle2 : isAbsent ? AlertCircle : isLate ? Clock : CalendarDays
+            const stColor = isPendingOtp ? '#D97706' : isPresent ? '#10B981' : isAbsent ? '#EF4444' : isLate ? '#F59E0B' : '#8B5CF6'
+            const stBg = isPendingOtp ? '#FFFBEB' : isPresent ? '#ECFDF5' : isAbsent ? '#FEF2F2' : isLate ? '#FFFBEB' : '#F5F3FF'
+            const stText = isPendingOtp ? 'OTP Pending' : isPresent ? 'Present' : isAbsent ? 'Absent' : isLate ? 'Late' : status || 'Off'
+            const StatusIcon = isPendingOtp ? KeyRound : isPresent ? CheckCircle2 : isAbsent ? AlertCircle : isLate ? Clock : CalendarDays
 
             const r = w.records && w.records[0] ? w.records[0] : null
             const hasCheckIn = r?.checkInAt != null
@@ -429,6 +550,76 @@ export function ProjectWorkersListView({ basePath = '/vendor' }) {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function OtpRequestCard({ labourId, req, onRegenerate }) {
+  const [countdown, setCountdown] = useState(0)
+
+  useEffect(() => {
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((new Date(req.expiresAt) - new Date()) / 1000))
+      setCountdown(remaining)
+    }
+    tick()
+    const interval = setInterval(tick, 1000)
+    return () => clearInterval(interval)
+  }, [req.expiresAt])
+
+  const mins = Math.floor(countdown / 60)
+  const secs = countdown % 60
+  const isExpired = countdown <= 0 || req.isExpired
+
+  return (
+    <div style={{
+      background: '#FFFFFF', borderRadius: 16, padding: '16px',
+      border: `1.5px solid ${isExpired ? '#F3F4F6' : '#FFF9DB'}`,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+      display: 'flex', flexDirection: 'column', gap: 10
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h4 style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>{req.workerName}</h4>
+          <p style={{ fontSize: 10, fontWeight: 700, color: isExpired ? '#EF4444' : '#B45309', margin: '2px 0 0', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+            {isExpired ? 'OTP Expired' : 'Waiting for Check In Verification'}
+          </p>
+        </div>
+        <span style={{
+          background: isExpired ? '#FEF2F2' : '#FFFBEB',
+          color: isExpired ? '#EF4444' : '#D97706',
+          padding: '4px 10px', borderRadius: 8, fontSize: 10, fontWeight: 800,
+          border: `1px solid ${isExpired ? '#FECACA' : '#FDE68A'}`
+        }}>
+          {isExpired ? 'Expired' : `Expires in ${mins}:${secs.toString().padStart(2, '0')}`}
+        </span>
+      </div>
+
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        background: '#F8FAFC', padding: '12px', borderRadius: 12, border: '1px solid #F1F5F9'
+      }}>
+        <div>
+          <p style={{ fontSize: 9, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 2 }}>Verification OTP</p>
+          <p style={{ fontSize: 18, fontWeight: 800, color: isExpired ? '#94A3B8' : '#0F172A', margin: 0, letterSpacing: '2px', textDecoration: isExpired ? 'line-through' : 'none' }}>
+            {req.otp}
+          </p>
+        </div>
+        <button
+          onClick={() => onRegenerate(req.attendanceId)}
+          style={{
+            background: isExpired ? 'linear-gradient(135deg, #F59E0B, #D97706)' : '#FFFFFF',
+            border: isExpired ? 'none' : '1.5px solid #E2E8F0',
+            borderRadius: 10,
+            padding: '8px 14px', fontSize: 11, fontWeight: 800,
+            color: isExpired ? '#FFFFFF' : '#475569',
+            cursor: 'pointer', transition: 'all 0.2s',
+            boxShadow: isExpired ? '0 2px 6px rgba(245,158,11,0.2)' : 'none'
+          }}
+        >
+          {isExpired ? 'Generate New OTP' : 'Regenerate OTP'}
+        </button>
       </div>
     </div>
   )

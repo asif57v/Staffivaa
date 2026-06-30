@@ -80,6 +80,17 @@ const workforceRequestSchema = new mongoose.Schema(
       index: true,
     },
     bookingType: { type: String, trim: true },
+    advancePaymentStatus: {
+      type: String,
+      enum: ['pending', 'paid', 'failed'],
+      default: 'pending',
+    },
+    finalPaymentStatus: {
+      type: String,
+      enum: ['pending', 'paid', 'failed'],
+      default: 'pending',
+    },
+    paymentDeadlineExtendedAt: Date,
     adminNote: { type: String, trim: true, maxlength: 500 },
     reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     reviewedAt: Date,

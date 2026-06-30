@@ -5,6 +5,8 @@ import { User } from '../models/User.js'
 import { Assignment } from '../models/Assignment.js'
 import { AttendanceRecord } from '../models/AttendanceRecord.js'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
+import { AttendanceOTP } from '../models/AttendanceOTP.js'
+import { OtpAuditLog } from '../models/OtpAuditLog.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { emitToCorporate, emitToVendor } from '../utils/socket.js'
@@ -42,6 +44,16 @@ export const checkIn = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Platform fee must be paid before check-in', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
 
+  if (request.sourceType === 'corporate') {
+    const allowedStatuses = ['advance_paid', 'project_active']
+    if (!allowedStatuses.includes(request.status)) {
+      return sendError(res, {
+        message: `Check-in is blocked. Project status is "${request.status}" (Advance Payment must be completed first).`,
+        statusCode: HTTP_STATUS.BAD_REQUEST
+      })
+    }
+  }
+
   // Distance validation
   if (request.locationLat != null && request.locationLng != null) {
     if (lat == null || lng == null) {
@@ -57,8 +69,105 @@ export const checkIn = asyncHandler(async (req, res) => {
   shiftDate.setHours(0, 0, 0, 0)
 
   let record = await AttendanceRecord.findOne({ assignmentId, shiftDate })
+
+  if (request.sourceType === 'corporate') {
+    if (record && record.status === 'checked_in') {
+      return sendError(res, { message: 'Already checked in for today', statusCode: HTTP_STATUS.BAD_REQUEST })
+    }
+    if (record && record.status === 'completed') {
+      return sendError(res, { message: 'Shift already completed for today', statusCode: HTTP_STATUS.BAD_REQUEST })
+    }
+
+    if (!record) {
+      record = await AttendanceRecord.create({
+        assignmentId: assignment._id,
+        requestId: assignment.requestId,
+        workerId: req.user._id,
+        projectId: request.projectId || request._id,
+        siteId: request.siteId,
+        vendorId: assignment.vendorId,
+        corporateId: request.clientId,
+        shiftDate,
+        attendanceStatus: ATTENDANCE_STATUS.ABSENT,
+        projectStatus: 'assigned',
+        status: 'otp_pending',
+        otpVerified: false,
+        billableUnits: 0,
+        verifiedBy: 'labour',
+      })
+    } else {
+      record.status = 'otp_pending'
+      record.otpVerified = false
+      await record.save()
+    }
+
+    // Invalidate any previous OTPs for this attendance
+    await AttendanceOTP.deleteMany({ attendanceId: record._id })
+
+    // Generate random 6 Digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString()
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+
+    await AttendanceOTP.create({
+      attendanceId: record._id,
+      labourId: req.user._id,
+      projectId: request.projectId || request._id,
+      corporateId: request.clientId,
+      vendorId: assignment.vendorId,
+      otp,
+      expiresAt,
+      isVerified: false
+    })
+
+    // Emit Socket Event: attendance:otpGenerated
+    const payload = {
+      attendanceId: record._id.toString(),
+      labourId: req.user._id.toString(),
+      otp,
+      expiresAt: expiresAt.toISOString()
+    }
+
+    import('../utils/socket.js').then(({ getIO }) => {
+      try {
+        const io = getIO()
+        // Emit to corporate client personal room
+        io.to(`corporate_${request.clientId.toString()}`).emit('attendance:otpGenerated', payload)
+        // Also emit to general request room
+        io.to(`request_${request._id.toString()}`).emit('attendance:otpGenerated', payload)
+      } catch (err) {
+        console.error('Socket emit error:', err)
+      }
+    })
+
+    // Setup expiration emit timer
+    setTimeout(async () => {
+      try {
+        const otpRecord = await AttendanceOTP.findOne({ attendanceId: record._id, otp, isVerified: false })
+        if (otpRecord && new Date() > otpRecord.expiresAt) {
+          const { getIO } = await import('../utils/socket.js')
+          const io = getIO()
+          io.to(`corporate_${request.clientId.toString()}`).emit('attendance:otpExpired', {
+            attendanceId: record._id.toString(),
+            labourId: req.user._id.toString()
+          })
+          io.to(`request_${request._id.toString()}`).emit('attendance:otpExpired', {
+            attendanceId: record._id.toString(),
+            labourId: req.user._id.toString()
+          })
+        }
+      } catch (err) {
+        console.error('OTP Expiration timer error:', err)
+      }
+    }, 5 * 60 * 1000 + 1000)
+
+    return sendSuccess(res, {
+      message: 'OTP verification pending',
+      data: { record, requiresOtp: true, expiresAt }
+    })
+  }
+
+  // Non-corporate (individual) normal flow
   if (!record) {
-    const request = await WorkforceRequest.findById(assignment.requestId).lean()
     record = await AttendanceRecord.create({
       assignmentId: assignment._id,
       requestId: assignment.requestId,
@@ -71,6 +180,9 @@ export const checkIn = asyncHandler(async (req, res) => {
       checkInAt: new Date(),
       attendanceStatus: ATTENDANCE_STATUS.PRESENT,
       projectStatus: 'working',
+      status: 'checked_in',
+      otpVerified: false,
+      workingHoursStartedAt: new Date(),
       billableUnits: 0,
       verifiedBy: 'labour',
     })
@@ -78,26 +190,22 @@ export const checkIn = asyncHandler(async (req, res) => {
     record.checkInAt = new Date()
     record.attendanceStatus = ATTENDANCE_STATUS.PRESENT
     record.projectStatus = 'working'
+    record.status = 'checked_in'
+    record.workingHoursStartedAt = new Date()
     await record.save()
   }
 
   assignment.status = 'on_site'
   await assignment.save()
 
-  request.status = 'on_site'
   await WorkforceRequest.findByIdAndUpdate(request._id, { status: 'on_site' })
 
   import('../utils/socket.js').then(({ getIO }) => {
     try {
       const io = getIO()
       io.to(`request_${request._id.toString()}`).emit('request_status_update', {
-        requestStatus: request.status,
+        requestStatus: 'on_site',
       })
-      
-      if (request.sourceType === 'corporate') {
-        if (request.clientId) emitToCorporate(request.clientId.toString(), 'work_progress_update', { requestId: request._id.toString() });
-        if (assignment.vendorId) emitToVendor(assignment.vendorId.toString(), 'work_progress_update', { requestId: request._id.toString() });
-      }
     } catch (err) {
       console.error('Socket emit error:', err)
     }
@@ -160,12 +268,39 @@ export const checkOut = asyncHandler(async (req, res) => {
   const hours = (record.checkOutAt.getTime() - checkInTime) / (1000 * 60 * 60)
   record.totalHours = parseFloat(hours.toFixed(2))
   record.projectStatus = 'completed'
+  record.status = 'completed'
+  record.workingHoursEndedAt = new Date()
+  
+  const workingStartedTime = record.workingHoursStartedAt ? record.workingHoursStartedAt.getTime() : checkInTime
+  const diffMinutes = Math.max(0, Math.floor((record.workingHoursEndedAt.getTime() - workingStartedTime) / 60000))
+  record.totalWorkingMinutes = diffMinutes
+
   record.billableUnits = billableUnitsForStatus(record.attendanceStatus)
   await record.save()
 
   // Mark the assignment as completed so it moves to the history tab for the worker
   assignment.status = 'completed'
   await assignment.save()
+
+  // Emit attendance:checkOut socket event
+  import('../utils/socket.js').then(({ getIO }) => {
+    try {
+      const io = getIO()
+      const payload = {
+        attendanceId: record._id.toString(),
+        labourId: req.user._id.toString(),
+        status: 'completed',
+        checkOutAt: record.checkOutAt.toISOString(),
+        workingHoursEndedAt: record.workingHoursEndedAt.toISOString(),
+        totalWorkingMinutes: record.totalWorkingMinutes
+      }
+      if (record.corporateId) io.to(`corporate_${record.corporateId.toString()}`).emit('attendance:checkOut', payload)
+      if (record.vendorId) io.to(`vendor-${record.vendorId.toString()}`).emit('attendance:checkOut', payload)
+      io.to(`request_${record.requestId.toString()}`).emit('attendance:checkOut', payload)
+    } catch (err) {
+      console.error('Socket emit error:', err)
+    }
+  })
 
   // Note: We do not mark the overall WorkforceRequest as completed here for corporate requests,
   // as other workers might still be assigned.
@@ -348,6 +483,16 @@ export const monitorAttendance = asyncHandler(async (req, res) => {
 
   const records = await AttendanceRecord.find(recordQuery).sort({ shiftDate: -1 }).lean()
 
+  for (const r of records) {
+    if (r.status === 'otp_pending') {
+      const otpRecord = await AttendanceOTP.findOne({ attendanceId: r._id, isVerified: false })
+      if (otpRecord) {
+        r.otp = otpRecord.otp
+        r.otpExpiresAt = otpRecord.expiresAt
+      }
+    }
+  }
+
   const projectGroups = {}
 
   for (const assignment of assignments) {
@@ -425,7 +570,9 @@ export const monitorAttendance = asyncHandler(async (req, res) => {
         workerId: assignment.labourId?._id,
         workerName: assignment.labourId?.fullName || 'Unknown Worker',
         role: assignment.categoryId?.name || 'Worker',
-        status: latestRecord.attendanceStatus || latestRecord.projectStatus,
+        status: latestRecord.status || latestRecord.attendanceStatus || latestRecord.projectStatus,
+        otp: latestRecord.otp,
+        otpExpiresAt: latestRecord.otpExpiresAt,
         assignedAt: assignment.acceptedAt || assignment.createdAt,
         records: workerRecords
       })
@@ -435,4 +582,225 @@ export const monitorAttendance = asyncHandler(async (req, res) => {
   const projects = Object.values(projectGroups)
   
   sendSuccess(res, { data: { projects } })
+})
+
+export const verifyCheckInOtp = asyncHandler(async (req, res) => {
+  const { attendanceId, otp } = req.body
+  const ipAddress = req.ip || req.connection.remoteAddress
+  const userAgent = req.headers['user-agent']
+
+  if (!attendanceId || !otp) {
+    return sendError(res, { message: 'Attendance ID and OTP are required', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const record = await AttendanceRecord.findById(attendanceId)
+  if (!record) {
+    return sendError(res, { message: 'Attendance record not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  const request = await WorkforceRequest.findById(record.requestId).lean()
+  if (request && request.sourceType === 'corporate') {
+    const allowedStatuses = ['advance_paid', 'project_active']
+    if (!allowedStatuses.includes(request.status)) {
+      return sendError(res, {
+        message: `OTP verification is blocked. Project status is "${request.status}" (Advance Payment must be completed first).`,
+        statusCode: HTTP_STATUS.BAD_REQUEST
+      })
+    }
+  }
+
+  if (record.status === 'checked_in') {
+    return sendError(res, { message: 'Attendance already checked in', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  // Find valid OTP record
+  const otpRecord = await AttendanceOTP.findOne({ attendanceId, labourId: req.user._id })
+  if (!otpRecord) {
+    await OtpAuditLog.create({
+      userId: req.user._id,
+      attendanceId,
+      otpAttempted: otp,
+      result: 'not_found',
+      ipAddress,
+      userAgent
+    })
+    return sendError(res, { message: 'OTP verification request not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  if (new Date() > otpRecord.expiresAt) {
+    await OtpAuditLog.create({
+      userId: req.user._id,
+      attendanceId,
+      otpAttempted: otp,
+      result: 'expired',
+      ipAddress,
+      userAgent
+    })
+    return sendError(res, { message: 'OTP Expired. Please request a new OTP.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  if (otpRecord.otp !== String(otp).trim()) {
+    await OtpAuditLog.create({
+      userId: req.user._id,
+      attendanceId,
+      otpAttempted: otp,
+      result: 'incorrect_otp',
+      ipAddress,
+      userAgent
+    })
+    return sendError(res, { message: 'Incorrect OTP. Please try again.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  // OTP is correct! Update OTP Record
+  otpRecord.isVerified = true
+  otpRecord.verifiedAt = new Date()
+  await otpRecord.save()
+
+  // Update Attendance Record
+  record.status = 'checked_in'
+  record.attendanceStatus = ATTENDANCE_STATUS.PRESENT
+  record.projectStatus = 'working'
+  record.checkInAt = new Date()
+  record.workingHoursStartedAt = new Date()
+  record.otpVerified = true
+  await record.save()
+
+  // Clean up OTPs for this attendance
+  await AttendanceOTP.deleteMany({ attendanceId })
+
+  // Log successful attempt
+  await OtpAuditLog.create({
+    userId: req.user._id,
+    attendanceId,
+    otpAttempted: otp,
+    result: 'success',
+    ipAddress,
+    userAgent
+  })
+
+  // Update Assignment Status
+  const assignment = await Assignment.findById(record.assignmentId)
+  if (assignment) {
+    assignment.status = 'on_site'
+    await assignment.save()
+  }
+
+  // Update Request Status
+  const requestDoc = await WorkforceRequest.findById(record.requestId)
+  if (requestDoc) {
+    requestDoc.status = 'on_site'
+    await requestDoc.save()
+  }
+
+  // Emit socket events to Corporate, Vendor, Labour and Project Room
+  import('../utils/socket.js').then(({ getIO }) => {
+    try {
+      const io = getIO()
+      const payload = {
+        attendanceId: record._id.toString(),
+        labourId: req.user._id.toString(),
+        status: 'checked_in',
+        checkedInAt: record.checkInAt.toISOString(),
+        workingHoursStartedAt: record.workingHoursStartedAt.toISOString()
+      }
+
+      // To specific users/rooms
+      if (record.corporateId) io.to(`corporate_${record.corporateId.toString()}`).emit('attendance:checkedIn', payload)
+      if (record.vendorId) io.to(`vendor-${record.vendorId.toString()}`).emit('attendance:checkedIn', payload)
+      io.to(`labour_${req.user._id.toString()}`).emit('attendance:checkedIn', payload)
+      
+      // Project room
+      io.to(`request_${record.requestId.toString()}`).emit('attendance:checkedIn', payload)
+      io.to(`request_${record.requestId.toString()}`).emit('request_status_update', {
+        requestStatus: 'on_site',
+      })
+    } catch (err) {
+      console.error('Socket emit error:', err)
+    }
+  })
+
+  sendSuccess(res, { message: 'Successfully Checked In', data: { record } })
+})
+
+export const regenerateCheckInOtp = asyncHandler(async (req, res) => {
+  const { attendanceId } = req.body
+  if (!attendanceId) {
+    return sendError(res, { message: 'Attendance ID is required', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const record = await AttendanceRecord.findById(attendanceId)
+  if (!record) {
+    return sendError(res, { message: 'Attendance record not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  // Only the corporate client assigned to this project request can regenerate the OTP
+  if (req.user.role !== USER_ROLES.CORPORATE || String(record.corporateId) !== String(req.user._id)) {
+    return sendError(res, { message: 'Forbidden: Only the corporate client can regenerate the OTP', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  // Invalidate previous OTPs
+  await AttendanceOTP.deleteMany({ attendanceId })
+
+  // Generate new OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString()
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+
+  await AttendanceOTP.create({
+    attendanceId: record._id,
+    labourId: record.workerId,
+    projectId: record.projectId || record.requestId,
+    corporateId: record.corporateId,
+    vendorId: record.vendorId,
+    otp,
+    expiresAt,
+    isVerified: false
+  })
+
+  const payload = {
+    attendanceId: record._id.toString(),
+    labourId: record.workerId.toString(),
+    otp,
+    expiresAt: expiresAt.toISOString()
+  }
+
+  import('../utils/socket.js').then(({ getIO }) => {
+    try {
+      const io = getIO()
+      // Emit to corporate client
+      io.to(`corporate_${record.corporateId.toString()}`).emit('attendance:otpGenerated', payload)
+      // Emit to request room
+      io.to(`request_${record.requestId.toString()}`).emit('attendance:otpGenerated', payload)
+      // Notify the labour client
+      io.to(`labour_${record.workerId.toString()}`).emit('attendance:otpGenerated', {
+        attendanceId: record._id.toString(),
+        expiresAt: expiresAt.toISOString(),
+        message: 'New OTP Generated. Please ask supervisor for updated OTP.'
+      })
+    } catch (err) {
+      console.error('Socket emit error:', err)
+    }
+  })
+
+  // Set setTimeout to emit attendance:otpExpired if still pending after 5 minutes
+  setTimeout(async () => {
+    try {
+      const otpRecord = await AttendanceOTP.findOne({ attendanceId: record._id, otp, isVerified: false })
+      if (otpRecord && new Date() > otpRecord.expiresAt) {
+        const { getIO } = await import('../utils/socket.js')
+        const io = getIO()
+        io.to(`corporate_${record.corporateId.toString()}`).emit('attendance:otpExpired', {
+          attendanceId: record._id.toString(),
+          labourId: record.workerId.toString()
+        })
+        io.to(`request_${record.requestId.toString()}`).emit('attendance:otpExpired', {
+          attendanceId: record._id.toString(),
+          labourId: record.workerId.toString()
+        })
+      }
+    } catch (err) {
+      console.error('OTP Expiration timer error:', err)
+    }
+  }, 5 * 60 * 1000 + 1000)
+
+  sendSuccess(res, { message: 'OTP regenerated successfully', data: { expiresAt } })
 })

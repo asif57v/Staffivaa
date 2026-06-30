@@ -16,7 +16,9 @@ import {
   checkOut,
   listAttendance,
   markAttendanceVendor,
-  monitorAttendance
+  monitorAttendance,
+  verifyCheckInOtp,
+  regenerateCheckInOtp
 } from '../controllers/attendanceController.js'
 import {
   createRazorpayOrder,
@@ -27,11 +29,13 @@ import {
   getExtraWorkForBooking,
   updateExtraWorkStatus,
 } from '../controllers/extraWorkController.js'
+import { getSystemPricing } from '../controllers/systemPricingController.js'
 
 const router = Router()
 
 router.use(protect)
 
+router.get('/system-pricing', restrictTo(...APP_ROLES), getSystemPricing)
 router.post('/requests', restrictTo(USER_ROLES.INDIVIDUAL, USER_ROLES.CORPORATE), createRequest)
 router.get('/requests', restrictTo(...APP_ROLES), listMyRequests)
 router.get('/requests/:id', restrictTo(...APP_ROLES, USER_ROLES.ADMIN), getRequest)
@@ -47,6 +51,8 @@ router.get('/assignments', restrictTo(USER_ROLES.LABOUR), listLabourAssignments)
 router.patch('/assignments/:id/respond', restrictTo(USER_ROLES.LABOUR), respondToAssignment)
 
 router.post('/attendance/check-in', restrictTo(USER_ROLES.LABOUR), checkIn)
+router.post('/attendance/check-in/verify', restrictTo(USER_ROLES.LABOUR), verifyCheckInOtp)
+router.post('/attendance/check-in/regenerate-otp', restrictTo(USER_ROLES.CORPORATE), regenerateCheckInOtp)
 router.post('/attendance/start-work', restrictTo(USER_ROLES.LABOUR), startWork)
 router.post('/attendance/check-out', restrictTo(USER_ROLES.LABOUR), checkOut)
 router.get('/attendance', restrictTo(...APP_ROLES, USER_ROLES.ADMIN), listAttendance)

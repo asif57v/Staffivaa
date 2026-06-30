@@ -5,6 +5,7 @@ import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { Allocation } from '../models/Allocation.js'
 import { Assignment } from '../models/Assignment.js'
 import { User } from '../models/User.js'
+import { SystemPricing } from '../models/SystemPricing.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { emitRequestStatusUpdate, getIO, emitToUser } from '../utils/socket.js'
@@ -233,12 +234,58 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       // Round distance to 1 decimal place
       distanceKm = Math.round(distanceKm * 10) / 10;
       
-      let labourFee = 0;
-      if (distanceKm <= 2) labourFee = 20;
-      else if (distanceKm <= 5) labourFee = 15;
-      else if (distanceKm <= 10) labourFee = 10;
-      else if (distanceKm <= 15) labourFee = 5;
-      else labourFee = 0;
+      const pricing = await SystemPricing.findOne().lean()
+      let labourFee = 20
+      const pf = pricing?.labour?.platformFee
+      if (pf) {
+        if (pf.type === 'distance') {
+          const slabs = pf.slabs || []
+          const sortedSlabs = [...slabs].sort((a, b) => Number(a.minDistance || 0) - Number(b.minDistance || 0))
+          let matchedFee = null
+          for (const slab of sortedSlabs) {
+            const min = Number(slab.minDistance || 0)
+            const max = slab.maxDistance !== null && slab.maxDistance !== undefined && slab.maxDistance !== '' ? Number(slab.maxDistance) : Infinity
+            if (distanceKm >= min && distanceKm < max) {
+              matchedFee = Number(slab.fee || 0)
+              break
+            }
+          }
+          if (matchedFee !== null) {
+            labourFee = matchedFee
+          } else {
+            labourFee = 0
+          }
+        } else if (pf.type === 'percentage') {
+          let estimatedTotalLabourCost = 800
+          if (request.lines && request.lines.length > 0) {
+            try {
+              const { LabourCategory } = await import('../models/LabourCategory.js')
+              const categories = await LabourCategory.find({ _id: { $in: request.lines.map(l => l.categoryId) } }).lean()
+              const categoryMap = {}
+              categories.forEach(c => {
+                categoryMap[c._id.toString()] = c.pricePerDay || c.pricePerHour * 8 || 800
+              })
+              let estimatedLabourCostPerDay = 0
+              request.lines.forEach((l) => {
+                const qty = l.quantity || 1
+                const rate = categoryMap[l.categoryId.toString()] || 800
+                estimatedLabourCostPerDay += qty * rate
+              })
+              let totalDurationInDays = 1
+              if (request.startDate && request.endDate) {
+                const diffTime = Math.abs(new Date(request.endDate) - new Date(request.startDate))
+                totalDurationInDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)))
+              }
+              estimatedTotalLabourCost = estimatedLabourCostPerDay * totalDurationInDays
+            } catch (err) {
+              console.error('Error calculating request cost for percentage fee:', err.message)
+            }
+          }
+          labourFee = Math.round((estimatedTotalLabourCost * (pf.value ?? 10)) / 100)
+        } else {
+          labourFee = pf.value ?? 20
+        }
+      }
 
       request.distanceKm = distanceKm;
       request.labourPlatformFee = labourFee;

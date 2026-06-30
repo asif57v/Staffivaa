@@ -33,6 +33,15 @@ const attendanceRecordSchema = new mongoose.Schema(
     verifiedBy: { type: String, enum: ['admin', 'vendor_supervisor', 'auto', 'labour'], default: 'labour' },
     verifiedAt: Date,
     notes: { type: String, trim: true, maxlength: 300 },
+    status: {
+      type: String,
+      enum: ['not_checked_in', 'otp_pending', 'checked_in', 'completed'],
+      default: 'not_checked_in',
+    },
+    otpVerified: { type: Boolean, default: false },
+    workingHoursStartedAt: Date,
+    workingHoursEndedAt: Date,
+    totalWorkingMinutes: { type: Number, default: 0 },
   },
   { timestamps: true },
 )

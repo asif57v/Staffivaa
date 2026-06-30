@@ -148,6 +148,7 @@ const userSchema = new mongoose.Schema(
     corporateProfile: corporateProfileSchema,
     labourProfile: labourProfileSchema,
     contractorProfile: contractorProfileSchema,
+    walletBalance: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true },
 )

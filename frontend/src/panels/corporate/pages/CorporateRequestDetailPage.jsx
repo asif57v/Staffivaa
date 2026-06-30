@@ -1,8 +1,8 @@
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Users, Building2, MapPin, Calendar, Clock, UserCircle, CheckCircle2, Construction, AlertCircle, XCircle, Phone } from 'lucide-react'
-import { useGetRequestQuery } from '../../../store/api/workforceApi.js'
+import { ArrowLeft, Users, Building2, MapPin, Calendar, Clock, UserCircle, CheckCircle2, Construction, AlertCircle, XCircle, Phone, Star, Award, Shield, FileDown, MessageSquare, ChevronDown, ChevronUp, Check, ArrowRight, FileText } from 'lucide-react'
+import { useGetRequestQuery, useRespondToQuotationMutation } from '../../../store/api/workforceApi.js'
 import { useAuth } from '../../../hooks/useAuth.js'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { getSocket } from '../../../services/socket.js'
 
 function formatDate(d) {
@@ -10,10 +10,246 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+const TIMELINE_STEPS = [
+  { label: 'Request Created', statusKey: 'created' },
+  { label: 'Vendor Accepted', statusKey: 'accepted' },
+  { label: 'Workers Assigned', statusKey: 'assigned' },
+  { label: 'Quotation Submitted', statusKey: 'quote_submitted' },
+  { label: 'Corporate Reviewing Quote', statusKey: 'quote_review' },
+  { label: 'Quote Approved', statusKey: 'quote_approved' },
+  { label: 'Advance Payment', statusKey: 'advance_payment' },
+  { label: 'Project Active', statusKey: 'project_active' },
+  { label: 'Workers Check-In', statusKey: 'check_in' },
+  { label: 'Attendance Running', statusKey: 'attendance' },
+  { label: 'Project Completed', statusKey: 'completed' },
+  { label: 'Final Settlement', statusKey: 'settlement' },
+]
+
+const getTimelineStepStatus = (stepKey, request, quotation, assignments) => {
+  const requestStatus = request?.status
+  const quoteStatus = quotation?.status
+  const totalAssigned = assignments?.length || 0
+  const totalRequired = (request?.lines ?? []).reduce((acc, line) => acc + (line.quantity || 1), 0)
+
+  switch (stepKey) {
+    case 'created':
+      return 'completed'
+    case 'accepted':
+      return !['pending_review', 'searching', 'allocating'].includes(requestStatus) ? 'completed' : 'pending'
+    case 'assigned':
+      if (totalAssigned >= totalRequired && totalRequired > 0) return 'completed'
+      return ['assigned', 'payment_pending', 'advance_paid', 'project_active', 'attendance_tracking', 'completed', 'settlement_pending', 'settlement_completed'].includes(requestStatus) ? 'completed' : 'pending'
+    case 'quote_submitted':
+      if (['submitted', 'under_review', 'revision_requested', 'revised', 'approved'].includes(quoteStatus)) return 'completed'
+      return 'pending'
+    case 'quote_review':
+      if (quoteStatus === 'approved') return 'completed'
+      if (['submitted', 'under_review', 'revised'].includes(quoteStatus)) return 'active'
+      if (quoteStatus === 'revision_requested') return 'active'
+      return 'pending'
+    case 'quote_approved':
+      if (quoteStatus === 'approved') return 'completed'
+      return 'pending'
+    case 'advance_payment':
+      if (['advance_paid', 'project_active', 'attendance_tracking', 'completed', 'settlement_pending', 'settlement_completed'].includes(requestStatus)) return 'completed'
+      if (requestStatus === 'payment_pending') return 'active'
+      return 'pending'
+    case 'project_active':
+      if (['project_active', 'attendance_tracking', 'completed', 'settlement_pending', 'settlement_completed'].includes(requestStatus)) return 'completed'
+      return 'pending'
+    case 'check_in':
+      if (['attendance_tracking', 'completed', 'settlement_pending', 'settlement_completed'].includes(requestStatus)) return 'completed'
+      if (requestStatus === 'project_active') return 'active'
+      return 'pending'
+    case 'attendance':
+      if (requestStatus === 'attendance_tracking') return 'active'
+      if (['completed', 'settlement_pending', 'settlement_completed'].includes(requestStatus)) return 'completed'
+      return 'pending'
+    case 'completed':
+      if (['completed', 'settlement_pending', 'settlement_completed'].includes(requestStatus)) return 'completed'
+      return 'pending'
+    case 'settlement':
+      if (requestStatus === 'settlement_completed') return 'completed'
+      if (requestStatus === 'settlement_pending') return 'active'
+      return 'pending'
+    default:
+      return 'pending'
+  }
+}
+
+const handleDownloadPDF = (quotation, request, allocation) => {
+  const printWindow = window.open('', '_blank')
+  const durationInDays = quotation.workingDays || 1
+  const companyName = request.clientId?.corporateProfile?.companyName || request.clientId?.fullName || 'Client'
+  const vendorName = allocation?.vendorId?.contractorProfile?.companyName || allocation?.vendorId?.fullName || 'Vendor'
+
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Quotation - ${request.reference}</title>
+        <style>
+          body { font-family: 'Inter', system-ui, -apple-system, sans-serif; color: #1e293b; padding: 40px; }
+          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; }
+          .logo { font-size: 24px; font-weight: 800; color: #f5b800; }
+          .title { font-size: 20px; font-weight: 800; text-align: right; text-transform: uppercase; color: #64748b; }
+          .info-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 40px; margin-bottom: 40px; }
+          .section-title { font-size: 12px; font-weight: 800; text-transform: uppercase; color: #94a3b8; margin-bottom: 10px; }
+          .details-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+          .details-table th { background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 12px; text-align: left; font-size: 12px; font-weight: 800; color: #64748b; }
+          .details-table td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; font-weight: 500; }
+          .total-box { margin-left: auto; width: 300px; border-top: 2px solid #e2e8f0; padding-top: 15px; }
+          .total-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+          .grand-total { font-weight: 900; font-size: 18px; color: #0f172a; margin-top: 10px; border-top: 1px solid #f1f5f9; padding-top: 10px; }
+          .footer { text-align: center; font-size: 11px; color: #94a3b8; margin-top: 80px; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <div class="logo">STAFFIVAA</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Premium Workforce Solutions</div>
+          </div>
+          <div>
+            <div class="title">Official Quotation</div>
+            <div style="font-size: 12px; color: #64748b; text-align: right; margin-top: 4px;">Ref: ${request.reference}</div>
+          </div>
+        </div>
+        
+        <div class="info-grid">
+          <div>
+            <div class="section-title">Quoted For:</div>
+            <div style="font-weight: 700; font-size: 15px;">${companyName}</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Project: ${request.projectId?.name || 'Construction Work'}</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 2px;">Site: ${request.siteId?.name || request.locationText}</div>
+          </div>
+          <div style="text-align: right;">
+            <div class="section-title">Quoted By:</div>
+            <div style="font-weight: 700; font-size: 15px;">${vendorName}</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Email/Phone: ${allocation?.vendorId?.email || ''} / ${allocation?.vendorId?.phone || ''}</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 2px;">Date: ${new Date(quotation.createdAt).toLocaleDateString('en-IN')}</div>
+          </div>
+        </div>
+
+        <table class="details-table">
+          <thead>
+            <tr>
+              <th>Item Description</th>
+              <th style="text-align: center;">Rate (₹)</th>
+              <th style="text-align: center;">Qty</th>
+              <th style="text-align: center;">Days</th>
+              <th style="text-align: right;">Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Labour Charges (${request.lines?.[0]?.categoryId?.name || 'Workforce Crew'})</td>
+              <td style="text-align: center;">₹${quotation.labourRatePerWorker}</td>
+              <td style="text-align: center;">${quotation.numberOfWorkers}</td>
+              <td style="text-align: center;">${durationInDays}</td>
+              <td style="text-align: right;">₹${quotation.labourCost}</td>
+            </tr>
+            ${quotation.transportationCharges ? `
+              <tr>
+                <td>Transportation Charges</td>
+                <td style="text-align: center;">—</td>
+                <td style="text-align: center;">—</td>
+                <td style="text-align: center;">—</td>
+                <td style="text-align: right;">₹${quotation.transportationCharges}</td>
+              </tr>
+            ` : ''}
+            ${quotation.equipmentCharges ? `
+              <tr>
+                <td>Equipment & Safety Gear Charges</td>
+                <td style="text-align: center;">—</td>
+                <td style="text-align: center;">—</td>
+                <td style="text-align: center;">—</td>
+                <td style="text-align: right;">₹${quotation.equipmentCharges}</td>
+              </tr>
+            ` : ''}
+            ${quotation.foodCharges ? `
+              <tr>
+                <td>Food & Catering Allowance</td>
+                <td style="text-align: center;">—</td>
+                <td style="text-align: center;">—</td>
+                <td style="text-align: center;">—</td>
+                <td style="text-align: right;">₹${quotation.foodCharges}</td>
+              </tr>
+            ` : ''}
+            ${quotation.accommodationCharges ? `
+              <tr>
+                <td>Accommodation & Boarding Charges</td>
+                <td style="text-align: center;">—</td>
+                <td style="text-align: center;">—</td>
+                <td style="text-align: center;">—</td>
+                <td style="text-align: right;">₹${quotation.accommodationCharges}</td>
+              </tr>
+            ` : ''}
+            ${quotation.otherCharges ? `
+              <tr>
+                <td>Other Miscellaneous Charges</td>
+                <td style="text-align: center;">—</td>
+                <td style="text-align: center;">—</td>
+                <td style="text-align: center;">—</td>
+                <td style="text-align: right;">₹${quotation.otherCharges}</td>
+              </tr>
+            ` : ''}
+          </tbody>
+        </table>
+
+        <div class="total-box">
+          <div class="total-row">
+            <span style="color: #64748b; font-weight: 600;">Subtotal</span>
+            <span style="font-weight: 700;">₹${quotation.labourCost + quotation.transportationCharges + quotation.equipmentCharges + quotation.foodCharges + quotation.accommodationCharges + quotation.otherCharges}</span>
+          </div>
+          ${quotation.discount ? `
+            <div class="total-row" style="color: #ef4444;">
+              <span>Discount</span>
+              <span>- ₹${quotation.discount}</span>
+            </div>
+          ` : ''}
+          <div class="total-row">
+            <span style="color: #64748b; font-weight: 600;">GST (${quotation.gstPercentage || 18}%)</span>
+            <span style="font-weight: 700;">₹${quotation.gst}</span>
+          </div>
+          <div class="total-row grand-total">
+            <span>Grand Total</span>
+            <span>₹${quotation.grandTotal}</span>
+          </div>
+        </div>
+
+        <div style="margin-top: 40px; border-top: 1px solid #f1f5f9; padding-top: 20px;">
+          <div class="section-title">Terms & Notes:</div>
+          <div style="font-size: 12px; line-height: 1.6; color: #64748b;">
+            ${quotation.notes || 'No notes provided by vendor.'}
+          </div>
+        </div>
+
+        <div class="footer">
+          Thank you for choosing Staffivaa.
+        </div>
+        
+        <script>
+          window.onload = function() {
+            window.print();
+            setTimeout(function() { window.close(); }, 500);
+          }
+        </script>
+      </body>
+    </html>
+  `)
+  printWindow.document.close()
+}
+
 export function CorporateRequestDetailPage() {
   const { id } = useParams()
   const { user } = useAuth()
   const { data, isLoading, isError, refetch } = useGetRequestQuery(id, { skip: !id })
+  const [respondToQuotation, { isLoading: responding }] = useRespondToQuotationMutation()
+
+  const [showBreakdown, setShowBreakdown] = useState(false)
+  const [showRevisionModal, setShowRevisionModal] = useState(false)
+  const [revisionFeedback, setRevisionFeedback] = useState('')
+  const [showTimeline, setShowTimeline] = useState(false)
 
   useEffect(() => {
     const socket = getSocket()
@@ -24,6 +260,8 @@ export function CorporateRequestDetailPage() {
       socket.on('work_progress_update', handleUpdate)
       socket.on('work_completed', handleUpdate)
       socket.on('request_status_update', handleUpdate)
+      socket.on('vendor_submitted_quotation', handleUpdate)
+      socket.on('corporate_responded_quotation', handleUpdate)
       
       return () => {
         socket.off('vendor_accepted_job', handleUpdate)
@@ -31,6 +269,8 @@ export function CorporateRequestDetailPage() {
         socket.off('work_progress_update', handleUpdate)
         socket.off('work_completed', handleUpdate)
         socket.off('request_status_update', handleUpdate)
+        socket.off('vendor_submitted_quotation', handleUpdate)
+        socket.off('corporate_responded_quotation', handleUpdate)
       }
     }
   }, [id, refetch])
@@ -38,6 +278,8 @@ export function CorporateRequestDetailPage() {
   const request = data?.request
   const allocation = data?.allocation
   const assignments = data?.assignments ?? []
+  const quotation = data?.quotation
+  const paymentSummary = data?.paymentSummary
   
   const totalRequired = (request?.lines ?? []).reduce((acc, line) => acc + (line.quantity || 1), 0)
   const totalAssigned = assignments.length
@@ -71,20 +313,51 @@ export function CorporateRequestDetailPage() {
   let StatusIcon = AlertCircle
   
   if (request.status === 'accepted' || request.status === 'allocated' || request.status === 'assigned') {
-    statusLabel = 'Accepted'
-    statusTone = 'bg-emerald-50 text-emerald-700'
+    statusLabel = 'Assigned'
+    statusTone = 'bg-blue-50 text-blue-700 border border-blue-100'
+    StatusIcon = Users
+  } else if (request.status === 'payment_pending') {
+    statusLabel = 'Payment Pending'
+    statusTone = 'bg-amber-50 text-amber-700 border border-amber-200'
+    StatusIcon = AlertCircle
+  } else if (request.status === 'advance_paid') {
+    statusLabel = 'Advance Paid'
+    statusTone = 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+    StatusIcon = CheckCircle2
+  } else if (request.status === 'project_active') {
+    statusLabel = 'Project Active'
+    statusTone = 'bg-indigo-50 text-indigo-700 border border-indigo-200 animate-pulse'
+    StatusIcon = Construction
+  } else if (request.status === 'settlement_pending') {
+    statusLabel = 'Settlement Pending'
+    statusTone = 'bg-amber-50 text-amber-700 border border-amber-200'
+    StatusIcon = AlertCircle
+  } else if (request.status === 'settlement_completed') {
+    statusLabel = 'Settlement Completed'
+    statusTone = 'bg-emerald-50 text-emerald-700 border border-emerald-200'
     StatusIcon = CheckCircle2
   } else if (request.status === 'completed') {
     statusLabel = 'Completed'
-    statusTone = 'bg-emerald-50 text-emerald-700'
+    statusTone = 'bg-emerald-50 text-emerald-700 border border-emerald-200'
     StatusIcon = CheckCircle2
   } else if (request.status === 'cancelled' || request.status === 'rejected') {
     statusLabel = request.status.charAt(0).toUpperCase() + request.status.slice(1)
-    statusTone = 'bg-rose-50 text-rose-700'
+    statusTone = 'bg-rose-50 text-rose-700 border border-rose-200'
     StatusIcon = XCircle
   }
 
   const durationStr = `${formatDate(request.startDate)}${request.endDate ? ` – ${formatDate(request.endDate)}` : ''}`
+
+  const handleQuotationAction = async (action, feedback) => {
+    try {
+      await respondToQuotation({ id, action, feedback }).unwrap()
+      alert(`Quotation successfully ${action === 'approve' ? 'approved' : action === 'revision' ? 'revision requested' : 'rejected'}`)
+      setShowRevisionModal(false)
+      setRevisionFeedback('')
+    } catch (err) {
+      alert(err?.data?.message || 'Action failed')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-50/50 pb-40">
@@ -153,6 +426,244 @@ export function CorporateRequestDetailPage() {
             </p>
           </div>
         </div>
+
+        {/* Professional Step-by-Step Timeline (Collapsible) */}
+        <div className="rounded-[20px] bg-white p-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
+          <button 
+            onClick={() => setShowTimeline(!showTimeline)} 
+            className="w-full flex items-center justify-between text-left focus:outline-none"
+          >
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-brand" />
+              <span className="text-[14px] font-extrabold text-slate-900">Project Workflow Timeline</span>
+            </div>
+            {showTimeline ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+          </button>
+          
+          {showTimeline && (
+            <div className="mt-4 pt-4 border-t border-slate-100 pl-2 space-y-4">
+              {TIMELINE_STEPS.map((step, idx) => {
+                const status = getTimelineStepStatus(step.statusKey, request, quotation, assignments)
+                let badgeColor = 'bg-slate-100 text-slate-400'
+                let lineCol = 'bg-slate-100'
+                let bullet = <span className="h-2 w-2 rounded-full bg-slate-300" />
+
+                if (status === 'completed') {
+                  badgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                  lineCol = 'bg-emerald-400'
+                  bullet = <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                } else if (status === 'active') {
+                  badgeColor = 'bg-yellow-50 text-yellow-800 border-yellow-200 animate-pulse'
+                  lineCol = 'bg-yellow-400'
+                  bullet = <span className="h-2 w-2 rounded-full bg-yellow-500" />
+                }
+
+                return (
+                  <div key={idx} className="flex gap-3 items-start relative">
+                    {/* Bullet line */}
+                    {idx < TIMELINE_STEPS.length - 1 && (
+                      <div className={`absolute left-4 top-8 w-[2px] h-6 -ml-[1px] ${lineCol}`} />
+                    )}
+                    <div className={`h-8 w-8 rounded-full border flex items-center justify-center shrink-0 ${status === 'completed' ? 'bg-emerald-500 border-emerald-500' : 'bg-white border-slate-200'}`}>
+                      {bullet}
+                    </div>
+                    <div className="pt-1.5 flex-1 min-w-0">
+                      <p className={`text-[12px] font-bold ${status === 'completed' ? 'text-slate-800' : status === 'active' ? 'text-brand font-extrabold' : 'text-slate-400'}`}>
+                        {step.label}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Enterprise Quotation Panel */}
+        {quotation ? (
+          <div className="rounded-[20px] bg-white p-5 shadow-[0_4px_20px_-6px_rgba(0,0,0,0.12)] border border-slate-100 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-[16px] font-black text-slate-900 tracking-tight">Enterprise Quotation</h3>
+                <p className="text-[11px] text-slate-400 font-semibold uppercase mt-0.5">Ref: {request.reference}-Q</p>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                quotation.status === 'approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                quotation.status === 'revision_requested' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                quotation.status === 'rejected' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                'bg-blue-50 text-blue-700 border-blue-200'
+              }`}>
+                {quotation.status.replace('_', ' ')}
+              </span>
+            </div>
+
+            {/* Vendor Profile Brief */}
+            <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+              <div className="h-10 w-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-extrabold text-slate-900 truncate">
+                  {quotation.vendorId?.contractorProfile?.companyName || quotation.vendorId?.fullName || 'Vendor Name'}
+                </p>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-bold mt-0.5">
+                  <Star className="h-3 w-3 fill-amber-400 text-amber-400 shrink-0" />
+                  <span>{quotation.vendorId?.contractorProfile?.rating || '4.8'} (Rating)</span>
+                  <span>&middot;</span>
+                  <Award className="h-3 w-3 text-indigo-500 shrink-0" />
+                  <span>{quotation.vendorId?.contractorProfile?.experience || '5+'} Years Exp.</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Real-time Pricing Table */}
+            <div className="space-y-2.5 text-xs text-slate-600">
+              <div className="flex justify-between items-center py-1">
+                <span className="font-bold">Labour Cost ({quotation.numberOfWorkers} workers &times; {quotation.workingDays} days)</span>
+                <span className="font-extrabold text-slate-900">₹{quotation.labourCost.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="font-bold">Transportation Charges</span>
+                <span className="font-extrabold text-slate-900">₹{(quotation.transportationCharges || 0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="font-bold">Equipment & Safety Charges</span>
+                <span className="font-extrabold text-slate-900">₹{(quotation.equipmentCharges || 0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="font-bold">Catering & Food Charges</span>
+                <span className="font-extrabold text-slate-900">₹{(quotation.foodCharges || 0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="font-bold">Accommodation Charges</span>
+                <span className="font-extrabold text-slate-900">₹{(quotation.accommodationCharges || 0).toLocaleString()}</span>
+              </div>
+              {quotation.otherCharges > 0 && (
+                <div className="flex justify-between items-center py-1">
+                  <span className="font-bold">Other Logistics / Charges</span>
+                  <span className="font-extrabold text-slate-900">₹{quotation.otherCharges.toLocaleString()}</span>
+                </div>
+              )}
+              {quotation.discount > 0 && (
+                <div className="flex justify-between items-center py-1 text-emerald-600 font-bold">
+                  <span>Special Vendor Discount</span>
+                  <span>- ₹{quotation.discount.toLocaleString()}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center py-1">
+                <span className="font-bold">GST ({quotation.gstPercentage}%)</span>
+                <span className="font-extrabold text-slate-900">₹{quotation.gst.toLocaleString()}</span>
+              </div>
+
+              {/* Grand Total box */}
+              <div className="flex justify-between items-center bg-slate-900 p-4 rounded-2xl text-white font-extrabold mt-3 shadow-sm border border-slate-900">
+                <span className="text-slate-300 text-[13px]">Grand Total (Vendor Rate)</span>
+                <span className="text-[18px]">₹{quotation.grandTotal.toLocaleString()}</span>
+              </div>
+            </div>
+
+            {/* Estimated Advance & Remaining breakdowns */}
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="bg-emerald-50/50 border border-emerald-100 p-3 rounded-2xl text-center">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Estimated Advance (30%)</p>
+                <p className="text-base font-black text-emerald-800 mt-1">₹{Math.round(quotation.grandTotal * 0.3).toLocaleString()}</p>
+              </div>
+              <div className="bg-slate-50 border border-slate-200/60 p-3 rounded-2xl text-center">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Remaining (70%)</p>
+                <p className="text-base font-black text-slate-800 mt-1">₹{Math.round(quotation.grandTotal * 0.7).toLocaleString()}</p>
+              </div>
+            </div>
+
+            {/* Included Services Checks */}
+            <div className="border-t border-slate-100 pt-4">
+              <span className="text-[11px] font-black text-slate-400 tracking-wider uppercase">Included Platform Services</span>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">
+                  <Shield className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Safety Equipment
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">
+                  <Users className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Worker Replacement
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">
+                  <Clock className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Attendance Tracking
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">
+                  <Phone className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> 24/7 Platform Support
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 col-span-2">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-indigo-500 shrink-0" /> Escrow Payment Protection Included
+                </div>
+              </div>
+            </div>
+
+            {/* Quotation Actions */}
+            <div className="border-t border-slate-100 pt-4 flex flex-col gap-2">
+              {['submitted', 'under_review', 'revised'].includes(quotation.status) ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button 
+                      onClick={() => handleQuotationAction('approve')} 
+                      disabled={responding}
+                      className="w-full flex items-center justify-center gap-1.5 rounded-[12px] bg-slate-900 text-white font-extrabold py-2.5 text-[13px] hover:bg-slate-800 transition active:scale-[0.98] disabled:opacity-50"
+                    >
+                      <Check className="h-4 w-4" /> Accept Quote
+                    </button>
+                    <button 
+                      onClick={() => setShowRevisionModal(true)} 
+                      disabled={responding}
+                      className="w-full flex items-center justify-center gap-1.5 rounded-[12px] bg-amber-50 border border-amber-200 text-amber-800 font-extrabold py-2.5 text-[13px] hover:bg-amber-100 transition active:scale-[0.98] disabled:opacity-50"
+                    >
+                      <MessageSquare className="h-4 w-4" /> Request Revision
+                    </button>
+                  </div>
+                  <button 
+                    onClick={() => handleQuotationAction('reject')} 
+                    disabled={responding}
+                    className="w-full text-center text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100/50 py-2.5 rounded-xl border border-rose-200/50 transition"
+                  >
+                    Reject Quotation
+                  </button>
+                </>
+              ) : null}
+
+              {quotation.status === 'revision_requested' && (
+                <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-2xl text-[12px] text-amber-800 font-medium">
+                  <p className="font-extrabold mb-1">Feedback sent to vendor:</p>
+                  <p className="italic">"{quotation.feedback || 'No comments'}"</p>
+                  <p className="mt-2 text-[10px] text-slate-400 font-bold">Waiting for vendor to submit a revised quotation.</p>
+                </div>
+              )}
+
+              {/* Utility actions */}
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <button 
+                  onClick={() => setShowBreakdown(true)}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  View Breakdown
+                </button>
+                <button 
+                  onClick={() => handleDownloadPDF(quotation, request, allocation)}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  <FileDown className="h-3.5 w-3.5" /> Download PDF
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-[20px] bg-white p-5 border border-slate-200 text-center space-y-3">
+            <div className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center mx-auto text-slate-400">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-900">Quotation Pending</h4>
+              <p className="text-xs text-slate-500 mt-1 leading-normal">
+                The vendor is currently allocating workers and compiling the project rates. Once submitted, the official quotation summary will appear here for review.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Request Overview */}
         <div className="rounded-[20px] bg-white p-5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
@@ -302,7 +813,15 @@ export function CorporateRequestDetailPage() {
 
       {/* Bottom Actions */}
       <div className="mt-4 p-4 pb-24 max-w-md mx-auto flex flex-col gap-3">
-        {request.status === 'completed' && request.userPaymentStatus !== 'paid' ? (
+        {request.status === 'payment_pending' && quotation?.status === 'approved' ? (
+          <Link to={`/corporate/requests/${id}/payment`} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
+            Proceed to Advance Payment
+          </Link>
+        ) : request.status === 'payment_pending' && quotation?.status !== 'approved' ? (
+          <button disabled className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-slate-200 py-3.5 text-[15px] font-bold text-slate-400 cursor-not-allowed">
+            Proceed to Advance Payment (Awaiting Quotation Approval)
+          </button>
+        ) : request.status === 'settlement_pending' || (request.status === 'completed' && request.finalPaymentStatus !== 'paid') ? (
           <Link to={`/corporate/requests/${id}/payment`} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
             Proceed to Final Payment
           </Link>
@@ -317,6 +836,109 @@ export function CorporateRequestDetailPage() {
           </>
         )}
       </div>
+
+      {/* Revision Request Feedback Modal */}
+      {showRevisionModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-xl border border-slate-100 space-y-4">
+            <div>
+              <h4 className="text-sm font-black text-slate-900">Request Revision</h4>
+              <p className="text-[11px] text-slate-400 font-semibold mt-1">Send pricing feedback to the vendor partner.</p>
+            </div>
+            
+            <textarea 
+              rows={4}
+              placeholder='e.g. "This quotation exceeds our budget. Please reduce transportation charges."'
+              value={revisionFeedback}
+              onChange={(e) => setRevisionFeedback(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 p-3 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand bg-white resize-none"
+            />
+            
+            <div className="grid grid-cols-2 gap-2">
+              <button 
+                onClick={() => setShowRevisionModal(false)}
+                className="w-full rounded-xl border border-slate-200 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => handleQuotationAction('revision', revisionFeedback)}
+                disabled={!revisionFeedback.trim() || responding}
+                className="w-full rounded-xl bg-slate-900 text-white py-2.5 text-xs font-bold hover:bg-slate-800 disabled:opacity-50"
+              >
+                Submit Feedback
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Detailed Breakdown Modal */}
+      {showBreakdown && quotation && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-xl border border-slate-100 max-h-[85vh] overflow-y-auto space-y-4">
+            <div className="flex justify-between items-center">
+              <h4 className="text-sm font-black text-slate-900">Quotation Detailed Breakdown</h4>
+              <button onClick={() => setShowBreakdown(false)} className="text-slate-400 hover:text-slate-600 text-xs font-black">Close</button>
+            </div>
+            
+            <div className="space-y-4 text-xs">
+              {/* Calculations Explanation */}
+              <div className="p-3 bg-slate-50 border border-slate-100 rounded-2xl space-y-2">
+                <span className="text-[10px] font-black text-slate-400 tracking-wider uppercase">Cost Formulas</span>
+                <div className="space-y-1 text-slate-600 leading-normal">
+                  <p><strong>Labour Cost Calculation:</strong></p>
+                  <p>₹{quotation.labourRatePerWorker} (Rate) &times; {quotation.numberOfWorkers} (Workers) &times; {quotation.workingDays} (Days) = <strong>₹{quotation.labourCost.toLocaleString()}</strong></p>
+                  
+                  <p className="mt-2"><strong>Taxable Cost:</strong></p>
+                  <p>Labour Cost + Logistics - Discount</p>
+                  <p>₹{quotation.labourCost} + ₹{quotation.transportationCharges + quotation.equipmentCharges + quotation.foodCharges + quotation.accommodationCharges + quotation.otherCharges} - ₹{quotation.discount} = <strong>₹{(quotation.labourCost + quotation.transportationCharges + quotation.equipmentCharges + quotation.foodCharges + quotation.accommodationCharges + quotation.otherCharges - quotation.discount).toLocaleString()}</strong></p>
+
+                  <p className="mt-2"><strong>GST ({quotation.gstPercentage}%):</strong></p>
+                  <p>Calculated on Taxable Cost = <strong>₹{quotation.gst.toLocaleString()}</strong></p>
+
+                  <p className="mt-2"><strong>Grand Total:</strong></p>
+                  <p>Taxable Cost + GST = <strong>₹{quotation.grandTotal.toLocaleString()}</strong></p>
+                </div>
+              </div>
+
+              {/* Revision History */}
+              {quotation.revisions && quotation.revisions.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-[10px] font-black text-slate-400 tracking-wider uppercase">Revision History</span>
+                  <div className="space-y-2">
+                    {quotation.revisions.map((rev, index) => (
+                      <div key={index} className="p-3 border border-slate-100 rounded-xl bg-slate-50/50 flex justify-between items-center text-[11px]">
+                        <div>
+                          <p className="font-bold text-slate-700">Revision #{index + 1}</p>
+                          <p className="text-[10px] text-slate-400">{new Date(rev.createdAt).toLocaleDateString('en-IN')}</p>
+                          {rev.feedback && <p className="text-[10px] text-amber-700 italic mt-0.5">Note: "{rev.feedback}"</p>}
+                        </div>
+                        <span className="font-extrabold text-slate-900">₹{rev.grandTotal?.toLocaleString() || 'N/A'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Vendor Notes */}
+              <div>
+                <span className="text-[10px] font-black text-slate-400 tracking-wider uppercase">Vendor Notes</span>
+                <p className="mt-1 p-3 bg-slate-50 border border-slate-100 rounded-2xl italic text-slate-600 leading-normal">
+                  {quotation.notes || '"No additional notes provided by vendor."'}
+                </p>
+              </div>
+            </div>
+            
+            <button 
+              onClick={() => setShowBreakdown(false)}
+              className="w-full rounded-xl bg-slate-900 text-white py-2.5 text-xs font-bold hover:bg-slate-800"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   )

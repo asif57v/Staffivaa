@@ -143,6 +143,16 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       providesTags: ['Invoices'],
     }),
+    getVendorWallet: build.query({
+      query: () => '/vendor/wallet',
+      transformResponse: unwrap,
+      providesTags: ['VendorWallet'],
+    }),
+    requestVendorWithdrawal: build.mutation({
+      query: (body) => ({ url: '/vendor/wallet/withdraw', method: 'POST', body }),
+      transformResponse: unwrap,
+      invalidatesTags: ['VendorWallet'],
+    }),
     getVendorMarketplaceRequests: build.query({
       query: () => '/vendor/requests',
       transformResponse: unwrap,
@@ -196,6 +206,16 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       invalidatesTags: ['Attendance', 'Assignments'],
     }),
+    verifyCheckInOtp: build.mutation({
+      query: (body) => ({ url: '/workforce/attendance/check-in/verify', method: 'POST', body }),
+      transformResponse: unwrap,
+      invalidatesTags: ['Attendance', 'Assignments'],
+    }),
+    regenerateCheckInOtp: build.mutation({
+      query: (body) => ({ url: '/workforce/attendance/check-in/regenerate-otp', method: 'POST', body }),
+      transformResponse: unwrap,
+      invalidatesTags: ['Attendance'],
+    }),
     startWork: build.mutation({
       query: (body) => ({ url: '/workforce/attendance/start-work', method: 'POST', body }),
       transformResponse: unwrap,
@@ -229,6 +249,29 @@ export const workforceApi = baseApi.injectEndpoints({
       }),
       transformResponse: unwrap,
       invalidatesTags: ['AdminRequests', 'Requests'],
+    }),
+    sendPaymentReminder: build.mutation({
+      query: (id) => ({
+        url: `/admin/workforce/requests/${id}/reminder`,
+        method: 'POST',
+      }),
+      transformResponse: unwrap,
+    }),
+    recordOfflinePayment: build.mutation({
+      query: (id) => ({
+        url: `/admin/workforce/requests/${id}/record-payment`,
+        method: 'POST',
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: ['AdminRequests', 'Requests'],
+    }),
+    releaseVendorSettlement: build.mutation({
+      query: (id) => ({
+        url: `/admin/workforce/requests/${id}/release-settlement`,
+        method: 'POST',
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: ['AdminRequests', 'Requests', 'VendorWallet'],
     }),
     createAllocation: build.mutation({
       query: (body) => ({ url: '/admin/workforce/allocations', method: 'POST', body }),
@@ -289,6 +332,11 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       providesTags: ['SystemPricing'],
     }),
+    getPublicSystemPricing: build.query({
+      query: () => '/workforce/system-pricing',
+      transformResponse: unwrap,
+      providesTags: ['SystemPricing'],
+    }),
     updateSystemPricing: build.mutation({
       query: (body) => ({ url: '/admin/workforce/system-pricing', method: 'POST', body }),
       transformResponse: unwrap,
@@ -318,6 +366,34 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       invalidatesTags: ['Attendance'],
     }),
+    getQuotation: build.query({
+      query: (requestId) => `/corporate/requests/${requestId}/quotation`,
+      transformResponse: unwrap,
+      providesTags: (r, e, requestId) => [{ type: 'Quotation', id: requestId }],
+    }),
+    getVendorQuotation: build.query({
+      query: (jobId) => `/vendor/jobs/${jobId}/quotation`,
+      transformResponse: unwrap,
+      providesTags: (r, e, jobId) => [{ type: 'Quotation', id: jobId }],
+    }),
+    submitQuotation: build.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/vendor/jobs/${id}/quotation`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: (r, e, { id }) => [{ type: 'Quotation', id: id }, 'VendorJobs', 'Requests'],
+    }),
+    respondToQuotation: build.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/corporate/requests/${id}/quotation/respond`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: (r, e, { id }) => [{ type: 'Quotation', id: id }, 'Requests', 'VendorJobs'],
+    }),
   }),
 })
 
@@ -346,6 +422,8 @@ export const {
   useGetVendorJobsQuery,
   useAcceptVendorJobMutation,
   useGetVendorSettlementsQuery,
+  useGetVendorWalletQuery,
+  useRequestVendorWithdrawalMutation,
   useGetVendorMarketplaceRequestsQuery,
   useAcceptMarketplaceRequestMutation,
   useDeclineMarketplaceRequestMutation,
@@ -361,12 +439,17 @@ export const {
   useGetLabourAssignmentsQuery,
   useRespondAssignmentMutation,
   useCheckInMutation,
+  useVerifyCheckInOtpMutation,
+  useRegenerateCheckInOtpMutation,
   useStartWorkMutation,
   useCheckOutMutation,
   useGetAttendanceQuery,
   useGetAttendanceMonitorQuery,
   useGetAdminRequestsQuery,
   usePatchRequestStatusMutation,
+  useSendPaymentReminderMutation,
+  useRecordOfflinePaymentMutation,
+  useReleaseVendorSettlementMutation,
   useCreateAllocationMutation,
   useReviewCorporateMutation,
   useReviewVendorMutation,
@@ -374,9 +457,14 @@ export const {
   useGetAdminPricingQuery,
   useUpsertPricingMutation,
   useGetSystemPricingQuery,
+  useGetPublicSystemPricingQuery,
   useUpdateSystemPricingMutation,
   useGetSettlementRulesQuery,
   useUpdateSettlementRulesMutation,
   useGetPricingHistoryQuery,
   useVerifyAttendanceMutation,
+  useGetQuotationQuery,
+  useGetVendorQuotationQuery,
+  useSubmitQuotationMutation,
+  useRespondToQuotationMutation,
 } = workforceApi

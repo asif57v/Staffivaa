@@ -13,6 +13,9 @@ import {
 import {
   listAdminRequests,
   patchRequestStatusAdmin,
+  sendPaymentReminderAdmin,
+  recordOfflinePaymentAdmin,
+  releaseVendorSettlementAdmin,
 } from '../controllers/requestController.js'
 import {
   createAllocationAdmin,
@@ -52,6 +55,9 @@ router.patch('/vendors/:id/review', reviewContractorAdmin)
 
 router.get('/requests', listAdminRequests)
 router.patch('/requests/:id/status', patchRequestStatusAdmin)
+router.post('/requests/:id/reminder', sendPaymentReminderAdmin)
+router.post('/requests/:id/record-payment', recordOfflinePaymentAdmin)
+router.post('/requests/:id/release-settlement', releaseVendorSettlementAdmin)
 
 router.post('/allocations', createAllocationAdmin)
 router.post('/assignments/:id/replace', replaceAssignmentAdmin)

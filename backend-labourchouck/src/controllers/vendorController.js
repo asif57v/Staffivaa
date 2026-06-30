@@ -9,6 +9,8 @@ import { Allocation } from '../models/Allocation.js'
 import { Assignment } from '../models/Assignment.js'
 import { Invoice } from '../models/Invoice.js'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
+import { WalletTransaction } from '../models/WalletTransaction.js'
+import { Withdrawal } from '../models/Withdrawal.js'
 import { REQUEST_SOURCE, REQUEST_STATUS, ASSIGNMENT_STATUS } from '../constants/workforceConstants.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
@@ -465,4 +467,66 @@ export const assignWorkforce = asyncHandler(async (req, res) => {
   }
 
   sendSuccess(res, { data: { message: 'Workforce assigned successfully', totalLabourCost } })
+})
+
+export const getVendorWallet = asyncHandler(async (req, res) => {
+  const err = requireApprovedVendor(req.user)
+  if (err) return sendError(res, { message: err, statusCode: HTTP_STATUS.FORBIDDEN })
+
+  const user = await User.findById(req.user._id).select('walletBalance').lean()
+  const transactions = await WalletTransaction.find({ labourId: req.user._id })
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean()
+  const withdrawals = await Withdrawal.find({ requestedBy: req.user._id })
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean()
+
+  sendSuccess(res, {
+    data: {
+      walletBalance: user?.walletBalance || 0,
+      transactions,
+      withdrawals
+    }
+  })
+})
+
+export const requestVendorWithdrawal = asyncHandler(async (req, res) => {
+  const err = requireApprovedVendor(req.user)
+  if (err) return sendError(res, { message: err, statusCode: HTTP_STATUS.FORBIDDEN })
+
+  const { amount, bankDetails } = req.body
+  if (!amount || amount <= 0) {
+    return sendError(res, { message: 'Invalid withdrawal amount', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const user = await User.findById(req.user._id)
+  if (!user || user.walletBalance < amount) {
+    return sendError(res, { message: 'Insufficient wallet balance', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  user.walletBalance -= amount
+  await user.save()
+
+  const withdrawal = await Withdrawal.create({
+    amount,
+    bankDetails,
+    requestedBy: req.user._id,
+    status: 'Pending'
+  })
+
+  await WalletTransaction.create({
+    transactionId: `WD-VND-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    payerId: req.user._id,
+    payerName: req.user.fullName || 'Vendor',
+    payerType: 'vendor',
+    labourId: req.user._id,
+    type: 'Withdrawal',
+    source: 'Vendor Wallet Withdrawal Request',
+    amount,
+    status: 'Pending'
+  })
+
+  sendSuccess(res, { data: { withdrawal, walletBalance: user.walletBalance } })
 })

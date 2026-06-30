@@ -14,6 +14,10 @@ import {
   getCorporateDashboard,
   listCorporateInvoices,
 } from '../controllers/corporateController.js'
+import {
+  getQuotationForRequest,
+  respondToQuotationCorporate,
+} from '../controllers/quotationController.js'
 
 const router = Router()
 
@@ -31,4 +35,9 @@ router.get('/projects/:id', getCorporateProject)
 router.post('/projects/:projectId/sites', addCorporateSite)
 router.get('/invoices', listCorporateInvoices)
 
+// Quotation endpoints
+router.get('/requests/:id/quotation', getQuotationForRequest)
+router.post('/requests/:id/quotation/respond', respondToQuotationCorporate)
+
 export default router
+

@@ -125,14 +125,30 @@ export function generateBookingRef() {
 /**
  * @param {{ lines: { quantity: number }[], durationDays: number }} input
  */
-export function estimateIndividualBooking(input) {
+export function estimateIndividualBooking(input, pricingConfig) {
   const durationDays = Math.max(1, Number(input.durationDays) || 1)
   const workerDays = (input.lines || []).reduce((sum, ln) => sum + Math.max(1, Number(ln.quantity) || 1), 0)
   const totalWorkerDays = workerDays * durationDays
   const estimatedTotal = totalWorkerDays * RATE_PER_WORKER_DAY
-  const platformFee = Math.round(estimatedTotal * 0.05)
-  const gst = Math.round((estimatedTotal + platformFee) * 0.18)
-  const grandTotal = estimatedTotal + platformFee + gst
+  
+  let platformFee = Math.round(estimatedTotal * 0.05)
+  if (pricingConfig?.userBooking?.platformFee) {
+    const pf = pricingConfig.userBooking.platformFee
+    if (pf.type === 'percentage') {
+      platformFee = Math.round((estimatedTotal * (pf.value ?? 10)) / 100)
+    } else {
+      platformFee = pf.value ?? 20
+    }
+    if (pf.minFee !== undefined && platformFee < pf.minFee) {
+      platformFee = pf.minFee
+    }
+    if (pf.maxFee !== undefined && pf.maxFee > 0 && platformFee > pf.maxFee) {
+      platformFee = pf.maxFee
+    }
+  }
+
+  const gst = 0
+  const grandTotal = estimatedTotal + platformFee
   const advanceAmount = Math.round(grandTotal * 0.2)
   return {
     workerDays: totalWorkerDays,
@@ -255,7 +271,7 @@ export function durationKindLabel(kind) {
 /**
  * @param {object} payload
  */
-export function createIndividualBookingRecord(payload) {
+export function createIndividualBookingRecord(payload, pricingConfig) {
   const durationDays = Math.max(
     1,
     Number(payload.durationDays) || durationKindToDays(payload.durationKind, 1),
@@ -263,7 +279,7 @@ export function createIndividualBookingRecord(payload) {
   const estimate = estimateIndividualBooking({
     lines: payload.lines,
     durationDays,
-  })
+  }, pricingConfig)
   let paymentPreference = 'after_assignment'
   if (payload.paymentPreference === 'advance') paymentPreference = 'advance'
   if (payload.paymentTiming === 'after_work' || payload.paymentPreference === 'after_work') {

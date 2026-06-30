@@ -106,7 +106,7 @@ export function IndividualBookingDetail({ booking, onRebook, onBack, onAdvancePi
               <span className="text-sm font-bold text-emerald-600">{formatInr(booking.userPlatformFee || 49)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-600">Estimated Labour Charge</span>
+              <span className="text-xs font-semibold text-slate-600">Visiting Charge</span>
               <span className="text-sm font-bold text-slate-900">{formatInr(booking.labourCharge || booking.estimatedTotal || 0)}</span>
             </div>
             <div className="mt-2 rounded-lg bg-amber-50 p-3 text-[10px] font-medium leading-relaxed text-amber-800 ring-1 ring-amber-200/50">

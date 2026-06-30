@@ -50,7 +50,7 @@ import {
   writeBookingDraft,
 } from '../../../lib/individualBookingDraft.js'
 import { readAppUserLocation, writeAppUserLocation } from '../../../lib/appUserLocationStorage.js'
-import { useCreateRequestMutation } from '../../../store/api/workforceApi.js'
+import { useCreateRequestMutation, useGetPublicSystemPricingQuery } from '../../../store/api/workforceApi.js'
 import { enrichDiscoverLabourUi } from '../../../lib/discoverLabourDummyUi.js'
 import { store } from '../../../store/index.js'
 import {
@@ -96,6 +96,7 @@ function FieldLabel({ children, optional }) {
 export function IndividualBookingFlowPage() {
   const navigate = useNavigate()
   const [createRequest] = useCreateRequestMutation()
+  const { data: pricingData } = useGetPublicSystemPricingQuery()
   const location = useLocation()
   const reduce = useReducedMotion()
   const [searchParams] = useSearchParams()
@@ -368,8 +369,8 @@ export function IndividualBookingFlowPage() {
       },
     ]
     const days = durationKindToDays(draft.durationKind, draft.durationDays)
-    return estimateIndividualBooking({ lines, durationDays: days })
-  }, [draft.durationDays, draft.durationKind, draft.selectedWorkers])
+    return estimateIndividualBooking({ lines, durationDays: days }, pricingData?.pricing)
+  }, [draft.durationDays, draft.durationKind, draft.selectedWorkers, pricingData])
 
   const pickLocation = () => {
     if (!navigator.geolocation) {
@@ -465,7 +466,7 @@ export function IndividualBookingFlowPage() {
       ...draft,
       imageNames: imageFiles.map((f) => f.name),
     })
-    const record = createIndividualBookingRecord(payload)
+    const record = createIndividualBookingRecord(payload, pricingData?.pricing)
     record.assignedWorker = null
     record.status = 'searching'
     record.jobTimelineStep = 'searching'
@@ -894,16 +895,12 @@ export function IndividualBookingFlowPage() {
             </p>
             <div className="border-t border-slate-100 pt-3">
               <div className="flex justify-between text-slate-600">
-                <span>Estimated labour</span>
+                <span>Visiting charge</span>
                 <span>{formatInr(estimate.estimatedSubtotal)}</span>
               </div>
               <div className="flex justify-between text-slate-500">
                 <span>Platform fee</span>
                 <span>{formatInr(estimate.platformFee)}</span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>Taxes</span>
-                <span>{formatInr(estimate.gst)}</span>
               </div>
               <div className="mt-2 flex justify-between text-base font-black text-brand">
                 <span>Total</span>
