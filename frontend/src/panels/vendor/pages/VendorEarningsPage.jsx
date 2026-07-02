@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { IndianRupee, Wallet, Landmark, ArrowUpRight, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { AppEmptyState } from '../../../components/app/AppEmptyState.jsx'
 import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
@@ -174,9 +175,9 @@ export function VendorEarningsPage() {
       </div>
 
       {/* Withdrawal Form Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-[24px] p-6 shadow-2xl space-y-4 animate-slide-up">
+      {showModal && createPortal(
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-[24px] p-6 shadow-2xl space-y-4 animate-slide-up max-h-[90dvh] overflow-y-auto no-scrollbar">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-1.5">
                 <Landmark className="h-5 w-5 text-yellow-500" /> Withdraw Funds
@@ -266,7 +267,8 @@ export function VendorEarningsPage() {
               </button>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

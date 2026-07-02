@@ -149,6 +149,8 @@ const userSchema = new mongoose.Schema(
     labourProfile: labourProfileSchema,
     contractorProfile: contractorProfileSchema,
     walletBalance: { type: Number, default: 0, min: 0 },
+    razorpayContactId: { type: String, trim: true },
+    razorpayFundAccountId: { type: String, trim: true },
   },
   { timestamps: true },
 )

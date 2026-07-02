@@ -32,6 +32,15 @@ export const adminWalletApi = baseApi.injectEndpoints({
       invalidatesTags: ['Wallet', 'WalletTransaction', 'Withdrawal'],
     }),
 
+    reviewWithdrawal: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/admin/wallet/withdrawals/${id}/review`,
+        method: 'PATCH',
+        body,
+      }),
+      invalidatesTags: ['Wallet', 'WalletTransaction', 'Withdrawal'],
+    }),
+
     getWalletReports: builder.query({
       query: () => '/admin/wallet/reports',
       providesTags: ['WalletReport'],
@@ -44,5 +53,6 @@ export const {
   useGetTransactionsQuery,
   useGetWithdrawalsQuery,
   useCreateWithdrawalMutation,
+  useReviewWithdrawalMutation,
   useGetWalletReportsQuery,
 } = adminWalletApi

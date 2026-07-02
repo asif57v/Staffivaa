@@ -4,7 +4,7 @@ import {
   Wallet, IndianRupee, ArrowDownRight, ArrowUpRight, 
   Building2, ArrowRightLeft, Clock, FileText, Download, 
   Users, Briefcase, Truck, Building, TrendingUp, Search, 
-  RefreshCw, SlidersHorizontal 
+  RefreshCw, SlidersHorizontal, Copy, Check, AlertCircle
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -13,9 +13,12 @@ import {
 import { 
   useGetWalletSummaryQuery, 
   useGetTransactionsQuery,
-  useGetWalletReportsQuery 
+  useGetWalletReportsQuery,
+  useGetWithdrawalsQuery,
+  useReviewWithdrawalMutation
 } from '../../../store/api/adminWalletApi.js'
 import toast from 'react-hot-toast'
+import { createPortal } from 'react-dom'
 
 const SEGMENT_METADATA = {
   platform: {
@@ -64,6 +67,12 @@ export function AdminWalletDashboard() {
   const [type, setType] = useState('')
   const [status, setStatus] = useState('')
 
+  // Withdrawal management states
+  const [selectedWithdrawal, setSelectedWithdrawal] = useState(null)
+  const [utr, setUtr] = useState('')
+  const [rejectionReason, setRejectionReason] = useState('')
+  const [copiedField, setCopiedField] = useState(null)
+
   // Reset page and filters when active tab changes
   useEffect(() => {
     setPage(1)
@@ -75,6 +84,12 @@ export function AdminWalletDashboard() {
   const { data: summaryData, isLoading: loadingSummary, refetch: refetchSummary } = useGetWalletSummaryQuery()
   const { data: reportsData, isLoading: loadingReports, refetch: refetchReports } = useGetWalletReportsQuery()
   
+  const { data: withdrawalsData, refetch: refetchWithdrawals } = useGetWithdrawalsQuery({
+    page: 1,
+    limit: 100
+  })
+  const [reviewWithdrawalMutation, { isLoading: isReviewing }] = useReviewWithdrawalMutation()
+
   // Pass correct query filters to getTransactions query based on active tab
   const { data: txData, isLoading: loadingTx, refetch: refetchTx } = useGetTransactionsQuery({ 
     page, 
@@ -83,6 +98,20 @@ export function AdminWalletDashboard() {
     payerType: activeTab === 'platform' ? '' : activeTab, 
     status, 
     type 
+  })
+
+  // Filter pending withdrawals for active vendor/labor tab
+  const withdrawalsList = withdrawalsData?.data?.withdrawals || []
+  const pendingPayouts = withdrawalsList.filter(w => {
+    if (w.status !== 'Pending') return false
+    const role = w.requestedBy?.role
+    if (activeTab === 'vendor') {
+      return role === 'vendor' || role === 'contractor'
+    }
+    if (activeTab === 'labour') {
+      return role === 'labour'
+    }
+    return false
   })
 
   const summary = summaryData?.data || {
@@ -171,7 +200,50 @@ export function AdminWalletDashboard() {
     refetchSummary()
     refetchReports()
     refetchTx()
+    refetchWithdrawals()
     toast.success('Wallet dashboard synced')
+  }
+
+  const copyToClipboard = (text, fieldName) => {
+    navigator.clipboard.writeText(text)
+    setCopiedField(fieldName)
+    setTimeout(() => setCopiedField(null), 2000)
+    toast.success(`${fieldName} copied!`)
+  }
+
+  const handleReviewPayout = async (status, payoutMethod) => {
+    if (!selectedWithdrawal) return
+
+    if (status === 'Completed' && payoutMethod === 'manual' && !utr.trim()) {
+      toast.error('Please enter the UTR / Ref Number for manual payouts')
+      return
+    }
+
+    if (status === 'Rejected' && !rejectionReason.trim()) {
+      toast.error('Please enter a reason for rejecting the payout request')
+      return
+    }
+
+    try {
+      await reviewWithdrawalMutation({
+        id: selectedWithdrawal._id,
+        status,
+        payoutMethod,
+        utrNumber: utr.trim(),
+        rejectionReason: rejectionReason.trim()
+      }).unwrap()
+
+      toast.success(`Payout successfully ${status === 'Completed' ? 'processed' : 'rejected'}`)
+      setSelectedWithdrawal(null)
+      setUtr('')
+      setRejectionReason('')
+      refetchSummary()
+      refetchReports()
+      refetchTx()
+      refetchWithdrawals()
+    } catch (err) {
+      toast.error(err?.data?.message || `Failed to process payout`)
+    }
   }
 
   const activeMeta = SEGMENT_METADATA[activeTab]
@@ -467,6 +539,47 @@ export function AdminWalletDashboard() {
           </div>
         </div>
 
+        {/* PENDING WITHDRAWAL REQUESTS */}
+        {pendingPayouts.length > 0 && (
+          <div className="rounded-2xl border border-amber-200/70 bg-amber-50/20 p-5 shadow-sm space-y-4 mb-6">
+            <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <Clock className="h-4.5 w-4.5 text-amber-500" />
+              Pending Payout Requests ({pendingPayouts.length})
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {pendingPayouts.map((payout) => (
+                <div key={payout._id} className="bg-white border border-slate-100 rounded-xl p-4 shadow-sm flex flex-col justify-between space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-extrabold text-sm text-slate-950">{payout.requestedBy?.fullName || 'Unknown Vendor'}</p>
+                      <p className="text-xs text-slate-500 font-semibold">{payout.requestedBy?.email || ''}</p>
+                      <p className="text-[10px] text-slate-400 mt-1">Requested {new Date(payout.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} at {new Date(payout.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                    <span className="font-black text-slate-950 text-base">
+                      {formatMoney(payout.amount)}
+                    </span>
+                  </div>
+                  <div className="border-t border-slate-50 pt-2 flex justify-between items-center">
+                    <span className="text-[10px] font-black uppercase text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded">
+                      Pending Review
+                    </span>
+                    <button
+                      onClick={() => {
+                        setSelectedWithdrawal(payout)
+                        setUtr('')
+                        setRejectionReason('')
+                      }}
+                      className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-black px-3.5 py-1.5 rounded-xl active:scale-95 transition"
+                    >
+                      Review & Pay
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* BOTTOM TRANSACTION LEDGER (Search, Filter, Table) */}
         <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
           {/* Card Header & Search filter */}
@@ -604,6 +717,165 @@ export function AdminWalletDashboard() {
           )}
         </div>
       </div>
+
+      {selectedWithdrawal && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-[24px] p-6 shadow-2xl space-y-4 animate-slide-up max-h-[90dvh] overflow-y-auto no-scrollbar text-left relative">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-1.5">
+                <Wallet className="h-5 w-5 text-yellow-500" /> Review Payout Request
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSelectedWithdrawal(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Requester Profile */}
+            <div className="bg-slate-50/70 rounded-xl p-4 space-y-2 border border-slate-100">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Requester Profile</span>
+              <div className="flex justify-between">
+                <span className="text-xs text-slate-500 font-semibold">Name:</span>
+                <span className="text-xs text-slate-900 font-bold">{selectedWithdrawal.requestedBy?.fullName || '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-xs text-slate-500 font-semibold">Email:</span>
+                <span className="text-xs text-slate-900 font-medium">{selectedWithdrawal.requestedBy?.email || '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-xs text-slate-500 font-semibold">Phone:</span>
+                <span className="text-xs text-slate-900 font-bold">{selectedWithdrawal.requestedBy?.phone || '—'}</span>
+              </div>
+              <div className="flex justify-between border-t border-slate-200/50 pt-2 mt-1">
+                <span className="text-xs text-slate-500 font-extrabold">Amount to Pay:</span>
+                <span className="text-sm text-slate-950 font-black">{formatMoney(selectedWithdrawal.amount)}</span>
+              </div>
+            </div>
+
+            {/* Bank Details */}
+            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Recipient Bank Details</span>
+              
+              <div className="space-y-2.5">
+                <div className="flex justify-between items-center">
+                  <div className="min-w-0">
+                    <span className="text-[10px] text-slate-400 font-semibold block">Account Holder Name</span>
+                    <span className="text-xs text-slate-900 font-bold block truncate">{selectedWithdrawal.bankDetails?.accountHolderName || '—'}</span>
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(selectedWithdrawal.bankDetails?.accountHolderName, 'Holder Name')}
+                    className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-slate-600 transition shrink-0"
+                    title="Copy Name"
+                  >
+                    {copiedField === 'Holder Name' ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+
+                <div className="flex justify-between items-center border-t border-slate-100 pt-2">
+                  <div className="min-w-0">
+                    <span className="text-[10px] text-slate-400 font-semibold block">Bank Account Number</span>
+                    <span className="text-xs font-mono font-bold text-slate-900 block truncate">{selectedWithdrawal.bankDetails?.accountNumber || '—'}</span>
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(selectedWithdrawal.bankDetails?.accountNumber, 'Account Number')}
+                    className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-slate-600 transition shrink-0"
+                    title="Copy Account Number"
+                  >
+                    {copiedField === 'Account Number' ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+
+                <div className="flex justify-between items-center border-t border-slate-100 pt-2">
+                  <div className="min-w-0">
+                    <span className="text-[10px] text-slate-400 font-semibold block">Bank Name</span>
+                    <span className="text-xs text-slate-900 font-bold block truncate">{selectedWithdrawal.bankDetails?.bankName || '—'}</span>
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(selectedWithdrawal.bankDetails?.bankName, 'Bank Name')}
+                    className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-slate-600 transition shrink-0"
+                    title="Copy Bank Name"
+                  >
+                    {copiedField === 'Bank Name' ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+
+                <div className="flex justify-between items-center border-t border-slate-100 pt-2">
+                  <div className="min-w-0">
+                    <span className="text-[10px] text-slate-400 font-semibold block">IFSC Code</span>
+                    <span className="text-xs font-mono font-bold text-slate-900 block uppercase">{selectedWithdrawal.bankDetails?.ifscCode || '—'}</span>
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(selectedWithdrawal.bankDetails?.ifscCode, 'IFSC Code')}
+                    className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-slate-600 transition shrink-0"
+                    title="Copy IFSC Code"
+                  >
+                    {copiedField === 'IFSC Code' ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Payout Options */}
+            <div className="space-y-4 pt-2">
+              <div className="border-t border-slate-250 pt-4">
+                <span className="text-xs font-bold text-slate-800 block mb-2">Option A: Razorpay Instant Payout</span>
+                <button
+                  onClick={() => handleReviewPayout('Completed', 'razorpay')}
+                  disabled={isReviewing}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-slate-900 hover:bg-slate-850 text-white font-bold text-xs py-3 transition shadow-sm active:scale-[0.98] disabled:opacity-50"
+                >
+                  {isReviewing ? 'Processing Payout...' : 'Pay Instantly via RazorpayX'}
+                </button>
+                <p className="text-[10px] text-slate-400 mt-1 font-medium text-center">Transfers money directly to vendor bank via API instant IMPS.</p>
+              </div>
+
+              <div className="border-t border-slate-100 pt-4 space-y-3">
+                <span className="text-xs font-bold text-slate-800 block">Option B: Record Manual Bank Transfer</span>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Enter Bank UTR / Transaction Ref No."
+                    value={utr}
+                    onChange={(e) => setUtr(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 py-2.5 px-4 text-xs font-bold text-slate-900 outline-none focus:ring-1 focus:ring-yellow-400"
+                  />
+                  <button
+                    onClick={() => handleReviewPayout('Completed', 'manual')}
+                    disabled={isReviewing}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-3 transition shadow-sm active:scale-[0.98] disabled:opacity-50"
+                  >
+                    Record Manual Payout (Paid Offline)
+                  </button>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 pt-4 space-y-3">
+                <span className="text-xs font-bold text-slate-800 block">Option C: Reject Request & Refund</span>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Enter reason for rejection"
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 py-2.5 px-4 text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-yellow-400"
+                  />
+                  <button
+                    onClick={() => handleReviewPayout('Rejected', 'manual')}
+                    disabled={isReviewing}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 font-bold text-xs py-3 transition active:scale-[0.98] disabled:opacity-50"
+                  >
+                    Reject & Refund to Vendor Wallet
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }

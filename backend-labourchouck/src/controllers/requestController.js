@@ -435,6 +435,43 @@ export const recordOfflinePaymentAdmin = asyncHandler(async (req, res) => {
     if (new Date() >= startDate) {
       request.status = 'project_active'
     }
+
+    if (request.sourceType === REQUEST_SOURCE.CORPORATE) {
+      try {
+        const { SystemPricing } = await import('../models/SystemPricing.js')
+        const pricing = await SystemPricing.findOne().lean()
+        const advancePercent = pricing?.corporate?.advancePercentage || 30
+
+        const allocation = await Allocation.findOne({ requestId: request._id })
+        if (allocation && allocation.vendorId) {
+          const totalLabourCost = allocation.totalLabourCost || 0
+          const vendorAdvance = Math.round((totalLabourCost * advancePercent) / 100)
+
+          allocation.vendorAdvancePaidAmount = vendorAdvance
+          await allocation.save()
+
+          await User.findByIdAndUpdate(allocation.vendorId, {
+            $inc: { walletBalance: vendorAdvance }
+          })
+
+          const { WalletTransaction } = await import('../models/WalletTransaction.js')
+          await WalletTransaction.create({
+            transactionId: `TXN-ADV-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            bookingId: request._id,
+            payerId: request.clientId,
+            payerName: 'Admin Offline Record',
+            payerType: 'corporate',
+            labourId: allocation.vendorId,
+            type: 'Settlement',
+            source: 'Project Advance Offline Credit (Vendor Share)',
+            amount: vendorAdvance,
+            status: 'Completed'
+          })
+        }
+      } catch (err) {
+        console.error('[recordOfflinePaymentAdmin] Vendor advance credit failed:', err.message)
+      }
+    }
   } else if (request.status === 'completed' || request.status === 'settlement_pending') {
     request.finalPaymentStatus = 'paid'
     request.status = 'settlement_completed'
@@ -486,18 +523,20 @@ export const releaseVendorSettlementAdmin = asyncHandler(async (req, res) => {
     extraCost += ew.revisedAmount != null ? ew.revisedAmount : ew.extraAmount
   })
 
-  const netAmountToVendor = totalLabourCost + extraCost - vendorPlatformFee
+  const vendorAdvancePaidAmount = allocation.vendorAdvancePaidAmount || 0
+  const netAmountToVendor = totalLabourCost + extraCost - vendorPlatformFee - vendorAdvancePaidAmount
 
   if (allocation.vendorId) {
     const { WalletTransaction } = await import('../models/WalletTransaction.js')
 
     const existingTx = await WalletTransaction.findOne({
       bookingId: request._id,
-      type: 'Settlement'
+      type: 'Settlement',
+      source: /Final Settlement/
     })
 
     if (existingTx) {
-      return sendError(res, { message: 'Settlement already released for this project', statusCode: HTTP_STATUS.BAD_REQUEST })
+      return sendError(res, { message: 'Final settlement already released for this project', statusCode: HTTP_STATUS.BAD_REQUEST })
     }
 
     await User.findByIdAndUpdate(allocation.vendorId, {
@@ -512,7 +551,7 @@ export const releaseVendorSettlementAdmin = asyncHandler(async (req, res) => {
       payerType: 'corporate',
       labourId: allocation.vendorId,
       type: 'Settlement',
-      source: 'Admin Final Settlement Manual Release',
+      source: 'Admin Final Settlement Manual Release (Vendor Share)',
       amount: netAmountToVendor,
       status: 'Completed'
     })

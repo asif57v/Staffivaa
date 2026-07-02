@@ -22,6 +22,9 @@ const withdrawalSchema = new mongoose.Schema(
     utrNumber: {
       type: String,
     },
+    rejectionReason: {
+      type: String,
+    },
     requestedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

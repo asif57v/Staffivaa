@@ -157,6 +157,45 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
       if (new Date() >= startDate) {
         request.status = 'project_active';
       }
+
+      // Credit advance share to vendor
+      try {
+        const { SystemPricing } = await import('../models/SystemPricing.js')
+        const pricing = await SystemPricing.findOne().lean()
+        const advancePercent = pricing?.corporate?.advancePercentage || 30
+
+        const { Allocation } = await import('../models/Allocation.js')
+        const allocation = await Allocation.findOne({ requestId: request._id })
+
+        if (allocation && allocation.vendorId) {
+          const totalLabourCost = allocation.totalLabourCost || 0
+          const vendorAdvance = Math.round((totalLabourCost * advancePercent) / 100)
+
+          allocation.vendorAdvancePaidAmount = vendorAdvance
+          await allocation.save()
+
+          const { User } = await import('../models/User.js')
+          await User.findByIdAndUpdate(allocation.vendorId, {
+            $inc: { walletBalance: vendorAdvance }
+          })
+
+          await WalletTransaction.create({
+            transactionId: `TXN-ADV-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            bookingId: request._id,
+            payerId: request.clientId,
+            payerName: req.user.fullName || 'Corporate Client',
+            payerType: 'corporate',
+            labourId: allocation.vendorId,
+            type: 'Settlement',
+            source: 'Project Advance Credit (Vendor Share)',
+            amount: vendorAdvance,
+            status: 'Completed'
+          })
+        }
+      } catch (err) {
+        console.error('[verifyRazorpayPayment] Vendor advance credit failed:', err.message)
+      }
+
       emitRequestStatusUpdate(request._id.toString(), { requestStatus: request.status });
     } else if (request.status === 'completed' || request.status === 'settlement_pending') {
       request.finalPaymentStatus = 'paid';
@@ -168,7 +207,7 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
         const commissionConfig = pricing?.vendor?.platformCommission || { type: 'percentage', value: 2 }
 
         const { Allocation } = await import('../models/Allocation.js')
-        const allocation = await Allocation.findOne({ requestId: request._id }).lean()
+        const allocation = await Allocation.findOne({ requestId: request._id })
 
         const totalLabourCost = allocation?.totalLabourCost || 0
 
@@ -186,7 +225,8 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
           extraCost += ew.revisedAmount != null ? ew.revisedAmount : ew.extraAmount
         })
 
-        const netAmountToVendor = totalLabourCost + extraCost - vendorPlatformFee
+        const vendorAdvancePaidAmount = allocation?.vendorAdvancePaidAmount || 0
+        const netAmountToVendor = totalLabourCost + extraCost - vendorPlatformFee - vendorAdvancePaidAmount
 
         if (allocation && allocation.vendorId) {
           const { User } = await import('../models/User.js')
@@ -202,7 +242,7 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
             payerType: 'corporate',
             labourId: allocation.vendorId,
             type: 'Settlement',
-            source: 'Project Final Settlement Credit',
+            source: 'Project Final Settlement Credit (Vendor Share)',
             amount: netAmountToVendor,
             status: 'Completed'
           })

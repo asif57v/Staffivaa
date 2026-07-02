@@ -27,6 +27,16 @@ isSupported().then((supported) => {
     onMessage(messaging, (payload) => {
       console.log("Foreground message received:", payload);
       window.dispatchEvent(new CustomEvent('fcm-foreground-message', { detail: payload }));
+      
+      // Programmatically trigger a system notification if permission is granted
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        if (payload.notification) {
+          new Notification(payload.notification.title, {
+            body: payload.notification.body,
+            icon: '/logo.png'
+          });
+        }
+      }
     });
   } else {
     console.warn("Firebase Messaging is not supported in this environment.");

@@ -555,22 +555,39 @@ export function CorporateRequestDetailPage() {
                 <span className="font-extrabold text-slate-900">₹{quotation.gst.toLocaleString()}</span>
               </div>
 
+              {paymentSummary && paymentSummary.userPlatformFee > 0 && (
+                <>
+                  <div className="flex justify-between items-center py-1 border-t border-slate-100 pt-2">
+                    <span className="font-bold text-slate-500">Platform Convenience Fee</span>
+                    <span className="font-extrabold text-slate-900">₹{paymentSummary.userPlatformFee.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1">
+                    <span className="font-bold text-slate-500">Platform GST ({paymentSummary.gstRate}%)</span>
+                    <span className="font-extrabold text-slate-900">₹{paymentSummary.gstAmount.toLocaleString()}</span>
+                  </div>
+                </>
+              )}
+
               {/* Grand Total box */}
               <div className="flex justify-between items-center bg-slate-900 p-4 rounded-2xl text-white font-extrabold mt-3 shadow-sm border border-slate-900">
-                <span className="text-slate-300 text-[13px]">Grand Total (Vendor Rate)</span>
-                <span className="text-[18px]">₹{quotation.grandTotal.toLocaleString()}</span>
+                <span className="text-slate-300 text-[13px]">Total Project Value</span>
+                <span className="text-[18px]">₹{(paymentSummary ? paymentSummary.grandTotal : quotation.grandTotal).toLocaleString()}</span>
               </div>
             </div>
 
             {/* Estimated Advance & Remaining breakdowns */}
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div className="bg-emerald-50/50 border border-emerald-100 p-3 rounded-2xl text-center">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Estimated Advance (30%)</p>
-                <p className="text-base font-black text-emerald-800 mt-1">₹{Math.round(quotation.grandTotal * 0.3).toLocaleString()}</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Estimated Advance ({paymentSummary?.advancePercentage || 30}%)</p>
+                <p className="text-base font-black text-emerald-800 mt-1">
+                  ₹{(paymentSummary ? paymentSummary.advanceAmount : Math.round(quotation.grandTotal * 0.3)).toLocaleString()}
+                </p>
               </div>
               <div className="bg-slate-50 border border-slate-200/60 p-3 rounded-2xl text-center">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Remaining (70%)</p>
-                <p className="text-base font-black text-slate-800 mt-1">₹{Math.round(quotation.grandTotal * 0.7).toLocaleString()}</p>
+                <p className="text-base font-black text-slate-800 mt-1">
+                  ₹{(paymentSummary ? paymentSummary.remainingAmount : Math.round(quotation.grandTotal * 0.7)).toLocaleString()}
+                </p>
               </div>
             </div>
 

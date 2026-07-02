@@ -4,7 +4,8 @@ import {
   getTransactions,
   createWithdrawal,
   getWithdrawals,
-  getReports
+  getReports,
+  reviewWithdrawal
 } from '../controllers/adminWalletController.js'
 import { protect, restrictTo } from '../middleware/auth.js'
 
@@ -17,6 +18,7 @@ router.get('/summary', getWalletSummary)
 router.get('/transactions', getTransactions)
 router.post('/withdraw', createWithdrawal)
 router.get('/withdrawals', getWithdrawals)
+router.patch('/withdrawals/:id/review', reviewWithdrawal)
 router.get('/reports', getReports)
 
 export default router

@@ -1,4 +1,5 @@
 import { Wallet } from '../models/Wallet.js'
+import { User } from '../models/User.js'
 import { WalletTransaction } from '../models/WalletTransaction.js'
 import { Withdrawal } from '../models/Withdrawal.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
@@ -132,7 +133,7 @@ export const getWithdrawals = asyncHandler(async (req, res) => {
   const skip = (parseInt(page) - 1) * parseInt(limit)
   
   const withdrawals = await Withdrawal.find()
-    .populate('requestedBy', 'fullName email')
+    .populate('requestedBy', 'fullName email phone role')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit))
@@ -318,4 +319,182 @@ export const getReports = asyncHandler(async (req, res) => {
       }
     }
   })
+})
+
+export const reviewWithdrawal = asyncHandler(async (req, res) => {
+  const { id } = req.params
+  const { status, utrNumber, rejectionReason, payoutMethod } = req.body
+
+  if (!status || !['Completed', 'Rejected'].includes(status)) {
+    return sendError(res, { message: 'Invalid status. Must be Completed or Rejected', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const withdrawal = await Withdrawal.findById(id)
+  if (!withdrawal) {
+    return sendError(res, { message: 'Withdrawal request not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  if (withdrawal.status !== 'Pending') {
+    return sendError(res, { message: 'Withdrawal request is already processed', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const user = await User.findById(withdrawal.requestedBy)
+  if (!user) {
+    return sendError(res, { message: 'Requester user not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  // Find the matching transaction
+  const transaction = await WalletTransaction.findOne({
+    payerId: withdrawal.requestedBy,
+    type: 'Withdrawal',
+    amount: withdrawal.amount,
+    status: 'Pending'
+  }).sort({ createdAt: -1 })
+
+  if (status === 'Completed') {
+    let finalUtr = utrNumber
+
+    if (payoutMethod === 'razorpay') {
+      const keyId = process.env.RAZORPAY_KEY_ID
+      const keySecret = process.env.RAZORPAY_KEY_SECRET
+      const razorpayXAccount = process.env.RAZORPAYX_ACCOUNT_NUMBER
+
+      if (!keyId || !keySecret) {
+        return sendError(res, { message: 'Razorpay API credentials not configured', statusCode: HTTP_STATUS.BAD_REQUEST })
+      }
+      if (!razorpayXAccount) {
+        return sendError(res, { message: 'RazorpayX Account Number is not configured (RAZORPAYX_ACCOUNT_NUMBER)', statusCode: HTTP_STATUS.BAD_REQUEST })
+      }
+
+      if (!withdrawal.bankDetails || !withdrawal.bankDetails.accountNumber || !withdrawal.bankDetails.ifscCode) {
+        return sendError(res, { message: 'Vendor has incomplete bank details for automatic payout', statusCode: HTTP_STATUS.BAD_REQUEST })
+      }
+
+      try {
+        // Step 1: Create/Get Razorpay Contact
+        let contactId = user.razorpayContactId
+        if (!contactId) {
+          const contactRes = await fetch('https://api.razorpay.com/v1/contacts', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64')
+            },
+            body: JSON.stringify({
+              name: user.fullName || 'Vendor Payout',
+              email: user.email || '',
+              contact: user.phone || '',
+              type: 'vendor',
+              reference_id: user._id.toString()
+            })
+          })
+          const contactData = await contactRes.json()
+          if (contactData.error) {
+            return sendError(res, { message: `Razorpay Contact creation failed: ${contactData.error.description}`, statusCode: HTTP_STATUS.BAD_REQUEST })
+          }
+          contactId = contactData.id
+          user.razorpayContactId = contactId
+          await user.save()
+        }
+
+        // Step 2: Create Fund Account
+        let fundAccountId = user.razorpayFundAccountId
+        if (!fundAccountId) {
+          const fundRes = await fetch('https://api.razorpay.com/v1/fund_accounts', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64')
+            },
+            body: JSON.stringify({
+              contact_id: contactId,
+              account_type: 'bank_account',
+              bank_account: {
+                name: withdrawal.bankDetails.accountHolderName || user.fullName || 'Vendor Account',
+                ifsc: withdrawal.bankDetails.ifscCode,
+                account_number: withdrawal.bankDetails.accountNumber
+              }
+            })
+          })
+          const fundData = await fundRes.json()
+          if (fundData.error) {
+            return sendError(res, { message: `Razorpay Fund Account failed: ${fundData.error.description}`, statusCode: HTTP_STATUS.BAD_REQUEST })
+          }
+          fundAccountId = fundData.id
+          user.razorpayFundAccountId = fundAccountId
+          await user.save()
+        }
+
+        // Step 3: Create Payout
+        const payoutRes = await fetch('https://api.razorpay.com/v1/payouts', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64')
+          },
+          body: JSON.stringify({
+            account_number: razorpayXAccount,
+            fund_account_id: fundAccountId,
+            amount: withdrawal.amount * 100, // in paise
+            currency: 'INR',
+            mode: 'IMPS',
+            purpose: 'payout',
+            queue_if_low_balance: true,
+            reference_id: withdrawal._id.toString()
+          })
+        })
+        const payoutData = await payoutRes.json()
+        if (payoutData.error) {
+          return sendError(res, { message: `Razorpay Payout trigger failed: ${payoutData.error.description}`, statusCode: HTTP_STATUS.BAD_REQUEST })
+        }
+
+        finalUtr = payoutData.id || payoutData.utr || `RXP-${Date.now()}`
+      } catch (razorpayErr) {
+        return sendError(res, { message: `Razorpay Payout integration error: ${razorpayErr.message}`, statusCode: HTTP_STATUS.INTERNAL_SERVER_ERROR })
+      }
+    } else {
+      if (!utrNumber) {
+        return sendError(res, { message: 'UTR / Reference Number is required for manual payouts', statusCode: HTTP_STATUS.BAD_REQUEST })
+      }
+    }
+
+    withdrawal.status = 'Completed'
+    withdrawal.utrNumber = finalUtr
+    await withdrawal.save()
+
+    if (transaction) {
+      transaction.status = 'Completed'
+      transaction.utrNumber = finalUtr
+      await transaction.save()
+    }
+  } else if (status === 'Rejected') {
+    withdrawal.status = 'Rejected'
+    if (rejectionReason) {
+      withdrawal.rejectionReason = rejectionReason
+    }
+    await withdrawal.save()
+
+    if (transaction) {
+      transaction.status = 'Failed'
+      await transaction.save()
+    }
+
+    user.walletBalance += withdrawal.amount
+    await user.save()
+
+    // Create a Refund transaction
+    await WalletTransaction.create({
+      transactionId: `RFD-VND-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      payerId: user._id,
+      payerName: 'System Refund',
+      payerType: user.role === 'vendor' || user.role === 'contractor' ? 'vendor' : 'labour',
+      labourId: user._id,
+      type: 'Credit',
+      source: `Refund: Rejected Withdrawal (${rejectionReason || 'No reason specified'})`,
+      amount: withdrawal.amount,
+      status: 'Completed'
+    })
+  }
+
+  sendSuccess(res, { data: { withdrawal } })
 })

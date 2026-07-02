@@ -14,6 +14,7 @@ const allocationSchema = new mongoose.Schema(
     deployedAt: Date,
     notes: { type: String, trim: true, maxlength: 500 },
     totalLabourCost: { type: Number, default: 0 },
+    vendorAdvancePaidAmount: { type: Number, default: 0 },
   },
   { timestamps: true },
 )
