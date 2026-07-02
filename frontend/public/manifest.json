@@ -1,0 +1,21 @@
+{
+  "short_name": "Staffivaa",
+  "name": "Staffivaa — Book Construction Labour",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/favicon.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/app",
+  "background_color": "#0a1628",
+  "theme_color": "#0a1628",
+  "display": "standalone",
+  "orientation": "portrait"
+}
