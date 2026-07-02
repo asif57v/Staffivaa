@@ -612,7 +612,7 @@ export const getDiscoverLabour = asyncHandler(async (req, res) => {
 
 /** POST /users/me/fcm-token — save FCM token for push notifications */
 export const saveFcmToken = asyncHandler(async (req, res) => {
-  const { token } = req.body
+  const { token, deviceType } = req.body
   if (!token || typeof token !== 'string') {
     return sendError(res, {
       message: 'FCM token is required',
@@ -621,9 +621,44 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
     })
   }
 
-  await User.findByIdAndUpdate(req.user._id, {
-    $addToSet: { fcmTokens: token }
-  })
+  // Determine platform classification: web vs mobile
+  let isMobile = false
+  if (deviceType === 'mobile') {
+    isMobile = true
+  } else if (deviceType === 'web') {
+    isMobile = false
+  } else {
+    // Detect from user-agent
+    const userAgent = req.headers['user-agent'] || ''
+    isMobile = /mobile|android|iphone|ipad|phone/i.test(userAgent)
+  }
+
+  const targetField = isMobile ? 'fcmTokensMobile' : 'fcmTokensWeb'
+
+  // Retrieve user document to mutate token array safely (using lean to bypass version tracking)
+  const user = await User.findById(req.user._id).lean()
+  if (!user) {
+    return sendError(res, {
+      message: 'User not found',
+      statusCode: HTTP_STATUS.NOT_FOUND
+    })
+  }
+
+  let tokens = user[targetField] || []
+  
+  // Prevent duplicate and place at the end (most recent)
+  tokens = tokens.filter(t => t !== token)
+  tokens.push(token)
+
+  // Cap at 5 most recent tokens to prevent database array bloat
+  if (tokens.length > 5) {
+    tokens.shift()
+  }
+
+  await User.updateOne(
+    { _id: req.user._id },
+    { $set: { [targetField]: tokens } }
+  )
 
   return sendSuccess(res, { message: 'Token saved' })
 })

@@ -485,6 +485,9 @@ export function AppAttendancePage() {
   const selectedStatusObj = getDayStatus(selectedDay)
   const isSelectedToday = selectedDay === now.getDate()
   const selectedDateStr = new Date(currentYear, currentMonth, selectedDay).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()
+  const isSelectedCheckInVerified = selectedRecord
+    ? (selectedRecord.status !== 'otp_pending')
+    : isCheckedIn
 
   let selStatusText = selectedStatusObj?.type || 'No Data'
   if (isSelectedToday && isCheckedIn && !isCompleted) {
@@ -910,12 +913,12 @@ export function AppAttendancePage() {
                   
                   {/* Check In Event */}
                   <div style={{ position: 'relative', marginBottom: 24 }}>
-                     <div style={{ position: 'absolute', left: -24, top: 2, width: 16, height: 16, borderRadius: '50%', background: '#ECFDF5', border: '2px solid #10B981', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}>
-                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }} />
+                     <div style={{ position: 'absolute', left: -24, top: 2, width: 16, height: 16, borderRadius: '50%', background: isSelectedCheckInVerified ? '#ECFDF5' : '#FFFBEB', border: `2px solid ${isSelectedCheckInVerified ? '#10B981' : '#F59E0B'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}>
+                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: isSelectedCheckInVerified ? '#10B981' : '#F59E0B' }} />
                      </div>
                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                        <div style={{ flexShrink: 0, minWidth: 60 }}>
-                         <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                         <p style={{ fontSize: 14, fontWeight: 800, color: isSelectedCheckInVerified ? '#0F172A' : '#64748B', margin: 0 }}>
                            {todayRecord?.checkInAt ? new Date(todayRecord.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).split(' ')[0] : selectedRecord?.checkInAt ? new Date(selectedRecord.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).split(' ')[0] : '—'}
                          </p>
                          <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', margin: 0 }}>
@@ -923,10 +926,18 @@ export function AppAttendancePage() {
                          </p>
                        </div>
                        <div>
-                         <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: '0 0 6px' }}>Checked In</p>
-                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: '#10B981', border: '1px solid #A7F3D0', borderRadius: 6, padding: '3px 8px', background: '#ECFDF5' }}>
-                           <MapPin style={{ width: 10, height: 10 }} /> GPS Verified
-                         </span>
+                         <p style={{ fontSize: 14, fontWeight: 800, color: isSelectedCheckInVerified ? '#0F172A' : '#475569', margin: '0 0 6px' }}>
+                           {isSelectedCheckInVerified ? 'Checked In' : 'Check-In Pending'}
+                         </p>
+                         {isSelectedCheckInVerified ? (
+                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: '#10B981', border: '1px solid #A7F3D0', borderRadius: 6, padding: '3px 8px', background: '#ECFDF5' }}>
+                             <MapPin style={{ width: 10, height: 10 }} /> GPS Verified
+                           </span>
+                         ) : (
+                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: '#B45309', border: '1px solid #FDE68A', borderRadius: 6, padding: '3px 8px', background: '#FFFBEB' }}>
+                             <KeyRound style={{ width: 10, height: 10 }} /> OTP Verification Required
+                           </span>
+                         )}
                        </div>
                      </div>
                   </div>

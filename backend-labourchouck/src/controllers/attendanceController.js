@@ -10,6 +10,8 @@ import { OtpAuditLog } from '../models/OtpAuditLog.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { emitToCorporate, emitToVendor } from '../utils/socket.js'
+import { Project } from '../models/Project.js'
+import { sendNotificationToUser } from '../services/notificationService.js'
 
 function billableUnitsForStatus(status) {
   if (status === ATTENDANCE_STATUS.PRESENT) return 1
@@ -118,6 +120,20 @@ export const checkIn = asyncHandler(async (req, res) => {
       expiresAt,
       isVerified: false
     })
+
+    // Send Push Notification to Corporate Client
+    const workerName = req.user.fullName || 'A worker'
+    let projectName = 'your project'
+    if (request.projectId) {
+      const projDoc = await Project.findById(request.projectId).lean()
+      if (projDoc) projectName = projDoc.name || 'your project'
+    }
+    sendNotificationToUser(
+      request.clientId.toString(),
+      'Check-In Verification Required',
+      `${workerName} has arrived at site for "${projectName}". Use OTP ${otp} to verify check-in.`,
+      { url: `/corporate/attendance/${request.projectId || request._id}` }
+    ).catch(err => console.error('FCM check-in initiation notify error:', err))
 
     // Emit Socket Event: attendance:otpGenerated
     const payload = {
@@ -692,6 +708,30 @@ export const verifyCheckInOtp = asyncHandler(async (req, res) => {
     await requestDoc.save()
   }
 
+  // Send Push Notification to Worker and Vendor
+  let projectName = 'your project'
+  if (requestDoc && requestDoc.projectId) {
+    const projDoc = await Project.findById(requestDoc.projectId).lean()
+    if (projDoc) projectName = projDoc.name || 'your project'
+  }
+
+  sendNotificationToUser(
+    record.workerId.toString(),
+    'Check-In Verified',
+    `Your check-in for "${projectName}" has been verified. Have a safe shift!`,
+    { url: '/app' }
+  ).catch(err => console.error('FCM check-in verification notify error (worker):', err))
+
+  if (record.vendorId) {
+    const workerName = req.user.fullName || 'A worker'
+    sendNotificationToUser(
+      record.vendorId.toString(),
+      'Worker Checked In',
+      `${workerName} has checked in successfully at "${projectName}".`,
+      { url: '/vendor/attendance' }
+    ).catch(err => console.error('FCM check-in verification notify error (vendor):', err))
+  }
+
   // Emit socket events to Corporate, Vendor, Labour and Project Room
   import('../utils/socket.js').then(({ getIO }) => {
     try {
@@ -755,6 +795,14 @@ export const regenerateCheckInOtp = asyncHandler(async (req, res) => {
     expiresAt,
     isVerified: false
   })
+
+  // Send Push Notification to Worker
+  sendNotificationToUser(
+    record.workerId.toString(),
+    'New Check-In OTP Generated',
+    'Your supervisor has generated a new check-in OTP. Please request it from them to check in.',
+    { url: '/app' }
+  ).catch(err => console.error('FCM check-in OTP regeneration notify error:', err))
 
   const payload = {
     attendanceId: record._id.toString(),

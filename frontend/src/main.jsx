@@ -18,7 +18,6 @@ createRoot(document.getElementById('root')).render(
 // Register Firebase service worker for mobile background notification support
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.navigator = navigator || {};
     navigator.serviceWorker.register('/firebase-messaging-sw.js')
       .then(reg => console.log('Firebase Service Worker registered successfully:', reg.scope))
       .catch(err => console.error('Service Worker registration failed:', err));

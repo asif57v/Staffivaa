@@ -12,8 +12,18 @@ import { User } from '../models/User.js';
  */
 export const sendNotificationToUser = async (userId, title, body, data = {}) => {
   try {
-    const user = await User.findById(userId).select('fcmTokens');
-    if (!user || !user.fcmTokens || user.fcmTokens.length === 0) {
+    const user = await User.findById(userId).select('fcmTokens fcmTokensWeb fcmTokensMobile');
+    if (!user) {
+      return { success: false, sentCount: 0, failedTokens: [] };
+    }
+
+    const tokens = [
+      ...(user.fcmTokens || []),
+      ...(user.fcmTokensWeb || []),
+      ...(user.fcmTokensMobile || [])
+    ];
+
+    if (tokens.length === 0) {
       console.log(`[NotificationService] No FCM tokens for user ${userId}`);
       return { success: false, sentCount: 0, failedTokens: [] };
     }
@@ -27,7 +37,7 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
         ...data,
         click_action: 'FLUTTER_NOTIFICATION_CLICK' // Helps some mobile setups, also useful for web service worker matching
       },
-      tokens: user.fcmTokens
+      tokens: tokens
     };
 
     const response = await getMessaging().sendEachForMulticast(message);
@@ -42,16 +52,22 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
             errorCode === 'messaging/invalid-registration-token' ||
             errorCode === 'messaging/registration-token-not-registered'
           ) {
-            failedTokens.push(user.fcmTokens[idx]);
+            failedTokens.push(tokens[idx]);
           }
         }
       });
 
       if (failedTokens.length > 0) {
-        // Remove stale/invalid tokens
+        // Remove stale/invalid tokens from all arrays
         await User.updateOne(
           { _id: userId },
-          { $pull: { fcmTokens: { $in: failedTokens } } }
+          {
+            $pull: {
+              fcmTokens: { $in: failedTokens },
+              fcmTokensWeb: { $in: failedTokens },
+              fcmTokensMobile: { $in: failedTokens }
+            }
+          }
         );
         console.log(`[NotificationService] Removed ${failedTokens.length} stale FCM tokens for user ${userId}`);
       }
@@ -79,11 +95,15 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
  */
 export const sendNotificationToUsers = async (userIds, title, body, data = {}) => {
   try {
-    const users = await User.find({ _id: { $in: userIds } }).select('_id fcmTokens');
+    const users = await User.find({ _id: { $in: userIds } }).select('_id fcmTokens fcmTokensWeb fcmTokensMobile');
     
     const results = await Promise.all(
       users.map(u => {
-        if (u.fcmTokens && u.fcmTokens.length > 0) {
+        const hasTokens = 
+          (u.fcmTokens && u.fcmTokens.length > 0) ||
+          (u.fcmTokensWeb && u.fcmTokensWeb.length > 0) ||
+          (u.fcmTokensMobile && u.fcmTokensMobile.length > 0);
+        if (hasTokens) {
            return sendNotificationToUser(u._id, title, body, data);
         }
         return Promise.resolve({ success: false, sentCount: 0 });

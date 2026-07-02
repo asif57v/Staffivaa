@@ -88,18 +88,27 @@ export function AppShell() {
   useEffect(() => {
     if (!user || !token) return;
     
-    if (Notification.permission === 'granted') {
-      import('../lib/firebase.js').then(({ requestForToken }) => {
-        requestForToken().then(fcmToken => {
+    const syncFcmToken = async () => {
+      try {
+        let permission = Notification.permission;
+        if (permission === 'default') {
+          permission = await Notification.requestPermission();
+        }
+        if (permission === 'granted') {
+          const { requestForToken } = await import('../lib/firebase.js');
+          const fcmToken = await requestForToken();
           if (fcmToken) {
-            import('../api/http.js').then(({ apiClient }) => {
-              apiClient.post('/users/me/fcm-token', { token: fcmToken })
-                .catch(err => console.error('Failed to sync FCM token:', err));
-            });
+            const { apiClient } = await import('../api/http.js');
+            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
+              .catch(err => console.error('Failed to sync FCM token:', err));
           }
-        });
-      }).catch(err => console.error('Firebase not available', err));
-    }
+        }
+      } catch (err) {
+        console.error('Firebase not available in AppShell:', err);
+      }
+    };
+
+    syncFcmToken();
 
     const handleFcmMessage = (event) => {
       const payload = event.detail;

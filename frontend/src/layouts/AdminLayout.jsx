@@ -90,6 +90,69 @@ export function AdminLayout() {
     setProfileOpen(false)
     setNotifOpen(false)
   }, [pathname])
+
+  // --- FCM Token Auto-sync & Foreground Listener ---
+  useEffect(() => {
+    if (!user) return
+
+    const syncFcmToken = async () => {
+      try {
+        let permission = Notification.permission
+        if (permission === 'default') {
+          permission = await Notification.requestPermission()
+        }
+        if (permission === 'granted') {
+          const { requestForToken } = await import('../lib/firebase.js')
+          const fcmToken = await requestForToken()
+          if (fcmToken) {
+            const { apiClient } = await import('../api/http.js')
+            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
+              .catch(err => console.error('Failed to sync FCM token:', err))
+          }
+        }
+      } catch (err) {
+        console.error('Firebase not available in AdminLayout:', err)
+      }
+    }
+
+    syncFcmToken()
+
+    const handleFcmMessage = (event) => {
+      const payload = event.detail
+      if (payload?.notification && Notification.permission === 'granted') {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.showNotification(payload.notification.title || 'Staffivaa Admin', {
+              body: payload.notification.body || '',
+              icon: '/favicon.svg',
+              badge: '/favicon.svg',
+              requireInteraction: false,
+              data: payload.data || {},
+            })
+          })
+        }
+      }
+    }
+
+    window.addEventListener('fcm-foreground-message', handleFcmMessage)
+
+    const handleServiceWorkerMessage = (event) => {
+      if (event.data && event.data.type === 'NAVIGATE_TO_URL' && event.data.url) {
+        navigate(event.data.url)
+      }
+    }
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage)
+    }
+
+    return () => {
+      window.removeEventListener('fcm-foreground-message', handleFcmMessage)
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage)
+      }
+    }
+  }, [user, navigate])
   useEffect(() => {
     function handlePointerDown(e) {
       if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false)
