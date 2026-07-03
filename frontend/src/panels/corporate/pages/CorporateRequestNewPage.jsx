@@ -379,11 +379,11 @@ export function CorporateRequestNewPage() {
             <div className="grid grid-cols-2 gap-2 mb-2">
               <div className="bg-white border border-slate-200 shadow-sm rounded-[12px] p-2">
                 <label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Start Date</label>
-                <input type="date" className="w-full bg-transparent text-[12px] font-semibold text-slate-900 outline-none" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+                <input type="date" min={new Date().toISOString().split('T')[0]} className="w-full bg-transparent text-[12px] font-semibold text-slate-900 outline-none" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
               </div>
               <div className="bg-white border border-slate-200 shadow-sm rounded-[12px] p-2">
                 <label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">End Date</label>
-                <input type="date" className="w-full bg-transparent text-[12px] font-semibold text-slate-900 outline-none" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                <input type="date" min={startDate || new Date().toISOString().split('T')[0]} className="w-full bg-transparent text-[12px] font-semibold text-slate-900 outline-none" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2">

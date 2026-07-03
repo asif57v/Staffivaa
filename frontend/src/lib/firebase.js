@@ -57,8 +57,8 @@ export const requestForToken = async () => {
       return null;
     }
   } catch (err) {
-    console.log('An error occurred while retrieving token. ', err);
-    alert('FCM Token error details: ' + (err?.message || err));
+    console.warn('An error occurred while retrieving token: ', err?.message || err);
+    // Returning null allows the app to continue working without push notifications
     return null;
   }
 };
