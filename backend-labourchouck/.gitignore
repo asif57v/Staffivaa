@@ -136,5 +136,4 @@ dist
 .pnp.*
 
 
-src/config/staffivaa-firebase-adminsdk-fbsvc-69b4a7edfe.json
 src/config/*.json

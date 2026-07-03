@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs'
 import { User } from '../models/User.js'
+import { logAudit } from '../utils/auditLogger.js'
 import { USER_ROLES, CORPORATE_STATUS } from '../constants/roles.js'
 import { createOtpChallenge, validateOtpChallenge, deleteOtpChallengeDoc } from '../services/otpService.js'
 import { signAccessToken } from '../services/tokenService.js'
@@ -218,6 +219,15 @@ export const adminLogin = asyncHandler(async (req, res) => {
   user.lastLoginAt = new Date()
   await user.save()
   const token = signAccessToken(user)
+  
+  // Log Admin Login
+  await logAudit({
+    adminId: user._id,
+    action: 'Admin Login',
+    module: 'Auth',
+    req
+  })
+
   return sendSuccess(res, {
     message: 'Admin login successful',
     data: buildAuthPayload(user, token),

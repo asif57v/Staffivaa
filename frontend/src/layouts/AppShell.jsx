@@ -90,9 +90,13 @@ export function AppShell() {
     
     const syncFcmToken = async () => {
       try {
-        let permission = Notification.permission;
+        if (typeof window === 'undefined' || !('Notification' in window)) {
+          console.warn('Notifications not supported in this environment.');
+          return;
+        }
+        let permission = window.Notification.permission;
         if (permission === 'default') {
-          permission = await Notification.requestPermission();
+          permission = await window.Notification.requestPermission();
         }
         if (permission === 'granted') {
           const { requestForToken } = await import('../lib/firebase.js');
@@ -122,6 +126,7 @@ export function AppShell() {
               icon: '/favicon.svg',
               badge: '/favicon.svg',
               requireInteraction: false,
+              tag: 'staffivaa-fcm-notification', // Collapse duplicates if multiple tabs are open
               data: payload.data || {},
             });
           });

@@ -9,6 +9,8 @@ import { populateLabourCategories } from '../utils/populateLabourCategories.js'
 import { isValidAadhaarLength, maskAadhaarLast4, normalizeAadhaar } from '../utils/aadhaar.js'
 import { normalizeStoredMediaUrl } from '../utils/mediaUrl.js'
 import { sendNotificationToUser } from '../services/notificationService.js'
+import { triggerNotification } from '../utils/notificationTrigger.js'
+import { logAudit } from '../utils/auditLogger.js'
 
 const MAX_KYC_IMAGE_CHARS = 750_000
 
@@ -242,6 +244,16 @@ export const submitLabourKycDocuments = asyncHandler(async (req, res) => {
   await req.user.save()
   await populateLabourCategories(req.user)
 
+  // Trigger Notification to admin
+  await triggerNotification({
+    userId: null,
+    title: 'KYC Submitted',
+    body: `New Labour KYC submitted by ${req.user.fullName || req.user.phone}`,
+    type: 'KYC_SUBMITTED',
+    relatedId: req.user._id,
+    relatedModel: 'User',
+  })
+
   return sendSuccess(res, {
     message: 'KYC video submitted — an admin will review your Aadhaar and PAN shortly.',
     data: { user: req.user.toSafeObject() },
@@ -282,12 +294,37 @@ export const reviewLabourKyc = asyncHandler(async (req, res) => {
 
   await user.save()
   
+  // Send database-backed notification to the worker
   if (decision === 'approved') {
-    sendNotificationToUser(user._id.toString(), 'KYC Verified!', 'Your Aadhaar/PAN KYC has been approved. You are ready to receive jobs.', { url: '/app/profile' })
+    await triggerNotification({
+      userId: user._id,
+      title: 'KYC Verified!',
+      body: 'Your Aadhaar/PAN KYC has been approved. You are ready to receive jobs.',
+      type: 'KYC_APPROVED',
+      relatedId: user._id,
+      relatedModel: 'User'
+    })
   } else {
-    sendNotificationToUser(user._id.toString(), 'Action Required', 'Your KYC was rejected. Please review and re-submit your documents.', { url: '/app/kyc' })
+    await triggerNotification({
+      userId: user._id,
+      title: 'Action Required',
+      body: 'Your KYC was rejected. Please review and re-submit your documents.',
+      type: 'KYC_REJECTED',
+      relatedId: user._id,
+      relatedModel: 'User'
+    })
   }
   
+  // Log Admin Audit Trail
+  await logAudit({
+    adminId: req.user._id,
+    action: decision === 'approved' ? 'KYC Approved' : 'KYC Rejected',
+    previousValue: { kycStatus: 'pending' },
+    newValue: { kycStatus: user.labourProfile.kycStatus, kycReviewNote: user.labourProfile.kycReviewNote },
+    module: 'Labour KYC',
+    req
+  })
+
   await populateLabourCategories(user)
 
   return sendSuccess(res, {

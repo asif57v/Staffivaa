@@ -23,13 +23,24 @@ import { appSpring } from '../components/app/appMotion.js'
 import { GlassPanel } from '../components/ui/GlassPanel.jsx'
 import { adminInitials, formatLastLoginDisplay, formatLastLoginRelative } from '../lib/formatAdminLastLogin.js'
 import { fetchAdminUsers } from '../api/adminUsersApi.js'
+import { useDispatch } from 'react-redux'
+import { connectSocket } from '../services/socket.js'
+import {
+  workforceApi,
+  useGetNotificationsQuery,
+  useMarkNotificationReadMutation,
+  useMarkAllNotificationsReadMutation,
+  useDeleteNotificationMutation,
+  useSearchModulesQuery
+} from '../store/api/workforceApi.js'
 
 const STORAGE_KEY = 'lc-admin-sidebar-collapsed'
 
 export function AdminLayout() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { user, logout } = useAuth()
+  const dispatch = useDispatch()
+  const { user, token, logout } = useAuth()
   const reduce = useReducedMotion()
 
   const [collapsed, setCollapsed] = useState(() => {
@@ -42,6 +53,61 @@ export function AdminLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
+
+  // Search query states
+  const [searchQuery, setSearchQuery] = useState('')
+  const { data: searchResults } = useSearchModulesQuery({ q: searchQuery }, { skip: !searchQuery })
+
+  // Notifications API queries
+  const { data: notifData } = useGetNotificationsQuery(undefined, { skip: !user })
+  const [markRead] = useMarkNotificationReadMutation()
+  const [markAllRead] = useMarkAllNotificationsReadMutation()
+  const [deleteNotif] = useDeleteNotificationMutation()
+
+  // Socket setup
+  useEffect(() => {
+    if (!user || !token) return
+
+    const socket = connectSocket(user, token)
+
+    const handleDashboardUpdate = () => {
+      console.log('[Socket] Refreshing admin caches...')
+      dispatch(
+        workforceApi.util.invalidateTags([
+          'AdminRequests',
+          'Assignments',
+          'Attendance',
+          'Invoices',
+          'AdminPricing',
+          'SystemPricing',
+          'BusinessVerification',
+          'AdminDashboard',
+          'Notifications',
+          'AuditLogs',
+          'Tickets',
+        ])
+      )
+    }
+
+    socket.on('dashboard:updated', handleDashboardUpdate)
+    socket.on('notification:new', (newNotif) => {
+      dispatch(workforceApi.util.invalidateTags(['Notifications']))
+      if (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'granted') {
+        new window.Notification(newNotif.title, { body: newNotif.body })
+      }
+    })
+    socket.on('booking:updated', handleDashboardUpdate)
+    socket.on('attendance:updated', handleDashboardUpdate)
+    socket.on('wallet:updated', handleDashboardUpdate)
+
+    return () => {
+      socket.off('dashboard:updated', handleDashboardUpdate)
+      socket.off('notification:new')
+      socket.off('booking:updated', handleDashboardUpdate)
+      socket.off('attendance:updated', handleDashboardUpdate)
+      socket.off('wallet:updated', handleDashboardUpdate)
+    }
+  }, [user, token, dispatch])
 
   const profileRef = useRef(null)
   const notifRef = useRef(null)
@@ -97,9 +163,13 @@ export function AdminLayout() {
 
     const syncFcmToken = async () => {
       try {
-        let permission = Notification.permission
+        if (typeof window === 'undefined' || !('Notification' in window)) {
+          console.warn('Notifications not supported in this environment.')
+          return
+        }
+        let permission = window.Notification.permission
         if (permission === 'default') {
-          permission = await Notification.requestPermission()
+          permission = await window.Notification.requestPermission()
         }
         if (permission === 'granted') {
           const { requestForToken } = await import('../lib/firebase.js')
@@ -127,6 +197,7 @@ export function AdminLayout() {
               icon: '/favicon.svg',
               badge: '/favicon.svg',
               requireInteraction: false,
+              tag: 'staffivaa-fcm-notification', // Collapse duplicates if multiple tabs are open
               data: payload.data || {},
             })
           })
@@ -356,9 +427,44 @@ export function AdminLayout() {
               </div>
               <input
                 type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="block w-full pl-10 pr-3 py-2 border border-slate-200/80 rounded-xl leading-5 bg-slate-50/50 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-brand/30 focus:border-brand/40 sm:text-sm transition-all"
-                placeholder="Search bookings, users, or modules (Press '/')"
+                placeholder="Search bookings, users, or modules..."
               />
+              {searchQuery && searchResults?.results && (
+                <div className="absolute left-0 right-0 mt-2 max-h-80 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2 scrollbar-thin">
+                  {Object.entries(searchResults.results).every(([_, list]) => !list.length) ? (
+                    <p className="text-xs text-slate-500 p-2 text-center">No results found for "{searchQuery}"</p>
+                  ) : (
+                    Object.entries(searchResults.results).map(([category, items]) => {
+                      if (!items.length) return null;
+                      return (
+                        <div key={category} className="mb-2">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 py-1">{category}</p>
+                          <ul className="space-y-0.5">
+                            {items.map((item) => (
+                              <li key={item.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSearchQuery('')
+                                    navigate(item.url)
+                                  }}
+                                  className="w-full text-left px-2 py-1.5 hover:bg-slate-50 rounded-lg transition text-xs"
+                                >
+                                  <p className="font-semibold text-slate-800">{item.title}</p>
+                                  <p className="text-[10px] text-slate-500">{item.subtitle}</p>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -376,6 +482,11 @@ export function AdminLayout() {
                 aria-label="Notifications"
               >
                 <Bell className="h-5 w-5" aria-hidden />
+                {notifData?.unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white shadow-sm ring-2 ring-white">
+                    {notifData.unreadCount}
+                  </span>
+                )}
               </button>
               <AnimatePresence>
                 {notifOpen ? (
@@ -384,13 +495,83 @@ export function AdminLayout() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={reduce ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
                     transition={{ duration: 0.18 }}
-                    className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[min(calc(100vw-2rem),20rem)] origin-top-right"
+                    className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[22rem] origin-top-right"
                   >
-                    <GlassPanel className="p-4 shadow-xl ring-1 ring-slate-200/60">
-                      <p className="text-sm font-bold text-slate-900">Notifications</p>
-                      <p className="mt-2 text-xs leading-relaxed text-slate-600">
-                        No new alerts. Booking approvals, KYC queues, and payment events will appear here.
-                      </p>
+                    <GlassPanel className="p-0 overflow-hidden shadow-xl ring-1 ring-slate-200/60 max-h-[30rem] flex flex-col">
+                      <div className="flex items-center justify-between border-b border-slate-100 bg-linear-to-br from-slate-50/95 to-white px-4 py-3">
+                        <p className="text-sm font-bold text-slate-900">Notifications ({notifData?.unreadCount || 0})</p>
+                        {notifData?.unreadCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => markAllRead()}
+                            className="text-xs font-bold text-brand hover:underline"
+                          >
+                            Mark all read
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex-1 overflow-y-auto divide-y divide-slate-100 scrollbar-thin max-h-[22rem]">
+                        {!notifData?.notifications || notifData.notifications.length === 0 ? (
+                          <p className="text-xs text-slate-500 p-4 text-center">No new notifications.</p>
+                        ) : (
+                          notifData.notifications.map((n) => {
+                            const getNotificationUrl = (item) => {
+                              if (item.type.startsWith('KYC')) return '/admin/business-verification'
+                              if (item.type.startsWith('BOOKING')) return '/admin/bookings'
+                              if (item.type.startsWith('SETTLEMENT') || item.type.startsWith('REFUND')) return '/admin/wallet'
+                              if (item.type === 'SUPPORT_TICKET_CREATED') return '/admin/reports'
+                              if (item.type === 'PRICING_CHANGED') return '/admin/pricing'
+                              return '/admin'
+                            }
+
+                            return (
+                              <div
+                                key={n._id}
+                                className={`flex items-start gap-2 p-3 transition hover:bg-slate-50/80 ${!n.isRead ? 'bg-emerald-50/20' : ''}`}
+                              >
+                                <div
+                                  className="flex-1 text-left cursor-pointer"
+                                  onClick={async () => {
+                                    if (!n.isRead) {
+                                      await markRead(n._id)
+                                    }
+                                    setNotifOpen(false)
+                                    navigate(getNotificationUrl(n))
+                                  }}
+                                >
+                                  <p className={`text-xs font-semibold ${!n.isRead ? 'text-slate-900 font-bold' : 'text-slate-700'}`}>
+                                    {n.title}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500 mt-0.5">{n.body}</p>
+                                  <p className="text-[9px] text-slate-400 mt-1">
+                                    {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </p>
+                                </div>
+                                <div className="flex flex-col gap-1 items-end shrink-0">
+                                  {!n.isRead && (
+                                    <button
+                                      type="button"
+                                      onClick={() => markRead(n._id)}
+                                      className="text-[10px] text-brand hover:underline font-bold"
+                                      title="Mark as read"
+                                    >
+                                      Read
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteNotif(n._id)}
+                                    className="text-[10px] text-rose-600 hover:underline"
+                                    title="Delete"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
                     </GlassPanel>
                   </motion.div>
                 ) : null}

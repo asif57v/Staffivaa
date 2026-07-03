@@ -177,9 +177,14 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
   const assignments = requestData?.assignments || []
   const paymentSummary = requestData?.paymentSummary || { serviceCost: 0, extraCost: 0, platformFee: 0, taxes: 0, totalAmount: 0 }
 
-  const currentStatus = realtimeStatus?.requestStatus || request?.status || booking?.status || 'pending_review'
-
   const activeAssignment = assignments?.find(a => ['accepted', 'on_site', 'in_progress', 'completed'].includes(a.status))
+
+  let currentStatus = realtimeStatus?.requestStatus || request?.status || booking?.status || 'pending_review'
+  if (activeAssignment && ['on_site', 'in_progress', 'completed'].includes(activeAssignment.status)) {
+    // Override request status with assignment status if worker has progressed
+    // This ensures OTP is shown when worker marks 'on_site'
+    currentStatus = activeAssignment.status
+  }
 
   // Only fallback to demo/draft workers if the booking has actually been accepted
   const isAcceptedOrBeyond = ['accepted', 'in_progress', 'on_site', 'completed'].includes(currentStatus)

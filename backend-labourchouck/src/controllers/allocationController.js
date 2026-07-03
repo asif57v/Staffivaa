@@ -10,6 +10,8 @@ import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { emitRequestStatusUpdate, getIO, emitToUser } from '../utils/socket.js'
 import { sendNotificationToUser } from '../services/notificationService.js'
+import { logAudit } from '../utils/auditLogger.js'
+import { triggerNotification } from '../utils/notificationTrigger.js'
 
 export const createAllocationAdmin = asyncHandler(async (req, res) => {
   const { requestId, vendorId, labourIds, notes } = req.body
@@ -56,7 +58,15 @@ export const createAllocationAdmin = asyncHandler(async (req, res) => {
     })
     assignments.push(assignment)
     emitToUser('labour', labourId.toString(), 'assignment_assigned', { assignmentId: assignment._id.toString() })
-    sendNotificationToUser(labourId.toString(), 'New Job Assigned', 'You have been assigned to a new job. Please check your schedule.', { url: '/app/jobs' })
+    
+    await triggerNotification({
+      userId: labourId,
+      title: 'New Job Assigned',
+      body: 'You have been assigned to a new job. Please check your schedule.',
+      type: 'LABOUR_ASSIGNED',
+      relatedId: assignment._id,
+      relatedModel: 'Assignment'
+    })
   }
 
   if (request.status === REQUEST_STATUS.PENDING_REVIEW || request.status === REQUEST_STATUS.CONFIRMED) {
@@ -67,6 +77,15 @@ export const createAllocationAdmin = asyncHandler(async (req, res) => {
     request.status = REQUEST_STATUS.ASSIGNED
     await request.save()
   }
+
+  // Log allocation creation audit
+  await logAudit({
+    adminId: req.user._id,
+    action: 'Create Allocation',
+    newValue: { requestId, vendorId, assignedLabourCount: assignments.length },
+    module: 'Operations',
+    req
+  })
 
   sendSuccess(res, { data: { allocation, assignments } }, HTTP_STATUS.CREATED)
 })

@@ -17,6 +17,8 @@ import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { emitToUser, emitToRole, emitToCorporate, emitToVendor } from '../utils/socket.js'
 import { sendNotificationToUser } from '../services/notificationService.js'
+import { logAudit } from '../utils/auditLogger.js'
+import { triggerNotification } from '../utils/notificationTrigger.js'
 
 function parseLines(lines) {
   if (!Array.isArray(lines) || !lines.length) return null
@@ -383,6 +385,8 @@ export const patchRequestStatusAdmin = asyncHandler(async (req, res) => {
   if (!Object.values(REQUEST_STATUS).includes(status)) {
     return sendError(res, { message: 'Invalid status', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
+
+  const previousStatus = request.status
   request.status = status
   if (adminNote != null) request.adminNote = String(adminNote).trim()
   if (req.body.paymentDeadlineExtendedAt !== undefined) {
@@ -391,9 +395,28 @@ export const patchRequestStatusAdmin = asyncHandler(async (req, res) => {
   request.reviewedBy = req.user._id
   request.reviewedAt = new Date()
   await request.save()
+
+  // Log audit trail
+  await logAudit({
+    adminId: req.user._id,
+    action: 'Update Booking Status',
+    previousValue: { status: previousStatus },
+    newValue: { status },
+    module: 'Operations',
+    req
+  })
+
+  // Trigger Notification to client
+  await triggerNotification({
+    userId: request.clientId,
+    title: 'Booking Update',
+    body: `Your booking status has been updated to ${status}.`,
+    type: 'BOOKING_UPDATED',
+    relatedId: request._id,
+    relatedModel: 'WorkforceRequest'
+  })
   
   emitToUser('individual', request.clientId?.toString(), 'request_updated', { requestId: request._id.toString() })
-  sendNotificationToUser(request.clientId?.toString(), 'Booking Update', `Your booking status has been updated to ${status}.`, { url: `/app/booking/${request._id}` })
   
   if (request.sourceType === REQUEST_SOURCE.CORPORATE) {
     emitToCorporate(request.clientId?.toString(), 'request_status_update', { requestId: request._id.toString(), status: request.status })

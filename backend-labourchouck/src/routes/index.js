@@ -12,6 +12,11 @@ import workforceRoutes from './workforceRoutes.js'
 import adminWorkforceRoutes from './adminWorkforceRoutes.js'
 import adminWalletRoutes from './adminWalletRoutes.js'
 import notificationRoutes from './notificationRoutes.js'
+import adminDashboardRoutes from './adminDashboardRoutes.js'
+import adminSearchRoutes from './adminSearchRoutes.js'
+import adminAuditLogRoutes from './adminAuditLogRoutes.js'
+import adminSupportTicketRoutes from './adminSupportTicketRoutes.js'
+import adminSettingsRoutes from './adminSettingsRoutes.js'
 
 const router = Router()
 
@@ -28,5 +33,10 @@ router.use('/admin', adminBuildmartRoutes)
 router.use('/admin/workforce', adminWorkforceRoutes)
 router.use('/admin/wallet', adminWalletRoutes)
 router.use('/notifications', notificationRoutes)
+router.use('/admin/dashboard', adminDashboardRoutes)
+router.use('/admin/search', adminSearchRoutes)
+router.use('/admin/audit-logs', adminAuditLogRoutes)
+router.use('/admin/tickets', adminSupportTicketRoutes)
+router.use('/admin/settings', adminSettingsRoutes)
 
 export default router

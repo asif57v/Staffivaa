@@ -12,6 +12,8 @@ import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { emitToCorporate, emitToVendor } from '../utils/socket.js'
 import { Project } from '../models/Project.js'
 import { sendNotificationToUser } from '../services/notificationService.js'
+import { logAudit } from '../utils/auditLogger.js'
+import { triggerNotification } from '../utils/notificationTrigger.js'
 
 function billableUnitsForStatus(status) {
   if (status === ATTENDANCE_STATUS.PRESENT) return 1
@@ -389,6 +391,9 @@ export const verifyAttendanceAdmin = asyncHandler(async (req, res) => {
   const { status, notes } = req.body
   const record = await AttendanceRecord.findById(req.params.id)
   if (!record) return sendError(res, { message: 'Not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  
+  const previousStatus = record.attendanceStatus
+
   if (status && Object.values(ATTENDANCE_STATUS).includes(status)) {
     record.attendanceStatus = status
     record.billableUnits = billableUnitsForStatus(status)
@@ -397,6 +402,33 @@ export const verifyAttendanceAdmin = asyncHandler(async (req, res) => {
   record.verifiedBy = req.user.role === USER_ROLES.CONTRACTOR ? 'vendor_supervisor' : 'admin'
   record.verifiedAt = new Date()
   await record.save()
+
+  // Log admin audit trail
+  await logAudit({
+    adminId: req.user._id,
+    action: 'Verify Attendance',
+    previousValue: { attendanceStatus: previousStatus },
+    newValue: { attendanceStatus: record.attendanceStatus, notes: record.notes },
+    module: 'Operations',
+    req
+  })
+
+  // Trigger Notification to labour
+  await triggerNotification({
+    userId: record.workerId,
+    title: 'Attendance Verified',
+    body: `Your attendance for ${new Date(record.shiftDate).toLocaleDateString()} has been verified as ${record.attendanceStatus}.`,
+    type: 'ATTENDANCE_UPDATED',
+    relatedId: record._id,
+    relatedModel: 'AttendanceRecord'
+  })
+
+  // Broadcast to other rooms via Socket
+  const io = getIO()
+  if (io) {
+    io.emit('attendance:updated', { recordId: record._id })
+  }
+
   sendSuccess(res, { data: { record } })
 })
 

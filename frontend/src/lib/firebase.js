@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getMessaging, getToken, onMessage, isSupported } from "firebase/messaging";
+import { getMessaging, getToken, onMessage, isSupported, deleteToken } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -39,6 +39,15 @@ export const requestForToken = async () => {
       console.warn('Firebase messaging is not initialized.');
       return null;
     }
+    
+    // Force delete old token to ensure we get a fresh one for the new project
+    try {
+      await deleteToken(messaging);
+      console.log('Old FCM token deleted successfully.');
+    } catch (e) {
+      console.log('No old token to delete or error deleting:', e);
+    }
+
     const currentToken = await getToken(messaging, { vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY });
     if (currentToken) {
       console.log('FCM Token:', currentToken);

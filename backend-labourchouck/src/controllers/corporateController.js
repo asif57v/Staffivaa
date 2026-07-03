@@ -20,6 +20,8 @@ import {
   validateCorporateProfileForSubmit,
 } from '../utils/corporateVerification.js'
 import { sendNotificationToUser } from '../services/notificationService.js'
+import { triggerNotification } from '../utils/notificationTrigger.js'
+import { logAudit } from '../utils/auditLogger.js'
 
 function requireApprovedCorporate(user) {
   if (user.role !== USER_ROLES.CORPORATE) return 'Corporate account required'
@@ -334,10 +336,33 @@ export const reviewCorporateAdmin = asyncHandler(async (req, res) => {
   await user.save()
   
   if (resolved === CORPORATE_STATUS.APPROVED) {
-    sendNotificationToUser(user._id.toString(), 'Account Approved', 'Your corporate account has been verified!', { url: '/app/dashboard' })
+    await triggerNotification({
+      userId: user._id,
+      title: 'Account Approved',
+      body: 'Your corporate account has been verified!',
+      type: 'KYC_APPROVED',
+      relatedId: user._id,
+      relatedModel: 'User'
+    })
   } else if (resolved === CORPORATE_STATUS.REJECTED) {
-    sendNotificationToUser(user._id.toString(), 'Action Required', 'Your corporate verification was rejected. Please review your documents.', { url: '/app/profile' })
+    await triggerNotification({
+      userId: user._id,
+      title: 'Action Required',
+      body: 'Your corporate verification was rejected. Please review your documents.',
+      type: 'KYC_REJECTED',
+      relatedId: user._id,
+      relatedModel: 'User'
+    })
   }
+
+  await logAudit({
+    adminId: req.user._id,
+    action: resolved === CORPORATE_STATUS.APPROVED ? 'KYC Approved' : 'KYC Rejected',
+    previousValue: { status: 'pending' },
+    newValue: { status: user.corporateProfile.status, reviewNote: user.corporateProfile.reviewNote },
+    module: 'Corporate KYC',
+    req
+  })
   
   sendSuccess(res, {
     message: resolved === CORPORATE_STATUS.APPROVED ? 'Corporate account approved' : 'Corporate verification rejected',
@@ -382,10 +407,33 @@ export const reviewContractorAdmin = asyncHandler(async (req, res) => {
   await user.save()
   
   if (resolved === 'approved') {
-    sendNotificationToUser(user._id.toString(), 'Account Approved', 'Your vendor account has been verified!', { url: '/app/dashboard' })
+    await triggerNotification({
+      userId: user._id,
+      title: 'Account Approved',
+      body: 'Your vendor account has been verified!',
+      type: 'KYC_APPROVED',
+      relatedId: user._id,
+      relatedModel: 'User'
+    })
   } else if (resolved === 'rejected') {
-    sendNotificationToUser(user._id.toString(), 'Action Required', 'Your vendor verification was rejected. Please review your documents.', { url: '/app/profile' })
+    await triggerNotification({
+      userId: user._id,
+      title: 'Action Required',
+      body: 'Your vendor verification was rejected. Please review your documents.',
+      type: 'KYC_REJECTED',
+      relatedId: user._id,
+      relatedModel: 'User'
+    })
   }
+
+  await logAudit({
+    adminId: req.user._id,
+    action: resolved === 'approved' ? 'KYC Approved' : 'KYC Rejected',
+    previousValue: { verificationStatus: 'pending' },
+    newValue: { verificationStatus: user.contractorProfile.verificationStatus, reviewNote: user.contractorProfile.reviewNote },
+    module: 'Vendor KYC',
+    req
+  })
   
   sendSuccess(res, {
     message: resolved === 'approved' ? 'Vendor account verified' : 'Vendor verification rejected',

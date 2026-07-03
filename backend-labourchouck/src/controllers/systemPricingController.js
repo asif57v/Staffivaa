@@ -3,6 +3,8 @@ import { SystemPricingHistory } from '../models/SystemPricingHistory.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { getIO } from '../utils/socket.js'
+import { logAudit } from '../utils/auditLogger.js'
+import { triggerNotification } from '../utils/notificationTrigger.js'
 
 // Deep helper to find changes between two plain objects
 function getObjectDiff(oldObj, newObj, prefix = '') {
@@ -279,6 +281,26 @@ export const updateSystemPricing = asyncHandler(async (req, res) => {
       reason: reason.trim(),
       changes,
       snapshot: newObject
+    })
+
+    // Log admin pricing change audit
+    await logAudit({
+      adminId: req.user._id,
+      action: 'Pricing Updated',
+      previousValue: oldObject,
+      newValue: newObject,
+      module: 'System Settings',
+      req
+    })
+
+    // Trigger Notification
+    await triggerNotification({
+      userId: null,
+      title: 'Pricing Updated',
+      body: `Pricing config updated. Reason: ${reason.trim()}`,
+      type: 'PRICING_CHANGED',
+      relatedId: pricingDoc._id,
+      relatedModel: 'SystemPricing'
     })
 
     try {

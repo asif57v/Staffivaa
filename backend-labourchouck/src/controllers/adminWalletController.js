@@ -4,6 +4,8 @@ import { WalletTransaction } from '../models/WalletTransaction.js'
 import { Withdrawal } from '../models/Withdrawal.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { sendSuccess, sendError, HTTP_STATUS } from '../utils/apiResponse.js'
+import { logAudit } from '../utils/auditLogger.js'
+import { triggerNotification } from '../utils/notificationTrigger.js'
 
 export const getWalletSummary = asyncHandler(async (req, res) => {
   let wallet = await Wallet.findOne({ singletonId: 'ADMIN_WALLET' })
@@ -467,6 +469,27 @@ export const reviewWithdrawal = asyncHandler(async (req, res) => {
       transaction.utrNumber = finalUtr
       await transaction.save()
     }
+
+    // Trigger Notification for vendor/contractor
+    await triggerNotification({
+      userId: user._id,
+      title: 'Withdrawal Completed',
+      body: `Your withdrawal of ₹${withdrawal.amount} has been approved and processed. UTR: ${finalUtr}`,
+      type: 'SETTLEMENT_COMPLETED',
+      relatedId: withdrawal._id,
+      relatedModel: 'Withdrawal'
+    })
+
+    // Log admin audit trail
+    await logAudit({
+      adminId: req.user._id,
+      action: 'Settlement Approved',
+      previousValue: { status: 'Pending' },
+      newValue: { status: 'Completed', utrNumber: finalUtr },
+      module: 'Finance',
+      req
+    })
+
   } else if (status === 'Rejected') {
     withdrawal.status = 'Rejected'
     if (rejectionReason) {
@@ -493,6 +516,26 @@ export const reviewWithdrawal = asyncHandler(async (req, res) => {
       source: `Refund: Rejected Withdrawal (${rejectionReason || 'No reason specified'})`,
       amount: withdrawal.amount,
       status: 'Completed'
+    })
+
+    // Trigger Notification for vendor/contractor
+    await triggerNotification({
+      userId: user._id,
+      title: 'Withdrawal Rejected',
+      body: `Your withdrawal of ₹${withdrawal.amount} was rejected. Reason: ${rejectionReason || 'No reason specified'}`,
+      type: 'REFUND_REQUESTED', // maps to refund / reject
+      relatedId: withdrawal._id,
+      relatedModel: 'Withdrawal'
+    })
+
+    // Log admin audit trail
+    await logAudit({
+      adminId: req.user._id,
+      action: 'Settlement Rejected',
+      previousValue: { status: 'Pending' },
+      newValue: { status: 'Rejected', rejectionReason },
+      module: 'Finance',
+      req
     })
   }
 

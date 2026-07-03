@@ -394,6 +394,75 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       invalidatesTags: (r, e, { id }) => [{ type: 'Quotation', id: id }, 'Requests', 'VendorJobs'],
     }),
+    getAdminDashboardStats: build.query({
+      query: () => '/admin/dashboard/stats',
+      transformResponse: unwrap,
+      providesTags: ['AdminDashboard'],
+    }),
+    getAdminDashboardAnalytics: build.query({
+      query: () => '/admin/dashboard/analytics',
+      transformResponse: unwrap,
+      providesTags: ['AdminDashboard'],
+    }),
+    searchModules: build.query({
+      query: (params) => ({ url: '/admin/search', params }),
+      transformResponse: unwrap,
+    }),
+    getNotifications: build.query({
+      query: () => '/notifications',
+      transformResponse: unwrap,
+      providesTags: ['Notifications'],
+    }),
+    markNotificationRead: build.mutation({
+      query: (id) => ({ url: `/notifications/${id}/read`, method: 'PATCH' }),
+      transformResponse: unwrap,
+      invalidatesTags: ['Notifications'],
+    }),
+    markAllNotificationsRead: build.mutation({
+      query: () => ({ url: '/notifications/read-all', method: 'PATCH' }),
+      transformResponse: unwrap,
+      invalidatesTags: ['Notifications'],
+    }),
+    deleteNotification: build.mutation({
+      query: (id) => ({ url: `/notifications/${id}`, method: 'DELETE' }),
+      transformResponse: unwrap,
+      invalidatesTags: ['Notifications'],
+    }),
+    getAuditLogs: build.query({
+      query: (params) => ({ url: '/admin/audit-logs', params }),
+      transformResponse: unwrap,
+      providesTags: ['AuditLogs'],
+    }),
+    getTickets: build.query({
+      query: (params) => ({ url: '/admin/tickets', params }),
+      transformResponse: unwrap,
+      providesTags: ['Tickets'],
+    }),
+    createTicket: build.mutation({
+      query: (body) => ({ url: '/admin/tickets', method: 'POST', body }),
+      transformResponse: unwrap,
+      invalidatesTags: ['Tickets'],
+    }),
+    replyTicket: build.mutation({
+      query: ({ id, ...body }) => ({ url: `/admin/tickets/${id}/reply`, method: 'POST', body }),
+      transformResponse: unwrap,
+      invalidatesTags: ['Tickets'],
+    }),
+    closeTicket: build.mutation({
+      query: (id) => ({ url: `/admin/tickets/${id}/close`, method: 'PATCH' }),
+      transformResponse: unwrap,
+      invalidatesTags: ['Tickets'],
+    }),
+    getSettings: build.query({
+      query: () => '/admin/settings',
+      transformResponse: unwrap,
+      providesTags: ['SystemSettings'],
+    }),
+    updateSettings: build.mutation({
+      query: (body) => ({ url: '/admin/settings', method: 'POST', body }),
+      transformResponse: unwrap,
+      invalidatesTags: ['SystemSettings'],
+    }),
   }),
 })
 
@@ -467,4 +536,18 @@ export const {
   useGetVendorQuotationQuery,
   useSubmitQuotationMutation,
   useRespondToQuotationMutation,
+  useGetAdminDashboardStatsQuery,
+  useGetAdminDashboardAnalyticsQuery,
+  useSearchModulesQuery,
+  useGetNotificationsQuery,
+  useMarkNotificationReadMutation,
+  useMarkAllNotificationsReadMutation,
+  useDeleteNotificationMutation,
+  useGetAuditLogsQuery,
+  useGetTicketsQuery,
+  useCreateTicketMutation,
+  useReplyTicketMutation,
+  useCloseTicketMutation,
+  useGetSettingsQuery,
+  useUpdateSettingsMutation,
 } = workforceApi

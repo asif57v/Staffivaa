@@ -39,6 +39,11 @@ export const baseApi = createApi({
     'SystemPricing',
     'BusinessVerification',
     'Quotation',
+    'AdminDashboard',
+    'Notifications',
+    'AuditLogs',
+    'Tickets',
+    'SystemSettings',
   ],
   endpoints: () => ({}),
 })

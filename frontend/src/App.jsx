@@ -37,6 +37,8 @@ const AdminPaymentDetailPage = lazy(() => import('./pages/admin/AdminPaymentDeta
 const AdminPricingPage = lazy(() => import('./pages/admin/AdminPricingPage.jsx').then(m => ({ default: m.AdminPricingPage })))
 const AdminWalletDashboard = lazy(() => import('./pages/admin/wallet/AdminWalletDashboard.jsx').then(m => ({ default: m.AdminWalletDashboard })))
 const AdminModulePlaceholder = lazy(() => import('./components/admin/AdminModulePlaceholder.jsx').then(m => ({ default: m.AdminModulePlaceholder })))
+const AdminReportsPage = lazy(() => import('./pages/admin/AdminReportsPage.jsx').then(m => ({ default: m.AdminReportsPage })))
+const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage.jsx').then(m => ({ default: m.AdminSettingsPage })))
 
 function App() {
   return (
@@ -127,26 +129,8 @@ function App() {
               <Route path="payments/:id" element={<AdminPaymentDetailPage />} />
               <Route path="pricing" element={<AdminPricingPage />} />
               <Route path="wallet" element={<AdminWalletDashboard />} />
-              <Route
-                path="reports"
-                element={
-                  <AdminModulePlaceholder
-                    title="Reports & analytics"
-                    subtitle="Active workforce, site usage, revenue, and dues."
-                    bullets={['Dashboard KPIs', 'Payment ageing', 'Export datasets']}
-                  />
-                }
-              />
-              <Route
-                path="settings"
-                element={
-                  <AdminModulePlaceholder
-                    title="Settings"
-                    subtitle="Platform configuration and integrations."
-                    bullets={['OTP providers', 'Payment gateways', 'Feature flags']}
-                  />
-                }
-              />
+              <Route path="reports" element={<AdminReportsPage />} />
+              <Route path="settings" element={<AdminSettingsPage />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/auth" replace />} />
