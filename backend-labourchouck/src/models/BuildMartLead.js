@@ -29,4 +29,3 @@ buildMartLeadSchema.index({ createdAt: -1 })
 buildMartLeadSchema.index({ status: 1, createdAt: -1 })
 
 export const BuildMartLead = mongoose.model('BuildMartLead', buildMartLeadSchema)
-6

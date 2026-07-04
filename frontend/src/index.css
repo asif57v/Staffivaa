@@ -53,12 +53,26 @@ body {
   position: relative;
   overflow-x: hidden;
   box-sizing: border-box;
+
+  /* App feel */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
 body.admin-mode {
   max-width: none;
   box-shadow: none;
   background-color: #f8fafc;
+  
+  /* Re-enable text selection for admin */
+  -webkit-touch-callout: default;
+  -webkit-user-select: auto;
+  -moz-user-select: auto;
+  -ms-user-select: auto;
+  user-select: auto;
 }
 
 ::selection {

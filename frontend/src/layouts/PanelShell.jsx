@@ -37,6 +37,25 @@ export function PanelShell({
   const [appLocation, setAppLocation] = useState(() => readAppUserLocation())
   const reduce = useReducedMotion()
 
+  const [scrollData, setScrollData] = useState({ y: 0, direction: 'up' })
+
+  useEffect(() => {
+    let lastY = window.scrollY
+    const handleScroll = () => {
+      const currentY = window.scrollY
+      let direction = 'up'
+      if (currentY > lastY && currentY > 50) {
+        direction = 'down'
+      } else if (currentY < lastY) {
+        direction = 'up'
+      }
+      setScrollData(prev => (prev.y === currentY && prev.direction === direction ? prev : { y: currentY, direction }))
+      lastY = currentY
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
   useEffect(() => {
     if (!user || !token) return;
 
@@ -304,7 +323,15 @@ export function PanelShell({
 
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-lg flex-col">
         {!hideShellHeader ? (
-          <header className="sticky top-0 z-30 bg-[#FFC107] px-4 pt-[max(0.5rem,env(safe-area-inset-top,0px))] pb-3 sm:px-5">
+          <header className={`sticky top-0 z-30 px-4 pt-[max(0.5rem,env(safe-area-inset-top,0px))] pb-3 sm:px-5 transition-all duration-300 ease-in-out ${
+            scrollData.y > 10
+              ? 'bg-[#FFC107]/90 backdrop-blur-md shadow-[0_4px_20px_-10px_rgba(0,0,0,0.3)]'
+              : 'bg-[#FFC107] shadow-none'
+          } ${
+            scrollData.direction === 'down' && scrollData.y > 50
+              ? '-translate-y-full opacity-0 pointer-events-none'
+              : 'translate-y-0 opacity-100 pointer-events-auto'
+          }`}>
             <div className="flex items-center justify-between gap-3">
               <button
                 type="button"

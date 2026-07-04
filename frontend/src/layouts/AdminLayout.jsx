@@ -22,7 +22,6 @@ import { ADMIN_NAV_SECTIONS, getAdminTitle } from '../config/adminNavigation.js'
 import { appSpring } from '../components/app/appMotion.js'
 import { GlassPanel } from '../components/ui/GlassPanel.jsx'
 import { adminInitials, formatLastLoginDisplay, formatLastLoginRelative } from '../lib/formatAdminLastLogin.js'
-import { fetchAdminUsers } from '../api/adminUsersApi.js'
 import { useDispatch } from 'react-redux'
 import { connectSocket } from '../services/socket.js'
 import {
@@ -31,7 +30,8 @@ import {
   useMarkNotificationReadMutation,
   useMarkAllNotificationsReadMutation,
   useDeleteNotificationMutation,
-  useSearchModulesQuery
+  useSearchModulesQuery,
+  useGetAdminDashboardStatsQuery
 } from '../store/api/workforceApi.js'
 
 const STORAGE_KEY = 'lc-admin-sidebar-collapsed'
@@ -125,31 +125,59 @@ export function AdminLayout() {
     return () => document.body.classList.remove('admin-mode')
   }, [])
 
-  const [navBadges, setNavBadges] = useState({ pendingKyc: 0, newUsers: 0 })
+  const { data: stats } = useGetAdminDashboardStatsQuery(undefined, {
+    skip: !user || user.role !== 'admin',
+    pollingInterval: 60000
+  })
+
+  const [lastSeen, setLastSeen] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('admin_nav_last_seen')) || {}
+    } catch {
+      return {}
+    }
+  })
 
   useEffect(() => {
-    let cancelled = false
-    async function loadStats() {
-      try {
-        const kycRes = await fetchAdminUsers({ role: 'labour', kycStatus: 'pending', limit: 1 })
-        const usersRes = await fetchAdminUsers({ limit: 1 })
-        if (!cancelled) {
-          let newUsers = 0
-          if (usersRes?.items?.[0]?.createdAt) {
-            const today = new Date().toISOString().split('T')[0]
-            if (usersRes.items[0].createdAt.startsWith(today)) {
-              newUsers = 1
-            }
-          }
-          setNavBadges({
-            pendingKyc: kycRes?.labourKycCounts?.pending || 0,
-            newUsers: newUsers > 0 ? 1 : 0
-          })
-        }
-      } catch (err) {}
+    if (!stats) return
+    
+    let updated = { ...lastSeen }
+    let changed = false
+
+    const updateSeen = (key, val) => {
+      if (updated[key] !== val) {
+        updated[key] = val
+        changed = true
+      }
     }
-    loadStats()
-  }, [])
+
+    if (pathname === '/admin/business-verification' || pathname === '/admin/labour') {
+      updateSeen('pendingKyc', stats.pendingKyc || 0)
+    }
+    if (pathname === '/admin/users') {
+      updateSeen('newUsersToday', stats.newUsersToday || 0)
+    }
+    if (pathname === '/admin/bookings') {
+      updateSeen('pendingRequests', stats.pendingRequests || 0)
+    }
+    if (pathname === '/admin/wallet') {
+      updateSeen('pendingSettlementCount', stats.pendingSettlementCount || 0)
+    }
+    if (pathname === '/admin/reports') {
+      updateSeen('supportTickets', stats.supportTickets || 0)
+    }
+
+    if ((stats.pendingKyc || 0) < (updated.pendingKyc || 0)) updateSeen('pendingKyc', stats.pendingKyc || 0)
+    if ((stats.newUsersToday || 0) < (updated.newUsersToday || 0)) updateSeen('newUsersToday', stats.newUsersToday || 0)
+    if ((stats.pendingRequests || 0) < (updated.pendingRequests || 0)) updateSeen('pendingRequests', stats.pendingRequests || 0)
+    if ((stats.pendingSettlementCount || 0) < (updated.pendingSettlementCount || 0)) updateSeen('pendingSettlementCount', stats.pendingSettlementCount || 0)
+    if ((stats.supportTickets || 0) < (updated.supportTickets || 0)) updateSeen('supportTickets', stats.supportTickets || 0)
+
+    if (changed) {
+      setLastSeen(updated)
+      localStorage.setItem('admin_nav_last_seen', JSON.stringify(updated))
+    }
+  }, [pathname, stats, lastSeen])
 
   useEffect(() => {
     setMobileOpen(false)
@@ -303,7 +331,21 @@ export function AdminLayout() {
               </div>
             ) : null}
             <ul className="space-y-1">
-              {section.items.map(({ to, label, icon: Icon, end }) => (
+              {section.items.map(({ to, label, icon: Icon, end }) => {
+                let badgeCount = 0
+                if (stats) {
+                  if (to === '/admin/business-verification' || to === '/admin/labour') badgeCount = Math.max(0, (stats.pendingKyc || 0) - (lastSeen.pendingKyc || 0))
+                  else if (to === '/admin/users') badgeCount = Math.max(0, (stats.newUsersToday || 0) - (lastSeen.newUsersToday || 0))
+                  else if (to === '/admin/bookings') badgeCount = Math.max(0, (stats.pendingRequests || 0) - (lastSeen.pendingRequests || 0))
+                  else if (to === '/admin/wallet') badgeCount = Math.max(0, (stats.pendingSettlementCount || 0) - (lastSeen.pendingSettlementCount || 0))
+                  else if (to === '/admin/reports') badgeCount = Math.max(0, (stats.supportTickets || 0) - (lastSeen.supportTickets || 0))
+                }
+                
+                if (pathname.startsWith(to)) {
+                  badgeCount = 0
+                }
+
+                return (
                 <li key={to}>
                   <NavLink
                     to={to}
@@ -323,43 +365,34 @@ export function AdminLayout() {
                   >
                     {({ isActive }) => (
                       <>
-                        <span
-                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-sm ring-1 transition ${
-                            isActive
-                              ? 'bg-white text-brand ring-brand/25 shadow-[0_4px_14px_-8px_rgba(28,175,98,0.35)]'
-                              : 'bg-white text-slate-500 ring-slate-200/85 group-hover:text-brand group-hover:ring-brand/20'
-                          }`}
-                        >
-                          <Icon className="h-[18px] w-[18px]" aria-hidden />
-                        </span>
+                        <div className="relative">
+                          <span
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-sm ring-1 transition ${
+                              isActive
+                                ? 'bg-white text-brand ring-brand/25 shadow-[0_4px_14px_-8px_rgba(28,175,98,0.35)]'
+                                : 'bg-white text-slate-500 ring-slate-200/85 group-hover:text-brand group-hover:ring-brand/20'
+                            }`}
+                          >
+                            <Icon className="h-[18px] w-[18px]" aria-hidden />
+                          </span>
+                          {badgeCount > 0 && (
+                            <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white shadow-[0_0_0_2px_white] ring-1 ring-inset ring-rose-600/20">
+                              {badgeCount}
+                            </span>
+                          )}
+                        </div>
                         <span className={`min-w-0 flex-1 truncate ${collapsed ? 'md:sr-only' : ''}`}>{label}</span>
                         {!collapsed ? (
-                          to === '/admin/labour' && navBadges.pendingKyc > 0 ? (
-                             <span className="ml-auto inline-flex items-center justify-center rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm ring-1 ring-inset ring-rose-600/20">
-                               {navBadges.pendingKyc}
-                             </span>
-                           ) : to === '/admin/users' && navBadges.newUsers > 0 ? (
-                             <span className="ml-auto inline-flex items-center justify-center rounded-full bg-blue-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm ring-1 ring-inset ring-blue-600/20">
-                               New
-                             </span>
-                           ) : (
-                            <ChevronRight
-                              className={`h-4 w-4 shrink-0 transition ${isActive ? 'translate-x-0 text-brand opacity-100' : 'text-slate-300 opacity-0 group-hover:translate-x-0.5 group-hover:opacity-100'}`}
-                              aria-hidden
-                            />
-                           )
+                          <ChevronRight
+                            className={`h-4 w-4 shrink-0 transition ${isActive ? 'translate-x-0 text-brand opacity-100' : 'text-slate-300 opacity-0 group-hover:translate-x-0.5 group-hover:opacity-100'}`}
+                            aria-hidden
+                          />
                         ) : null}
-                        {collapsed && to === '/admin/labour' && navBadges.pendingKyc > 0 && (
-                          <span className="absolute right-1 top-1 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-rose-500 shadow-sm ring-2 ring-white md:right-1.5 md:top-1.5" />
-                        )}
-                        {collapsed && to === '/admin/users' && navBadges.newUsers > 0 && (
-                          <span className="absolute right-1 top-1 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-blue-500 shadow-sm ring-2 ring-white md:right-1.5 md:top-1.5" />
-                        )}
                       </>
                     )}
                   </NavLink>
                 </li>
-              ))}
+              )})}
             </ul>
           </div>
         ))}

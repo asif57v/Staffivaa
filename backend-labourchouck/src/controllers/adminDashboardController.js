@@ -33,6 +33,8 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
   const todayCheckIns = await AttendanceRecord.countDocuments({ checkInAt: { $gte: startOfToday, $lte: endOfToday } })
   const todayCheckOuts = await AttendanceRecord.countDocuments({ checkOutAt: { $gte: startOfToday, $lte: endOfToday } })
   
+  const newUsersToday = await User.countDocuments({ createdAt: { $gte: startOfToday, $lte: endOfToday } })
+  
   const totalBookings = await WorkforceRequest.countDocuments({})
   
   // Revenue
@@ -65,9 +67,10 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
   
   const pendingSettledAgg = await WalletTransaction.aggregate([
     { $match: { type: 'Settlement', status: 'Pending' } },
-    { $group: { _id: null, total: { $sum: '$amount' } } }
+    { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
   ])
   const pendingSettlements = pendingSettledAgg[0]?.total || 0
+  const pendingSettlementCount = pendingSettledAgg[0]?.count || 0
   
   // Wallet Balance
   let adminWallet = await Wallet.findOne({ singletonId: 'ADMIN_WALLET' })
@@ -98,8 +101,10 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       platformEarnings,
       vendorSettlements,
       pendingSettlements,
+      pendingSettlementCount,
       walletBalance,
       supportTickets,
+      newUsersToday,
     }
   })
 })
