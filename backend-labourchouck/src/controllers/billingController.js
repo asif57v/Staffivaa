@@ -132,3 +132,8 @@ export const patchInvoiceStatusAdmin = asyncHandler(async (req, res) => {
   await invoice.save()
   sendSuccess(res, { invoice })
 })
+
+export const getInvoicesByRequestAdmin = asyncHandler(async (req, res) => {
+  const invoices = await Invoice.find({ requestId: req.params.requestId }).sort({ createdAt: -1 }).lean()
+  sendSuccess(res, { invoices })
+})

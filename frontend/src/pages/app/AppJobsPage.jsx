@@ -85,7 +85,12 @@ export function AppJobsPage() {
       transports: ['websocket', 'polling']
     })
     
-    socket.on('connect', () => console.log('[Socket.io AppJobsPage] Connected:', socket.id))
+    socket.on('connect', () => {
+      console.log('[Socket.io AppJobsPage] Connected:', socket.id)
+      if (user) {
+        socket.emit('authenticate', { _id: user.id || user._id, role: user.role || 'labour' })
+      }
+    })
     socket.on('connect_error', (err) => console.error('[Socket.io AppJobsPage] Error:', err.message))
     socket.on('disconnect', (reason) => console.log('[Socket.io AppJobsPage] Disconnected:', reason))
 
@@ -99,12 +104,24 @@ export function AppJobsPage() {
       refetch()
     })
 
+    socket.on('payment_status_update', (data) => {
+      console.log('[LabourJobs] Payment status updated:', data)
+      refetch()
+    })
+
+    socket.on('request_status_update', (data) => {
+      console.log('[LabourJobs] Request status updated:', data)
+      refetch()
+    })
+
     return () => {
       socket.off('connect')
       socket.off('connect_error')
       socket.off('disconnect')
       socket.off('bookingAcceptedGlobal')
       socket.off('platformFeeConfigurationUpdated')
+      socket.off('payment_status_update')
+      socket.off('request_status_update')
       socket.disconnect()
     }
   }, [refetch])

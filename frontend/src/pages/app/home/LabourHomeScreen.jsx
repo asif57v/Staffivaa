@@ -46,6 +46,7 @@ import {
 } from '../../../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../../../components/app/AppUserLocationModal.jsx'
 import { LabourCheckOutConfirmModal } from '../../../components/labour/LabourCheckOutConfirmModal.jsx'
+import { useGetNotificationsQuery } from '../../../store/api/workforceApi.js'
 import {
   bucketsFromAssignments,
 } from '../../../lib/labourJobDemoStorage.js'
@@ -366,10 +367,10 @@ export function LabourHomeScreen({ user }) {
     [entries, wallet.ratePaisePerMin, withdrawnPaise],
   )
 
-  const notifications = useMemo(
-    () => buildLabourNotifications(user, jobs, earnings),
-    [user, jobs, earnings, notifTick],
-  )
+  const { data: notifRes } = useGetNotificationsQuery(undefined, { pollingInterval: 10000 })
+  const notifications = useMemo(() => ({
+    unreadCount: notifRes?.data?.unreadCount || 0
+  }), [notifRes])
 
   const hasWorkLocation = useMemo(() => hasAppUserLocation(appLocation), [appLocation])
   const locationLabel = formatAppUserLocationLabel(appLocation) || 'Set your work area'

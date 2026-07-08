@@ -31,3 +31,32 @@ export async function fetchAdminUsers(params = {}) {
   const json = await apiRequest(`/users?${sp.toString()}`)
   return json.data
 }
+
+export async function patchUserStatusAdmin(userId, status, reason) {
+  const json = await apiRequest(`/users/${userId}/status`, {
+    method: 'PATCH',
+    body: { status, reason }
+  })
+  return json.data?.user ?? null
+}
+
+export async function addAdminNote(userId, text) {
+  const json = await apiRequest(`/users/${userId}/notes`, {
+    method: 'POST',
+    body: { text }
+  })
+  return json.data?.user ?? null
+}
+
+export async function updateUserWalletAdmin(userId, action, amount, reason) {
+  const json = await apiRequest(`/users/${userId}/wallet`, {
+    method: 'PATCH',
+    body: { action, amount, reason }
+  })
+  return json.data?.user ?? null
+}
+
+export async function getUserTimelineAdmin(userId) {
+  const json = await apiRequest(`/users/${userId}/timeline`)
+  return json.data?.logs ?? []
+}

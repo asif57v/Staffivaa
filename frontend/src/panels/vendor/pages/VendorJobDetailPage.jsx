@@ -1,6 +1,6 @@
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Users, Building2, MapPin, Calendar, Clock, UserCircle, CheckCircle2, Construction, AlertCircle, XCircle, Phone, Star, Award, Shield, FileDown, MessageSquare, ChevronDown, ChevronUp, Check, ArrowRight, IndianRupee, Percent, FileText } from 'lucide-react'
-import { useAcceptVendorJobMutation, useGetVendorJobsQuery, useGetVendorQuotationQuery, useSubmitQuotationMutation } from '../../../store/api/workforceApi.js'
+import { useAcceptVendorJobMutation, useGetVendorJobsQuery, useGetVendorQuotationQuery, useSubmitQuotationMutation, useGetSystemPricingQuery } from '../../../store/api/workforceApi.js'
 import { useState, useEffect } from 'react'
 import { getSocket } from '../../../services/socket.js'
 
@@ -17,6 +17,9 @@ export function VendorJobDetailPage() {
 
   const { data: quoteData, refetch: refetchQuote } = useGetVendorQuotationQuery(id, { skip: !id })
   const [submitQuotation, { isLoading: submittingQuote }] = useSubmitQuotationMutation()
+  const { data: pricingData } = useGetSystemPricingQuery()
+  
+  const advancePercentage = pricingData?.pricing?.corporate?.advancePercentage || 30
 
   const allocation = (data?.allocations ?? []).find((a) => String(a._id) === String(id))
   const req = allocation?.requestId
@@ -245,6 +248,18 @@ export function VendorJobDetailPage() {
                 <span>Quoted Total</span>
                 <span>₹{quotation.grandTotal.toLocaleString()}</span>
               </div>
+              {quotation.status === 'approved' && (
+                <div className="pt-2 mt-2 border-t border-slate-100 border-dashed space-y-1.5">
+                  <div className="flex justify-between text-[12px] font-bold text-emerald-600">
+                    <span>{req?.advancePaymentStatus === 'paid' ? `Advance Received (${advancePercentage}%)` : `Advance Pending (${advancePercentage}%)`}</span>
+                    <span>₹{Math.round(quotation.grandTotal * (advancePercentage / 100)).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-[12px] font-bold text-amber-600">
+                    <span>{req?.finalPaymentStatus === 'paid' ? 'Balance Paid' : 'Remaining Balance'}</span>
+                    <span>₹{Math.round(quotation.grandTotal * (1 - (advancePercentage / 100))).toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {['draft', 'submitted', 'under_review', 'revision_requested', 'revised'].includes(quotation.status) && (
@@ -288,7 +303,7 @@ export function VendorJobDetailPage() {
                 <Calendar className="h-4 w-4" />
                 <span className="text-[13px] font-bold">Request Date</span>
               </div>
-              <span className="text-[13px] font-medium text-slate-900 text-right">{new Date(req.createdAt).toLocaleString('en-IN', {day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit'})}</span>
+              <span className="text-[13px] font-medium text-slate-900 text-right">{req?.createdAt ? new Date(req.createdAt).toLocaleString('en-IN', {day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit'}) : 'Invalid Date'}</span>
             </div>
             
             <div className="flex justify-between items-start gap-4">

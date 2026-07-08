@@ -13,6 +13,15 @@ const auditLogSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    targetUser: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      index: true,
+    },
+    reason: {
+      type: String,
+      trim: true,
+    },
     previousValue: {
       type: mongoose.Schema.Types.Mixed,
     },

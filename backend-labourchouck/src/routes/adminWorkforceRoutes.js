@@ -16,6 +16,9 @@ import {
   sendPaymentReminderAdmin,
   recordOfflinePaymentAdmin,
   releaseVendorSettlementAdmin,
+  releasePartialSettlementAdmin,
+  holdSettlementAdmin,
+  addFinanceNoteAdmin,
 } from '../controllers/requestController.js'
 import {
   createAllocationAdmin,
@@ -27,6 +30,7 @@ import {
   upsertPricingRateAdmin,
   generateInvoiceAdmin,
   patchInvoiceStatusAdmin,
+  getInvoicesByRequestAdmin,
 } from '../controllers/billingController.js'
 import {
   getSystemPricing,
@@ -58,6 +62,9 @@ router.patch('/requests/:id/status', patchRequestStatusAdmin)
 router.post('/requests/:id/reminder', sendPaymentReminderAdmin)
 router.post('/requests/:id/record-payment', recordOfflinePaymentAdmin)
 router.post('/requests/:id/release-settlement', releaseVendorSettlementAdmin)
+router.post('/requests/:id/release-partial', releasePartialSettlementAdmin)
+router.post('/requests/:id/hold', holdSettlementAdmin)
+router.post('/requests/:id/notes', addFinanceNoteAdmin)
 
 router.post('/allocations', createAllocationAdmin)
 router.post('/assignments/:id/replace', replaceAssignmentAdmin)
@@ -76,6 +83,7 @@ router.get('/quotations', getQuotations)
 router.patch('/quotations/:id/approve', approveQuotation)
 router.patch('/quotations/:id/reject', rejectQuotation)
 router.post('/invoices/generate', generateInvoiceAdmin)
+router.get('/requests/:requestId/invoices', getInvoicesByRequestAdmin)
 router.patch('/invoices/:id', patchInvoiceStatusAdmin)
 
 export default router

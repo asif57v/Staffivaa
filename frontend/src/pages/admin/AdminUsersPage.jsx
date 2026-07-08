@@ -6,19 +6,18 @@ import { fetchAdminUsers } from '../../api/adminUsersApi.js'
 import { ApiError } from '../../api/http.js'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import { ROLE_LABELS, ROLE_LIST } from '../../constants/userRoles.js'
+import { ACCOUNT_STATUS_COLORS, ACCOUNT_STATUS_LABELS, ACCOUNT_STATUSES } from '../../constants/userStatuses.js'
 import { formatLastLoginDisplay } from '../../lib/formatAdminLastLogin.js'
 import { Link } from 'react-router-dom'
 
-function StatusPill({ active }) {
+function StatusPill({ status, active }) {
+  const accountStatus = status || (active !== false ? ACCOUNT_STATUSES.ACTIVE : ACCOUNT_STATUSES.DELETED)
+  const colorClass = ACCOUNT_STATUS_COLORS[accountStatus] || ACCOUNT_STATUS_COLORS[ACCOUNT_STATUSES.ACTIVE]
+  const label = ACCOUNT_STATUS_LABELS[accountStatus] || 'Active'
+
   return (
-    <span
-      className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ring-1 ${
-        active
-          ? 'bg-emerald-50 text-emerald-900 ring-emerald-200/80'
-          : 'bg-slate-100 text-slate-600 ring-slate-200/80'
-      }`}
-    >
-      {active ? 'Active' : 'Inactive'}
+    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ring-1 ${colorClass}`}>
+      {label}
     </span>
   )
 }
@@ -155,9 +154,10 @@ export function AdminUsersPage({ fixedRole, customTitle }) {
               onChange={(e) => setStatus(e.target.value)}
               className="w-full rounded-xl border border-slate-200/90 bg-white px-3 py-2.5 text-sm shadow-sm outline-none focus:ring-2 focus:ring-brand/35"
             >
-              <option value="all">Active & inactive</option>
-              <option value="active">Active only</option>
-              <option value="inactive">Inactive only</option>
+              <option value="all">All Statuses</option>
+              {Object.values(ACCOUNT_STATUSES).map((val) => (
+                <option key={val} value={val}>{ACCOUNT_STATUS_LABELS[val]}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -209,7 +209,7 @@ export function AdminUsersPage({ fixedRole, customTitle }) {
                         <RolePill role={u.role} />
                       </td>
                       <td className="px-4 py-3">
-                        <StatusPill active={u.isActive !== false} />
+                        <StatusPill status={u.accountStatus} active={u.isActive !== false} />
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-600">{formatLastLoginDisplay(u.lastLoginAt) || '—'}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">
@@ -254,7 +254,7 @@ export function AdminUsersPage({ fixedRole, customTitle }) {
                     <p className="mt-0.5 font-mono text-xs text-slate-600">+91 {u.phone || '—'}</p>
                     <p className="mt-1 truncate text-xs text-slate-500">{u.email || '—'}</p>
                   </div>
-                  <StatusPill active={u.isActive !== false} />
+                  <StatusPill status={u.accountStatus} active={u.isActive !== false} />
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
                   <div className="flex items-center gap-2">

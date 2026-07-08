@@ -56,4 +56,11 @@ router.patch(
   admin.patchCategory,
 )
 
+router.delete(
+  '/labour-categories/:id',
+  [param('id').isMongoId().withMessage('Invalid id')],
+  validateRequest,
+  admin.deleteCategory,
+)
+
 export default router

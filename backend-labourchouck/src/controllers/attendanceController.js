@@ -296,9 +296,11 @@ export const checkOut = asyncHandler(async (req, res) => {
   record.billableUnits = billableUnitsForStatus(record.attendanceStatus)
   await record.save()
 
-  // Mark the assignment as completed so it moves to the history tab for the worker
-  assignment.status = 'completed'
-  await assignment.save()
+  // Mark the assignment as completed ONLY if it's an individual (1-day) project
+  if (request && request.sourceType === 'individual') {
+    assignment.status = 'completed'
+    await assignment.save()
+  }
 
   // Emit attendance:checkOut socket event
   import('../utils/socket.js').then(({ getIO }) => {

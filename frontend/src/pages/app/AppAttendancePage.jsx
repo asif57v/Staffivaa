@@ -77,10 +77,10 @@ export function AppAttendancePage() {
   const [toast, setToast] = useState('')
   const [selectedDay, setSelectedDay] = useState(new Date().getDate())
   
-  const { data: assignmentsData, isLoading: loadingAssignments, refetch } = useGetLabourAssignmentsQuery()
+  const { data: assignmentsData, isLoading: loadingAssignments, refetch } = useGetLabourAssignmentsQuery(undefined, { pollingInterval: 5000, refetchOnMountOrArgChange: true })
   
   // Fetch ALL historical attendance records for this worker, without date filtering
-  const { data: attendanceData, isLoading: loadingAttendance } = useGetAttendanceQuery()
+  const { data: attendanceData, isLoading: loadingAttendance } = useGetAttendanceQuery(undefined, { pollingInterval: 5000, refetchOnMountOrArgChange: true })
   
   const [localDemo, setLocalDemo] = useState(() => loadJobDemoState())
   useEffect(() => subscribeJobDemo(setLocalDemo), [])

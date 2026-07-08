@@ -7,7 +7,7 @@ import { WalletTransaction } from '../models/WalletTransaction.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { USER_ROLES } from '../constants/roles.js'
-import { emitRequestStatusUpdate, emitToVendor } from '../utils/socket.js'
+import { emitRequestStatusUpdate, emitToVendor, emitToUser } from '../utils/socket.js'
 import { sendNotificationToUser } from '../services/notificationService.js'
 
 // Cache the instance
@@ -284,6 +284,17 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
         }
       });
     }).catch(err => console.error(err));
+    
+    if (request.labourId) {
+      emitToUser('labour', request.labourId.toString(), 'payment_status_update', { requestId: request._id.toString() });
+    }
+    
+    emitRequestStatusUpdate(request._id.toString(), { 
+      requestId: request._id.toString(), 
+      requestStatus: request.status,
+      userPaymentStatus: request.userPaymentStatus,
+      labourPaymentStatus: request.labourPaymentStatus
+    });
   }
 
   // --- Wallet Ledger Integration ---

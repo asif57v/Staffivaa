@@ -21,7 +21,11 @@ export const REQUEST_STATUS = {
   ADVANCE_PAID: 'advance_paid',
   PROJECT_ACTIVE: 'project_active',
   SETTLEMENT_PENDING: 'settlement_pending',
+  SETTLEMENT_ON_HOLD: 'settlement_on_hold',
+  PARTIALLY_RELEASED: 'partially_released',
   SETTLEMENT_COMPLETED: 'settlement_completed',
+  REFUNDED: 'refunded',
+  DISPUTED: 'disputed',
 }
 
 export const SCHEDULE_TYPE = {

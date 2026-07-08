@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
 import {
@@ -19,29 +19,16 @@ import {
   X,
 } from 'lucide-react'
 import { useAuth } from '../../../hooks/useAuth.js'
-import { KYC_STATUS } from '../../../constants/userRoles.js'
-import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
-import { AppButton } from '../../../components/app-ui/buttons/AppButton.jsx'
 import { AppBadge } from '../../../components/app-ui/data-display/AppBadge.jsx'
 import { AppEmptyState } from '../../../components/app/AppEmptyState.jsx'
 import { GlassPanel } from '../../../components/ui/GlassPanel.jsx'
 import { AppPillTabs } from '../../../components/app-ui/navigation/AppPillTabs.jsx'
 import {
-  buildLabourNotifications,
-  dismissNotification,
-  markNotificationRead,
-  markNotificationsRead,
-  subscribeLabourNotifications,
-} from '../../../lib/labourNotifications.js'
-import {
-  loadJobDemoState,
-  nowIso,
-  saveJobDemoState,
-  subscribeJobDemo,
-} from '../../../lib/labourJobDemoStorage.js'
-import { readAttendanceEntries, subscribeAttendance } from '../../../lib/labourAttendanceStorage.js'
-import { readWalletState, subscribeWallet } from '../../../lib/labourWalletStorage.js'
-import { buildEarningsGlance } from '../../../lib/labourHomeHelpers.js'
+  useGetNotificationsQuery,
+  useMarkNotificationReadMutation,
+  useMarkAllNotificationsReadMutation,
+  useDeleteNotificationMutation,
+} from '../../../store/api/workforceApi.js'
 
 const TABS = [
   { id: 'all', label: 'All' },
@@ -49,14 +36,25 @@ const TABS = [
   { id: 'updates', label: 'Updates' },
 ]
 
-const KIND_ICON = {
-  job_request: Flame,
-  kyc: IdCard,
-  attendance: Timer,
-  earnings: Wallet,
-  assignment: HardHat,
-  profile: MapPin,
-  system: Bell,
+const TYPE_MAPPING = {
+  'NEW_USER': { icon: Bell, kind: 'system', priority: 'normal', category: 'updates' },
+  'NEW_LABOUR': { icon: Bell, kind: 'system', priority: 'normal', category: 'updates' },
+  'NEW_VENDOR': { icon: Bell, kind: 'system', priority: 'normal', category: 'updates' },
+  'NEW_CORPORATE': { icon: Bell, kind: 'system', priority: 'normal', category: 'updates' },
+  'KYC_SUBMITTED': { icon: IdCard, kind: 'kyc', priority: 'normal', category: 'updates' },
+  'KYC_APPROVED': { icon: IdCard, kind: 'kyc', priority: 'high', category: 'updates' },
+  'KYC_REJECTED': { icon: IdCard, kind: 'kyc', priority: 'high', category: 'updates' },
+  'BOOKING_CREATED': { icon: Flame, kind: 'job_request', priority: 'high', category: 'jobs' },
+  'BOOKING_UPDATED': { icon: Flame, kind: 'job_request', priority: 'normal', category: 'jobs' },
+  'BOOKING_CANCELLED': { icon: Flame, kind: 'job_request', priority: 'high', category: 'jobs' },
+  'LABOUR_ASSIGNED': { icon: HardHat, kind: 'assignment', priority: 'high', category: 'jobs' },
+  'LABOUR_CHECK_IN': { icon: Timer, kind: 'attendance', priority: 'normal', category: 'updates' },
+  'LABOUR_CHECK_OUT': { icon: Timer, kind: 'attendance', priority: 'normal', category: 'updates' },
+  'LABOUR_REPLACED': { icon: HardHat, kind: 'assignment', priority: 'high', category: 'jobs' },
+  'PAYMENT_RECEIVED': { icon: Wallet, kind: 'earnings', priority: 'high', category: 'updates' },
+  'WALLET_CREDIT': { icon: Wallet, kind: 'earnings', priority: 'high', category: 'updates' },
+  'WALLET_DEBIT': { icon: Wallet, kind: 'earnings', priority: 'normal', category: 'updates' },
+  'WITHDRAWAL_COMPLETED': { icon: Wallet, kind: 'earnings', priority: 'high', category: 'updates' },
 }
 
 const KIND_TONE = {
@@ -74,95 +72,72 @@ export function LabourNotificationsPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const [tab, setTab] = useState('all')
-  const [jobs, setJobs] = useState(loadJobDemoState)
-  const [entries, setEntries] = useState(readAttendanceEntries)
-  const [wallet, setWallet] = useState(readWalletState)
-  const [tick, setTick] = useState(0)
-  const [confirmOfferId, setConfirmOfferId] = useState(null)
   const [toast, setToast] = useState('')
 
-  const kycOk = user?.labourProfile?.kycStatus === KYC_STATUS.VERIFIED
+  const { data: notificationsData, refetch } = useGetNotificationsQuery(undefined, { pollingInterval: 10000 })
+  const [markRead] = useMarkNotificationReadMutation()
+  const [markAllRead] = useMarkAllNotificationsReadMutation()
+  const [deleteNotif] = useDeleteNotificationMutation()
 
-  useEffect(() => subscribeJobDemo(setJobs), [])
-  useEffect(() => subscribeAttendance(setEntries), [])
-  useEffect(() => subscribeWallet(setWallet), [])
-  useEffect(() => subscribeLabourNotifications(() => setTick((t) => t + 1)), [])
+  const feedItems = notificationsData?.data?.notifications || []
+  const unreadCount = notificationsData?.data?.unreadCount || 0
+  const jobCount = feedItems.filter(n => TYPE_MAPPING[n.type]?.category === 'jobs').length
 
-  const earnings = useMemo(() => {
-    const withdrawn = wallet.withdrawals.reduce((a, w) => a + w.amountPaise, 0)
-    return buildEarningsGlance(entries, wallet.ratePaisePerMin, withdrawn)
-  }, [entries, wallet])
-
-  const feed = useMemo(
-    () => buildLabourNotifications(user, jobs, earnings),
-    [user, jobs, earnings, tick],
-  )
+  const mappedFeedItems = useMemo(() => {
+    return feedItems.map(n => {
+      const mapping = TYPE_MAPPING[n.type] || { icon: Bell, kind: 'system', priority: 'normal', category: 'updates' }
+      return {
+        ...n,
+        icon: mapping.icon,
+        kind: mapping.kind,
+        priority: mapping.priority,
+        category: mapping.category,
+      }
+    })
+  }, [feedItems])
 
   const filtered = useMemo(() => {
-    if (tab === 'jobs') return feed.items.filter((n) => n.category === 'jobs')
-    if (tab === 'updates') return feed.items.filter((n) => n.category === 'updates')
-    return feed.items
-  }, [feed.items, tab])
+    if (tab === 'jobs') return mappedFeedItems.filter((n) => n.category === 'jobs')
+    if (tab === 'updates') return mappedFeedItems.filter((n) => n.category === 'updates')
+    return mappedFeedItems
+  }, [mappedFeedItems, tab])
 
   const showToast = useCallback((msg) => {
     setToast(msg)
     window.setTimeout(() => setToast(''), 2800)
   }, [])
 
-  const handleMarkAllRead = () => {
-    markNotificationsRead(feed.items.map((n) => n.id))
-    setTick((t) => t + 1)
-    showToast('All caught up — notifications marked read.')
-  }
-
-  const handleOpen = (n) => {
-    markNotificationRead(n.id)
-    setTick((t) => t + 1)
-    if (n.href && n.kind !== 'job_request') {
-      navigate(n.href)
+  const handleMarkAllRead = async () => {
+    try {
+      await markAllRead().unwrap()
+      refetch()
+      showToast('All caught up — notifications marked read.')
+    } catch (err) {
+      showToast('Failed to mark all as read.')
     }
   }
 
-  const handleDismiss = (id, e) => {
+  const handleOpen = async (n) => {
+    if (!n.isRead) {
+      await markRead(n._id).unwrap()
+      refetch()
+    }
+    
+    // Simple navigation logic based on kind
+    if (n.kind === 'kyc') navigate('/app/kyc')
+    else if (n.kind === 'attendance') navigate('/app/attendance')
+    else if (n.kind === 'earnings') navigate('/app/earnings')
+    else if (n.kind === 'assignment' || n.kind === 'job_request') navigate('/app/jobs')
+  }
+
+  const handleDismiss = async (id, e) => {
     e?.stopPropagation()
-    dismissNotification(id)
-    setTick((t) => t + 1)
-  }
-
-  const handleAccept = (offerId) => {
-    if (!kycOk) {
-      showToast('Complete KYC before accepting jobs.')
-      navigate('/app/kyc')
-      return
+    try {
+      await deleteNotif(id).unwrap()
+      refetch()
+    } catch (err) {
+      showToast('Failed to dismiss notification.')
     }
-    setConfirmOfferId(offerId)
-  }
-
-  const confirmAccept = (offerId) => {
-    const offer = jobs.offers.find((o) => o.id === offerId)
-    if (!offer) return
-    saveJobDemoState({
-      ...jobs,
-      offers: jobs.offers.filter((o) => o.id !== offerId),
-      active: [...jobs.active, { ...offer, acceptedAt: nowIso() }],
-    })
-    markNotificationRead(`job:${offerId}`)
-    setConfirmOfferId(null)
-    setJobs(loadJobDemoState())
-    setTick((t) => t + 1)
-    showToast('Job accepted — see Active in My Jobs.')
-  }
-
-  const handleDecline = (offerId) => {
-    saveJobDemoState({
-      ...jobs,
-      offers: jobs.offers.filter((o) => o.id !== offerId),
-    })
-    markNotificationRead(`job:${offerId}`)
-    dismissNotification(`job:${offerId}`)
-    setJobs(loadJobDemoState())
-    setTick((t) => t + 1)
-    showToast('Request removed from your list.')
   }
 
   return (
@@ -190,18 +165,18 @@ export function LabourNotificationsPage() {
             </div>
             <p className="mt-1 text-sm text-white/75">Job requests, KYC, pay & attendance alerts</p>
           </div>
-          {feed.unreadCount > 0 ? (
+          {unreadCount > 0 ? (
             <span className="flex h-8 min-w-8 items-center justify-center rounded-full bg-amber-400 px-2 text-xs font-black text-amber-950">
-              {feed.unreadCount > 99 ? '99+' : feed.unreadCount}
+              {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           ) : null}
         </div>
 
         <div className="relative mt-4 grid grid-cols-3 gap-2">
           {[
-            { label: 'Unread', value: String(feed.unreadCount) },
-            { label: 'Job requests', value: String(feed.jobCount) },
-            { label: 'Total', value: String(feed.items.length) },
+            { label: 'Unread', value: String(unreadCount) },
+            { label: 'Job requests', value: String(jobCount) },
+            { label: 'Total', value: String(feedItems.length) },
           ].map((s) => (
             <div
               key={s.label}
@@ -213,7 +188,7 @@ export function LabourNotificationsPage() {
           ))}
         </div>
 
-        {feed.unreadCount > 0 ? (
+        {unreadCount > 0 ? (
           <button
             type="button"
             onClick={handleMarkAllRead}
@@ -246,29 +221,29 @@ export function LabourNotificationsPage() {
         ) : (
           <ul className="space-y-3">
             {filtered.map((n, i) => {
-              const Icon = KIND_ICON[n.kind] || Bell
+              const Icon = n.icon || Bell
               const tone = KIND_TONE[n.kind] || KIND_TONE.system
-              const offer = n.offerId ? jobs.offers.find((o) => o.id === n.offerId) : null
 
               return (
                 <motion.li
-                  key={n.id}
+                  key={n._id}
                   initial={reduce ? false : { opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04 }}
                 >
                   <GlassPanel
-                    className={`relative overflow-hidden border-2 p-4 transition ${
-                      n.unread ? 'border-brand/30 bg-white shadow-md shadow-brand/5' : 'border-slate-200/90'
+                    className={`relative overflow-hidden border-2 p-4 transition cursor-pointer ${
+                      !n.isRead ? 'border-brand/30 bg-white shadow-md shadow-brand/5' : 'border-slate-200/90'
                     } ${n.priority === 'high' ? 'ring-1 ring-amber-200/60' : ''}`}
+                    onClick={() => handleOpen(n)}
                   >
-                    {n.unread ? (
+                    {!n.isRead ? (
                       <span className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-brand shadow-[0_0_0_3px_rgba(255,179,71,0.25)]" />
                     ) : null}
 
                     <button
                       type="button"
-                      onClick={() => handleDismiss(n.id)}
+                      onClick={(e) => handleDismiss(n._id, e)}
                       className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                       aria-label="Dismiss"
                     >
@@ -285,81 +260,17 @@ export function LabourNotificationsPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           {n.priority === 'high' ? <AppBadge variant="amber">Important</AppBadge> : null}
                           {n.kind === 'job_request' ? <AppBadge variant="brand">Job</AppBadge> : null}
-                          {!n.unread ? (
+                          {n.isRead ? (
                             <span className="text-[10px] font-bold uppercase text-slate-400">Read</span>
                           ) : null}
                         </div>
                         <p className="mt-1 text-sm font-extrabold text-slate-900">{n.title}</p>
                         <p className="mt-1 text-xs leading-relaxed text-slate-600">{n.body}</p>
-
-                        {offer && n.meta?.shift ? (
-                          <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-700">
-                            <Clock className="h-3.5 w-3.5 text-brand" aria-hidden />
-                            {n.meta.shift}
-                          </p>
-                        ) : null}
-                        {offer ? (
-                          <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-600">
-                            <Building2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                            {offer.site}
-                          </p>
-                        ) : null}
-
-                        {n.kind === 'job_request' && offer ? (
-                          <div className="mt-4 space-y-2">
-                            {confirmOfferId === offer.id ? (
-                              <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
-                                <p className="text-xs font-bold text-slate-900">Accept this assignment?</p>
-                                <p className="mt-1 text-[11px] text-slate-600">
-                                  You agree to report for {offer.trade} at {offer.site}.
-                                </p>
-                                <div className="mt-3 flex gap-2">
-                                  <AppButton type="button" variant="secondary" onClick={() => setConfirmOfferId(null)}>
-                                    Cancel
-                                  </AppButton>
-                                  <AppPrimaryButton
-                                    type="button"
-                                    className="flex-1 py-2.5 text-xs"
-                                    onClick={() => confirmAccept(offer.id)}
-                                  >
-                                    <CheckCircle2 className="h-4 w-4" aria-hidden />
-                                    Confirm
-                                  </AppPrimaryButton>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="flex gap-2">
-                                <AppButton type="button" variant="secondary" onClick={() => handleDecline(offer.id)}>
-                                  Decline
-                                </AppButton>
-                                <AppPrimaryButton
-                                  type="button"
-                                  className={`flex-1 py-2.5 text-xs ${!kycOk ? 'opacity-55' : ''}`}
-                                  onClick={() => handleAccept(offer.id)}
-                                >
-                                  Accept job
-                                </AppPrimaryButton>
-                              </div>
-                            )}
-                          </div>
-                        ) : n.href ? (
-                          <button
-                            type="button"
-                            onClick={() => handleOpen(n)}
-                            className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-brand underline-offset-4 hover:underline"
-                          >
-                            {n.ctaLabel || 'Open'}
-                            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => markNotificationRead(n.id)}
-                            className="mt-3 text-xs font-bold text-slate-500 hover:text-slate-800"
-                          >
-                            Mark as read
-                          </button>
-                        )}
+                        
+                        <span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-brand underline-offset-4 hover:underline">
+                          View details
+                          <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                        </span>
                       </div>
                     </div>
                   </GlassPanel>
@@ -368,21 +279,8 @@ export function LabourNotificationsPage() {
             })}
           </ul>
         )}
-
-        <GlassPanel className="border-dashed border-slate-300/90 p-4 text-center">
-          <Sparkles className="mx-auto h-5 w-5 text-brand" aria-hidden />
-          <p className="mt-2 text-xs leading-relaxed text-slate-600">
-            Demo alerts on this device. Production will push real-time job offers and admin messages.
-          </p>
-          <Link
-            to="/app/jobs"
-            className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-brand underline-offset-4 hover:underline"
-          >
-            Open full jobs list
-            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-          </Link>
-        </GlassPanel>
       </motion.div>
     </div>
   )
 }
+

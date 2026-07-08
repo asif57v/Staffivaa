@@ -136,3 +136,11 @@ export const patchCategory = asyncHandler(async (req, res) => {
   await c.save()
   return sendSuccess(res, { message: 'Category updated', data: { category: c } })
 })
+
+export const deleteCategory = asyncHandler(async (req, res) => {
+  const c = await LabourCategory.findByIdAndDelete(req.params.id)
+  if (!c) {
+    return sendError(res, { message: 'Category not found', statusCode: HTTP_STATUS.NOT_FOUND, code: 'NOT_FOUND' })
+  }
+  return sendSuccess(res, { message: 'Category deleted' })
+})

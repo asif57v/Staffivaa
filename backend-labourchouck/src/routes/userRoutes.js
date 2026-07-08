@@ -81,4 +81,9 @@ router.patch(
 
 router.get('/:id', restrictTo(USER_ROLES.ADMIN), validateUserIdParam, validateRequest, user.getUserById)
 
+router.patch('/:id/status', restrictTo(USER_ROLES.ADMIN), validateUserIdParam, validateRequest, user.patchUserStatusAdmin)
+router.post('/:id/notes', restrictTo(USER_ROLES.ADMIN), validateUserIdParam, validateRequest, user.addAdminNote)
+router.patch('/:id/wallet', restrictTo(USER_ROLES.ADMIN), validateUserIdParam, validateRequest, user.updateUserWalletAdmin)
+router.get('/:id/timeline', restrictTo(USER_ROLES.ADMIN), validateUserIdParam, validateRequest, user.getUserTimelineAdmin)
+
 export default router

@@ -273,6 +273,33 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       invalidatesTags: ['AdminRequests', 'Requests', 'VendorWallet'],
     }),
+    releasePartialSettlement: build.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/admin/workforce/requests/${id}/release-partial`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: ['AdminRequests', 'Requests', 'VendorWallet'],
+    }),
+    holdSettlement: build.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/admin/workforce/requests/${id}/hold`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: ['AdminRequests', 'Requests'],
+    }),
+    addFinanceNote: build.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/admin/workforce/requests/${id}/notes`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: ['AdminRequests', 'Requests'],
+    }),
     createAllocation: build.mutation({
       query: (body) => ({ url: '/admin/workforce/allocations', method: 'POST', body }),
       transformResponse: unwrap,
@@ -316,6 +343,11 @@ export const workforceApi = baseApi.injectEndpoints({
       query: (body) => ({ url: '/admin/workforce/invoices/generate', method: 'POST', body }),
       transformResponse: unwrap,
       invalidatesTags: ['Invoices', 'AdminRequests'],
+    }),
+    getInvoicesByRequest: build.query({
+      query: (requestId) => `/admin/workforce/requests/${requestId}/invoices`,
+      transformResponse: unwrap,
+      providesTags: (r, e, requestId) => [{ type: 'Invoices', id: requestId }],
     }),
     getAdminPricing: build.query({
       query: () => '/admin/workforce/pricing',
@@ -519,10 +551,14 @@ export const {
   useSendPaymentReminderMutation,
   useRecordOfflinePaymentMutation,
   useReleaseVendorSettlementMutation,
+  useReleasePartialSettlementMutation,
+  useHoldSettlementMutation,
+  useAddFinanceNoteMutation,
   useCreateAllocationMutation,
   useReviewCorporateMutation,
   useReviewVendorMutation,
   useGenerateInvoiceMutation,
+  useGetInvoicesByRequestQuery,
   useGetAdminPricingQuery,
   useUpsertPricingMutation,
   useGetSystemPricingQuery,

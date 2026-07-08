@@ -1,48 +1,116 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Wallet as WalletIcon } from 'lucide-react'
 import { WalletBalanceCard } from './components/WalletBalanceCard'
 import { TransactionCard } from './components/TransactionCard'
 import { AddMoneyModal } from './components/AddMoneyModal'
 import { PageSkeleton } from '../../../components/ui/PageSkeleton'
+import { useGetWalletBalanceQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation } from '../../../store/api/walletApi'
+import { useAuth } from '../../../hooks/useAuth'
 
-// Dummy Data
-const INITIAL_TRANSACTIONS = [
-  { id: 1, title: 'Money Added', amount: 1000, type: 'credit', status: 'success', date: 'Today, 10:30 AM' },
-  { id: 2, title: 'Money Added', amount: 500, type: 'credit', status: 'success', date: 'Yesterday, 02:15 PM' },
-  { id: 3, title: 'Booking Payment', amount: 200, type: 'debit', status: 'success', date: '2 days ago' },
-]
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true)
+      return
+    }
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.onload = () => resolve(true)
+    script.onerror = () => resolve(false)
+    document.body.appendChild(script)
+  })
+}
 
 export function WalletPage() {
   const navigate = useNavigate()
-  const [balance, setBalance] = useState(2500)
-  const [transactions, setTransactions] = useState(INITIAL_TRANSACTIONS)
+  const { user } = useAuth()
+  
+  const { data: walletData, isLoading, refetch } = useGetWalletBalanceQuery()
+  const [createOrder] = useCreateRazorpayOrderMutation()
+  const [verifyPayment] = useVerifyRazorpayPaymentMutation()
+  
   const [isAddMoneyOpen, setIsAddMoneyOpen] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
 
-  const handleAddMoney = (amount) => {
+  const balance = walletData?.data?.balance || 0
+  const transactions = walletData?.data?.transactions || []
+
+  const handleAddMoney = async (amount) => {
     setIsProcessing(true)
     setIsAddMoneyOpen(false)
-    
-    // Simulate network request
-    setTimeout(() => {
-      setBalance(prev => prev + amount)
-      const newTransaction = {
-        id: Date.now(),
-        title: 'Money Added via UPI',
-        amount: amount,
-        type: 'credit',
-        status: 'success',
-        date: 'Just now'
+
+    try {
+      const isLoaded = await loadRazorpayScript()
+      if (!isLoaded) {
+        alert('Failed to load Razorpay SDK. Are you online?')
+        setIsProcessing(false)
+        return
       }
-      setTransactions([newTransaction, ...transactions])
+
+      // Create Order
+      const res = await createOrder({ amount }).unwrap()
+      const { orderId, amount: orderAmount, currency, key } = res.data
+
+      const options = {
+        key: key,
+        amount: orderAmount.toString(),
+        currency: currency,
+        name: 'Staffivaa',
+        description: 'Add Money to Wallet',
+        image: '/favicon.svg',
+        order_id: orderId,
+        handler: async function (response) {
+          try {
+            setIsProcessing(true)
+            await verifyPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              amount: amount
+            }).unwrap()
+            
+            // Payment successful, RTK query invalidates 'Wallet' tag automatically, but we can also refetch
+            refetch()
+          } catch (error) {
+            console.error('Payment verification failed:', error)
+            alert('Payment verification failed. If money was deducted, it will be refunded.')
+          } finally {
+            setIsProcessing(false)
+          }
+        },
+        prefill: {
+          name: user?.fullName || '',
+          email: user?.email || '',
+          contact: user?.phone || ''
+        },
+        theme: {
+          color: '#0f172a'
+        },
+        modal: {
+          ondismiss: function() {
+            setIsProcessing(false)
+          }
+        }
+      }
+
+      const rzp1 = new window.Razorpay(options)
+      rzp1.on('payment.failed', function (response) {
+        console.error('Payment Failed:', response.error)
+        setIsProcessing(false)
+      })
+      rzp1.open()
+      
+    } catch (error) {
+      console.error('Failed to initiate payment:', error)
+      alert(error?.data?.message || 'Failed to initiate payment. Please try again.')
       setIsProcessing(false)
-    }, 1500)
+    }
   }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      <PageSkeleton visible={isProcessing} />
+      <PageSkeleton visible={isProcessing || isLoading} />
       
       {/* Sticky Header */}
       <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-gray-100 px-4 py-4 pt-8">
@@ -76,7 +144,14 @@ export function WalletPage() {
           <div className="space-y-1">
             {transactions.length > 0 ? (
               transactions.map(txn => (
-                <TransactionCard key={txn.id} transaction={txn} />
+                <TransactionCard key={txn._id || txn.transactionId} transaction={{
+                  id: txn._id || txn.transactionId,
+                  title: txn.source || 'Wallet Transaction',
+                  amount: txn.amount,
+                  type: txn.type.toLowerCase(),
+                  status: txn.status.toLowerCase(),
+                  date: new Date(txn.createdAt).toLocaleString()
+                }} />
               ))
             ) : (
               <div className="text-center py-10 bg-white rounded-2xl border border-gray-100 shadow-sm mt-4">

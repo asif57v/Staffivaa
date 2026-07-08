@@ -578,11 +578,29 @@ export const releaseVendorSettlementAdmin = asyncHandler(async (req, res) => {
       amount: netAmountToVendor,
       status: 'Completed'
     })
+    
+    request.settlementLedger.push({
+      amount: netAmountToVendor,
+      type: 'Final',
+      method: req.body.method || 'RazorpayX',
+      reference: req.body.reference || `TXN-VND-${Date.now()}`,
+      adminName: req.user?.firstName ? `${req.user.firstName} ${req.user.lastName}` : 'System Admin',
+      date: new Date()
+    })
   }
 
   request.finalPaymentStatus = 'paid'
   request.status = 'settlement_completed'
   await request.save()
+
+  await logAudit({
+    adminId: req.user._id,
+    action: 'Final Settlement Released',
+    previousValue: null,
+    newValue: { amount: netAmountToVendor },
+    module: 'Finance',
+    req
+  })
 
   if (request.sourceType === REQUEST_SOURCE.CORPORATE) {
     emitToCorporate(request.clientId?.toString(), 'request_status_update', { requestId: request._id.toString(), status: request.status })
@@ -590,4 +608,105 @@ export const releaseVendorSettlementAdmin = asyncHandler(async (req, res) => {
   }
 
   sendSuccess(res, { message: 'Settlement released to vendor wallet successfully', request })
+})
+
+export const releasePartialSettlementAdmin = asyncHandler(async (req, res) => {
+  const { amount, method, reference, notes } = req.body
+  const request = await WorkforceRequest.findById(req.params.id)
+  if (!request) return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
+
+  const allocation = await Allocation.findOne({ requestId: request._id }).lean()
+  if (!allocation || !allocation.vendorId) {
+    return sendError(res, { message: 'No workforce allocation found for this project', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  request.settlementLedger.push({
+    amount: Number(amount),
+    type: 'Partial',
+    method: method || 'Manual Bank Transfer',
+    reference: reference || '',
+    adminName: req.user?.firstName ? `${req.user.firstName} ${req.user.lastName}` : 'System Admin',
+    date: new Date()
+  })
+
+  request.status = 'partially_released'
+  await request.save()
+
+  const { WalletTransaction } = await import('../models/WalletTransaction.js')
+  await WalletTransaction.create({
+    transactionId: `TXN-PRT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    bookingId: request._id,
+    payerId: request.clientId,
+    payerName: 'Admin Partial Release',
+    payerType: 'system',
+    labourId: allocation.vendorId,
+    type: 'Settlement',
+    source: 'Partial Settlement',
+    amount: Number(amount),
+    status: 'Completed'
+  })
+
+  await User.findByIdAndUpdate(allocation.vendorId, {
+    $inc: { walletBalance: Number(amount) }
+  })
+
+  await logAudit({
+    adminId: req.user._id,
+    action: 'Partial Settlement Released',
+    previousValue: null,
+    newValue: { amount },
+    reason: notes,
+    module: 'Finance',
+    req
+  })
+
+  sendSuccess(res, { message: 'Partial settlement released', request })
+})
+
+export const holdSettlementAdmin = asyncHandler(async (req, res) => {
+  const { holdReason, holdNotes, expectedResumeDate, status } = req.body
+  const request = await WorkforceRequest.findById(req.params.id)
+  if (!request) return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
+
+  if (status) {
+    request.status = status
+    if (status !== 'settlement_on_hold') {
+      request.holdReason = null
+      request.holdNotes = null
+      request.expectedResumeDate = null
+    }
+  } else {
+    request.status = 'settlement_on_hold'
+    request.holdReason = holdReason
+    request.holdNotes = holdNotes
+    request.expectedResumeDate = expectedResumeDate ? new Date(expectedResumeDate) : null
+  }
+  await request.save()
+
+  await logAudit({
+    adminId: req.user._id,
+    action: status === 'settlement_pending' ? 'Settlement Resumed' : 'Settlement Placed On Hold',
+    previousValue: null,
+    newValue: { holdReason, expectedResumeDate, status: request.status },
+    reason: holdNotes,
+    module: 'Finance',
+    req
+  })
+
+  sendSuccess(res, { message: status === 'settlement_pending' ? 'Settlement resumed' : 'Settlement placed on hold', request })
+})
+
+export const addFinanceNoteAdmin = asyncHandler(async (req, res) => {
+  const { note } = req.body
+  const request = await WorkforceRequest.findById(req.params.id)
+  if (!request) return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
+
+  request.adminFinanceNotes.push({
+    note,
+    adminName: req.user?.firstName ? `${req.user.firstName} ${req.user.lastName}` : 'System Admin',
+    date: new Date()
+  })
+  await request.save()
+
+  sendSuccess(res, { message: 'Finance note added', request })
 })

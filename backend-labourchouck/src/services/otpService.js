@@ -14,7 +14,7 @@ async function sendRealSms(phone, code) {
     const apiKey = process.env.SMSINDIAHUB_API_KEY || 'BCIYO13pGkmdHgmGGFSqhA';
     const senderId = process.env.SMSINDIAHUB_SENDER_ID || 'SMSHUB';
     
-    const message = `Welcome to the V10 gym powered by SMSINDIAHUB. Your OTP for registration is ${code}`;
+    const message = `Welcome to the Staffivaa powered by SMSINDIAHUB. Your OTP for registration is ${code}`;
     
     const url = `http://cloud.smsindiahub.in/vendorsms/pushsms.aspx?APIKey=${apiKey}&sid=${senderId}&msisdn=${phone}&fl=0&gwid=2&msg=${encodeURIComponent(message)}`;
     

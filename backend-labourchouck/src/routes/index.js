@@ -11,6 +11,7 @@ import vendorRoutes from './vendorRoutes.js'
 import workforceRoutes from './workforceRoutes.js'
 import adminWorkforceRoutes from './adminWorkforceRoutes.js'
 import adminWalletRoutes from './adminWalletRoutes.js'
+import walletRoutes from './walletRoutes.js'
 import notificationRoutes from './notificationRoutes.js'
 import adminDashboardRoutes from './adminDashboardRoutes.js'
 import adminSearchRoutes from './adminSearchRoutes.js'
@@ -22,6 +23,7 @@ const router = Router()
 
 router.use('/auth', authRoutes)
 router.use('/users', userRoutes)
+router.use('/wallet', walletRoutes)
 router.use('/uploads', uploadRoutes)
 router.use('/labour-categories', labourCategoryRoutes)
 router.use('/buildmart', buildmartRoutes)

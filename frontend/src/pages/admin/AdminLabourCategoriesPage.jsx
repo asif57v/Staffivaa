@@ -8,11 +8,14 @@ import {
   Sparkles,
   Tag,
   X,
+  Edit2,
+  Trash2,
 } from 'lucide-react'
 import {
   fetchAdminLabourCategoryTree,
   createAdminLabourCategory,
   patchAdminLabourCategory,
+  deleteAdminLabourCategory,
 } from '../../api/adminLabourCategoriesApi.js'
 import { ApiError } from '../../api/http.js'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
@@ -20,16 +23,16 @@ import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
 import { AdminSubcategoryImageEditor } from '../../components/admin/AdminSubcategoryImageEditor.jsx'
 import { getCategoryImageUrl } from '../../lib/labourCategoryDisplay.js'
 
-function AddCategoryModal({ groupLabel, onClose, onSubmit, busy, error, reduceMotion }) {
+function CategoryModal({ groupLabel, initialName = '', isEdit = false, onClose, onSubmit, busy, error, reduceMotion }) {
   const inputRef = useRef(null)
 
-  const [name, setName] = useState('')
+  const [name, setName] = useState(initialName)
 
   useEffect(() => {
-    setName('')
+    setName(initialName)
     const t = window.setTimeout(() => inputRef.current?.focus(), 50)
     return () => window.clearTimeout(t)
-  }, [])
+  }, [initialName])
 
   function handleSubmit(e) {
     e.preventDefault()
@@ -60,7 +63,7 @@ function AddCategoryModal({ groupLabel, onClose, onSubmit, busy, error, reduceMo
           <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-linear-to-br from-emerald-50/90 to-white px-5 py-4">
             <div className="min-w-0">
               <p id="add-cat-title" className="text-lg font-extrabold text-slate-900">
-                Add subcategory
+                {isEdit ? 'Edit subcategory' : 'Add subcategory'}
               </p>
               <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-slate-600">
                 <Layers className="h-3.5 w-3.5 shrink-0 text-brand" aria-hidden />
@@ -103,7 +106,7 @@ function AddCategoryModal({ groupLabel, onClose, onSubmit, busy, error, reduceMo
                 Cancel
               </button>
               <AppPrimaryButton type="submit" disabled={busy || !name.trim()} className="!w-auto min-w-[140px]">
-                {busy ? 'Saving…' : 'Create'}
+                {busy ? 'Saving…' : (isEdit ? 'Save Changes' : 'Create')}
               </AppPrimaryButton>
             </div>
           </form>
@@ -122,6 +125,7 @@ export function AdminLabourCategoriesPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [modalBusy, setModalBusy] = useState(false)
   const [modalError, setModalError] = useState('')
+  const [editingCategory, setEditingCategory] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -184,31 +188,53 @@ export function AdminLabourCategoriesPage() {
     }
   }
 
-  async function handleModalCreate(name) {
-    if (!selectedGroupId || !name) {
+  async function handleModalSubmit(name) {
+    if (!name) {
       setModalError('Enter a name')
       return
     }
     setModalError('')
     setModalBusy(true)
     try {
-      await createAdminLabourCategory({
-        groupId: selectedGroupId,
-        name,
-        sortOrder: 999,
-      })
+      if (editingCategory) {
+        await patchAdminLabourCategory(editingCategory._id, { name })
+      } else {
+        if (!selectedGroupId) {
+          setModalError('No group selected')
+          setModalBusy(false)
+          return
+        }
+        await createAdminLabourCategory({
+          groupId: selectedGroupId,
+          name,
+          sortOrder: 999,
+        })
+      }
       setModalOpen(false)
+      setEditingCategory(null)
       await load()
     } catch (err) {
-      setModalError(err instanceof ApiError ? err.message : 'Could not create')
+      setModalError(err instanceof ApiError ? err.message : 'Could not save')
     } finally {
       setModalBusy(false)
     }
   }
 
-  function openModal() {
+  function openModal(category = null) {
     setModalError('')
+    setEditingCategory(category)
     setModalOpen(true)
+  }
+
+  async function handleDelete(c) {
+    if (!window.confirm(`Are you sure you want to delete the subcategory "${c.name}"?`)) return
+    setBanner('')
+    try {
+      await deleteAdminLabourCategory(c._id)
+      await load()
+    } catch (e) {
+      setBanner(e instanceof ApiError ? e.message : 'Delete failed')
+    }
   }
 
   const groupLabel = selectedGroup ? `${selectedGroup.name} (${selectedGroup.kind})` : ''
@@ -315,7 +341,7 @@ export function AdminLabourCategoriesPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={openModal}
+                  onClick={() => openModal()}
                   className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-linear-to-r from-brand-bright to-brand px-4 py-2.5 text-sm font-bold text-white shadow-[0_10px_28px_-10px_rgba(255,179,71,0.45)] transition hover:brightness-105"
                 >
                   <Plus className="h-4 w-4" aria-hidden />
@@ -337,7 +363,7 @@ export function AdminLabourCategoriesPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={openModal}
+                      onClick={() => openModal()}
                       className="inline-flex items-center gap-2 rounded-xl border border-brand/30 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-brand transition hover:bg-emerald-100/80"
                     >
                       <Plus className="h-4 w-4" aria-hidden />
@@ -360,17 +386,35 @@ export function AdminLabourCategoriesPage() {
                               <p className="mt-0.5 font-mono text-[11px] text-slate-400">{c.slug}</p>
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => toggleCategory(c, !c.isActive)}
-                            className={`shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-bold transition ${
-                              c.isActive
-                                ? 'bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200/80'
-                                : 'bg-slate-100 text-slate-500 ring-1 ring-slate-200/80'
-                            }`}
-                          >
-                            {c.isActive ? 'Active' : 'Hidden'}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openModal(c)}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition hover:bg-slate-200/80 hover:text-brand"
+                              title="Edit"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(c)}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-500 transition hover:bg-rose-100 hover:text-rose-600"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleCategory(c, !c.isActive)}
+                              className={`shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-bold transition ${
+                                c.isActive
+                                  ? 'bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200/80'
+                                  : 'bg-slate-100 text-slate-500 ring-1 ring-slate-200/80'
+                              }`}
+                            >
+                              {c.isActive ? 'Active' : 'Hidden'}
+                            </button>
+                          </div>
                         </div>
                         <AdminSubcategoryImageEditor category={c} onUpdated={load} />
                       </li>
@@ -392,11 +436,18 @@ export function AdminLabourCategoriesPage() {
 
       <AnimatePresence>
         {modalOpen ? (
-          <AddCategoryModal
-            key="add-subcategory"
+          <CategoryModal
+            key="category-modal"
             groupLabel={groupLabel}
-            onClose={() => !modalBusy && setModalOpen(false)}
-            onSubmit={handleModalCreate}
+            initialName={editingCategory ? editingCategory.name : ''}
+            isEdit={!!editingCategory}
+            onClose={() => {
+              if (!modalBusy) {
+                setModalOpen(false)
+                setEditingCategory(null)
+              }
+            }}
+            onSubmit={handleModalSubmit}
             busy={modalBusy}
             error={modalError}
             reduceMotion={reduceMotion}

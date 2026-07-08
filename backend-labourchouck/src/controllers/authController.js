@@ -143,10 +143,14 @@ export const loginRequestOtp = asyncHandler(async (req, res) => {
       code: 'USE_ADMIN_LOGIN',
     })
   }
+  
+  // Platform is strictly based on role
+  const platform = user.role === USER_ROLES.ADMIN ? 'web' : 'app'
+
   const { challengeId } = await createOtpChallenge(phone, 'login')
   return sendSuccess(res, {
     message: 'OTP sent to your mobile number',
-    data: { phone, role: user.role, challengeId },
+    data: { phone, role: user.role, platform, challengeId },
   })
 })
 
@@ -182,11 +186,17 @@ export const loginVerify = asyncHandler(async (req, res) => {
   user.lastLoginAt = new Date()
   await user.save()
   await deleteOtpChallengeDoc(otp.doc)
+  
+  // Platform is strictly based on role
+  const platform = user.role === USER_ROLES.ADMIN ? 'web' : 'app'
 
   const token = signAccessToken(user)
+  const payload = buildAuthPayload(user, token)
+  payload.platform = platform
+
   return sendSuccess(res, {
     message: 'Login successful',
-    data: buildAuthPayload(user, token),
+    data: payload,
   })
 })
 
@@ -228,9 +238,12 @@ export const adminLogin = asyncHandler(async (req, res) => {
     req
   })
 
+  const payload = buildAuthPayload(user, token)
+  payload.platform = 'web'
+
   return sendSuccess(res, {
     message: 'Admin login successful',
-    data: buildAuthPayload(user, token),
+    data: payload,
   })
 })
 

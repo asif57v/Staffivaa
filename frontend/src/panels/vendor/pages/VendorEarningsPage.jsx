@@ -50,6 +50,14 @@ export function VendorEarningsPage() {
       setErrorMsg('All bank details are required.')
       return
     }
+    if (accountNumber.length < 9 || accountNumber.length > 18) {
+      setErrorMsg('Bank Account Number must be between 9 and 18 digits.')
+      return
+    }
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode)) {
+      setErrorMsg('Please enter a valid 11-character IFSC Code.')
+      return
+    }
 
     try {
       await requestWithdrawal({
@@ -236,7 +244,9 @@ export function VendorEarningsPage() {
                     required
                     placeholder="Bank Account Number"
                     value={accountNumber}
-                    onChange={(e) => setAccountNumber(e.target.value)}
+                    onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ''))}
+                    maxLength={18}
+                    minLength={9}
                     className="w-full rounded-xl border border-slate-200 py-2 px-3 text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-yellow-400"
                   />
                   <input
@@ -252,7 +262,9 @@ export function VendorEarningsPage() {
                     required
                     placeholder="IFSC Code"
                     value={ifscCode}
-                    onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
+                    onChange={(e) => setIfscCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                    maxLength={11}
+                    minLength={11}
                     className="w-full rounded-xl border border-slate-200 py-2 px-3 text-xs font-bold text-slate-800 outline-none focus:ring-1 focus:ring-yellow-400 uppercase"
                   />
                 </div>

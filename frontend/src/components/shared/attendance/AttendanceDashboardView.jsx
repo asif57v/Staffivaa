@@ -93,7 +93,7 @@ export function AttendanceDashboardView({ basePath = '/vendor' }) {
         position: 'sticky', top: 0, zIndex: 30,
         background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(16px)',
         borderBottom: '1px solid #F1F1F1',
-        padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+        padding: '14px 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
       }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.3px' }}>Attendance</h1>
@@ -116,12 +116,12 @@ export function AttendanceDashboardView({ basePath = '/vendor' }) {
         </div>
       </header>
 
-      <div style={{ padding: '16px 16px 0' }}>
+      <div style={{ padding: '16px 6px 0' }}>
 
         {/* ──── Aggregated Stats Banner ──── */}
         {!isLoading && projects.length > 0 && (
           <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 16
+            display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, marginBottom: 16
           }}>
             {[
               { label: 'Assigned', value: totals.assigned, color: '#3B82F6', bg: '#EFF6FF', icon: Users },
@@ -153,7 +153,7 @@ export function AttendanceDashboardView({ basePath = '/vendor' }) {
         {/* ──── Attendance Rate Bar ──── */}
         {!isLoading && projects.length > 0 && (
           <div style={{
-            background: '#FFFFFF', borderRadius: 16, padding: '14px 16px',
+            background: '#FFFFFF', borderRadius: 16, padding: '12px 8px',
             border: '1px solid #F1F5F9', marginBottom: 16,
             display: 'flex', alignItems: 'center', gap: 12
           }}>
@@ -300,7 +300,7 @@ export function AttendanceDashboardView({ basePath = '/vendor' }) {
                 </div>
 
                 {/* Project Info */}
-                <div style={{ padding: '12px 14px' }}>
+                <div style={{ padding: '10px 8px' }}>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
                     <p style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: '#64748B', margin: 0 }}>
                       <Building2 style={{ width: 13, height: 13, color: '#94A3B8' }} />

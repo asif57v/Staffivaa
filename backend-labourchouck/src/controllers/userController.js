@@ -234,8 +234,14 @@ export const submitLabourKycDocuments = asyncHandler(async (req, res) => {
 
   req.user.labourProfile = req.user.labourProfile || {}
   req.user.labourProfile.kycStatus = KYC_STATUS.PENDING
-  if (hasAadhaarInput) req.user.labourProfile.aadhaarMasked = maskAadhaarLast4(normalizedAadhaar)
-  if (hasPanInput) req.user.labourProfile.panMasked = maskPan(normalizedPan)
+  if (hasAadhaarInput) {
+    req.user.labourProfile.aadhaarMasked = maskAadhaarLast4(normalizedAadhaar)
+    req.user.labourProfile.aadhaarNumber = normalizedAadhaar
+  }
+  if (hasPanInput) {
+    req.user.labourProfile.panMasked = maskPan(normalizedPan)
+    req.user.labourProfile.panNumber = normalizedPan
+  }
   req.user.labourProfile.kycVideoUrl = videoUrl
   req.user.labourProfile.kycVideoMeta = sanitizeKycVideoMeta(req.body.videoMeta)
   req.user.labourProfile.kycSubmittedAt = new Date()
@@ -376,14 +382,10 @@ export const listUsers = asyncHandler(async (req, res) => {
     }
   }
 
-  if (status === 'active') q.isActive = true
-  else if (status === 'inactive') q.isActive = false
-  else if (status != null && status !== '' && status !== 'all') {
-    return sendError(res, {
-      message: 'status must be active, inactive, or all',
-      statusCode: HTTP_STATUS.BAD_REQUEST,
-      code: 'INVALID_STATUS',
-    })
+  if (status === 'active') { q.isActive = true }
+  else if (status === 'inactive') { q.isActive = false }
+  else if (status && status !== 'all') {
+    q.accountStatus = status
   }
 
   const searchTrim = typeof search === 'string' ? search.trim() : ''
@@ -487,6 +489,8 @@ export const listUsers = asyncHandler(async (req, res) => {
 /** Admin: get one user (includes KYC document data URLs for review) */
 export const getUserById = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id)
+    .select('+labourProfile.aadhaarNumber +labourProfile.panNumber')
+    .populate({ path: 'adminNotes.addedBy', select: 'fullName email profileImageUrl role' })
   if (!user) {
     return sendError(res, { message: 'User not found', statusCode: HTTP_STATUS.NOT_FOUND, code: 'NOT_FOUND' })
   }
@@ -658,19 +662,10 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
     })
   }
 
-  // Determine platform classification: web vs mobile
-  let isMobile = false
-  if (deviceType === 'mobile') {
-    isMobile = true
-  } else if (deviceType === 'web') {
-    isMobile = false
-  } else {
-    // Detect from user-agent
-    const userAgent = req.headers['user-agent'] || ''
-    isMobile = /mobile|android|iphone|ipad|phone/i.test(userAgent)
-  }
+// Determine platform classification strictly by role
+  const isApp = req.user.role !== 'admin'
 
-  const targetField = isMobile ? 'fcmTokensMobile' : 'fcmTokensWeb'
+  const targetField = isApp ? 'fcmTokensMobile' : 'fcmTokensWeb'
 
   // Retrieve user document to mutate token array safely (using lean to bypass version tracking)
   const user = await User.findById(req.user._id).lean()
@@ -697,5 +692,154 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
     { $set: { [targetField]: tokens } }
   )
 
-  return sendSuccess(res, { message: 'Token saved' })
+  return sendSuccess(res, { message: `FCM Token saved successfully for ${isApp ? 'app' : 'web'} platform` })
+})
+
+/** Admin: update user status (active, suspended, blocked, etc.) */
+export const patchUserStatusAdmin = asyncHandler(async (req, res) => {
+  const { status, reason } = req.body
+  const validStatuses = ['active', 'pending_verification', 'on_hold', 'suspended', 'blocked', 'deleted']
+  if (!validStatuses.includes(status)) {
+    return sendError(res, { message: 'Invalid status', statusCode: HTTP_STATUS.BAD_REQUEST, code: 'INVALID_STATUS' })
+  }
+  if (!reason || typeof reason !== 'string') {
+    return sendError(res, { message: 'Reason is required for status change', statusCode: HTTP_STATUS.BAD_REQUEST, code: 'REASON_REQUIRED' })
+  }
+
+  const user = await User.findById(req.params.id)
+  if (!user) {
+    return sendError(res, { message: 'User not found', statusCode: HTTP_STATUS.NOT_FOUND, code: 'NOT_FOUND' })
+  }
+
+  const oldStatus = user.accountStatus || 'active'
+  user.accountStatus = status
+
+  if (['active', 'pending_verification', 'on_hold'].includes(status)) {
+    user.isActive = true
+  } else {
+    user.isActive = false
+  }
+
+  if (status === 'deleted') {
+    user.deletedAt = new Date()
+  } else {
+    user.deletedAt = undefined
+  }
+
+  await user.save()
+
+  await logAudit({
+    adminId: req.user._id,
+    action: `Changed status to ${status}`,
+    previousValue: { accountStatus: oldStatus },
+    newValue: { accountStatus: status },
+    module: 'User Management',
+    targetUser: user._id,
+    reason: reason,
+    req
+  })
+
+  const populatedUser = await User.findById(user._id).populate({ path: 'adminNotes.addedBy', select: 'fullName email profileImageUrl role' })
+  await populateLabourCategories(populatedUser)
+  return sendSuccess(res, { message: 'User status updated', data: { user: populatedUser.toSafeObject() } })
+})
+
+/** Admin: Add internal note */
+export const addAdminNote = asyncHandler(async (req, res) => {
+  const { text } = req.body
+  if (!text || typeof text !== 'string') {
+    return sendError(res, { message: 'Note text is required', statusCode: HTTP_STATUS.BAD_REQUEST, code: 'INVALID_NOTE' })
+  }
+
+  const user = await User.findById(req.params.id)
+  if (!user) {
+    return sendError(res, { message: 'User not found', statusCode: HTTP_STATUS.NOT_FOUND, code: 'NOT_FOUND' })
+  }
+
+  user.adminNotes = user.adminNotes || []
+  user.adminNotes.push({
+    text: text.trim(),
+    addedBy: req.user._id,
+    addedAt: new Date()
+  })
+
+  await user.save()
+
+  await logAudit({
+    adminId: req.user._id,
+    action: 'Added Internal Note',
+    previousValue: null,
+    newValue: { note: text.trim() },
+    module: 'User Management',
+    targetUser: user._id,
+    req
+  })
+
+  const populatedUser = await User.findById(user._id).populate({ path: 'adminNotes.addedBy', select: 'fullName email profileImageUrl role' })
+  await populateLabourCategories(populatedUser)
+  return sendSuccess(res, { message: 'Note added', data: { user: populatedUser.toSafeObject() } })
+})
+
+/** Admin: update user wallet (freeze/unfreeze or adjust balance) */
+export const updateUserWalletAdmin = asyncHandler(async (req, res) => {
+  const { action, amount, reason } = req.body
+  
+  if (!reason || typeof reason !== 'string') {
+    return sendError(res, { message: 'Reason is required', statusCode: HTTP_STATUS.BAD_REQUEST, code: 'REASON_REQUIRED' })
+  }
+
+  const user = await User.findById(req.params.id)
+  if (!user) {
+    return sendError(res, { message: 'User not found', statusCode: HTTP_STATUS.NOT_FOUND, code: 'NOT_FOUND' })
+  }
+
+  const oldWallet = {
+    balance: user.walletBalance || 0,
+    frozen: user.isWalletFrozen || false
+  }
+
+  if (action === 'freeze') {
+    user.isWalletFrozen = true
+  } else if (action === 'unfreeze') {
+    user.isWalletFrozen = false
+  } else if (action === 'add') {
+    if (typeof amount !== 'number' || amount <= 0) {
+      return sendError(res, { message: 'Invalid amount', statusCode: HTTP_STATUS.BAD_REQUEST })
+    }
+    user.walletBalance = (user.walletBalance || 0) + amount
+  } else if (action === 'deduct') {
+    if (typeof amount !== 'number' || amount <= 0) {
+      return sendError(res, { message: 'Invalid amount', statusCode: HTTP_STATUS.BAD_REQUEST })
+    }
+    user.walletBalance = Math.max(0, (user.walletBalance || 0) - amount)
+  } else {
+    return sendError(res, { message: 'Invalid action', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  await user.save()
+
+  await logAudit({
+    adminId: req.user._id,
+    action: `Wallet ${action}`,
+    previousValue: oldWallet,
+    newValue: { balance: user.walletBalance, frozen: user.isWalletFrozen },
+    module: 'Wallet Management',
+    targetUser: user._id,
+    reason: reason,
+    req
+  })
+
+  const populatedUser = await User.findById(user._id).populate({ path: 'adminNotes.addedBy', select: 'fullName email profileImageUrl role' })
+  await populateLabourCategories(populatedUser)
+  return sendSuccess(res, { message: `Wallet updated successfully`, data: { user: populatedUser.toSafeObject() } })
+})
+
+/** Admin: get user timeline (audit logs) */
+export const getUserTimelineAdmin = asyncHandler(async (req, res) => {
+  const { AuditLog } = await import('../models/AuditLog.js')
+  const logs = await AuditLog.find({ targetUser: req.params.id })
+    .populate({ path: 'admin', select: 'fullName email role profileImageUrl' })
+    .sort({ createdAt: -1 })
+    .lean()
+  return sendSuccess(res, { data: { logs } })
 })

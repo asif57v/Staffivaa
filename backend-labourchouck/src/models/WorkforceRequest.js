@@ -101,6 +101,29 @@ const workforceRequestSchema = new mongoose.Schema(
     expiresAt: Date,
     acceptedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     declinedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    
+    // Settlement Tracking
+    settlementLedger: [
+      {
+        amount: { type: Number, required: true },
+        type: { type: String, enum: ['Partial', 'Final', 'Refund', 'Adjustment'], required: true },
+        method: { type: String, required: true },
+        reference: { type: String, trim: true },
+        adminName: { type: String, trim: true },
+        date: { type: Date, default: Date.now },
+      }
+    ],
+    adminFinanceNotes: [
+      {
+        note: { type: String, required: true, trim: true },
+        adminName: { type: String, required: true, trim: true },
+        date: { type: Date, default: Date.now },
+      }
+    ],
+    holdReason: { type: String, trim: true },
+    holdNotes: { type: String, trim: true },
+    expectedResumeDate: { type: Date },
+
   },
   { timestamps: true },
 )

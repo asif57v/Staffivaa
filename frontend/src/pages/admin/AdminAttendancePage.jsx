@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Clock, Building2, Calendar, Filter, CheckCircle } from 'lucide-react'
+import { Clock, Building2, Calendar, Filter, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import { useGetAttendanceMonitorQuery, useVerifyAttendanceMutation } from '../../store/api/workforceApi.js'
 import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
@@ -37,6 +37,7 @@ export function AdminAttendancePage() {
   const [datePreset, setDatePreset] = useState('today')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
+  const [expandedProjectIds, setExpandedProjectIds] = useState(new Set())
 
   const queryParams = useMemo(() => {
     if (datePreset === 'custom') {
@@ -56,6 +57,18 @@ export function AdminAttendancePage() {
     } catch {
       // Ignore
     }
+  }
+
+  const toggleProject = (projectId) => {
+    setExpandedProjectIds(prev => {
+      const next = new Set(prev)
+      if (next.has(projectId)) {
+        next.delete(projectId)
+      } else {
+        next.add(projectId)
+      }
+      return next
+    })
   }
 
   return (
@@ -127,26 +140,48 @@ export function AdminAttendancePage() {
       )}
 
       {!isLoading && !isError && projects.length > 0 && (
-        <div className="space-y-6">
-          {projects.map(project => (
-            <GlassPanel key={project.projectId} className="overflow-hidden border border-slate-200">
-              <div className="bg-slate-50 p-4 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600">
-                    <Building2 className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-black text-slate-900">{project.projectName}</h4>
-                    <div className="flex gap-4 mt-1">
-                      <p className="text-xs font-semibold text-slate-500">Assigned: <span className="text-slate-800">{project.assignedWorkers}</span></p>
-                      <p className="text-xs font-semibold text-slate-500">Present (in range): <span className="text-emerald-700">{project.present}</span></p>
-                      <p className="text-xs font-semibold text-slate-500">Absent (in range): <span className="text-rose-700">{project.absent}</span></p>
+        <div className="space-y-4">
+          {projects.map(project => {
+            const isExpanded = expandedProjectIds.has(project.projectId)
+
+            return (
+              <GlassPanel key={project.projectId} className="overflow-hidden border border-slate-200 p-0 transition-all">
+                <div 
+                  className="bg-white p-5 cursor-pointer hover:bg-slate-50 transition flex flex-col md:flex-row md:items-center justify-between gap-4 select-none"
+                  onClick={() => toggleProject(project.projectId)}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="bg-indigo-50 p-3 rounded-xl text-indigo-600 ring-1 ring-indigo-100">
+                      <Building2 className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-extrabold text-slate-900">{project.projectName}</h4>
+                      <div className="flex flex-wrap items-center gap-3 mt-2">
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">
+                          <Calendar className="h-3.5 w-3.5" />
+                          <span>{formatDate(queryParams.startDate)} — {formatDate(queryParams.endDate)}</span>
+                        </div>
+                        <p className="text-xs font-semibold text-slate-600">
+                          Assigned: <span className="text-slate-900">{project.assignedWorkers}</span>
+                        </p>
+                        <div className="h-1 w-1 rounded-full bg-slate-300" />
+                        <p className="text-xs font-semibold text-slate-600">
+                          Present: <span className="text-emerald-600">{project.present}</span>
+                        </p>
+                        <div className="h-1 w-1 rounded-full bg-slate-300" />
+                        <p className="text-xs font-semibold text-slate-600">
+                          Absent: <span className="text-rose-600">{project.absent}</span>
+                        </p>
+                      </div>
                     </div>
                   </div>
+                  <div className="flex items-center justify-center h-10 w-10 rounded-full bg-slate-50 text-slate-400 group-hover:bg-slate-100 transition">
+                    {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                  </div>
                 </div>
-              </div>
 
-              <div className="overflow-x-auto">
+                {isExpanded && (
+                  <div className="overflow-x-auto border-t border-slate-100 bg-slate-50/50">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-100 bg-white">
@@ -219,8 +254,10 @@ export function AdminAttendancePage() {
                   </tbody>
                 </table>
               </div>
-            </GlassPanel>
-          ))}
+                )}
+              </GlassPanel>
+            )
+          })}
         </div>
       )}
     </div>

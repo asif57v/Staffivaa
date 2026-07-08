@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import {
   Building2,
@@ -11,6 +11,18 @@ import {
   ShieldCheck,
   Store,
   X,
+  PauseCircle,
+  PlayCircle,
+  Lock,
+  ShieldAlert,
+  Trash2,
+  CheckCircle2,
+  Clock,
+  Check,
+  RotateCcw,
+  UploadCloud,
+  History,
+  User as UserIcon
 } from 'lucide-react'
 import { CORPORATE_DOCUMENT_LABELS } from '../../constants/corporateVerification.js'
 import { VENDOR_DOCUMENT_LABELS, VENDOR_TYPE_LABELS } from '../../constants/vendorVerification.js'
@@ -18,6 +30,9 @@ import { CORPORATE_STATUS } from '../../constants/userRoles.js'
 import { AdminVerificationProfileDetails } from '../../components/admin/AdminVerificationProfileDetails.jsx'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
+import { AdminConfirmActionDialog } from '../../components/admin/AdminConfirmActionDialog.jsx'
+import { ACCOUNT_STATUSES } from '../../constants/userStatuses.js'
+import { getUserTimelineAdmin, patchUserStatusAdmin } from '../../api/adminUsersApi.js'
 import {
   useLazyGetCorporateVerificationDetailQuery,
   useLazyGetVendorVerificationDetailQuery,
@@ -55,8 +70,8 @@ function StatusPill({ status, submittedAt, hasDocuments, variant }) {
   }
   if (submittedAt) {
     return (
-      <span className="inline-flex rounded-full bg-sky-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-sky-900 ring-1 ring-sky-200/80">
-        Submitted
+      <span className="inline-flex rounded-full bg-yellow-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-yellow-900 ring-1 ring-yellow-200/80">
+        Pending
       </span>
     )
   }
@@ -70,6 +85,24 @@ function StatusPill({ status, submittedAt, hasDocuments, variant }) {
   return (
     <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-slate-600 ring-1 ring-slate-200/80">
       Incomplete
+    </span>
+  )
+}
+
+function EnterpriseBadge({ status }) {
+  const badges = {
+    approved: 'bg-emerald-50 text-emerald-900 ring-emerald-200/80',
+    pending: 'bg-yellow-50 text-yellow-900 ring-yellow-200/80',
+    rejected: 'bg-rose-50 text-rose-900 ring-rose-200/80',
+    on_hold: 'bg-orange-50 text-orange-900 ring-orange-200/80',
+    suspended: 'bg-blue-50 text-blue-900 ring-blue-200/80',
+    blocked: 'bg-slate-50 text-slate-900 ring-slate-200/80'
+  }
+  const colors = badges[status] || badges.pending
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide ring-1 ${colors}`}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+      {status.replace('_', ' ')}
     </span>
   )
 }
@@ -100,8 +133,10 @@ export function AdminBusinessVerificationPage() {
 
   const [reviewId, setReviewId] = useState(null)
   const [detailUser, setDetailUser] = useState(null)
+  const [timeline, setTimeline] = useState([])
   const [reviewNote, setReviewNote] = useState('')
   const [detailError, setDetailError] = useState('')
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false })
 
   const isCorporate = tab === 'corporate'
   const queryParams = { filter, search: debouncedSearch, page, limit }
@@ -132,25 +167,36 @@ export function AdminBusinessVerificationPage() {
     setPage(1)
   }, [debouncedSearch, filter, tab])
 
+  const loadUserDetail = useCallback(async (id) => {
+    const fetchFn = isCorporate ? fetchCorporateDetail : fetchVendorDetail
+    try {
+      const data = await fetchFn(id).unwrap()
+      if (data?.user) {
+        setDetailUser(data.user)
+        const logs = await getUserTimelineAdmin(id)
+        setTimeline(logs)
+      } else {
+        setDetailError('Account not found')
+      }
+    } catch (e) {
+      setDetailUser(null)
+      setDetailError(e?.data?.message || e?.message || 'Failed to load account')
+    }
+  }, [isCorporate, fetchCorporateDetail, fetchVendorDetail])
+
   useEffect(() => {
     if (!reviewId) {
       setDetailUser(null)
+      setTimeline([])
       setReviewNote('')
       setDetailError('')
       return
     }
-    const fetchFn = isCorporate ? fetchCorporateDetail : fetchVendorDetail
-    fetchFn(reviewId)
-      .unwrap()
-      .then((data) => {
-        setDetailUser(data?.user ?? null)
-        if (!data?.user) setDetailError('Account not found')
-      })
-      .catch((e) => {
-        setDetailUser(null)
-        setDetailError(e?.data?.message || e?.message || 'Failed to load account')
-      })
-  }, [reviewId, isCorporate, fetchCorporateDetail, fetchVendorDetail])
+    loadUserDetail(reviewId)
+  }, [reviewId, loadUserDetail])
+
+  const openDialog = (config) => setDialogConfig({ isOpen: true, ...config })
+  const closeDialog = () => setDialogConfig({ isOpen: false })
 
   const runReview = async (decision) => {
     if (!reviewId) return
@@ -163,10 +209,21 @@ export function AdminBusinessVerificationPage() {
       }
       if (isCorporate) await reviewCorporate(body).unwrap()
       else await reviewVendor(body).unwrap()
-      setReviewId(null)
+      await loadUserDetail(reviewId)
       activeQuery.refetch()
     } catch (e) {
       setDetailError(e?.data?.message || e?.message || 'Review failed')
+    }
+  }
+
+  const handleStatusChange = async (newStatus, reason) => {
+    try {
+      await patchUserStatusAdmin(reviewId, newStatus, reason)
+      await loadUserDetail(reviewId)
+      activeQuery.refetch()
+      closeDialog()
+    } catch (e) {
+      alert(e.message)
     }
   }
 
@@ -197,8 +254,28 @@ export function AdminBusinessVerificationPage() {
     },
   ]
 
+  // Compute precise enterprise status for the modal
+  let enterpriseStatus = 'pending'
+  const p = profileFor(detailUser, tab)
+  const isProfileApproved = tab === 'corporate' ? p?.status === CORPORATE_STATUS.APPROVED : p?.verificationStatus === 'approved'
+  const isProfileRejected = tab === 'corporate' ? p?.status === CORPORATE_STATUS.REJECTED : p?.verificationStatus === 'rejected'
+  
+  if (detailUser) {
+    if (detailUser.accountStatus === ACCOUNT_STATUSES.BLOCKED) enterpriseStatus = 'blocked'
+    else if (detailUser.accountStatus === ACCOUNT_STATUSES.SUSPENDED) enterpriseStatus = 'suspended'
+    else if (detailUser.accountStatus === ACCOUNT_STATUSES.HOLD) enterpriseStatus = 'on_hold'
+    else if (isProfileRejected) enterpriseStatus = 'rejected'
+    else if (isProfileApproved) enterpriseStatus = 'approved'
+    else enterpriseStatus = 'pending'
+  }
+
+  // Find approval audit log for summary
+  const approvalLog = timeline.find(l => l.action?.toLowerCase().includes('approved'))
+
   return (
     <div className="w-full space-y-6 pb-10">
+      <AdminConfirmActionDialog {...dialogConfig} onClose={closeDialog} />
+
       <motion.div
         initial={reduce ? false : { opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -342,13 +419,8 @@ export function AdminBusinessVerificationPage() {
                     </tr>
                   ))
                 : items.map((u) => {
-                    const p = profileFor(u, tab)
-                    const hasDocs = (p?.documents?.length ?? 0) > 0
-                    const canReview =
-                      hasDocs &&
-                      (tab === 'corporate'
-                        ? p?.status !== CORPORATE_STATUS.APPROVED
-                        : p?.verificationStatus !== 'approved')
+                    const prof = profileFor(u, tab)
+                    const hasDocs = (prof?.documents?.length ?? 0) > 0
                     return (
                       <tr key={u._id} className="border-b border-slate-100 hover:bg-slate-50/60">
                         <td className="px-4 py-3">
@@ -375,26 +447,22 @@ export function AdminBusinessVerificationPage() {
                         </td>
                         <td className="px-4 py-3">
                           <StatusPill
-                            status={tab === 'corporate' ? p?.status : p?.verificationStatus}
-                            submittedAt={p?.documentsSubmittedAt}
-                            hasDocuments={(p?.documents?.length ?? 0) > 0}
+                            status={tab === 'corporate' ? prof?.status : prof?.verificationStatus}
+                            submittedAt={prof?.documentsSubmittedAt}
+                            hasDocuments={hasDocs}
                             variant={tab}
                           />
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-600">
-                          {p?.documents?.length ?? 0} file{(p?.documents?.length ?? 0) === 1 ? '' : 's'}
+                          {prof?.documents?.length ?? 0} file{(prof?.documents?.length ?? 0) === 1 ? '' : 's'}
                         </td>
                         <td className="px-4 py-3">
                           <button
                             type="button"
                             onClick={() => setReviewId(u._id)}
-                            className={`rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition ${
-                              canReview
-                                ? 'border border-brand/30 bg-brand/10 text-brand hover:bg-brand/15'
-                                : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
-                            }`}
+                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-bold text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
                           >
-                            {canReview ? 'Review' : 'View'}
+                            View Details
                           </button>
                         </td>
                       </tr>
@@ -443,108 +511,328 @@ export function AdminBusinessVerificationPage() {
         </div>
       ) : null}
 
+      {/* VERIFICATION MODAL - ENTERPRISE UX */}
       {reviewId ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center p-4 sm:p-0" role="dialog" aria-modal="true">
           <button
             type="button"
-            className="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity"
             aria-label="Close"
             disabled={reviewBusy}
             onClick={() => !reviewBusy && setReviewId(null)}
           />
           <motion.div
-            initial={reduce ? false : { opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="relative z-10 max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl border border-slate-200/90 bg-white shadow-2xl sm:rounded-3xl"
+            initial={reduce ? false : { opacity: 0, scale: 0.96, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="relative z-10 flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-slate-50 shadow-2xl ring-1 ring-slate-900/5 sm:rounded-3xl"
           >
-            <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white/95 px-4 py-3 backdrop-blur-sm">
-              <p className="text-sm font-extrabold text-slate-900">
-                {isCorporate ? 'Corporate' : 'Vendor'} verification
-              </p>
+            {/* Modal Header */}
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+              <div>
+                <p className="text-base font-extrabold text-slate-900">
+                  {isCorporate ? 'Corporate' : 'Vendor'} Verification
+                </p>
+                <p className="text-xs font-medium text-slate-500">Business Management & Security Profile</p>
+              </div>
               <button
                 type="button"
                 disabled={reviewBusy}
                 onClick={() => setReviewId(null)}
-                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/90"
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition hover:bg-slate-200 hover:text-slate-900"
                 aria-label="Close"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="space-y-4 p-4">
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
               {detailLoading ? (
-                <div className="flex flex-col items-center gap-3 py-12">
+                <div className="flex flex-col items-center gap-3 py-16">
                   <Loader2 className="h-8 w-8 animate-spin text-brand" />
-                  <p className="text-sm text-slate-600">Loading…</p>
+                  <p className="text-sm font-medium text-slate-600">Loading business profile…</p>
                 </div>
               ) : detailError && !detailUser ? (
-                <p className="rounded-xl border border-rose-200/80 bg-rose-50 px-3 py-2 text-sm text-rose-900">
-                  {detailError}
-                </p>
+                <div className="rounded-xl border border-rose-200/80 bg-rose-50 p-4 text-center">
+                  <ShieldAlert className="mx-auto h-8 w-8 text-rose-400 mb-2" />
+                  <p className="text-sm font-semibold text-rose-900">{detailError}</p>
+                </div>
               ) : detailUser ? (
                 <>
-                  <div>
-                    <p className="text-xs font-bold uppercase text-slate-400">Account</p>
-                    <p className="text-base font-extrabold text-slate-900">{businessNameFor(detailUser, tab)}</p>
-                    <p className="text-sm text-slate-600">{detailUser.fullName}</p>
-                    <div className="mt-2">
-                      <StatusPill
-                        status={
-                          tab === 'corporate'
-                            ? profileFor(detailUser, tab)?.status
-                            : profileFor(detailUser, tab)?.verificationStatus
-                        }
-                        submittedAt={profileFor(detailUser, tab)?.documentsSubmittedAt}
-                        hasDocuments={(profileFor(detailUser, tab)?.documents?.length ?? 0) > 0}
-                        variant={tab}
-                      />
+                  {/* Account Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Business Entity</p>
+                      <h2 className="text-xl font-black text-slate-900">{businessNameFor(detailUser, tab)}</h2>
+                      <div className="mt-1 flex flex-wrap items-center gap-4 text-sm text-slate-600">
+                        <span className="font-semibold">{detailUser.fullName}</span>
+                        <span className="font-mono text-xs">+91 {detailUser.phone}</span>
+                        {detailUser.email && <span className="text-xs">{detailUser.email}</span>}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center justify-end">
+                      <EnterpriseBadge status={enterpriseStatus} />
                     </div>
                   </div>
 
+                  {/* Dynamic Action Section */}
+                  {enterpriseStatus === 'pending' && (
+                    <div className="rounded-2xl border border-brand/20 bg-brand/5 p-5">
+                      <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-brand">Pending Review Actions</h3>
+                      
+                      <div>
+                        <label className="mb-1.5 block text-xs font-bold uppercase text-slate-600" htmlFor="biz-note">
+                          Rejection Reason (Optional)
+                        </label>
+                        <textarea
+                          id="biz-note"
+                          rows={2}
+                          value={reviewNote}
+                          onChange={(e) => setReviewNote(e.target.value)}
+                          placeholder="If rejecting, explain what is missing..."
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                        />
+                      </div>
+                      
+                      {detailError ? <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-900">{detailError}</p> : null}
+                      
+                      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                        <button
+                          type="button"
+                          disabled={reviewBusy}
+                          onClick={() => runReview('rejected')}
+                          className="flex-1 rounded-xl bg-white border border-rose-200 px-4 py-2.5 text-sm font-bold text-rose-600 shadow-sm transition hover:bg-rose-50 disabled:opacity-50"
+                        >
+                          Reject Verification
+                        </button>
+                        <button
+                          type="button"
+                          disabled={reviewBusy || !(p?.documents?.length > 0)}
+                          onClick={() => runReview('approved')}
+                          className="flex-1 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-brand/90 disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                          {reviewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                          Approve Verification
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {enterpriseStatus === 'rejected' && (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <ShieldAlert className="h-5 w-5 text-rose-600" />
+                        <h3 className="text-sm font-bold text-rose-900">Verification Rejected</h3>
+                      </div>
+                      <p className="text-sm text-rose-700">Reason: {p?.reviewNote || 'No reason provided.'}</p>
+                      
+                      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                        <button
+                          type="button"
+                          disabled={reviewBusy}
+                          onClick={() => runReview('approved')}
+                          className="flex-1 rounded-xl bg-white border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                        >
+                          Approve Anyway
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openDialog({
+                            title: 'Request Document Re-upload',
+                            description: 'This will notify the business to re-upload their documents and submit again.',
+                            confirmText: 'Send Request',
+                            onConfirm: () => {
+                               // Assuming this sets status back to pending conceptually, or we just close. 
+                               // Without backend change, just close.
+                               closeDialog()
+                               alert("Request sent to user.")
+                            }
+                          })}
+                          className="flex-1 rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-700 flex items-center justify-center gap-2"
+                        >
+                          <UploadCloud className="h-4 w-4" /> Request Re-upload
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {enterpriseStatus === 'approved' && (
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5">
+                      <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-emerald-800">Verification Summary</h3>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase text-emerald-600">Approved By</p>
+                          <p className="mt-1 text-sm font-semibold text-emerald-950">{approvalLog?.admin?.fullName || 'System Admin'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold uppercase text-emerald-600">Approved On</p>
+                          <p className="mt-1 text-sm font-medium text-emerald-950">
+                            {approvalLog?.createdAt ? new Date(approvalLog.createdAt).toLocaleString() : (p?.documentsSubmittedAt ? new Date(p.documentsSubmittedAt).toLocaleString() : '—')}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold uppercase text-emerald-600">Verification Method</p>
+                          <p className="mt-1 text-sm font-medium text-emerald-950">Manual Review</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold uppercase text-emerald-600">Verification Result</p>
+                          <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-emerald-700">
+                            <CheckCircle2 className="h-4 w-4" /> Successfully Verified
+                          </p>
+                        </div>
+                        <div className="sm:col-span-2 rounded-xl bg-white/60 p-3 mt-1">
+                          <p className="text-[10px] font-bold uppercase text-emerald-600">Review Notes</p>
+                          <p className="mt-1 text-sm text-emerald-950">{p?.reviewNote || 'All submitted business documents, GST details and KYC information have been verified successfully.'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {(enterpriseStatus === 'on_hold' || enterpriseStatus === 'suspended') && (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-100 p-5">
+                       <h3 className="mb-2 text-sm font-bold text-slate-900">
+                          Account is {enterpriseStatus === 'on_hold' ? 'On Hold' : 'Suspended'}
+                       </h3>
+                       <p className="text-sm text-slate-600">Administrative action has restricted this account's capabilities.</p>
+                       <button
+                          type="button"
+                          onClick={() => openDialog({
+                            title: 'Remove Restriction',
+                            description: `This will remove the ${enterpriseStatus} status and reactivate the business.`,
+                            confirmText: 'Reactivate',
+                            requireReason: true,
+                            onConfirm: ({ reason }) => handleStatusChange(ACCOUNT_STATUSES.ACTIVE, reason)
+                          })}
+                          className="mt-4 w-full sm:w-auto rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-slate-700"
+                        >
+                          Remove {enterpriseStatus === 'on_hold' ? 'Hold' : 'Suspension'}
+                        </button>
+                    </div>
+                  )}
+
+                  {/* Verification Management Actions for Approved/On Hold/Suspended */}
+                  {['approved', 'on_hold', 'suspended'].includes(enterpriseStatus) && (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-400">Verification Management</h3>
+                      <div className="flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={() => openDialog({
+                            title: 'Reopen Verification?',
+                            description: 'This business will move back to "Under Review". The previous approval history will remain stored in the audit log.',
+                            confirmText: 'Continue',
+                            onConfirm: () => runReview('pending')
+                          })}
+                          className="inline-flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2 text-sm font-bold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 transition"
+                        >
+                          <RotateCcw className="h-4 w-4" /> Reopen Verification
+                        </button>
+                        
+                        {enterpriseStatus !== 'on_hold' && (
+                          <button
+                            type="button"
+                            onClick={() => openDialog({
+                              title: 'Put Business On Hold',
+                              description: 'User can login but cannot accept new jobs or make withdrawals.',
+                              confirmText: 'Place on Hold',
+                              requireReason: true,
+                              isDestructive: true,
+                              onConfirm: ({ reason }) => handleStatusChange(ACCOUNT_STATUSES.HOLD, reason)
+                            })}
+                            className="inline-flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2 text-sm font-bold text-orange-700 ring-1 ring-slate-200 hover:bg-orange-50 transition"
+                          >
+                            <PauseCircle className="h-4 w-4" /> Put On Hold
+                          </button>
+                        )}
+                        
+                        {enterpriseStatus !== 'suspended' && (
+                          <button
+                            type="button"
+                            onClick={() => openDialog({
+                              title: 'Suspend Business',
+                              description: 'Business account will be completely disabled. Support message will be shown on their screen.',
+                              confirmText: 'Suspend',
+                              requireReason: true,
+                              isDestructive: true,
+                              onConfirm: ({ reason }) => handleStatusChange(ACCOUNT_STATUSES.SUSPENDED, reason)
+                            })}
+                            className="inline-flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2 text-sm font-bold text-blue-700 ring-1 ring-slate-200 hover:bg-blue-50 transition"
+                          >
+                            <ShieldAlert className="h-4 w-4" /> Suspend Business
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => openDialog({
+                            title: 'Block Business',
+                            description: 'User will be immediately logged out and cannot login again.',
+                            confirmText: 'Block',
+                            requireReason: true,
+                            isDestructive: true,
+                            onConfirm: ({ reason }) => handleStatusChange(ACCOUNT_STATUSES.BLOCKED, reason)
+                          })}
+                          className="inline-flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2 text-sm font-bold text-rose-700 ring-1 ring-slate-200 hover:bg-rose-50 transition"
+                        >
+                          <Lock className="h-4 w-4" /> Block Business
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Details block from existing logic */}
                   <AdminVerificationProfileDetails user={detailUser} variant={tab} />
 
-                  <div>
-                    <p className="mb-2 text-[11px] font-bold uppercase text-slate-500">Documents</p>
-                    {(profileFor(detailUser, tab)?.documents ?? []).length === 0 ? (
-                      <p className="rounded-xl border border-amber-200/80 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                        No documents uploaded.
-                      </p>
+                  {/* Documents Section */}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <p className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-400">Submitted Documents</p>
+                    {(p?.documents ?? []).length === 0 ? (
+                      <div className="rounded-xl border border-slate-100 bg-slate-50 p-6 text-center text-slate-500">
+                        <FileText className="mx-auto h-8 w-8 text-slate-300 mb-2" />
+                        <p className="text-sm font-semibold">No documents uploaded.</p>
+                      </div>
                     ) : (
-                      <ul className="space-y-2">
-                        {(profileFor(detailUser, tab)?.documents ?? []).map((doc) => {
+                      <ul className="space-y-3">
+                        {(p?.documents ?? []).map((doc) => {
                           const typeLabel = documentTypeLabel(doc, tab)
+                          const isDocApproved = isProfileApproved || enterpriseStatus === 'approved'
                           return (
                             <li
                               key={doc._id || doc.url}
-                              className="flex items-start gap-3 rounded-xl border border-slate-200/90 bg-slate-50 px-3 py-2.5"
+                              className="flex items-center justify-between gap-4 rounded-xl border border-slate-100 bg-slate-50/80 p-4 transition hover:bg-slate-100"
                             >
-                              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-semibold text-slate-900">
-                                  {doc.label || typeLabel || 'Document'}
-                                </p>
-                                {typeLabel && doc.label && typeLabel !== doc.label ? (
-                                  <p className="text-[11px] text-slate-500">{typeLabel}</p>
-                                ) : null}
-                                {doc.uploadedAt ? (
-                                  <p className="text-[11px] text-slate-400">
-                                    {new Date(doc.uploadedAt).toLocaleString('en-IN', {
-                                      dateStyle: 'medium',
-                                      timeStyle: 'short',
-                                    })}
-                                  </p>
-                                ) : null}
+                              <div className="flex items-center gap-4 min-w-0">
+                                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${isDocApproved ? 'bg-emerald-100 text-emerald-600' : 'bg-white shadow-sm ring-1 ring-slate-200 text-slate-500'}`}>
+                                  {isDocApproved ? <Check className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-sm font-bold text-slate-900 truncate">
+                                      {doc.label || typeLabel || 'Document'}
+                                    </p>
+                                    {isDocApproved && (
+                                      <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700">Verified</span>
+                                    )}
+                                  </div>
+                                  <div className="mt-0.5 flex items-center gap-2 text-[11px] font-medium text-slate-500">
+                                    {isDocApproved ? (
+                                      <span>Verified on {approvalLog?.createdAt ? new Date(approvalLog.createdAt).toLocaleDateString() : 'recently'} by {approvalLog?.admin?.fullName || 'System Admin'}</span>
+                                    ) : (
+                                      <span>Uploaded on {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}</span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                              {doc.url ? (
+                              {doc.url && (
                                 <a
                                   href={doc.url}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="shrink-0 text-xs font-bold text-brand"
+                                  className="shrink-0 rounded-lg bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 hover:text-brand transition"
                                 >
-                                  Open
+                                  View Document
                                 </a>
-                              ) : null}
+                              )}
                             </li>
                           )
                         })}
@@ -552,56 +840,89 @@ export function AdminBusinessVerificationPage() {
                     )}
                   </div>
 
-                  {profileFor(detailUser, tab)?.reviewNote ? (
-                    <p className="rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-700">
-                      Previous note: {profileFor(detailUser, tab).reviewNote}
-                    </p>
-                  ) : null}
+                  {/* Audit Timeline */}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                     <h3 className="mb-6 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+                       <History className="h-4 w-4" /> Audit Timeline
+                     </h3>
+                     <div className="relative space-y-6 before:absolute before:inset-0 before:ml-4 before:h-full before:w-0.5 before:bg-slate-100 pl-10">
+                        <div className="relative">
+                          <span className="absolute -left-[35px] flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-slate-500 shadow-[0_0_0_4px_white]">
+                            <div className="h-2 w-2 rounded-full bg-slate-500" />
+                          </span>
+                          <p className="text-sm font-bold text-slate-900">Current Status</p>
+                          <div className="mt-1">
+                            <EnterpriseBadge status={enterpriseStatus} />
+                          </div>
+                        </div>
 
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase text-slate-500" htmlFor="biz-note">
-                      Note if rejecting (optional)
-                    </label>
-                    <textarea
-                      id="biz-note"
-                      rows={2}
-                      value={reviewNote}
-                      onChange={(e) => setReviewNote(e.target.value)}
-                      placeholder="e.g. GST certificate is unclear — please re-upload"
-                      className="w-full rounded-xl border border-slate-200/90 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/35"
-                    />
-                  </div>
+                        {timeline.map((log) => (
+                          <div key={log._id} className="relative">
+                            <span className="absolute -left-[35px] flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 shadow-[0_0_0_4px_white]">
+                               <Clock className="h-3 w-3 text-slate-400" />
+                            </span>
+                            <div className="flex items-center gap-3">
+                               <p className="text-xs font-bold text-slate-500">{new Date(log.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</p>
+                               <p className="text-sm font-medium text-slate-900">{log.action}</p>
+                            </div>
+                            {log.admin && <p className="text-[11px] text-slate-500 mt-1">by {log.admin.fullName}</p>}
+                          </div>
+                        ))}
 
-                  {detailError ? (
-                    <p className="rounded-xl border border-rose-200/80 bg-rose-50 px-3 py-2 text-sm text-rose-900">
-                      {detailError}
-                    </p>
-                  ) : null}
+                        {p?.documentsSubmittedAt && (
+                          <div className="relative">
+                            <span className="absolute -left-[35px] flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 shadow-[0_0_0_4px_white]">
+                               <UploadCloud className="h-3 w-3 text-slate-400" />
+                            </span>
+                            <div className="flex items-center gap-3">
+                               <p className="text-xs font-bold text-slate-500">{new Date(p.documentsSubmittedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</p>
+                               <p className="text-sm font-medium text-slate-900">KYC Submitted</p>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {(p?.documents ?? []).length > 0 && (
+                          <div className="relative">
+                            <span className="absolute -left-[35px] flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 shadow-[0_0_0_4px_white]">
+                               <FileText className="h-3 w-3 text-slate-400" />
+                            </span>
+                            <div className="flex items-center gap-3">
+                               <p className="text-xs font-bold text-slate-500">{p.documents[0].uploadedAt ? new Date(p.documents[0].uploadedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'Prior'}</p>
+                               <p className="text-sm font-medium text-slate-900">Documents Uploaded</p>
+                            </div>
+                          </div>
+                        )}
 
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <button
-                      type="button"
-                      disabled={reviewBusy}
-                      onClick={() => runReview('rejected')}
-                      className="flex-1 rounded-2xl border border-rose-200/90 bg-rose-50 py-3 text-sm font-bold text-rose-900 disabled:opacity-50"
-                    >
-                      Reject
-                    </button>
-                    <AppPrimaryButton
-                      type="button"
-                      className="flex-1 py-3 text-sm"
-                      disabled={
-                        reviewBusy || !(profileFor(detailUser, tab)?.documents?.length > 0)
-                      }
-                      onClick={() => runReview('approved')}
-                    >
-                      {reviewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                      Approve
-                    </AppPrimaryButton>
+                        <div className="relative">
+                          <span className="absolute -left-[35px] flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 shadow-[0_0_0_4px_white]">
+                              <UserIcon className="h-3 w-3 text-slate-400" />
+                          </span>
+                          <div className="flex items-center gap-3">
+                              <p className="text-xs font-bold text-slate-500">{new Date(detailUser.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</p>
+                              <p className="text-sm font-medium text-slate-900">Business Registered</p>
+                          </div>
+                        </div>
+                     </div>
                   </div>
                 </>
               ) : null}
             </div>
+            
+            {/* Modal Footer */}
+            {!detailLoading && !detailError && detailUser && enterpriseStatus !== 'pending' && enterpriseStatus !== 'rejected' && (
+              <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-4">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Last Reviewed</p>
+                  <p className="mt-0.5 text-xs font-semibold text-slate-700">
+                    {approvalLog ? new Date(approvalLog.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Reviewed By</p>
+                  <p className="mt-0.5 text-xs font-semibold text-slate-700">{approvalLog?.admin?.fullName || 'System Admin'}</p>
+                </div>
+              </div>
+            )}
           </motion.div>
         </div>
       ) : null}

@@ -53,7 +53,9 @@ const labourProfileSchema = new mongoose.Schema(
       default: KYC_STATUS.PENDING,
     },
     aadhaarMasked: String,
+    aadhaarNumber: { type: String, select: false },
     panMasked: String,
+    panNumber: { type: String, select: false },
     /** When worker submitted Aadhaar/PAN video KYC for admin review */
     kycSubmittedAt: Date,
     /** Cloudinary video URL for manual Aadhaar + PAN review */
@@ -140,6 +142,21 @@ const userSchema = new mongoose.Schema(
     /** Optional profile photo (https URL); shown in app header when set */
     profileImageUrl: { type: String, maxlength: 2048 },
     isActive: { type: Boolean, default: true },
+    accountStatus: {
+      type: String,
+      enum: ['active', 'pending_verification', 'on_hold', 'suspended', 'blocked', 'deleted'],
+      default: 'active',
+      index: true,
+    },
+    adminNotes: [
+      {
+        text: String,
+        addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        addedAt: { type: Date, default: Date.now },
+      },
+    ],
+    deletedAt: Date,
+    isWalletFrozen: { type: Boolean, default: false },
     isPhoneVerified: { type: Boolean, default: false },
     fcmTokens: [{ type: String, trim: true }],
     fcmTokensWeb: [{ type: String, trim: true }],
