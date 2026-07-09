@@ -17,9 +17,16 @@ import {
   acceptVendorMarketplaceRequest,
   declineVendorMarketplaceRequest,
   assignWorkforce,
-  getVendorWallet,
-  requestVendorWithdrawal,
 } from '../controllers/vendorController.js'
+import {
+  getWalletSummary,
+  getSettlements,
+  getWalletActivity,
+  getSettlementDetails,
+  requestWithdrawal,
+  getWithdrawals,
+  remindAdminForSettlement,
+} from '../controllers/vendorWalletController.js'
 import {
   submitQuotationVendor,
   getQuotationForRequest,
@@ -44,8 +51,15 @@ router.get('/settlements', listVendorSettlements)
 router.get('/requests', listVendorMarketplaceRequests)
 router.post('/requests/:id/accept', acceptVendorMarketplaceRequest)
 router.post('/requests/:id/decline', declineVendorMarketplaceRequest)
-router.get('/wallet', getVendorWallet)
-router.post('/wallet/withdraw', requestVendorWithdrawal)
+
+// Wallet Endpoints
+router.get('/wallet/summary', getWalletSummary)
+router.get('/wallet/settlements', getSettlements)
+router.get('/wallet/activity', getWalletActivity)
+router.get('/wallet/withdrawals', getWithdrawals)
+router.post('/wallet/withdraw', requestWithdrawal)
+router.get('/wallet/:settlementId', getSettlementDetails)
+router.post('/wallet/:settlementId/remind', remindAdminForSettlement)
 
 // Quotation endpoints
 router.post('/jobs/:id/quotation', submitQuotationVendor)

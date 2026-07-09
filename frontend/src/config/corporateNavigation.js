@@ -7,6 +7,7 @@ import {
   Home,
   LifeBuoy,
   UserRound,
+  Wallet,
 } from 'lucide-react'
 
 export const corporateNavigation = {
@@ -24,6 +25,7 @@ export const corporateNavigation = {
     { id: 'requests', to: '/corporate/requests', label: 'Workforce requests', icon: ClipboardList },
     { id: 'attendance', to: '/corporate/attendance', label: 'Attendance', icon: Clock },
     { id: 'billing', to: '/corporate/billing', label: 'Billing & invoices', icon: FileText },
+    { id: 'wallet', to: '/corporate/wallet', label: 'Wallet & Top-up', icon: Wallet },
     { id: 'analytics', to: '/corporate/analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'support', to: '/corporate/support', label: 'Support', icon: LifeBuoy },
     { id: 'profile', to: '/corporate/profile', label: 'Profile & KYC', icon: UserRound },
@@ -39,6 +41,7 @@ export function getCorporateTitle(pathname) {
   if (pathname.startsWith('/corporate/requests')) return 'Requests'
   if (pathname.startsWith('/corporate/attendance')) return 'Attendance'
   if (pathname.startsWith('/corporate/billing')) return 'Billing'
+  if (pathname.startsWith('/corporate/wallet')) return 'Wallet'
   if (pathname.startsWith('/corporate/analytics')) return 'Analytics'
   if (pathname.startsWith('/corporate/support')) return 'Support'
   if (pathname.startsWith('/corporate/profile')) return 'Profile'

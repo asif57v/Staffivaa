@@ -15,6 +15,7 @@ import { CorporateBillingPage } from '../panels/corporate/pages/CorporateBilling
 import { CorporateAnalyticsPage } from '../panels/corporate/pages/CorporateAnalyticsPage.jsx'
 import { CorporateProfilePage } from '../panels/corporate/pages/CorporateProfilePage.jsx'
 import { CorporateSupportPage } from '../panels/corporate/pages/CorporateSupportPage.jsx'
+import { CorporateWalletPage } from '../panels/corporate/pages/CorporateWalletPage.jsx'
 
 /** Nested `/corporate/*` routes — Fragment of `<Route>` nodes for React Router. */
 export const corporateChildRoutes = (
@@ -35,5 +36,6 @@ export const corporateChildRoutes = (
     <Route path="analytics" element={<CorporateAnalyticsPage />} />
     <Route path="profile" element={<CorporateProfilePage />} />
     <Route path="support" element={<CorporateSupportPage />} />
+    <Route path="wallet" element={<CorporateWalletPage />} />
   </>
 )

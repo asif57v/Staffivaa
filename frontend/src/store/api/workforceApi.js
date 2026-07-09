@@ -139,19 +139,38 @@ export const workforceApi = baseApi.injectEndpoints({
       invalidatesTags: ['VendorJobs', 'VendorDashboard', 'Requests'],
     }),
     getVendorSettlements: build.query({
-      query: () => '/vendor/settlements',
-      transformResponse: unwrap,
-      providesTags: ['Invoices'],
-    }),
-    getVendorWallet: build.query({
-      query: () => '/vendor/wallet',
+      query: () => '/vendor/wallet/settlements',
       transformResponse: unwrap,
       providesTags: ['VendorWallet'],
+    }),
+    getVendorWalletSummary: build.query({
+      query: () => '/vendor/wallet/summary',
+      transformResponse: unwrap,
+      providesTags: ['VendorWallet'],
+    }),
+    getVendorWalletActivity: build.query({
+      query: () => '/vendor/wallet/activity',
+      transformResponse: unwrap,
+      providesTags: ['VendorWallet'],
+    }),
+    getVendorWithdrawals: build.query({
+      query: () => '/vendor/wallet/withdrawals',
+      transformResponse: unwrap,
+      providesTags: ['VendorWallet'],
+    }),
+    getVendorSettlementDetails: build.query({
+      query: (id) => `/vendor/wallet/${id}`,
+      transformResponse: unwrap,
+      providesTags: (r, e, id) => [{ type: 'VendorWallet', id }],
     }),
     requestVendorWithdrawal: build.mutation({
       query: (body) => ({ url: '/vendor/wallet/withdraw', method: 'POST', body }),
       transformResponse: unwrap,
       invalidatesTags: ['VendorWallet'],
+    }),
+    remindAdminForSettlement: build.mutation({
+      query: (settlementId) => ({ url: `/vendor/wallet/${settlementId}/remind`, method: 'POST' }),
+      transformResponse: unwrap,
     }),
     getVendorMarketplaceRequests: build.query({
       query: () => '/vendor/requests',
@@ -523,8 +542,12 @@ export const {
   useGetVendorJobsQuery,
   useAcceptVendorJobMutation,
   useGetVendorSettlementsQuery,
-  useGetVendorWalletQuery,
+  useGetVendorWalletSummaryQuery,
+  useGetVendorWalletActivityQuery,
+  useGetVendorWithdrawalsQuery,
+  useGetVendorSettlementDetailsQuery,
   useRequestVendorWithdrawalMutation,
+  useRemindAdminForSettlementMutation,
   useGetVendorMarketplaceRequestsQuery,
   useAcceptMarketplaceRequestMutation,
   useDeclineMarketplaceRequestMutation,
