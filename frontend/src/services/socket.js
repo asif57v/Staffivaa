@@ -6,7 +6,9 @@ export const connectSocket = (user, token) => {
   if (socket) return socket
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
-  const socketUrl = API_URL.replace('/api/v1', '')
+  
+  // Enforce socket on port 5001
+  const socketUrl = import.meta.env.VITE_SOCKET_URL || API_URL.replace('/api/v1', '').replace(':5000', ':5001').replace(':50011', ':5001')
   
   socket = io(socketUrl, {
     auth: { token },
@@ -49,3 +51,4 @@ export const disconnectSocket = () => {
 export const getSocket = () => {
   return socket
 }
+

@@ -692,7 +692,13 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
     { $set: { [targetField]: tokens } }
   )
 
-  return sendSuccess(res, { message: `FCM Token saved successfully for ${isApp ? 'app' : 'web'} platform` })
+  return sendSuccess(res, { 
+    message: `FCM Token saved successfully for ${isApp ? 'app' : 'web'} platform`,
+    data: {
+      role: req.user.role,
+      platform: isApp ? 'app' : 'web'
+    }
+  })
 })
 
 /** Admin: update user status (active, suspended, blocked, etc.) */

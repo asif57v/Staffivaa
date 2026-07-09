@@ -8,6 +8,7 @@ import { Notification } from '../models/Notification.js'
 import { REQUEST_STATUS } from '../constants/workforceConstants.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
+import { emitToRole } from '../utils/socket.js'
 
 function requireApprovedVendor(user) {
   if (user.role !== 'contractor') return 'Vendor account required'
@@ -282,13 +283,16 @@ export const remindAdminForSettlement = asyncHandler(async (req, res) => {
   }
 
   // Create notification for Admin
-  await Notification.create({
+  const notification = await Notification.create({
     title: 'Settlement Reminder',
     body: `${req.user.fullName} has requested the release of settlement for project ${request.reference}.`,
     type: 'SETTLEMENT_PENDING',
     relatedId: request._id,
     relatedModel: 'WorkforceRequest'
   })
+
+  // Emit real-time socket event to all admins
+  emitToRole('admin', 'new_notification', notification)
 
   // Optionally, record this in the request notes to prevent spam
   request.adminFinanceNotes.push({

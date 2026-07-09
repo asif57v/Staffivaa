@@ -2,8 +2,8 @@ import { Server } from 'socket.io'
 
 let io
 
-export const initSocket = (server) => {
-  io = new Server(server, {
+export const initSocket = () => {
+  io = new Server(5001, {
     cors: {
       origin: function (origin, callback) {
         // Allow dynamic origin resolution to support Vercel preview and production domains
@@ -13,6 +13,8 @@ export const initSocket = (server) => {
       credentials: true,
     },
   })
+
+  console.log(`[Socket.io] Listening on :5001`)
 
   io.on('connection', (socket) => {
     console.log(`[Socket.io] Client connected: ${socket.id}`)

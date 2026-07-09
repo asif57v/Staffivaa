@@ -78,7 +78,7 @@ export function AppJobsPage() {
   }, [])
 
   useEffect(() => {
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1'
     const socketUrl = baseUrl.replace('/api/v1', '')
     const socket = io(socketUrl, { 
       withCredentials: true,
@@ -515,3 +515,4 @@ export function AppJobsPage() {
     </div>
   )
 }
+

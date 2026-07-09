@@ -16,7 +16,10 @@ function buildAuthPayload(user, token) {
       corporateApprovalStatus: user.corporateProfile.status,
     }
   }
+  const platform = user.role === USER_ROLES.ADMIN ? 'web' : 'app'
   return {
+    role: user.role,
+    platform,
     user: safe,
     token,
     flags,
@@ -187,12 +190,8 @@ export const loginVerify = asyncHandler(async (req, res) => {
   await user.save()
   await deleteOtpChallengeDoc(otp.doc)
   
-  // Platform is strictly based on role
-  const platform = user.role === USER_ROLES.ADMIN ? 'web' : 'app'
-
   const token = signAccessToken(user)
   const payload = buildAuthPayload(user, token)
-  payload.platform = platform
 
   return sendSuccess(res, {
     message: 'Login successful',
@@ -239,7 +238,6 @@ export const adminLogin = asyncHandler(async (req, res) => {
   })
 
   const payload = buildAuthPayload(user, token)
-  payload.platform = 'web'
 
   return sendSuccess(res, {
     message: 'Admin login successful',

@@ -14,7 +14,7 @@ async function main() {
   initializeFirebaseAdmin()
   
   const server = http.createServer(app)
-  initSocket(server)
+  initSocket()
   
   // Start background jobs
   startBookingExpirationJob()
@@ -29,3 +29,4 @@ main().catch((e) => {
   console.error(e)
   process.exit(1)
 })
+

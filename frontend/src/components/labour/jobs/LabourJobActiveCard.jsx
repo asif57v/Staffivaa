@@ -66,7 +66,7 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
         }
       },
       (err) => console.error('Error watching location', err),
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 5001 }
     )
 
     return () => navigator.geolocation.clearWatch(watchId)
@@ -116,7 +116,7 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
   
   useEffect(() => {
     if (!requestId) return
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1'
     const socketUrl = baseUrl.replace('/api/v1', '')
     const socket = io(socketUrl, { 
       withCredentials: true,
@@ -393,3 +393,4 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
     </article>
   )
 }
+
