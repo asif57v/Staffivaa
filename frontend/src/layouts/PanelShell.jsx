@@ -65,7 +65,8 @@ export function PanelShell({
       console.log('[Socket] Invalidating Corporate and Vendor cache');
       dispatch(workforceApi.util.invalidateTags([
         'VendorDashboard', 'VendorJobs', 'Requests', 
-        'CorporateDashboard', 'Projects', 'Attendance', 'Invoices'
+        'CorporateDashboard', 'Projects', 'Attendance', 'Invoices',
+        'VendorWallet', 'Wallet'
       ]));
     };
 

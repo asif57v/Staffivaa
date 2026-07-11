@@ -515,6 +515,11 @@ export function AuthEntryPage() {
                         value={phone}
                         onChange={(e) => setPhoneDigits(e.target.value)}
                         onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            if (!busy) void handleSendOtp()
+                            return
+                          }
                           const allowed = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End']
                           if (allowed.includes(e.key)) return
                           if (e.ctrlKey || e.metaKey) return

@@ -250,7 +250,9 @@ export const createRequest = asyncHandler(async (req, res) => {
 
   emitToUser('individual', user._id.toString(), 'request_created', { requestId: request._id.toString() })
   if (sourceType === REQUEST_SOURCE.CORPORATE) {
+    console.log(`[Socket] Emitting corporate_request_created to contractor and vendor roles`)
     emitToRole('contractor', 'corporate_request_created', { requestId: request._id.toString() })
+    emitToRole('vendor', 'corporate_request_created', { requestId: request._id.toString() })
   }
 
   sendSuccess(res, { data: { request } }, HTTP_STATUS.CREATED)
