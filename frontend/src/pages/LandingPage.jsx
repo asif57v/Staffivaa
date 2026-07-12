@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react'
+import { Navigate } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth.js'
+import { getRoleHomePath } from '../lib/roleHomePath.js'
 import { AppPromoSection } from '../components/landing/AppPromoSection'
 import { FAQSection } from '../components/landing/FAQSection'
 import { FeaturesSection } from '../components/landing/FeaturesSection'
@@ -23,6 +26,16 @@ export function LandingPage() {
     const t = window.setTimeout(() => setBoot(false), 700)
     return () => window.clearTimeout(t)
   }, [])
+
+  const { isAuthenticated, user, loading } = useAuth()
+
+  if (loading) {
+    return <PageSkeleton visible={true} />
+  }
+
+  if (isAuthenticated && user) {
+    return <Navigate to={getRoleHomePath(user.role)} replace />
+  }
 
   return (
     <>
