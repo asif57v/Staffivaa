@@ -69,13 +69,16 @@ export function VendorSettlementDrawer({ settlementId, onClose }) {
                     {settlement.status === 'settlement_completed' && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
                     {settlement.status === 'settlement_pending' && <Clock className="h-4 w-4 text-amber-500" />}
                     {settlement.status === 'settlement_on_hold' && <AlertCircle className="h-4 w-4 text-rose-500" />}
+                    {settlement.status === 'waiting_for_corporate_payment' && <Clock className="h-4 w-4 text-blue-500" />}
                     {settlement.status.replace(/_/g, ' ')}
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-[12px] font-bold text-slate-500">Net Settlement</p>
-                  <p className="text-[20px] font-black text-emerald-600">{formatMoney(settlement.financials?.netSettlement)}</p>
-                </div>
+                {!settlement.isPlaceholder && (
+                  <div className="text-right">
+                    <p className="text-[12px] font-bold text-slate-500">Net Settlement</p>
+                    <p className="text-[20px] font-black text-emerald-600">{formatMoney(settlement.financials?.netSettlement)}</p>
+                  </div>
+                )}
               </AppSurface>
 
               {/* Project & Client */}
@@ -97,37 +100,39 @@ export function VendorSettlementDrawer({ settlementId, onClose }) {
               </AppSurface>
 
               {/* Earnings Breakdown */}
-              <AppSurface className="p-5 space-y-4">
-                <h3 className="text-[13px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                  <Banknote className="h-4 w-4" /> Earnings Breakdown
-                </h3>
-                
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[13px] font-semibold text-slate-600">Gross Earnings</span>
-                    <span className="text-[13px] font-bold text-slate-900">{formatMoney(settlement.financials?.grossEarnings)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-[13px] font-semibold text-rose-500">Platform Fee</span>
-                    <span className="text-[13px] font-bold text-rose-600">- {formatMoney(settlement.financials?.platformFee)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-[13px] font-semibold text-rose-500">GST Deducted</span>
-                    <span className="text-[13px] font-bold text-rose-600">- {formatMoney(settlement.financials?.gst)}</span>
-                  </div>
-                  {settlement.financials?.otherDeductions > 0 && (
+              {!settlement.isPlaceholder && (
+                <AppSurface className="p-5 space-y-4">
+                  <h3 className="text-[13px] font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                    <Banknote className="h-4 w-4" /> Earnings Breakdown {settlement.milestone && `(${settlement.milestone.toUpperCase()})`}
+                  </h3>
+                  
+                  <div className="space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className="text-[13px] font-semibold text-rose-500">Other Deductions</span>
-                      <span className="text-[13px] font-bold text-rose-600">- {formatMoney(settlement.financials?.otherDeductions)}</span>
+                      <span className="text-[13px] font-semibold text-slate-600">Gross Earnings</span>
+                      <span className="text-[13px] font-bold text-slate-900">{formatMoney(settlement.financials?.grossEarnings)}</span>
                     </div>
-                  )}
-                </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[13px] font-semibold text-rose-500">Platform Fee</span>
+                      <span className="text-[13px] font-bold text-rose-600">- {formatMoney(settlement.financials?.platformFee)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[13px] font-semibold text-rose-500">GST Deducted</span>
+                      <span className="text-[13px] font-bold text-rose-600">- {formatMoney(settlement.financials?.gst)}</span>
+                    </div>
+                    {settlement.financials?.otherDeductions > 0 && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-[13px] font-semibold text-rose-500">Other Deductions</span>
+                        <span className="text-[13px] font-bold text-rose-600">- {formatMoney(settlement.financials?.otherDeductions)}</span>
+                      </div>
+                    )}
+                  </div>
 
-                <div className="pt-3 border-t border-slate-100 flex justify-between items-center">
-                  <span className="text-[14px] font-black text-slate-900">Final Net Settlement</span>
-                  <span className="text-[16px] font-black text-emerald-600">{formatMoney(settlement.financials?.netSettlement)}</span>
-                </div>
-              </AppSurface>
+                  <div className="pt-3 border-t border-slate-100 flex justify-between items-center">
+                    <span className="text-[14px] font-black text-slate-900">Final Net Settlement</span>
+                    <span className="text-[16px] font-black text-emerald-600">{formatMoney(settlement.financials?.netSettlement)}</span>
+                  </div>
+                </AppSurface>
+              )}
 
               {/* Timeline */}
               <AppSurface className="p-5">
@@ -141,11 +146,13 @@ export function VendorSettlementDrawer({ settlementId, onClose }) {
                     <p className="text-[11px] font-semibold text-slate-500">{formatDate(settlement.timeline?.acceptedAt)}</p>
                   </div>
                   
-                  <div className="relative pl-6">
-                    <div className="absolute w-3 h-3 bg-blue-500 rounded-full -left-[7px] top-1.5 ring-4 ring-white" />
-                    <p className="text-[13px] font-bold text-slate-900">Settlement Created</p>
-                    <p className="text-[11px] font-semibold text-slate-500">{formatDate(settlement.timeline?.createdAt)}</p>
-                  </div>
+                  {!settlement.isPlaceholder && (
+                    <div className="relative pl-6">
+                      <div className="absolute w-3 h-3 bg-blue-500 rounded-full -left-[7px] top-1.5 ring-4 ring-white" />
+                      <p className="text-[13px] font-bold text-slate-900">Settlement Created</p>
+                      <p className="text-[11px] font-semibold text-slate-500">{formatDate(settlement.timeline?.createdAt)}</p>
+                    </div>
+                  )}
 
                   {settlement.status === 'settlement_on_hold' && (
                     <div className="relative pl-6">

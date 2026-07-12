@@ -54,42 +54,45 @@ export const getWalletSummary = asyncHandler(async (req, res) => {
   const user = await User.findById(vendorId).select('walletBalance').lean()
   const availableBalance = user?.walletBalance || 0
 
-  // Find all allocations for this vendor
-  const allocations = await Allocation.find({ vendorId }).lean()
-  const requestIds = allocations.map(a => a.requestId)
-
-  // Fetch related requests
-  const requests = await WorkforceRequest.find({ _id: { $in: requestIds } }).lean()
+  const { Settlement } = await import('../models/Settlement.js')
+  
+  // Aggregate from Settlement collection
+  const settlements = await Settlement.find({ vendorId }).lean()
 
   let pendingSettlement = 0
   let onHoldSettlement = 0
   let lifetimeEarnings = 0
   let totalSettlements = 0
-  let activeProjects = 0
 
-  for (const req of requests) {
-    const calc = await getSettlementCalculations(req, vendorId)
-
-    if (req.status === REQUEST_STATUS.SETTLEMENT_PENDING || req.status === REQUEST_STATUS.PAYMENT_PENDING) {
-      pendingSettlement += calc.netSettlement
+  for (const s of settlements) {
+    if (s.status === 'settlement_pending') {
+      pendingSettlement += s.financials?.netSettlement || 0
     }
-    
-    if (req.status === REQUEST_STATUS.SETTLEMENT_ON_HOLD) {
-      onHoldSettlement += calc.netSettlement
+    if (s.status === 'settlement_on_hold') {
+      onHoldSettlement += s.financials?.netSettlement || 0
     }
-
-    if ([REQUEST_STATUS.SETTLEMENT_COMPLETED, REQUEST_STATUS.PARTIALLY_RELEASED, REQUEST_STATUS.SETTLEMENT_PENDING, REQUEST_STATUS.SETTLEMENT_ON_HOLD].includes(req.status)) {
-      lifetimeEarnings += calc.grossEarnings
+    if (['settlement_completed', 'settlement_pending', 'settlement_on_hold'].includes(s.status)) {
+      lifetimeEarnings += s.financials?.grossEarnings || 0
     }
-
-    if (req.status === REQUEST_STATUS.SETTLEMENT_COMPLETED) {
+    if (s.status === 'settlement_completed') {
       totalSettlements += 1
     }
-
-    if ([REQUEST_STATUS.PROJECT_ACTIVE, REQUEST_STATUS.IN_PROGRESS, REQUEST_STATUS.ON_SITE, REQUEST_STATUS.ATTENDANCE, REQUEST_STATUS.BILLING, REQUEST_STATUS.PAYMENT_PENDING].includes(req.status)) {
-      activeProjects += 1
-    }
   }
+
+  // Active Projects is still from WorkforceRequest
+  const allocations = await Allocation.find({ vendorId }).lean()
+  const requestIds = allocations.map(a => a.requestId)
+  const activeProjectsCount = await WorkforceRequest.countDocuments({
+    _id: { $in: requestIds },
+    status: { $in: [
+      REQUEST_STATUS.PROJECT_ACTIVE, 
+      REQUEST_STATUS.IN_PROGRESS, 
+      REQUEST_STATUS.ON_SITE, 
+      REQUEST_STATUS.ATTENDANCE, 
+      REQUEST_STATUS.BILLING, 
+      REQUEST_STATUS.PAYMENT_PENDING
+    ]}
+  })
 
   // Calculate Total Withdrawn
   const withdrawals = await Withdrawal.aggregate([
@@ -106,7 +109,7 @@ export const getWalletSummary = asyncHandler(async (req, res) => {
       lifetimeEarnings,
       totalWithdrawn,
       totalSettlements,
-      activeProjects
+      activeProjects: activeProjectsCount
     }
   })
 })
@@ -117,28 +120,31 @@ export const getSettlements = asyncHandler(async (req, res) => {
 
   const vendorId = req.user._id
 
+  // Return BOTH un-paid requests (as Waiting for Corporate Payment) AND actual settlements
   const allocations = await Allocation.find({ vendorId }).lean()
   const requestIds = allocations.map(a => a.requestId)
 
-  const requests = await WorkforceRequest.find({
+  const unpaidRequests = await WorkforceRequest.find({
     _id: { $in: requestIds },
-    status: { $in: [
-      REQUEST_STATUS.PAYMENT_PENDING,
-      REQUEST_STATUS.SETTLEMENT_PENDING,
-      REQUEST_STATUS.SETTLEMENT_ON_HOLD,
-      REQUEST_STATUS.PARTIALLY_RELEASED,
-      REQUEST_STATUS.SETTLEMENT_COMPLETED,
-      REQUEST_STATUS.COMPLETED
-    ]}
+    status: { $in: [REQUEST_STATUS.PAYMENT_PENDING] }
   })
   .populate('clientId', 'corporateProfile.companyName fullName')
   .populate('projectId', 'name')
   .sort({ updatedAt: -1 })
   .lean()
 
-  const settlements = await Promise.all(requests.map(async req => {
-    const calc = await getSettlementCalculations(req, vendorId)
+  const { Settlement } = await import('../models/Settlement.js')
+  const actualSettlements = await Settlement.find({ vendorId })
+  .populate('clientId', 'corporateProfile.companyName fullName')
+  .populate('projectId', 'name')
+  .populate('requestId')
+  .sort({ createdAt: -1 })
+  .lean()
 
+  let finalSettlementsList = []
+
+  // Add Unpaid requests (Placeholder settlements)
+  for (const req of unpaidRequests) {
     // Calculate project duration
     let duration = 0
     if (req.startDate && req.endDate) {
@@ -148,20 +154,52 @@ export const getSettlements = asyncHandler(async (req, res) => {
       duration = 1
     }
 
-    return {
+    finalSettlementsList.push({
       _id: req._id,
+      isPlaceholder: true,
       reference: req.reference,
       projectName: req.projectId?.name || 'Unknown Project',
       corporateName: req.clientId?.corporateProfile?.companyName || req.clientId?.fullName,
-      status: req.status,
+      status: 'waiting_for_corporate_payment',
       date: req.updatedAt,
       durationDays: duration,
       workerCount: req.lines?.reduce((sum, line) => sum + line.quantity, 0) || 0,
-      financials: calc
-    }
-  }))
+      financials: null // No financials yet!
+    })
+  }
 
-  sendSuccess(res, { data: { settlements } })
+  // Add actual Settlements
+  for (const s of actualSettlements) {
+    const req = s.requestId
+    
+    // Calculate project duration
+    let duration = 0
+    if (req && req.startDate && req.endDate) {
+      const ms = new Date(req.endDate) - new Date(req.startDate)
+      duration = Math.ceil(ms / (1000 * 60 * 60 * 24)) + 1
+    } else {
+      duration = 1
+    }
+    
+    finalSettlementsList.push({
+      _id: s._id,
+      isPlaceholder: false,
+      reference: s.reference,
+      projectName: s.projectId?.name || 'Unknown Project',
+      corporateName: s.clientId?.corporateProfile?.companyName || s.clientId?.fullName,
+      status: s.status,
+      date: s.createdAt,
+      durationDays: duration,
+      workerCount: req?.lines?.reduce((sum, line) => sum + line.quantity, 0) || 0,
+      financials: s.financials,
+      milestone: s.milestone
+    })
+  }
+
+  // Sort combined list by date descending
+  finalSettlementsList.sort((a, b) => new Date(b.date) - new Date(a.date))
+
+  sendSuccess(res, { data: { settlements: finalSettlementsList } })
 })
 
 export const getWalletActivity = asyncHandler(async (req, res) => {
@@ -180,8 +218,40 @@ export const getSettlementDetails = asyncHandler(async (req, res) => {
   const err = requireApprovedVendor(req.user)
   if (err) return sendError(res, { message: err, statusCode: HTTP_STATUS.FORBIDDEN })
 
-  const settlementId = req.params.settlementId
-  const request = await WorkforceRequest.findById(settlementId)
+  const id = req.params.settlementId
+  const { Settlement } = await import('../models/Settlement.js')
+  
+  // It could be an actual Settlement ID, or a WorkforceRequest ID (if it's a placeholder)
+  let settlementDoc = null;
+  if(id && id.length === 24) {
+    settlementDoc = await Settlement.findById(id)
+      .populate('clientId', 'corporateProfile.companyName fullName')
+      .populate('projectId', 'name')
+      .lean()
+  }
+
+  if (settlementDoc) {
+    sendSuccess(res, {
+      data: {
+        settlement: {
+          _id: settlementDoc._id,
+          isPlaceholder: false,
+          reference: settlementDoc.reference,
+          status: settlementDoc.status,
+          milestone: settlementDoc.milestone,
+          projectName: settlementDoc.projectId?.name,
+          corporateName: settlementDoc.clientId?.corporateProfile?.companyName || settlementDoc.clientId?.fullName,
+          timeline: settlementDoc.timeline,
+          financials: settlementDoc.financials,
+          holdReason: settlementDoc.holdReason
+        }
+      }
+    })
+    return
+  }
+
+  // Fallback: check if it's a placeholder (WorkforceRequest ID)
+  const request = await WorkforceRequest.findById(id)
     .populate('clientId', 'corporateProfile.companyName fullName')
     .populate('projectId', 'name')
     .lean()
@@ -190,15 +260,13 @@ export const getSettlementDetails = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Settlement not found', statusCode: HTTP_STATUS.NOT_FOUND })
   }
 
-  const calc = await getSettlementCalculations(request, req.user._id)
-  const quotation = await Quotation.findOne({ requestId: request._id, vendorId: req.user._id, status: 'approved' }).lean()
-
   sendSuccess(res, {
     data: {
       settlement: {
         _id: request._id,
+        isPlaceholder: true,
         reference: request.reference,
-        status: request.status,
+        status: 'waiting_for_corporate_payment',
         projectName: request.projectId?.name,
         corporateName: request.clientId?.corporateProfile?.companyName || request.clientId?.fullName,
         timeline: {
@@ -206,10 +274,7 @@ export const getSettlementDetails = asyncHandler(async (req, res) => {
           acceptedAt: request.acceptedAt,
           updatedAt: request.updatedAt,
         },
-        financials: calc,
-        quotationDetails: quotation,
-        ledger: request.settlementLedger || [],
-        holdReason: request.holdReason
+        financials: null
       }
     }
   })

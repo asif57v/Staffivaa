@@ -3,7 +3,7 @@ import { ArrowLeft, Users, Building2, MapPin, Calendar, Clock, UserCircle, Check
 import { useGetRequestQuery, useRespondToQuotationMutation } from '../../../store/api/workforceApi.js'
 import { useAuth } from '../../../hooks/useAuth.js'
 import { useEffect, useState } from 'react'
-import { getSocket } from '../../../services/socket.js'
+import { useSocket } from '../../../hooks/useSocket.js'
 
 function formatDate(d) {
   if (!d) return '—'
@@ -251,8 +251,9 @@ export function CorporateRequestDetailPage() {
   const [revisionFeedback, setRevisionFeedback] = useState('')
   const [showTimeline, setShowTimeline] = useState(false)
 
+  const socket = useSocket()
+
   useEffect(() => {
-    const socket = getSocket()
     if (socket && id) {
       const handleUpdate = () => refetch()
       socket.on('vendor_accepted_job', handleUpdate)
@@ -273,7 +274,7 @@ export function CorporateRequestDetailPage() {
         socket.off('corporate_responded_quotation', handleUpdate)
       }
     }
-  }, [id, refetch])
+  }, [socket, id, refetch])
 
   const request = data?.request
   const allocation = data?.allocation

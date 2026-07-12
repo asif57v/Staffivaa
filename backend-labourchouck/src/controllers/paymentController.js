@@ -174,11 +174,30 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
           allocation.vendorAdvancePaidAmount = vendorAdvance
           await allocation.save()
 
+          const { Settlement } = await import('../models/Settlement.js')
+          await Settlement.create({
+            reference: `STL-ADV-${Date.now()}`,
+            requestId: request._id,
+            vendorId: allocation.vendorId,
+            clientId: request.clientId,
+            projectId: request.projectId,
+            milestone: 'advance',
+            status: 'settlement_completed',
+            financials: {
+              grossEarnings: vendorAdvance,
+              platformFee: 0,
+              gst: 0,
+              otherDeductions: 0,
+              netSettlement: vendorAdvance
+            }
+          })
+
           const { User } = await import('../models/User.js')
           await User.findByIdAndUpdate(allocation.vendorId, {
             $inc: { walletBalance: vendorAdvance }
           })
 
+          const { WalletTransaction } = await import('../models/WalletTransaction.js')
           await WalletTransaction.create({
             transactionId: `TXN-ADV-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
             bookingId: request._id,
@@ -229,11 +248,30 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
         const netAmountToVendor = totalLabourCost + extraCost - vendorPlatformFee - vendorAdvancePaidAmount
 
         if (allocation && allocation.vendorId) {
+          const { Settlement } = await import('../models/Settlement.js')
+          await Settlement.create({
+            reference: `STL-FIN-${Date.now()}`,
+            requestId: request._id,
+            vendorId: allocation.vendorId,
+            clientId: request.clientId,
+            projectId: request.projectId,
+            milestone: 'final',
+            status: 'settlement_completed',
+            financials: {
+              grossEarnings: totalLabourCost + extraCost,
+              platformFee: vendorPlatformFee,
+              gst: 0,
+              otherDeductions: vendorAdvancePaidAmount,
+              netSettlement: netAmountToVendor
+            }
+          })
+
           const { User } = await import('../models/User.js')
           await User.findByIdAndUpdate(allocation.vendorId, {
             $inc: { walletBalance: netAmountToVendor }
           })
 
+          const { WalletTransaction } = await import('../models/WalletTransaction.js')
           await WalletTransaction.create({
             transactionId: `TXN-VND-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
             bookingId: request._id,

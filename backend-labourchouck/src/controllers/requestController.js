@@ -475,6 +475,24 @@ export const recordOfflinePaymentAdmin = asyncHandler(async (req, res) => {
           allocation.vendorAdvancePaidAmount = vendorAdvance
           await allocation.save()
 
+          const { Settlement } = await import('../models/Settlement.js')
+          await Settlement.create({
+            reference: `STL-ADV-${Date.now()}`,
+            requestId: request._id,
+            vendorId: allocation.vendorId,
+            clientId: request.clientId,
+            projectId: request.projectId,
+            milestone: 'advance',
+            status: 'settlement_completed',
+            financials: {
+              grossEarnings: vendorAdvance,
+              platformFee: 0,
+              gst: 0,
+              otherDeductions: 0,
+              netSettlement: vendorAdvance
+            }
+          })
+
           await User.findByIdAndUpdate(allocation.vendorId, {
             $inc: { walletBalance: vendorAdvance }
           })

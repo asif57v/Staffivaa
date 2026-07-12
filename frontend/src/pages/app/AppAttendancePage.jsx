@@ -398,8 +398,12 @@ export function AppAttendancePage() {
 
   // Map records for the current month
   const recordMap = {}
-  if (records) {
-    records.forEach(r => {
+  if (records && displayAssignment) {
+    const relevantRecords = records.filter(r => 
+      String(r.assignmentId) === String(displayAssignment._id) || 
+      (r.assignmentId && String(r.assignmentId._id) === String(displayAssignment._id))
+    )
+    relevantRecords.forEach(r => {
       const d = new Date(r.shiftDate)
       d.setHours(0, 0, 0, 0)
       if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {

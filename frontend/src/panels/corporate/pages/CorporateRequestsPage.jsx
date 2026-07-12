@@ -6,7 +6,7 @@ import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
 import { useGetMyRequestsQuery } from '../../../store/api/workforceApi.js'
 import { useAuth } from '../../../hooks/useAuth.js'
 import { useEffect } from 'react'
-import { getSocket } from '../../../services/socket.js'
+import { useSocket } from '../../../hooks/useSocket.js'
 
 function formatDate(d) {
   if (!d) return '—'
@@ -17,8 +17,9 @@ export function CorporateRequestsPage() {
   const { data, isLoading, isError, refetch } = useGetMyRequestsQuery()
   const { user } = useAuth()
 
+  const socket = useSocket()
+
   useEffect(() => {
-    const socket = getSocket()
     if (socket) {
       const handleUpdate = () => refetch()
       socket.on('vendor_accepted_request', handleUpdate)
@@ -39,7 +40,7 @@ export function CorporateRequestsPage() {
         socket.off('request_status_update', handleUpdate)
       }
     }
-  }, [refetch])
+  }, [socket, refetch])
 
   const requests = data?.requests ?? []
 

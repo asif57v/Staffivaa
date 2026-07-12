@@ -260,8 +260,13 @@ export function VendorEarningsPage() {
                   }`} />
                   <div className="flex-1 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-extrabold text-slate-900">{s.projectName}</p>
+                        {s.milestone && (
+                          <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full uppercase tracking-widest border border-slate-200">
+                            {s.milestone}
+                          </span>
+                        )}
                         <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
                            s.status === 'settlement_completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
                            s.status === 'settlement_on_hold' ? 'bg-rose-50 text-rose-700 border border-rose-100' :

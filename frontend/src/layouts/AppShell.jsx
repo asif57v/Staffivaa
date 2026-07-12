@@ -458,7 +458,7 @@ export function AppShell() {
                     </NavLink>
                   ))}
                 </nav>
-                <div className="border-t border-slate-200/70 bg-linear-to-t from-slate-50/50 to-white p-3">
+                <div className="border-t border-slate-200/70 bg-linear-to-t from-slate-50/50 to-white px-3 pt-3 pb-10">
                   <Link
                     to="/"
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200/90 bg-white py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[#0f172a]/25 hover:text-[#0f172a]"
@@ -497,10 +497,10 @@ export function AppShell() {
           <header ref={headerRef} className={`${isIndividualAppHome ? 'relative z-30' : 'sticky top-0 z-30 px-3 pt-3'}`}>
           {isIndividualAppHome ? (
             <div
-              className={`flex items-center gap-2 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top,0px))] transition-all duration-300 ${
+              className={`flex items-center gap-2 px-4 pb-2 pt-3 transition-all duration-300 ${
                 solidIndividualHeader
-                  ? 'bg-yellow-300/95 shadow-md backdrop-blur-md'
-                  : 'bg-yellow-300 shadow-sm'
+                  ? 'bg-[#FFD100]/95 shadow-md backdrop-blur-md'
+                  : 'bg-[#FFD100] shadow-sm'
               }`}
             >
               {/* Location — takes all remaining space */}
