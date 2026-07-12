@@ -296,7 +296,7 @@ export function PanelShell({
                     </NavLink>
                   ))}
                 </nav>
-                <div className="border-t border-slate-200/70 p-3">
+                <div className="border-t border-slate-200/70 px-3 pt-3 pb-10">
                   <Link
                     to="/"
                     className="flex w-full items-center justify-center rounded-xl border border-slate-200/90 bg-white py-3 text-sm font-semibold text-slate-700"
@@ -324,7 +324,7 @@ export function PanelShell({
 
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-lg flex-col">
         {!hideShellHeader ? (
-          <header className={`sticky top-0 z-30 px-4 pt-[max(0.5rem,env(safe-area-inset-top,0px))] pb-3 sm:px-5 transition-all duration-300 ease-in-out ${
+          <header className={`sticky top-0 z-30 px-4 pt-3 pb-3 sm:px-5 transition-all duration-300 ease-in-out ${
             scrollData.y > 10
               ? 'bg-[#FFC107]/90 backdrop-blur-md shadow-[0_4px_20px_-10px_rgba(0,0,0,0.3)]'
               : 'bg-[#FFC107] shadow-none'
