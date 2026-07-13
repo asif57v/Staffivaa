@@ -437,11 +437,9 @@ export function IndividualHomeScreen({ user }) {
     try {
       const token = await requestForToken()
       if (token) {
-        toast.loading('Saving token & sending test...', { id: 'test-notification' })
-        // Save the token to DB
-        await apiClient.post('/users/me/fcm-token', { token, deviceType: 'web' })
+        toast.loading('Sending test notification...', { id: 'test-notification' })
         
-        // Trigger the backend test endpoint
+        // Trigger the backend test endpoint directly
         await apiClient.post('/notifications/test', { token })
         
         toast.success('Notification sent!', { id: 'test-notification' })
@@ -556,7 +554,6 @@ export function IndividualHomeScreen({ user }) {
               const gid = String(g._id)
               const active = selectedGroupId === gid
               const VisIcon = TRADE_VISUAL_ICONS[idx % TRADE_VISUAL_ICONS.length]
-              const iconPastel = getPastelStyles(VisIcon)
               return (
                 <button
                   key={gid}
@@ -602,129 +599,7 @@ export function IndividualHomeScreen({ user }) {
 
         <PopularServicesSection onBook={() => setCategorySheetOpen(true)} />
 
-        {/* Nearby labour */}
-        <motion.section
-          initial={reduce ? false : { opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.38, delay: 0.08 }}
-          className="space-y-3"
-        >
-          <div className="flex items-center justify-between gap-2 px-1">
-            <h3 className="text-[17px] font-bold tracking-tight text-slate-900">Nearby Labour</h3>
-            <button
-              type="button"
-              onClick={() => setShowAllLabours(true)}
-              className="flex items-center gap-1 text-[13px] font-semibold text-slate-600 hover:text-slate-900 transition"
-            >
-              View all <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2 px-1 mb-1">
-            {TRUST_PILLS.map(({ icon: Icon, label }) => {
-              return (
-                <span
-                  key={label}
-                  className="inline-flex items-center gap-1.5 rounded-[10px] border border-slate-100 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
-                >
-                  <Icon className={`h-3.5 w-3.5 ${label.includes('Aadhaar') ? 'text-emerald-500' : 'text-[#F4CC34]'}`} aria-hidden />
-                  {label}
-                </span>
-              )
-            })}
-          </div>
-
-          {laboursErr ? (
-            <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-center text-xs font-medium text-rose-900">
-              {laboursErr}
-            </p>
-          ) : null}
-
-          {!laboursLoading && !laboursErr && labours.length === 0 ? (
-            <GlassPanel className="border-dashed border-[#e2e8f0] bg-white p-6 text-center">
-              <UserRound className="mx-auto h-10 w-10 text-[#A5B4FC]" aria-hidden />
-              <p className="mt-2 text-sm font-medium text-[#3730A3]">No profiles in this filter yet</p>
-              <p className="mt-1 text-xs leading-relaxed text-[#A5B4FC]">
-                Workers appear here once they pick work categories on Staffivaa. Try &quot;All&quot; or book and we&apos;ll match you manually.
-              </p>
-              <button
-                type="button"
-                onClick={() => setCategorySheetOpen(true)}
-                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#F4CC34] px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:brightness-[1.05]"
-              >
-                Find a skill
-                <ArrowRight className="h-4 w-4" aria-hidden />
-              </button>
-            </GlassPanel>
-          ) : null}
-
-          {laboursLoading ? <AppListSkeleton rows={2} /> : null}
-
-          {!laboursLoading && !laboursErr && nearbyLabours.length > 0 ? (
-            <ul className="space-y-3">
-              {nearbyLabours.slice(0, 1).map((l) => {
-                const ui = l._ui
-                const firstCat = (l.tradeCategories || [])[0]
-                const dist = distanceLabelFor(l.id)
-                const { label: availLabel, dot } = availabilityFromWorkHours(ui.workHoursLabel, ui.responseLabel)
-
-                return (
-                  <li key={l.id}>
-                    <button
-                      type="button"
-                      onClick={() => openDetail(l.id)}
-                      className="w-full text-left transition active:scale-[0.98]"
-                    >
-                      <div className="relative overflow-hidden rounded-[20px] border border-slate-200 bg-white p-4 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)]">
-                        <div className="flex items-start gap-4">
-                          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full bg-slate-50 ring-2 ring-slate-100">
-                            <img src={ui.photoUrl} alt="" className="h-full w-full object-cover object-top" loading="lazy" decoding="async" />
-                            <span aria-hidden className="absolute bottom-0 right-0 h-4 w-4 rounded-full border-2 border-white bg-emerald-500" />
-                          </div>
-                          
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <h4 className="truncate text-[17px] font-bold tracking-tight text-slate-900">
-                                {l.displayName}
-                              </h4>
-                              {l.kycVerified ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                                  <ShieldCheck className="h-3 w-3" /> Verified
-                                </span>
-                              ) : null}
-                            </div>
-                            <p className="mt-0.5 truncate text-[13px] font-semibold text-slate-600">
-                              {firstCat?.name || 'Skilled worker'}
-                            </p>
-                            
-                            <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                              <span className="inline-flex items-center gap-1 rounded-[8px] bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700">
-                                <Star className="h-3 w-3 fill-amber-500 text-amber-500" /> {ui.rating.toFixed(1)} ({hashSeed(l.id, 200) + 20}+)
-                              </span>
-                              <span className="inline-flex items-center gap-1 rounded-[8px] bg-slate-50 border border-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600">
-                                <ClipboardList className="h-3 w-3" /> {ui.experienceLabel}
-                              </span>
-                              <span className="inline-flex items-center gap-1 rounded-[8px] bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700">
-                                <MapPin className="h-3 w-3" /> {dist}
-                              </span>
-                            </div>
-                            
-                            <div className="mt-2.5 flex items-center justify-between">
-                              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600">
-                                <span className={`h-1.5 w-1.5 rounded-full ${dot}`} /> {availLabel}
-                              </span>
-                              <ChevronRight className="h-4 w-4 text-slate-400" />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          ) : null}
-        </motion.section>
 
         {/* Ongoing / Recent Bookings */}
         <motion.section
@@ -854,75 +729,58 @@ export function IndividualHomeScreen({ user }) {
           className="space-y-3 mt-8"
         >
           <div className="flex items-center justify-between gap-2 px-1">
-            <h3 className="text-[17px] font-bold tracking-tight text-slate-900">Boost hiring</h3>
-            <span className="text-[11px] font-bold uppercase tracking-wide text-[#3730A3] flex items-center gap-1">
-              Swipe <ChevronRight className="h-3 w-3" />
-            </span>
+            <h3 className="text-[17px] font-bold tracking-tight text-slate-900">Boost Hiring</h3>
+            <button
+              type="button"
+              className="flex items-center gap-1 text-[13px] font-semibold text-[#3730A3] hover:text-[#312E81] transition"
+            >
+              View plans <ChevronRight className="h-3.5 w-3.5" />
+            </button>
           </div>
 
-          <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 scrollbar-none [&::-webkit-scrollbar]:hidden">
-            {/* Emergency */}
-            <motion.div
-              className="relative min-w-[85%] sm:min-w-[75%] overflow-hidden rounded-[20px] border border-slate-200 bg-white p-4 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)] snap-start flex gap-4"
-              whileHover={reduce ? undefined : { y: -2 }}
-            >
-              <div className="flex-1 flex flex-col items-start">
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="inline-flex items-center gap-1 rounded-[6px] bg-slate-900 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white">
-                    <Sparkles className="h-2.5 w-2.5" /> Emergency
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-[6px] bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-700">
-                    <CalendarClock className="h-2.5 w-2.5" /> 30 min match
-                  </span>
-                </div>
-                
-                <h4 className="text-[16px] font-extrabold text-slate-900 leading-tight">Need Labour Urgently?</h4>
-                <p className="mt-1 text-[12px] font-medium text-slate-500 line-clamp-2">Get verified workers assigned within 30 minutes.</p>
-                
-                <button
-                  type="button"
-                  onClick={() => setCategorySheetOpen(true)}
-                  className="mt-4 inline-flex items-center gap-1 rounded-[10px] bg-[#F4CC34] px-4 py-2 text-[12px] font-bold text-slate-900 shadow-sm transition hover:brightness-[1.05] active:scale-[0.96]"
-                >
-                  Hire Now <ChevronRight className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <div className="w-20 shrink-0 self-end opacity-90">
+          <motion.div
+            className="relative w-full overflow-hidden rounded-[24px] bg-[#2a1d5c] p-6 shadow-lg flex items-center justify-between min-h-[180px]"
+            whileHover={reduce ? undefined : { y: -2 }}
+          >
+            <div className="relative z-20 w-[60%] flex flex-col items-start">
+              <span className="mb-3 inline-flex rounded-full bg-[#5f35d2] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-widest text-white shadow-sm">
+                Most Popular
+              </span>
+              
+              <h4 className="text-[20px] font-extrabold text-white leading-tight mb-2">
+                Need Labour Urgently?
+              </h4>
+              <p className="mb-5 text-[13px] font-medium text-slate-200 leading-snug">
+                Get verified workers assigned <br className="hidden sm:block" />
+                within <span className="text-[#F4CC34]">30 minutes.</span>
+              </p>
+              
+              <button
+                type="button"
+                onClick={() => setCategorySheetOpen(true)}
+                className="inline-flex items-center gap-3 rounded-[12px] bg-white pl-5 pr-1.5 py-1.5 text-[14px] font-bold text-slate-900 shadow-md transition active:scale-[0.96]"
+              >
+                Hire Now 
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F4CC34]">
+                  <ArrowRight className="h-4 w-4 stroke-[2.5]" />
+                </span>
+              </button>
+            </div>
+            
+            <div className="absolute right-0 bottom-0 h-full w-[45%] pointer-events-none flex justify-end items-end overflow-hidden">
+              <img 
+                src="/app_mockup.png" 
+                alt="" 
+                className="h-full w-full object-cover object-left-bottom drop-shadow-2xl" 
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
+              />
+              <div className="absolute right-[-10px] bottom-[-10px] w-32 opacity-95">
                 <ConstructionIllustration />
               </div>
-            </motion.div>
-
-            {/* BuildMart */}
-            <motion.div
-              className="relative min-w-[85%] sm:min-w-[75%] overflow-hidden rounded-[20px] border border-slate-200 bg-white p-4 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)] snap-start flex gap-4"
-              whileHover={reduce ? undefined : { y: -2 }}
-            >
-              <div className="flex-1 flex flex-col items-start">
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="inline-flex items-center gap-1 rounded-[6px] bg-slate-900 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white">
-                    <LayoutGrid className="h-2.5 w-2.5" /> Materials
-                  </span>
-                </div>
-                
-                <h4 className="text-[16px] font-extrabold text-slate-900 leading-tight">Need Materials?</h4>
-                <p className="mt-1 text-[12px] font-medium text-slate-500 line-clamp-2">Order cement, sand, steel & suppliers directly.</p>
-                
-                <button
-                  type="button"
-                  onClick={() => navigate('/app/buildmart')}
-                  className="mt-4 inline-flex items-center gap-1 rounded-[10px] bg-[#F4CC34] px-4 py-2 text-[12px] font-bold text-slate-900 shadow-sm transition hover:brightness-[1.05] active:scale-[0.96]"
-                >
-                  Order Now <ChevronRight className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <div className="w-20 shrink-0 self-center">
-                 {/* Placeholder for material box illustration */}
-                 <div className="h-20 w-20 bg-amber-100 rounded-xl flex items-center justify-center">
-                    <PaintRoller className="h-8 w-8 text-amber-500 opacity-50" />
-                 </div>
-              </div>
-            </motion.div>
-          </div>
+            </div>
+          </motion.div>
         </motion.section>
 
         {/* Quick actions */}

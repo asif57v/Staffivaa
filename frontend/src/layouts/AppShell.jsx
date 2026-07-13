@@ -516,13 +516,13 @@ export function AppShell() {
                 onClick={() => setLocationModalOpen(true)}
                 className="flex min-w-0 flex-1 flex-col items-start text-left outline-none transition active:opacity-70"
               >
-                <span className="text-[9px] font-bold uppercase tracking-wide text-slate-800/70">Location</span>
-                <div className="mt-0.5 flex min-w-0 w-full items-center gap-0.5">
-                  <MapPin className="h-3 w-3 shrink-0 text-slate-900" fill="currentColor" />
-                  <span className="truncate min-w-0 text-[12px] font-extrabold tracking-tight text-slate-900">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-800/80">Location</span>
+                <div className="mt-0.5 flex min-w-0 w-full items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-900" fill="currentColor" />
+                  <span className="truncate min-w-0 text-[14px] font-semibold tracking-normal text-slate-900">
                     {individualLocationTitle}
                   </span>
-                  <ChevronDown className="h-3 w-3 shrink-0 text-slate-900/70" />
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-900/70" />
                 </div>
               </button>
 
