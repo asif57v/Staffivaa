@@ -662,10 +662,17 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
     })
   }
 
-// Determine platform classification strictly by role
-  const isApp = req.user.role !== 'admin'
-
-  const targetField = isApp ? 'fcmTokensMobile' : 'fcmTokensWeb'
+  // Determine platform classification by deviceType from client
+  let targetField = 'fcmTokens';
+  if (deviceType === 'web') {
+    targetField = 'fcmTokensWeb';
+  } else if (deviceType === 'mobile' || deviceType === 'android' || deviceType === 'ios') {
+    targetField = 'fcmTokensMobile';
+  } else {
+    // Fallback if client doesn't send deviceType
+    const isApp = req.user.role !== 'admin';
+    targetField = isApp ? 'fcmTokensMobile' : 'fcmTokensWeb';
+  }
 
   // Retrieve user document to mutate token array safely (using lean to bypass version tracking)
   const user = await User.findById(req.user._id).lean()
@@ -692,11 +699,12 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
     { $set: { [targetField]: tokens } }
   )
 
+  const isMobileField = targetField === 'fcmTokensMobile'
   return sendSuccess(res, { 
-    message: `FCM Token saved successfully for ${isApp ? 'app' : 'web'} platform`,
+    message: `FCM Token saved successfully for ${isMobileField ? 'app' : 'web'} platform`,
     data: {
       role: req.user.role,
-      platform: isApp ? 'app' : 'web'
+      platform: isMobileField ? 'app' : 'web'
     }
   })
 })

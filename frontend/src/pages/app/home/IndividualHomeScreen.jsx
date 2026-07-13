@@ -34,6 +34,7 @@ import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
 import { AppPressableLinkCard } from '../../../components/app/AppPressableLinkCard.jsx'
 import { getPastelStyles } from '../../../lib/iconMap.jsx'
 import { IndividualLabourSubcategoriesSection } from '../../../components/app/individual/IndividualLabourSubcategoriesSection.jsx'
+import { PopularServicesSection } from '../../../components/app/individual/PopularServicesSection.jsx'
 import { flattenTradeSubcategories } from '../../../lib/labourCategoryDisplay.js'
 import { CategoryPickBottomSheet } from '../../../components/app/booking/CategoryPickBottomSheet.jsx'
 import { BookingTypeSheet } from '../../../components/app/booking/BookingTypeSheet.jsx'
@@ -102,17 +103,15 @@ function distanceLabelFor(labourId) {
 
 function getCategoryImage(category) {
   const cat = String(category || '').toLowerCase()
-  if (cat.includes('plumb')) return '/service_plumber.png'
-  if (cat.includes('electric')) return '/service_electrician.png'
-  if (cat.includes('carpent')) return '/service_carpenter.png'
-  if (cat.includes('paint')) return '/service_painter.png'
-  if (cat.includes('mason')) return '/service_mason.png'
-  if (cat.includes('weld')) return '/service_welder.png'
-  if (cat.includes('tile')) return '/service_tile.png'
-  if (cat.includes('heavy') || cat.includes('load')) return '/service_heavy.png'
-  if (cat.includes('help') || cat.includes('clean')) return '/service_helper.png'
-  if (cat.includes('cook') || cat.includes('chef')) return '/service_cook.png'
-  return '/home_service_hero.png'
+  if (cat.includes('ac')) return '/3d_icon_ac.png'
+  if (cat.includes('plumb') || cat.includes('electric') || cat.includes('mechanic') || cat.includes('car') || cat.includes('bike')) return '/3d_icon_tools.png'
+  if (cat.includes('mason') || cat.includes('construct') || cat.includes('labor') || cat.includes('helper') || cat.includes('glass') || cat.includes('tile')) return '/3d_icon_worker.png'
+  if (cat.includes('paint') || cat.includes('interior') || cat.includes('carpent')) return '/3d_icon_painter.png'
+  if (cat.includes('jcb') || cat.includes('crane') || cat.includes('heavy') || cat.includes('operator')) return '/3d_icon_jcb.png'
+  if (cat.includes('cook') || cat.includes('chef')) return '/3d_icon_cook.png'
+  if (cat.includes('garden') || cat.includes('mali')) return '/3d_icon_garden.png'
+  if (cat.includes('help') || cat.includes('clean') || cat.includes('housekeep')) return '/3d_icon_cleaning.png'
+  return '/3d_icon_tools.png'
 }
 
 /**
@@ -135,35 +134,35 @@ export function IndividualHomeScreen({ user }) {
       actionType: 'search'
     },
     {
-      image: '/service_ac.png',
+      image: '/3d_icon_ac.png',
       title: 'AC Technician',
       subtitle: 'Expert AC repair, servicing, and installation.',
       price: '₹149/hr',
       slug: 'ac-technician'
     },
     {
-      image: '/service_cook.png',
+      image: '/3d_icon_cook.png',
       title: 'Professional Cook',
       subtitle: 'Delicious home-cooked meals by verified chefs.',
       price: '₹199/hr',
       slug: 'cook'
     },
     {
-      image: '/service_electrician.png',
+      image: '/3d_icon_tools.png',
       title: 'Expert Electrician',
       subtitle: 'Safe and reliable electrical repairs and wiring.',
       price: '₹99/hr',
       slug: 'electrician'
     },
     {
-      image: '/service_plumber.png',
+      image: '/3d_icon_tools.png',
       title: 'Skilled Plumber',
       subtitle: 'Fix leaks, blockages, and pipe installations.',
       price: '₹99/hr',
       slug: 'plumber'
     },
     {
-      image: '/service_painter.png',
+      image: '/3d_icon_painter.png',
       title: 'House Painter',
       subtitle: 'Professional home painting and touch-ups.',
       price: '₹120/hr',
@@ -440,7 +439,7 @@ export function IndividualHomeScreen({ user }) {
       if (token) {
         toast.loading('Saving token & sending test...', { id: 'test-notification' })
         // Save the token to DB
-        await apiClient.post('/users/me/fcm-token', { token })
+        await apiClient.post('/users/me/fcm-token', { token, deviceType: 'web' })
         
         // Trigger the backend test endpoint
         await apiClient.post('/notifications/test', { token })
@@ -508,22 +507,18 @@ export function IndividualHomeScreen({ user }) {
 
       <div className="sticky top-0 z-40 w-full max-w-full bg-white/95 backdrop-blur-md py-3 px-4 shadow-sm border-b border-slate-100 flex flex-col gap-2">
         <button
-          onClick={handleTestNotification}
-          className="w-full bg-[#3730A3] text-white font-bold py-2 px-4 rounded-full shadow-md active:scale-95 transition"
-        >
-          Test Notification
-        </button>
-        <button
           type="button"
           onClick={() => setCategorySheetOpen(true)}
-          className="flex w-full max-w-full items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-3.5 text-left shadow-sm transition active:scale-[0.99]"
+          className="flex w-full max-w-full items-center gap-3 rounded-[24px] bg-gradient-to-b from-[#ffffff] to-[#f8fafc] px-5 py-4 text-left shadow-[0_8px_20px_-4px_rgba(0,0,0,0.08),inset_0_4px_6px_rgba(255,255,255,1),inset_0_-4px_8px_rgba(0,0,0,0.04)] ring-1 ring-slate-200/60 transition-all duration-200 active:scale-[0.98] active:shadow-[0_2px_8px_-2px_rgba(0,0,0,0.1),inset_0_2px_4px_-1px_rgba(0,0,0,0.05)] active:translate-y-[2px]"
           aria-label="Search by category"
         >
-          <Search className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-500">
+          <Search className="h-5 w-5 shrink-0 text-slate-400 drop-shadow-sm" aria-hidden />
+          <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-slate-500 drop-shadow-sm">
             Search electrician, plumber, mason…
           </span>
-          <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white shadow-[0_2px_4px_rgba(0,0,0,0.05),inset_0_1px_2px_rgba(255,255,255,1)] ring-1 ring-slate-100">
+             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+          </div>
         </button>
       </div>
 
@@ -604,6 +599,8 @@ export function IndividualHomeScreen({ user }) {
             if (cat.groupId) setSelectedGroupId(String(cat.groupId))
           }}
         />
+
+        <PopularServicesSection onBook={() => setCategorySheetOpen(true)} />
 
         {/* Nearby labour */}
         <motion.section
@@ -1016,7 +1013,7 @@ export function IndividualHomeScreen({ user }) {
         </section>
 
         {/* Support */}
-        <section className="mt-10 mb-28">
+        <section className="mt-10 mb-6">
           <div className="relative min-h-[100px] w-full rounded-[24px] bg-white border border-slate-100 shadow-[0_12px_30px_rgba(0,0,0,0.06)] flex flex-wrap sm:flex-nowrap items-center p-2 gap-3">
             <div className="w-[85px] h-[85px] shrink-0 relative rounded-[18px] overflow-hidden bg-slate-100">
                <img src="/support_agent_avatar.png" alt="Support" className="h-full w-full object-cover" />
@@ -1040,6 +1037,16 @@ export function IndividualHomeScreen({ user }) {
                </button>
             </div>
           </div>
+        </section>
+
+        {/* Test Notification (Bottom) */}
+        <section className="px-4 mb-28">
+          <button
+            onClick={handleTestNotification}
+            className="w-full bg-[#3730A3] text-white font-bold py-3 px-4 rounded-full shadow-md active:scale-95 transition"
+          >
+            Test Notification
+          </button>
         </section>
 
       </section>

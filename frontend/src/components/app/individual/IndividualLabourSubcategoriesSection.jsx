@@ -4,17 +4,15 @@ import { GlassPanel } from '../../ui/GlassPanel.jsx'
 
 function getCategoryImage(name) {
   const n = String(name || '').toLowerCase();
-  if (n.includes('electric')) return '/service_electrician.png';
-  if (n.includes('plumb') || n.includes('ac')) return '/service_plumber.png';
-  if (n.includes('mason') || n.includes('construct')) return '/service_mason.png';
-  if (n.includes('paint') || n.includes('interior')) return '/service_painter.png';
-  if (n.includes('jcb') || n.includes('crane') || n.includes('heavy') || n.includes('operator')) return '/service_heavy.png';
-  if (n.includes('mechanic') || n.includes('car') || n.includes('bike')) return '/service_welder.png'; // closest for mechanical work
-  if (n.includes('glass') || n.includes('tile')) return '/service_tile.png';
-  if (n.includes('cook') || n.includes('chef')) return '/service_helper.png'; // using helper as fallback for cook
-  if (n.includes('garden') || n.includes('mali')) return '/service_painter.png'; // fallback
-  if (n.includes('help') || n.includes('housekeep') || n.includes('labor')) return '/service_helper.png';
-  return '/service_carpenter.png';
+  if (n.includes('ac')) return '/3d_icon_ac.png';
+  if (n.includes('electric') || n.includes('plumb') || n.includes('mechanic') || n.includes('car') || n.includes('bike')) return '/3d_icon_tools.png';
+  if (n.includes('mason') || n.includes('construct') || n.includes('labor') || n.includes('helper') || n.includes('glass') || n.includes('tile')) return '/3d_icon_worker.png';
+  if (n.includes('paint') || n.includes('interior')) return '/3d_icon_painter.png';
+  if (n.includes('jcb') || n.includes('crane') || n.includes('heavy') || n.includes('operator')) return '/3d_icon_jcb.png';
+  if (n.includes('cook') || n.includes('chef')) return '/3d_icon_cook.png';
+  if (n.includes('garden') || n.includes('mali')) return '/3d_icon_garden.png';
+  if (n.includes('help') || n.includes('housekeep') || n.includes('clean')) return '/3d_icon_cleaning.png';
+  return '/3d_icon_tools.png';
 }
 
 export function IndividualLabourSubcategoriesSection({ subcategories, loading, onSelect, onQuickBook }) {
