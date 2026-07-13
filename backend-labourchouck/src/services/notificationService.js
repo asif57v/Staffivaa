@@ -12,13 +12,12 @@ import { User } from '../models/User.js';
  */
 export const sendNotificationToUser = async (userId, title, body, data = {}) => {
   try {
-    const user = await User.findById(userId).select('fcmTokens fcmTokensWeb fcmTokensMobile');
+    const user = await User.findById(userId).select('fcmTokensWeb fcmTokensMobile');
     if (!user) {
       return { success: false, sentCount: 0, failedTokens: [] };
     }
 
     const tokens = [
-      ...(user.fcmTokens || []),
       ...(user.fcmTokensWeb || []),
       ...(user.fcmTokensMobile || [])
     ];
@@ -35,7 +34,18 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
       },
       data: {
         ...data,
-        click_action: 'FLUTTER_NOTIFICATION_CLICK' // Helps some mobile setups, also useful for web service worker matching
+        click_action: 'FLUTTER_NOTIFICATION_CLICK'
+      },
+      android: {
+        priority: 'high',
+        notification: { sound: 'default' }
+      },
+      apns: {
+        headers: { 'apns-priority': '10' },
+        payload: { aps: { sound: 'default' } }
+      },
+      webpush: {
+        headers: { Urgency: 'high' }
       },
       tokens: tokens
     };
@@ -63,7 +73,6 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
           { _id: userId },
           {
             $pull: {
-              fcmTokens: { $in: failedTokens },
               fcmTokensWeb: { $in: failedTokens },
               fcmTokensMobile: { $in: failedTokens }
             }
@@ -95,12 +104,11 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
  */
 export const sendNotificationToUsers = async (userIds, title, body, data = {}) => {
   try {
-    const users = await User.find({ _id: { $in: userIds } }).select('_id fcmTokens fcmTokensWeb fcmTokensMobile');
+    const users = await User.find({ _id: { $in: userIds } }).select('_id fcmTokensWeb fcmTokensMobile');
     
     const results = await Promise.all(
       users.map(u => {
         const hasTokens = 
-          (u.fcmTokens && u.fcmTokens.length > 0) ||
           (u.fcmTokensWeb && u.fcmTokensWeb.length > 0) ||
           (u.fcmTokensMobile && u.fcmTokensMobile.length > 0);
         if (hasTokens) {

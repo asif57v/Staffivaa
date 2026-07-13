@@ -158,9 +158,8 @@ const userSchema = new mongoose.Schema(
     deletedAt: Date,
     isWalletFrozen: { type: Boolean, default: false },
     isPhoneVerified: { type: Boolean, default: false },
-    fcmTokens: [{ type: String, trim: true }],
-    fcmTokensWeb: [{ type: String, trim: true }],
-    fcmTokensMobile: [{ type: String, trim: true }],
+    fcmTokensWeb: { type: [String], default: [] },
+    fcmTokensMobile: { type: [String], default: [] },
     lastLoginAt: Date,
     /** When labour is onboarded under a vendor/contractor */
     vendorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },

@@ -127,6 +127,14 @@ export function PanelShell({
 
     const handleFcmMessage = (event) => {
       const payload = event.detail;
+      // Also show a toast so the user definitely sees it inside the app
+      if (typeof window !== 'undefined') {
+        import('react-hot-toast').then(({ default: toast }) => {
+          toast.success(`Notification: ${payload.notification.title}`);
+        });
+      }
+
+      // Use service worker showNotification so it appears as native OS popup
       if (payload?.notification && Notification.permission === 'granted') {
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.ready.then((registration) => {

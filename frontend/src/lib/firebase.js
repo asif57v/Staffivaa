@@ -26,6 +26,14 @@ isSupported().then((supported) => {
     messaging = getMessaging(app);
     onMessage(messaging, (payload) => {
       console.log("Foreground message received:", payload);
+      
+      // Directly show toast here to guarantee it works regardless of which shell is active
+      import('react-hot-toast').then(({ default: toast }) => {
+        if (payload?.notification?.title) {
+          toast.success(`FCM: ${payload.notification.title}`, { duration: 5000, position: 'top-center' });
+        }
+      });
+
       window.dispatchEvent(new CustomEvent('fcm-foreground-message', { detail: payload }));
     });
   } else {
@@ -40,13 +48,8 @@ export const requestForToken = async () => {
       return null;
     }
     
-    // Force delete old token to ensure we get a fresh one for the new project
-    try {
-      await deleteToken(messaging);
-      console.log('Old FCM token deleted successfully.');
-    } catch (e) {
-      console.log('No old token to delete or error deleting:', e);
-    }
+    // We do not delete the old token anymore, so the browser can cache it efficiently
+    // This stops the extra API calls to Firebase and makes it instant.
 
     const currentToken = await getToken(messaging, { vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY });
     if (currentToken) {

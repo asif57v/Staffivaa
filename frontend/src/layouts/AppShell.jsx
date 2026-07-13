@@ -117,6 +117,13 @@ export function AppShell() {
     const handleFcmMessage = (event) => {
       const payload = event.detail;
       if (payload?.notification && Notification.permission === 'granted') {
+        // Also show a toast so the user definitely sees it inside the app
+        if (typeof window !== 'undefined') {
+          import('react-hot-toast').then(({ default: toast }) => {
+            toast.success(`Notification: ${payload.notification.title}`);
+          });
+        }
+        
         // Use service worker showNotification so it appears as native OS popup
         // even when the app tab is currently focused (Chrome blocks new Notification() in foreground)
         if ('serviceWorker' in navigator) {

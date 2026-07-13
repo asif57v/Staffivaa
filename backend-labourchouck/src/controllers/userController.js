@@ -663,7 +663,7 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
   }
 
   // Determine platform classification by deviceType from client
-  let targetField = 'fcmTokens';
+  let targetField = 'fcmTokensMobile'; // default to mobile if not specified
   if (deviceType === 'web') {
     targetField = 'fcmTokensWeb';
   } else if (deviceType === 'mobile' || deviceType === 'android' || deviceType === 'ios') {

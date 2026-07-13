@@ -23,6 +23,17 @@ export const sendTestNotification = async (req, res, next) => {
       data: {
         testId: '12345',
         click_action: 'FLUTTER_NOTIFICATION_CLICK'
+      },
+      android: {
+        priority: 'high',
+        notification: { sound: 'default' }
+      },
+      apns: {
+        headers: { 'apns-priority': '10' },
+        payload: { aps: { sound: 'default' } }
+      },
+      webpush: {
+        headers: { Urgency: 'high' }
       }
     };
 
