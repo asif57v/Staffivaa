@@ -18,7 +18,8 @@ import adminSearchRoutes from './adminSearchRoutes.js'
 import adminAuditLogRoutes from './adminAuditLogRoutes.js'
 import adminSupportTicketRoutes from './adminSupportTicketRoutes.js'
 import adminSettingsRoutes from './adminSettingsRoutes.js'
-
+import adminMarketingRoutes from './adminMarketingRoutes.js'
+import marketingRoutes from './marketingRoutes.js'
 const router = Router()
 
 router.use('/auth', authRoutes)
@@ -40,5 +41,7 @@ router.use('/admin/search', adminSearchRoutes)
 router.use('/admin/audit-logs', adminAuditLogRoutes)
 router.use('/admin/tickets', adminSupportTicketRoutes)
 router.use('/admin/settings', adminSettingsRoutes)
+router.use('/admin/marketing', adminMarketingRoutes)
+router.use('/marketing', marketingRoutes)
 
 export default router

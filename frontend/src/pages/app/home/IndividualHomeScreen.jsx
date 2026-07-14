@@ -125,6 +125,32 @@ export function IndividualHomeScreen({ user }) {
   const [groupsLoading, setGroupsLoading] = useState(true)
   const [selectedGroupId, setSelectedGroupId] = useState(null)
 
+  const [marketingBanners, setMarketingBanners] = useState([])
+  const [marketingOffers, setMarketingOffers] = useState([])
+  const [marketingAds, setMarketingAds] = useState([])
+
+  useEffect(() => {
+    let mounted = true
+    const fetchMarketing = async () => {
+      try {
+        const [bRes, oRes, aRes] = await Promise.all([
+          apiClient.get('/marketing/banners').then(r => r.data),
+          apiClient.get('/marketing/offers').then(r => r.data),
+          apiClient.get('/marketing/ads').then(r => r.data),
+        ])
+        if (mounted) {
+          if (bRes.success) setMarketingBanners(bRes.data.banners)
+          if (oRes.success) setMarketingOffers(oRes.data.offers)
+          if (aRes.success) setMarketingAds(aRes.data.ads)
+        }
+      } catch (e) {
+        console.error('Marketing data fetch failed', e)
+      }
+    }
+    fetchMarketing()
+    return () => { mounted = false }
+  }, [])
+
   const HERO_SLIDES = useMemo(() => [
     {
       image: '/home_service_hero.png',
@@ -170,6 +196,11 @@ export function IndividualHomeScreen({ user }) {
     }
   ], [user?.fullName])
   
+  const activeCarouselBanners = useMemo(() => {
+    const banners = marketingBanners.filter(b => b.position === 'CAROUSEL' || b.position === 'TOP')
+    return banners.length > 0 ? banners : HERO_SLIDES
+  }, [marketingBanners, HERO_SLIDES])
+
   const [heroSlideIndex, setHeroSlideIndex] = useState(0)
   const heroScrollRef = useRef(null)
   const isHeroHoveredRef = useRef(false)
@@ -177,10 +208,10 @@ export function IndividualHomeScreen({ user }) {
   useEffect(() => {
     const interval = setInterval(() => {
       if (isHeroHoveredRef.current) return
-      setHeroSlideIndex((prev) => (prev + 1) % HERO_SLIDES.length)
+      setHeroSlideIndex((prev) => (prev + 1) % activeCarouselBanners.length)
     }, 3000)
     return () => clearInterval(interval)
-  }, [HERO_SLIDES.length])
+  }, [activeCarouselBanners.length])
 
   useEffect(() => {
     const container = heroScrollRef.current
@@ -453,15 +484,15 @@ export function IndividualHomeScreen({ user }) {
 
   return (
     <div
-      className="w-full max-w-full overflow-x-hidden flex flex-col pb-2"
+      className="w-[calc(100%+2rem)] -mx-4 overflow-x-hidden flex flex-col pb-2"
       aria-label={user?.fullName ? `Home for ${user.fullName}` : 'Discover workers home'}
     >
-      <section className="relative z-10 isolate w-full max-w-full shrink-0 pb-1 pt-1">
+      <section className="relative z-10 isolate w-full shrink-0 pb-1 pt-1">
         <motion.div
           initial={reduce ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
-          className="relative text-slate-900 w-full max-w-full"
+          className="relative text-slate-900 w-full"
         >
           <div
             ref={heroScrollRef}
@@ -469,41 +500,51 @@ export function IndividualHomeScreen({ user }) {
             onMouseLeave={() => { isHeroHoveredRef.current = false }}
             onTouchStart={() => { isHeroHoveredRef.current = true }}
             onTouchEnd={() => { isHeroHoveredRef.current = false }}
-            className="relative overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-none flex gap-3 pb-2 pt-1 -mx-4 px-4 w-[calc(100%+2rem)] min-h-[130px]"
+            className="relative overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-none flex gap-3 pb-2 pt-1 px-3 w-full min-h-[130px]"
           >
-            {HERO_SLIDES.map((slide, i) => (
+            {activeCarouselBanners.map((slide, i) => (
               <div
                 key={i}
                 onClick={() => handleHeroSlideClick(slide)}
-                className="w-[85%] sm:w-[90%] shrink-0 snap-center relative overflow-hidden rounded-[20px] bg-white border border-slate-200 shadow-sm min-h-[120px] flex items-stretch cursor-pointer hover:border-[#FFD100]/60 active:scale-[0.99] transition-all"
+                className="w-[85%] sm:w-[90%] shrink-0 snap-center relative overflow-hidden rounded-[20px] bg-slate-100 border border-slate-200 shadow-sm min-h-[120px] flex items-stretch cursor-pointer hover:border-[#FFD100]/60 active:scale-[0.99] transition-all"
               >
-                <div className="flex-1 p-3 flex flex-col justify-center relative z-10">
-                  <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 break-words">
-                    {slide.title}
-                  </h2>
-                  <p className="mt-0.5 text-[10px] sm:text-[11px] font-medium leading-tight text-slate-500 line-clamp-2 pr-2 break-words">
-                    {slide.subtitle}
-                  </p>
-                  <div className="mt-2 inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 shadow-sm border border-slate-100 w-max max-w-full">
-                    <span className="text-[11px] sm:text-xs font-black text-[#F43F5E] truncate">{slide.price}</span>
-                    <span className="ml-1 text-[8px] sm:text-[9px] font-medium text-slate-400 shrink-0">Starting*</span>
-                  </div>
-                </div>
-                <div className="w-[45%] relative shrink-0 overflow-hidden">
+                {slide.title ? (
+                  <>
+                    <div className="flex-1 p-3 flex flex-col justify-center relative z-10">
+                      <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 break-words">
+                        {slide.title}
+                      </h2>
+                      <p className="mt-0.5 text-[10px] sm:text-[11px] font-medium leading-tight text-slate-500 line-clamp-2 pr-2 break-words">
+                        {slide.subtitle}
+                      </p>
+                      <div className="mt-2 inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 shadow-sm border border-slate-100 w-max max-w-full">
+                        <span className="text-[11px] sm:text-xs font-black text-[#F43F5E] truncate">{slide.price}</span>
+                        <span className="ml-1 text-[8px] sm:text-[9px] font-medium text-slate-400 shrink-0">Starting*</span>
+                      </div>
+                    </div>
+                    <div className="w-[45%] relative shrink-0 overflow-hidden">
+                      <img
+                        src={slide.image}
+                        alt={slide.title}
+                        className="absolute inset-0 w-full h-full object-cover object-[center_20%]"
+                      />
+                      <div className="absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-slate-100 to-transparent z-10" />
+                    </div>
+                  </>
+                ) : (
                   <img
                     src={slide.image}
-                    alt={slide.title}
-                    className="absolute inset-0 w-full h-full object-cover object-[center_20%]"
+                    alt="Banner"
+                    className="absolute inset-0 w-full h-full object-cover"
                   />
-                  <div className="absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-white to-transparent z-10" />
-                </div>
+                )}
               </div>
             ))}
           </div>
         </motion.div>
       </section>
 
-      <div className="sticky top-0 z-40 w-full max-w-full bg-white/95 backdrop-blur-md py-3 px-4 shadow-sm border-b border-slate-100 flex flex-col gap-2">
+      <div className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md py-3 px-3 shadow-sm border-b border-slate-100 flex flex-col gap-2">
         <button
           type="button"
           onClick={() => setCategorySheetOpen(true)}
@@ -520,20 +561,20 @@ export function IndividualHomeScreen({ user }) {
         </button>
       </div>
 
-      <section className="relative z-10 w-full max-w-full shrink-0 pt-5 pb-2 overflow-hidden px-4">
+      <section className="relative z-10 w-full shrink-0 pt-5 pb-2 overflow-hidden">
         <motion.div
           initial={reduce ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
-          className="w-full max-w-full"
+          className="w-full"
         >
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold tracking-tight text-slate-800">Browse by work area</h3>
+          <div className="mb-2 flex items-center justify-between gap-2 px-3">
+            <h3 className="text-[17px] font-bold tracking-tight text-slate-900">Most booked services</h3>
             {groupsLoading ? <Loader2 className="h-4 w-4 animate-spin text-slate-400" aria-hidden /> : null}
           </div>
           <div
             ref={categoryScrollRef}
-            className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 pt-1 scrollbar-none [&::-webkit-scrollbar]:hidden w-[calc(100%+2rem)] -mx-4 px-4"
+            className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 pt-1 scrollbar-none [&::-webkit-scrollbar]:hidden w-full px-3"
           >
             <button
               type="button"
@@ -582,7 +623,7 @@ export function IndividualHomeScreen({ user }) {
         </motion.div>
       </section>
 
-      <section className="relative z-20 -mt-6 flex-1 space-y-5 rounded-t-2xl bg-[#FAFAFA] px-2 pb-8 pt-5 shadow-sm border-t border-[#e2e8f0] w-full max-w-full overflow-hidden">
+      <section className="relative z-20 -mt-6 flex-1 space-y-5 rounded-t-2xl bg-[#FAFAFA] px-3 pb-8 pt-5 shadow-sm border-t border-[#e2e8f0] w-full overflow-hidden">
         <span
           id="individual-home-scroll-sentinel"
           className="pointer-events-none absolute left-0 right-0 top-0 h-px w-full"
@@ -599,7 +640,59 @@ export function IndividualHomeScreen({ user }) {
 
         <PopularServicesSection onBook={() => setCategorySheetOpen(true)} />
 
+        {marketingOffers.length > 0 && (
+          <motion.section
+            initial={reduce ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-3 mt-8"
+          >
+            <div className="px-0 flex justify-between items-center">
+              <h3 className="text-[17px] font-bold tracking-tight text-slate-900 flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-[#F59E0B]" /> Exclusive Offers
+              </h3>
+            </div>
+            <div className="flex overflow-x-auto gap-3 pb-2 -mx-3 px-3 scrollbar-none snap-x snap-mandatory">
+              {marketingOffers.map(offer => (
+                <div key={offer._id} className="w-full snap-center shrink-0 rounded-[20px] overflow-hidden border border-slate-200 shadow-sm relative bg-white">
+                  <img src={offer.image} alt={offer.title} className="w-full h-32 object-cover" />
+                  <div className="p-3">
+                    <h4 className="font-bold text-slate-900 text-sm truncate">{offer.title}</h4>
+                    <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{offer.description}</p>
+                    {offer.ctaText && (
+                      <button className="mt-2 text-[11px] font-bold bg-slate-900 text-white px-3 py-1.5 rounded-full">{offer.ctaText}</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.section>
+        )}
 
+        {marketingAds.length > 0 && (
+          <motion.section
+            initial={reduce ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-3 mt-8"
+          >
+            <div className="px-0 flex justify-between items-center">
+              <h3 className="text-[17px] font-bold tracking-tight text-slate-900">Sponsored</h3>
+            </div>
+            <div className="flex flex-col gap-3 px-0">
+              {marketingAds.map(ad => (
+                <a href={ad.redirectUrl || '#'} key={ad._id} className="flex gap-3 bg-white border border-slate-200 rounded-[16px] p-3 shadow-sm items-center active:scale-[0.98] transition">
+                  <img src={ad.banner} alt={ad.companyName} className="w-16 h-16 rounded-[12px] object-cover bg-slate-100" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="bg-slate-100 text-slate-500 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">Ad</span>
+                      <h4 className="font-bold text-slate-900 text-sm truncate">{ad.companyName}</h4>
+                    </div>
+                    <p className="text-[11px] text-slate-500 line-clamp-2">{ad.description}</p>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </motion.section>
+        )}
 
         {/* Ongoing / Recent Bookings */}
         <motion.section
@@ -608,7 +701,7 @@ export function IndividualHomeScreen({ user }) {
           transition={{ duration: 0.35, delay: 0.02 }}
           className="space-y-3 mt-8"
         >
-          <div className="flex items-center justify-between gap-2 px-1">
+          <div className="flex items-center justify-between gap-2 px-0">
             <h3 className="text-[17px] font-bold tracking-tight text-slate-900">Ongoing / Recent Bookings</h3>
             <button
               type="button"
@@ -783,129 +876,84 @@ export function IndividualHomeScreen({ user }) {
           </motion.div>
         </motion.section>
 
-        {/* Quick actions */}
-        <section className="space-y-5 mt-10 px-4">
-          <h3 className="text-[20px] font-extrabold tracking-tight text-slate-900">Quick Actions</h3>
-          <div className="flex flex-col gap-4">
-            {[
-              { id: 'book', title: 'Book Labour', subtitle: 'Find skilled workers near you', img: '/bg_quick_book.png', action: () => setCategorySheetOpen(true) },
-              { id: 'history', title: 'My Bookings', subtitle: 'Track and manage your jobs', img: '/bg_quick_bookings.png', action: () => navigate('/app/bookings') },
-              { id: 'support', title: 'Support', subtitle: "We're here to help you", img: '/bg_quick_support.png', action: () => navigate('/app/support') }
-            ].map((a) => (
-              <button
-                key={a.id}
-                onClick={a.action}
-                className="relative overflow-hidden w-full h-[130px] rounded-[24px] shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition active:scale-[0.98] group border border-slate-100"
-              >
-                <div className="absolute inset-0">
-                   <img src={a.img} alt="" className="h-full w-full object-cover object-center group-hover:scale-105 transition-transform duration-700" />
-                </div>
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0F172A]/90 via-[#0F172A]/40 to-transparent" />
-                <div className="absolute inset-0 bg-gradient-to-r from-[#0F172A]/80 via-[#0F172A]/20 to-transparent" />
-                
-                <div className="absolute inset-0 p-5 flex items-end justify-between">
-                  <div className="relative z-10 flex-1 pr-4 text-left">
-                    <h4 className="text-[22px] font-black text-white leading-none tracking-tight mb-1.5">{a.title}</h4>
-                    <p className="text-[13px] font-medium text-white/80">{a.subtitle}</p>
-                  </div>
-                  
-                  <div className="relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#FFC107] text-black shadow-[0_4px_12px_rgba(255,193,7,0.4)] group-hover:bg-[#FFD100]">
-                    <ArrowRight className="h-6 w-6 stroke-[2.5]" />
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
 
-        {/* How it works */}
-        <section className="mt-10 px-4">
-          <h3 className="mb-6 text-[20px] font-extrabold tracking-tight text-slate-900">How it works</h3>
-          <div className="flex justify-between items-stretch gap-2.5">
-            {[
-              { num: 1, title: 'Request', copy: 'Tell us what you need', img: '/hiw_request.png' },
-              { num: 2, title: 'Match', copy: 'We find the best match', img: '/hiw_match.png' },
-              { num: 3, title: 'Relax', copy: 'Sit back and relax', img: '/hiw_relax.png' }
-            ].map((step, i) => (
-              <div key={i} className="relative flex flex-col items-center flex-1 min-w-0 bg-white rounded-[20px] shadow-[0_8px_20px_rgba(0,0,0,0.04)] border border-slate-100 h-[145px] overflow-visible">
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 h-[26px] w-[26px] rounded-full bg-[#FFC107] text-black text-[12px] font-black flex items-center justify-center shadow-[0_4px_8px_rgba(255,193,7,0.3)] border-2 border-white z-20">
-                  {step.num}
-                </div>
-                
-                <div className="w-full h-[85px] p-1.5 shrink-0 relative z-10">
-                  <div className="w-full h-full rounded-[14px] overflow-hidden bg-slate-50 relative">
-                    <img src={step.img} alt="" className="h-full w-full object-cover" />
-                    <div className="absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05)] rounded-[14px]" />
-                  </div>
-                </div>
-                
-                <div className="flex-1 flex flex-col items-center px-1 pb-2 mt-0.5">
-                  <h4 className="text-[13px] font-black text-slate-900 mb-0.5 tracking-tight">{step.title}</h4>
-                  <p className="text-[9px] text-slate-500 text-center font-semibold leading-[1.2] px-0.5">{step.copy}</p>
-                </div>
 
-                {i < 2 && (
-                  <div className="absolute top-[40px] -right-[15px] z-0 text-[#FFC107]">
-                    <ChevronRight className="h-5 w-5 opacity-80" strokeWidth={3} />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Trust */}
-        <section className="mt-10 px-4">
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            {[
-              { icon: ShieldCheck, label: 'Aadhaar Verified' },
-              { icon: Star, label: 'Transparent Pricing' },
-              { icon: CheckCircle2, label: 'Safe & Reliable' }
-            ].map((pill, i) => (
-              <div key={i} className="flex items-center gap-2 px-3.5 py-2.5 bg-[#FFFDE7] rounded-full border border-[#FFF59D] shadow-[0_4px_10px_rgba(255,193,7,0.1)]">
-                <pill.icon className="h-4 w-4 text-[#FBC02D] stroke-[2.5]" />
-                <span className="text-[11px] font-extrabold text-[#F57F17] tracking-tight">{pill.label}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Support */}
-        <section className="mt-10 mb-6">
-          <div className="relative min-h-[100px] w-full rounded-[24px] bg-white border border-slate-100 shadow-[0_12px_30px_rgba(0,0,0,0.06)] flex flex-wrap sm:flex-nowrap items-center p-2 gap-3">
-            <div className="w-[85px] h-[85px] shrink-0 relative rounded-[18px] overflow-hidden bg-slate-100">
-               <img src="/support_agent_avatar.png" alt="Support" className="h-full w-full object-cover" />
-               <div className="absolute bottom-1.5 right-1.5 h-3.5 w-3.5 rounded-full bg-emerald-500 border-[2.5px] border-white shadow-sm" />
+        {/* How it works & Trust */}
+        <section className="mt-10 mb-8">
+          <div className="pt-2 pb-4">
+            <div className="px-5 mb-8">
+              <h3 className="text-[24px] font-extrabold tracking-tight text-slate-900 inline-block relative">
+                How It Works
+                <span className="absolute -bottom-2 left-0 w-10 h-[3.5px] bg-[#FFC107] rounded-full" />
+              </h3>
             </div>
             
-            <div className="flex-1 flex flex-col justify-center min-w-[120px]">
-               <h4 className="text-[16px] sm:text-[18px] font-black text-slate-900 leading-tight mb-0.5 tracking-tight break-words">Need Help?</h4>
-               <p className="text-[11px] font-semibold text-slate-500 leading-tight break-words">Chat with our team</p>
-               <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                  <span className="text-[9px] font-extrabold text-emerald-700 tracking-tight bg-emerald-100/80 px-2 py-1 rounded-md inline-block">Avg. reply &lt; 2 mins</span>
-               </div>
+            <div 
+              className="relative w-full overflow-x-auto snap-x snap-mandatory px-5 pb-6"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              {/* Custom class for hiding scrollbar in webkit browsers isn't always standard, so inline styles help for Firefox/IE. */}
+              <style dangerouslySetInnerHTML={{__html: `
+                .hide-scrollbar::-webkit-scrollbar { display: none; }
+              `}} />
+              
+              <div className="relative flex justify-between items-start min-w-[480px] w-full gap-4 hide-scrollbar">
+                {/* Dotted Line */}
+                <div className="absolute top-[36px] left-[15%] right-[15%] h-[2px] border-t-2 border-dashed border-slate-200/80 z-0" />
+                
+                {[
+                  { num: 1, title: 'Choose Service', copy: 'Select the service\nyou need', icon: Search },
+                  { num: 2, title: 'Book & Schedule', copy: 'Pick a convenient\ndate & time', icon: CalendarClock },
+                  { num: 3, title: 'Expert Service', copy: 'Our experts arrive at\nyour location', icon: UserRound }
+                ].map((step, i) => (
+                  <div key={i} className="relative z-10 flex flex-col items-center flex-1 snap-center">
+                    {/* Circle Icon Container */}
+                    <div className="relative w-[72px] h-[72px] bg-white rounded-full flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.06)] border border-slate-50 mb-6">
+                      {/* Yellow Arc SVG */}
+                      <svg className="absolute -top-[1px] -left-[1px] w-[74px] h-[74px] rotate-[-75deg] pointer-events-none" viewBox="0 0 74 74">
+                        <circle cx="37" cy="37" r="36" fill="none" stroke="#FFC107" strokeWidth="2.5" strokeDasharray="50 180" strokeLinecap="round" />
+                      </svg>
+
+                       <step.icon className="h-7 w-7 text-slate-800" strokeWidth={1.5} />
+                       
+                       {/* Number Badge */}
+                       <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 h-[24px] w-[24px] bg-[#FFC107] rounded-full flex items-center justify-center text-[12px] font-black text-slate-900 shadow-md border-[2.5px] border-white">
+                          {step.num}
+                       </div>
+                    </div>
+                    
+                    {/* Text Content */}
+                    <div className="text-[10px] font-bold text-[#F59E0B] tracking-widest uppercase mb-1.5">STEP {step.num}</div>
+                    <h4 className="text-[15px] font-black text-slate-900 mb-1 tracking-tight text-center leading-tight">{step.title}</h4>
+                    <p className="text-[12px] font-medium text-slate-500 text-center leading-[1.35] whitespace-pre-line">{step.copy}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-            
-            <div className="shrink-0 flex items-center justify-end w-full sm:w-auto">
-               <button
-                 onClick={() => navigate('/app/support')}
-                 className="h-[40px] sm:h-[44px] px-4 sm:px-5 w-full sm:w-auto rounded-[16px] bg-[#FFC107] text-slate-900 text-[13px] font-black shadow-[0_4px_12px_rgba(255,193,7,0.3)] transition active:scale-95 flex items-center justify-center whitespace-nowrap"
-               >
-                 Chat Now
-               </button>
+
+            {/* Trust Badges Pill */}
+            <div className="mt-6 mx-2 bg-[#F4F6F9] rounded-3xl py-6 flex items-center shadow-sm border border-slate-200/60">
+               {[
+                 { icon: ShieldCheck, label: 'Aadhaar\nVerified' },
+                 { icon: Star, label: 'Transparent\nPricing' },
+                 { icon: ShieldCheck, label: 'Safe &\nReliable' }
+               ].map((badge, i) => (
+                 <div key={i} className="flex flex-col items-center gap-2.5 flex-1 relative px-1">
+                   {i !== 2 && (
+                     <div className="absolute right-0 top-1/2 -translate-y-1/2 h-[75%] w-[1px] bg-slate-200/80" />
+                   )}
+                   <div className="h-11 w-11 rounded-full bg-white shadow-sm flex items-center justify-center text-[#FFC107]">
+                     <badge.icon className="h-5 w-5" strokeWidth={2.5} />
+                   </div>
+                   <span className="text-[11.5px] font-bold text-[#111827] tracking-tight text-center leading-[1.25] whitespace-pre-line">{badge.label}</span>
+                 </div>
+               ))}
             </div>
           </div>
         </section>
 
-        {/* Test Notification (Bottom) */}
-        <section className="px-4 mb-28">
-          <button
-            onClick={handleTestNotification}
-            className="w-full bg-[#3730A3] text-white font-bold py-3 px-4 rounded-full shadow-md active:scale-95 transition"
-          >
-            Test Notification
-          </button>
-        </section>
+        {/* Bottom padding for tab bar */}
+        <div className="h-28" />
 
       </section>
       <CategoryPickBottomSheet

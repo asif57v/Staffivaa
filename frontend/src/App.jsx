@@ -40,6 +40,11 @@ const AdminModulePlaceholder = lazy(() => import('./components/admin/AdminModule
 const AdminReportsPage = lazy(() => import('./pages/admin/AdminReportsPage.jsx').then(m => ({ default: m.AdminReportsPage })))
 const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage.jsx').then(m => ({ default: m.AdminSettingsPage })))
 
+const AdminPromotionsOffersPage = lazy(() => import('./pages/admin/marketing/AdminPromotionsOffersPage.jsx').then(m => ({ default: m.AdminPromotionsOffersPage })))
+const AdminSponsoredAdsPage = lazy(() => import('./pages/admin/marketing/AdminSponsoredAdsPage.jsx').then(m => ({ default: m.AdminSponsoredAdsPage })))
+const AdminBannerManagementPage = lazy(() => import('./pages/admin/marketing/AdminBannerManagementPage.jsx').then(m => ({ default: m.AdminBannerManagementPage })))
+const AdminCampaignAnalyticsPage = lazy(() => import('./pages/admin/marketing/AdminCampaignAnalyticsPage.jsx').then(m => ({ default: m.AdminCampaignAnalyticsPage })))
+
 function App() {
   return (
     <BrowserRouter>
@@ -131,6 +136,10 @@ function App() {
               <Route path="wallet" element={<AdminWalletDashboard />} />
               <Route path="reports" element={<AdminReportsPage />} />
               <Route path="settings" element={<AdminSettingsPage />} />
+              <Route path="marketing/promotions" element={<AdminPromotionsOffersPage />} />
+              <Route path="marketing/ads" element={<AdminSponsoredAdsPage />} />
+              <Route path="marketing/banners" element={<AdminBannerManagementPage />} />
+              <Route path="marketing/analytics" element={<AdminCampaignAnalyticsPage />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/auth" replace />} />

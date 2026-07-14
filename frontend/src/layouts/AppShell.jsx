@@ -19,7 +19,7 @@ import { GlassPanel } from '../components/ui/GlassPanel.jsx'
 import { AppBottomNav } from '../components/app-ui/navigation/AppBottomNav.jsx'
 import { AppBadge } from '../components/app-ui/data-display/AppBadge.jsx'
 import { adminInitials } from '../lib/formatAdminLastLogin.js'
-import { readAppUserLocation } from '../lib/appUserLocationStorage.js'
+import { readAppUserLocation, parseAppUserLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { APP_HOME_LOCATION, APP_HOME_PATH, hasBookingFlowQuery } from '../lib/bookingFlowNavigation.js'
 import { useGetLabourAssignmentsQuery, workforceApi } from '../store/api/workforceApi.js'
@@ -350,25 +350,10 @@ export function AppShell() {
     if (!isIndividualAppHome) {
       return { individualLocationTitle: '', individualLocationSubtitle: '' }
     }
-    const addr = appLocation?.address?.trim()
-    const la = appLocation?.lat
-    const ln = appLocation?.lng
-    if (addr) {
-      return {
-        individualLocationTitle: addr,
-        individualLocationSubtitle:
-          la != null && ln != null ? `GPS ${la.toFixed(5)}, ${ln.toFixed(5)}` : 'Current work area',
-      }
-    }
-    if (la != null && ln != null) {
-      return {
-        individualLocationTitle: 'Current location',
-        individualLocationSubtitle: `${la.toFixed(5)}, ${ln.toFixed(5)}`,
-      }
-    }
+    const parsed = parseAppUserLocation(appLocation)
     return {
-      individualLocationTitle: 'Your location',
-      individualLocationSubtitle: 'Tap to set address or use GPS',
+      individualLocationTitle: parsed.area,
+      individualLocationSubtitle: parsed.detail,
     }
   }, [appLocation, isIndividualAppHome])
 
@@ -504,45 +489,61 @@ export function AppShell() {
           <header ref={headerRef} className={`${isIndividualAppHome ? 'relative z-30' : 'sticky top-0 z-30 px-3 pt-3'}`}>
           {isIndividualAppHome ? (
             <div
-              className={`flex items-center gap-2 px-4 pb-2 pt-3 transition-all duration-300 ${
+              className={`flex items-start justify-between gap-4 px-5 pb-3 pt-4 transition-all duration-300 min-h-[90px] ${
                 solidIndividualHeader
-                  ? 'bg-[#FFD100]/95 shadow-md backdrop-blur-md'
-                  : 'bg-[#FFD100] shadow-sm'
+                  ? 'bg-white shadow-md backdrop-blur-md'
+                  : 'bg-white shadow-sm'
               }`}
             >
-              {/* Location — takes all remaining space */}
+              {/* Location — takes remaining space */}
               <button
                 type="button"
                 onClick={() => setLocationModalOpen(true)}
-                className="flex min-w-0 flex-1 flex-col items-start text-left outline-none transition active:opacity-70"
+                className="flex items-center gap-3 min-w-0 flex-1 text-left outline-none transition active:opacity-70 group"
               >
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-800/80">Location</span>
-                <div className="mt-0.5 flex min-w-0 w-full items-center gap-1">
-                  <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-900" fill="currentColor" />
-                  <span className="truncate min-w-0 text-[14px] font-semibold tracking-normal text-slate-900">
-                    {individualLocationTitle}
-                  </span>
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-900/70" />
+                <div className="flex shrink-0 items-center justify-center mt-1">
+                  <MapPin className="h-[28px] w-[28px] text-[#FFC107]" strokeWidth={2} />
                 </div>
+                
+                <AnimatePresence mode="popLayout">
+                  <motion.div
+                    key={individualLocationTitle + individualLocationSubtitle}
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex flex-col items-start min-w-0 w-full"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0 w-full">
+                      <span className="truncate min-w-0 text-[19px] font-extrabold tracking-tight text-[#111827]">
+                        {individualLocationTitle}
+                      </span>
+                      <ChevronDown className="h-4 w-4 shrink-0 text-slate-600 transition-transform group-hover:translate-y-0.5" strokeWidth={2.5} />
+                    </div>
+                    <span className="truncate min-w-0 w-full text-[11px] font-semibold tracking-wider uppercase text-slate-500 mt-0.5">
+                      {individualLocationSubtitle}
+                    </span>
+                  </motion.div>
+                </AnimatePresence>
               </button>
 
               {/* Right action icons — fixed, never shrink */}
-              <div className="flex shrink-0 items-center gap-1.5">
+              <div className="flex shrink-0 items-center gap-2 mt-1">
                 <Link
                   to="/app/buildmart"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/90 text-slate-800 shadow-sm transition hover:bg-white active:scale-95"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
                   aria-label="BuildMart Cart"
                 >
-                  <ShoppingCart className="h-4 w-4" />
+                  <ShoppingCart className="h-5 w-5" />
                 </Link>
                 <button
                   type="button"
                   onClick={() => setDrawerOpen(true)}
-                  className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-white text-slate-800 shadow-sm transition hover:bg-yellow-50 active:scale-95"
+                  className="relative flex h-11 w-11 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
                   aria-label="Notifications & Menu"
                 >
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-red-500 ring-1 ring-white" />
+                  <Bell className="h-5 w-5" />
+                  <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
                 </button>
               </div>
             </div>

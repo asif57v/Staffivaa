@@ -22,6 +22,9 @@ import {
   LineChart,
   History,
   CalendarCheck,
+  Megaphone,
+  MonitorPlay,
+  ImagePlus,
 } from 'lucide-react'
 
 /**
@@ -96,6 +99,15 @@ export const ADMIN_NAV_SECTIONS = [
     items: [{ to: '/admin/reports', label: 'Reports & analytics', icon: BarChart3 }],
   },
   {
+    title: 'Marketing Center',
+    items: [
+      { to: '/admin/marketing/promotions', label: 'Promotions & Offers', icon: Megaphone },
+      { to: '/admin/marketing/ads', label: 'Sponsored Ads', icon: MonitorPlay },
+      { to: '/admin/marketing/banners', label: 'Banner Management', icon: ImagePlus },
+      { to: '/admin/marketing/analytics', label: 'Campaign Analytics', icon: LineChart },
+    ],
+  },
+  {
     title: 'System',
     items: [{ to: '/admin/settings', label: 'Settings', icon: Settings }],
   },
@@ -119,6 +131,7 @@ const ROUTE_TITLES = [
   { prefix: '/admin/categories', title: 'Skill categories' },
   { prefix: '/admin/business-verification', title: 'Corporate & vendor KYC' },
   { prefix: '/admin/labour', title: 'Labour & KYC' },
+  { prefix: '/admin/marketing', title: 'Marketing Center' },
   { prefix: '/admin/users', title: 'Individuals & corporates' },
   { prefix: '/admin', title: 'Dashboard' },
 ]

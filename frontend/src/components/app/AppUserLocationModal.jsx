@@ -34,6 +34,7 @@ export function AppUserLocationModal({
   const [address, setAddress] = useState('')
   const [lat, setLat] = useState(null)
   const [lng, setLng] = useState(null)
+  const [addressComponents, setAddressComponents] = useState(null)
   const [geoBusy, setGeoBusy] = useState(false)
   const [hint, setHint] = useState('')
 
@@ -46,6 +47,7 @@ export function AppUserLocationModal({
       if (inputRef.current) inputRef.current.value = initAddr
       setLat(stored?.lat ?? null)
       setLng(stored?.lng ?? null)
+      setAddressComponents(stored?.addressComponents ?? null)
       setHint('')
     })
   }, [open])
@@ -63,7 +65,7 @@ export function AppUserLocationModal({
     if (!open || !isLoaded || !inputRef.current || !apiKey) return
 
     autocompleteRef.current = new window.google.maps.places.Autocomplete(inputRef.current, {
-      fields: ['formatted_address', 'geometry'],
+      fields: ['formatted_address', 'geometry', 'address_components'],
       componentRestrictions: { country: 'in' },
     })
 
@@ -73,6 +75,7 @@ export function AppUserLocationModal({
         setAddress(place.formatted_address)
         setLat(place.geometry.location.lat())
         setLng(place.geometry.location.lng())
+        setAddressComponents(place.address_components || null)
         setHint('Location selected from suggestions.')
       } else {
         setAddress(inputRef.current.value)
@@ -113,6 +116,7 @@ export function AppUserLocationModal({
           const data = await res.json()
           if (data.results && data.results.length > 0) {
             setAddress(data.results[0].formatted_address)
+            setAddressComponents(data.results[0].address_components || null)
             if (inputRef.current) inputRef.current.value = data.results[0].formatted_address
             setHint('Location successfully updated.')
           } else {
@@ -140,7 +144,7 @@ export function AppUserLocationModal({
       setHint('Please select a location from the dropdown suggestions or fetch your current GPS location.')
       return
     }
-    writeAppUserLocation({ address: trimmed, lat, lng })
+    writeAppUserLocation({ address: trimmed, lat, lng, addressComponents })
     window.dispatchEvent(new CustomEvent('lc-app-user-location-changed'))
     onSaved?.()
     onClose()

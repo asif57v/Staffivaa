@@ -64,7 +64,7 @@ export function IndividualLabourSubcategoriesSection({ subcategories, loading, o
                 <span className={`relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl bg-slate-100 ring-1 ring-slate-200/60 transition duration-300 group-hover:scale-105`}>
                   <img src={imgSrc} alt={cat.name} className="h-full w-full object-cover" loading="lazy" />
                 </span>
-                <span className="line-clamp-2 mt-0.5 h-[2.15rem] w-full overflow-hidden text-center text-xs font-normal leading-snug text-slate-700 break-words">
+                <span className="line-clamp-2 mt-1 h-[2.2rem] w-full overflow-hidden text-center text-[12px] font-semibold leading-snug text-slate-800 break-words">
                   {cat.name}
                 </span>
               </>
