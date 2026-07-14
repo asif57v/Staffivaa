@@ -636,6 +636,7 @@ export function IndividualHomeScreen({ user }) {
           onSelect={(cat) => {
             if (cat.groupId) setSelectedGroupId(String(cat.groupId))
           }}
+          onViewAll={() => setCategorySheetOpen(true)}
         />
 
         <PopularServicesSection onBook={() => setCategorySheetOpen(true)} />

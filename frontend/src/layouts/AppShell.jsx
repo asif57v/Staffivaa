@@ -489,20 +489,20 @@ export function AppShell() {
           <header ref={headerRef} className={`${isIndividualAppHome ? 'relative z-30' : 'sticky top-0 z-30 px-3 pt-3'}`}>
           {isIndividualAppHome ? (
             <div
-              className={`flex items-start justify-between gap-4 px-5 pb-3 pt-4 transition-all duration-300 min-h-[90px] ${
+              className={`flex items-center justify-between gap-3 px-4 pb-1.5 pt-2 transition-all duration-300 min-h-[56px] ${
                 solidIndividualHeader
-                  ? 'bg-white shadow-md backdrop-blur-md'
-                  : 'bg-white shadow-sm'
+                  ? 'bg-[#FFD100]/95 shadow-md backdrop-blur-md'
+                  : 'bg-[#FFD100] shadow-sm'
               }`}
             >
               {/* Location — takes remaining space */}
               <button
                 type="button"
                 onClick={() => setLocationModalOpen(true)}
-                className="flex items-center gap-3 min-w-0 flex-1 text-left outline-none transition active:opacity-70 group"
+                className="flex items-center gap-2 min-w-0 flex-1 text-left outline-none transition active:opacity-70 group"
               >
-                <div className="flex shrink-0 items-center justify-center mt-1">
-                  <MapPin className="h-[28px] w-[28px] text-[#FFC107]" strokeWidth={2} />
+                <div className="flex shrink-0 items-center justify-center">
+                  <MapPin className="h-[24px] w-[24px] text-slate-900" strokeWidth={2} />
                 </div>
                 
                 <AnimatePresence mode="popLayout">
@@ -515,12 +515,12 @@ export function AppShell() {
                     className="flex flex-col items-start min-w-0 w-full"
                   >
                     <div className="flex items-center gap-1.5 min-w-0 w-full">
-                      <span className="truncate min-w-0 text-[19px] font-extrabold tracking-tight text-[#111827]">
+                      <span className="truncate min-w-0 text-[17px] font-extrabold tracking-tight text-[#111827]">
                         {individualLocationTitle}
                       </span>
                       <ChevronDown className="h-4 w-4 shrink-0 text-slate-600 transition-transform group-hover:translate-y-0.5" strokeWidth={2.5} />
                     </div>
-                    <span className="truncate min-w-0 w-full text-[11px] font-semibold tracking-wider uppercase text-slate-500 mt-0.5">
+                    <span className="truncate min-w-0 w-full text-[10px] font-semibold tracking-wider uppercase text-slate-600">
                       {individualLocationSubtitle}
                     </span>
                   </motion.div>
@@ -528,22 +528,22 @@ export function AppShell() {
               </button>
 
               {/* Right action icons — fixed, never shrink */}
-              <div className="flex shrink-0 items-center gap-2 mt-1">
+              <div className="flex shrink-0 items-center gap-2">
                 <Link
                   to="/app/buildmart"
-                  className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
                   aria-label="BuildMart Cart"
                 >
-                  <ShoppingCart className="h-5 w-5" />
+                  <ShoppingCart className="h-[18px] w-[18px]" />
                 </Link>
                 <button
                   type="button"
                   onClick={() => setDrawerOpen(true)}
-                  className="relative flex h-11 w-11 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
+                  className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
                   aria-label="Notifications & Menu"
                 >
-                  <Bell className="h-5 w-5" />
-                  <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
+                  <Bell className="h-[18px] w-[18px]" />
+                  <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-red-500 ring-2 ring-white" />
                 </button>
               </div>
             </div>
