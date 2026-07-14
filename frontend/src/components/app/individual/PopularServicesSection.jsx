@@ -16,7 +16,7 @@ const POPULAR_SERVICES = [
   {
     id: 'intense-cleaning',
     title: 'Intense cleaning (2 bathrooms)',
-    image: '/service_helper.png',
+    image: '/service_cleaning_realistic.png',
     rating: '4.80',
     reviews: '8k',
     price: 872,
@@ -65,7 +65,7 @@ export function PopularServicesSection({ onBook }) {
         </h3>
       </div>
 
-      <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-4 scrollbar-none [&::-webkit-scrollbar]:hidden">
+      <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto px-1 pb-4 scrollbar-none [&::-webkit-scrollbar]:hidden">
         {POPULAR_SERVICES.map((service, idx) => (
           <motion.div
             key={service.id}

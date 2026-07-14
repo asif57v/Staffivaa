@@ -243,7 +243,7 @@ export function IndividualHomeScreen({ user }) {
 
       let next = container.scrollLeft + 80
       if (next >= maxScroll - 5) {
-        container.scrollTo({ left: 0, behavior: 'smooth' })
+        container.scrollTo({ left: 0, behavior: 'auto' })
       } else {
         container.scrollTo({ left: next, behavior: 'smooth' })
       }
@@ -544,7 +544,7 @@ export function IndividualHomeScreen({ user }) {
         </motion.div>
       </section>
 
-      <div className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md py-3 px-3 shadow-sm border-b border-slate-100 flex flex-col gap-2">
+      <div className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md py-3 px-3 flex flex-col gap-2">
         <button
           type="button"
           onClick={() => setCategorySheetOpen(true)}
@@ -561,7 +561,7 @@ export function IndividualHomeScreen({ user }) {
         </button>
       </div>
 
-      <section className="relative z-10 w-full shrink-0 pt-5 pb-2 overflow-hidden">
+      <section className="relative z-10 w-full shrink-0 pt-5 pb-8 overflow-hidden">
         <motion.div
           initial={reduce ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -579,16 +579,15 @@ export function IndividualHomeScreen({ user }) {
             <button
               type="button"
               onClick={() => setSelectedGroupId(null)}
-              className={`flex min-w-[90px] w-[90px] shrink-0 snap-start flex-col items-center justify-between gap-1.5 rounded-2xl border px-2 pb-2.5 pt-2.5 transition shadow-sm active:scale-[0.98] ${selectedGroupId == null
-                ? 'border-[#FFD100] bg-[#FFD100]/10 ring-1 ring-[#FFD100]'
-                : 'border-slate-200 bg-white hover:bg-slate-50'
-                }`}
+              className="flex min-w-[76px] w-[76px] shrink-0 snap-start flex-col items-center gap-2 transition active:scale-[0.96]"
             >
-              <span className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${selectedGroupId == null ? 'bg-[#FFD100] text-slate-900' : 'bg-slate-100 text-[#F4CC34]'
+              <span className={`flex h-[64px] w-[64px] items-center justify-center rounded-full border shadow-sm transition-all ${selectedGroupId == null
+                ? 'border-[#FFD100] bg-[#FFD100]/15 text-slate-900 ring-2 ring-[#FFD100] ring-offset-1'
+                : 'border-slate-200 bg-white text-[#F4CC34] hover:bg-slate-50 hover:border-slate-300'
                 }`}>
-                <LayoutGrid className="h-5 w-5" aria-hidden />
+                <LayoutGrid className="h-6 w-6" aria-hidden />
               </span>
-              <span className={`w-full text-center text-[10px] font-bold leading-tight line-clamp-2 ${selectedGroupId == null ? 'text-slate-900' : 'text-slate-600'
+              <span className={`w-full text-center text-[10.5px] font-bold leading-[1.15] line-clamp-2 ${selectedGroupId == null ? 'text-slate-900' : 'text-slate-600'
                 }`}>All Categories</span>
             </button>
             {tradeGroups.map((g, idx) => {
@@ -600,16 +599,15 @@ export function IndividualHomeScreen({ user }) {
                   key={gid}
                   type="button"
                   onClick={() => setSelectedGroupId(gid)}
-                  className={`flex min-w-[90px] w-[90px] shrink-0 snap-start flex-col items-center justify-between gap-1.5 rounded-2xl border px-2 pb-2.5 pt-2.5 transition shadow-sm active:scale-[0.98] ${active
-                    ? 'border-[#FFD100] bg-[#FFD100]/10 ring-1 ring-[#FFD100]'
-                    : 'border-slate-200 bg-white hover:bg-slate-50'
-                    }`}
+                  className="flex min-w-[76px] w-[76px] shrink-0 snap-start flex-col items-center gap-2 transition active:scale-[0.96]"
                 >
-                  <span className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${active ? 'bg-[#FFD100] text-slate-900' : 'bg-slate-100 text-[#F4CC34]'
+                  <span className={`flex h-[64px] w-[64px] items-center justify-center rounded-full border shadow-sm transition-all ${active
+                    ? 'border-[#FFD100] bg-[#FFD100]/15 text-slate-900 ring-2 ring-[#FFD100] ring-offset-1'
+                    : 'border-slate-200 bg-white text-[#F4CC34] hover:bg-slate-50 hover:border-slate-300'
                     }`}>
-                    <VisIcon className="h-5 w-5" aria-hidden />
+                    <VisIcon className="h-6 w-6" aria-hidden />
                   </span>
-                  <span className={`w-full text-center text-[10px] font-bold leading-tight line-clamp-2 ${active ? 'text-slate-900' : 'text-slate-600'
+                  <span className={`w-full text-center text-[10.5px] font-bold leading-[1.15] line-clamp-2 ${active ? 'text-slate-900' : 'text-slate-600'
                     }`}>
                     {g.name}
                   </span>
@@ -617,9 +615,7 @@ export function IndividualHomeScreen({ user }) {
               )
             })}
           </div>
-          <p className="mt-2 text-center text-[11px] font-medium text-slate-500 italic">
-            Tap a tile to filter workers — same catalogue as when you book.
-          </p>
+
         </motion.div>
       </section>
 
@@ -730,7 +726,7 @@ export function IndividualHomeScreen({ user }) {
           {bookingsLoading ? <AppListSkeleton rows={2} /> : null}
 
           {!bookingsLoading && recentBookings.length ? (
-            <motion.div className="space-y-2 mt-2">
+            <motion.div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 pt-2 -mx-3 px-3 scrollbar-none [&::-webkit-scrollbar]:hidden mt-2">
               {recentBookings.map((b, idx) => {
                 const st = bookingStatusToUi(b.status)
                 const primaryLine = (b.lines || [])[0]
@@ -745,7 +741,7 @@ export function IndividualHomeScreen({ user }) {
                     initial={reduce ? undefined : { opacity: 0, y: 10 }}
                     animate={reduce ? undefined : { opacity: 1, y: 0 }}
                     transition={{ duration: 0.28, delay: idx * 0.05 }}
-                    className="relative overflow-hidden rounded-[16px] border border-slate-200 bg-white p-3 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)]"
+                    className="relative shrink-0 w-[85vw] max-w-[340px] snap-start overflow-hidden rounded-[16px] border border-slate-200 bg-white p-3 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)]"
                   >
                     <div className="flex gap-3">
                       {/* Thumbnail */}
@@ -883,9 +879,9 @@ export function IndividualHomeScreen({ user }) {
         <section className="mt-10 mb-8">
           <div className="pt-2 pb-4">
             <div className="px-5 mb-8">
-              <h3 className="text-[24px] font-extrabold tracking-tight text-slate-900 inline-block relative">
+              <h3 className="text-[20px] font-extrabold tracking-tight text-slate-900 inline-block relative">
                 How It Works
-                <span className="absolute -bottom-2 left-0 w-10 h-[3.5px] bg-[#FFC107] rounded-full" />
+                <span className="absolute -bottom-2 left-0 w-8 h-[3px] bg-[#FFC107] rounded-full" />
               </h3>
             </div>
             
@@ -909,16 +905,11 @@ export function IndividualHomeScreen({ user }) {
                 ].map((step, i) => (
                   <div key={i} className="relative z-10 flex flex-col items-center flex-1 snap-center">
                     {/* Circle Icon Container */}
-                    <div className="relative w-[72px] h-[72px] bg-white rounded-full flex items-center justify-center shadow-[0_8px_24px_rgba(0,0,0,0.06)] border border-slate-50 mb-6">
-                      {/* Yellow Arc SVG */}
-                      <svg className="absolute -top-[1px] -left-[1px] w-[74px] h-[74px] rotate-[-75deg] pointer-events-none" viewBox="0 0 74 74">
-                        <circle cx="37" cy="37" r="36" fill="none" stroke="#FFC107" strokeWidth="2.5" strokeDasharray="50 180" strokeLinecap="round" />
-                      </svg>
-
-                       <step.icon className="h-7 w-7 text-slate-800" strokeWidth={1.5} />
+                    <div className="relative w-[56px] h-[56px] bg-white rounded-full flex items-center justify-center shadow-[0_4px_16px_rgba(0,0,0,0.08)] border border-slate-100 mb-5 transition-transform hover:scale-105">
+                       <step.icon className="h-5 w-5 text-slate-700" strokeWidth={1.8} />
                        
                        {/* Number Badge */}
-                       <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 h-[24px] w-[24px] bg-[#FFC107] rounded-full flex items-center justify-center text-[12px] font-black text-slate-900 shadow-md border-[2.5px] border-white">
+                       <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 h-[22px] w-[22px] bg-[#FFC107] rounded-full flex items-center justify-center text-[11px] font-black text-slate-900 shadow-sm border-2 border-white">
                           {step.num}
                        </div>
                     </div>
