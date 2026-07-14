@@ -5,13 +5,20 @@ import { GlassPanel } from '../../ui/GlassPanel.jsx'
 function getCategoryImage(name) {
   const n = String(name || '').toLowerCase();
   if (n.includes('ac')) return '/3d_icon_ac.png';
-  if (n.includes('electric') || n.includes('plumb') || n.includes('mechanic') || n.includes('car') || n.includes('bike')) return '/3d_icon_tools.png';
-  if (n.includes('mason') || n.includes('construct') || n.includes('labor') || n.includes('helper') || n.includes('glass') || n.includes('tile')) return '/3d_icon_worker.png';
-  if (n.includes('paint') || n.includes('interior')) return '/3d_icon_painter.png';
-  if (n.includes('jcb') || n.includes('crane') || n.includes('heavy') || n.includes('operator')) return '/3d_icon_jcb.png';
+  if (n.includes('electric')) return '/3d_icon_electrician.png';
+  if (n.includes('plumb')) return '/3d_icon_plumber.png';
+  if (n.includes('2-wheeler') || n.includes('bike')) return '/3d_icon_mechanic_2w.png';
+  if (n.includes('4-wheeler') || n.includes('car')) return '/3d_icon_mechanic_4w.png';
+  if (n.includes('mechanic')) return '/3d_icon_tools.png';
+  if (n.includes('glass')) return '/3d_icon_glass.png';
+  if (n.includes('interior') || n.includes('design')) return '/3d_icon_interior_designer.png';
   if (n.includes('cook') || n.includes('chef')) return '/3d_icon_cook.png';
+  if (n.includes('mason') || n.includes('construct')) return '/3d_icon_worker.png';
+  if (n.includes('paint')) return '/3d_icon_painter.png';
+  if (n.includes('jcb') || n.includes('crane') || n.includes('heavy') || n.includes('operator')) return '/3d_icon_jcb.png';
   if (n.includes('garden') || n.includes('mali')) return '/3d_icon_garden.png';
-  if (n.includes('help') || n.includes('housekeep') || n.includes('clean')) return '/3d_icon_cleaning.png';
+  if (n.includes('housekeep') || n.includes('clean') || n.includes('office')) return '/3d_icon_cleaning.png';
+  if (n.includes('general') || n.includes('labor') || n.includes('helper') || n.includes('tile')) return '/3d_icon_general_labor.png';
   return '/3d_icon_tools.png';
 }
 
@@ -48,7 +55,7 @@ export function IndividualLabourSubcategoriesSection({ subcategories, loading, o
       ) : null}
 
       {!loading && subcategories.length > 0 ? (
-        <div className="-mx-1 grid grid-cols-3 gap-x-2 gap-y-0.5 min-[380px]:grid-cols-4 md:gap-x-3 md:gap-y-1">
+        <div className="grid grid-cols-3 gap-x-1.5 gap-y-1.5 min-[380px]:grid-cols-4 md:gap-x-3 md:gap-y-2">
           {subcategories.slice(0, 16).map((cat, idx) => {
             const imgSrc = getCategoryImage(cat.name)
 
@@ -76,7 +83,7 @@ export function IndividualLabourSubcategoriesSection({ subcategories, loading, o
                     onSelect?.(cat)
                     onQuickBook?.(cat)
                   }}
-                  className="group flex w-full flex-col items-center gap-1 rounded-2xl border border-transparent bg-transparent px-1 py-0.5 transition active:scale-[0.98]"
+                  className="group flex w-full flex-col items-center gap-1 rounded-2xl border border-transparent bg-transparent py-0.5 transition active:scale-[0.98]"
                 >
                   {inner}
                 </button>

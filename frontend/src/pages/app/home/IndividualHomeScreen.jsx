@@ -621,22 +621,22 @@ export function IndividualHomeScreen({ user }) {
 
           <Link
             to="/app/bookings"
-            className="group flex items-center gap-3 rounded-[20px] border border-amber-200 bg-amber-50 p-4 transition hover:bg-amber-100 active:scale-[0.98]"
+            className="group flex items-center gap-3 rounded-[16px] border border-amber-200 bg-amber-50 p-3 transition hover:bg-amber-100 active:scale-[0.98]"
           >
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#F4CC34] text-white shadow-sm">
-              <UserRound className="h-6 w-6" aria-hidden />
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F4CC34] text-white shadow-sm">
+              <UserRound className="h-5 w-5" aria-hidden />
             </span>
             <span className="min-w-0 flex-1">
-              <p className="text-[15px] font-bold text-slate-900">Need workers on site?</p>
-              <p className="text-[12px] font-medium text-slate-600 mt-0.5">Instant or scheduled booking with roles & site details</p>
+              <p className="text-[14px] font-bold text-slate-900">Need workers on site?</p>
+              <p className="text-[11px] font-medium text-slate-600 mt-0.5">Instant or scheduled booking with roles & site details</p>
             </span>
-            <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition group-hover:translate-x-0.5" aria-hidden />
+            <ChevronRight className="h-4 w-4 shrink-0 text-slate-600 transition group-hover:translate-x-0.5" aria-hidden />
           </Link>
 
           {bookingsLoading ? <AppListSkeleton rows={2} /> : null}
 
           {!bookingsLoading && recentBookings.length ? (
-            <motion.div className="space-y-3 mt-3">
+            <motion.div className="space-y-2 mt-2">
               {recentBookings.map((b, idx) => {
                 const st = bookingStatusToUi(b.status)
                 const primaryLine = (b.lines || [])[0]
@@ -651,57 +651,57 @@ export function IndividualHomeScreen({ user }) {
                     initial={reduce ? undefined : { opacity: 0, y: 10 }}
                     animate={reduce ? undefined : { opacity: 1, y: 0 }}
                     transition={{ duration: 0.28, delay: idx * 0.05 }}
-                    className="relative overflow-hidden rounded-[20px] border border-slate-200 bg-white p-4 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)]"
+                    className="relative overflow-hidden rounded-[16px] border border-slate-200 bg-white p-3 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.05)]"
                   >
-                    <div className="flex gap-4">
+                    <div className="flex gap-3">
                       {/* Thumbnail */}
-                      <div className="h-20 w-20 shrink-0 overflow-hidden rounded-[14px] bg-slate-100">
+                      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-[12px] bg-slate-100">
                         <img src={getCategoryImage(itemLabel)} alt="" className="h-full w-full object-cover" />
                       </div>
                       
-                      <div className="flex-1 min-w-0 py-0.5">
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="inline-flex items-center gap-1 rounded-[8px] bg-slate-50 border border-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-                            <CalendarClock className="h-3 w-3" />
+                      <div className="flex-1 min-w-0 py-0">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="inline-flex items-center gap-1 rounded-[6px] bg-slate-50 border border-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
+                            <CalendarClock className="h-2.5 w-2.5" />
                             {day} · {timeHint}
                           </span>
-                          <span className={`inline-flex items-center rounded-[8px] px-2 py-0.5 text-[10px] font-bold ${st.tone.replace('ring-1', '')} bg-opacity-20`}>
+                          <span className={`inline-flex items-center rounded-[6px] px-1.5 py-0.5 text-[9px] font-bold ${st.tone.replace('ring-1', '')} bg-opacity-20`}>
                             {st.label}
                           </span>
                         </div>
                         
-                        <h4 className="truncate text-[16px] font-bold text-slate-900">{itemLabel}</h4>
+                        <h4 className="truncate text-[15px] font-bold text-slate-900">{itemLabel}</h4>
                         
-                        <div className="mt-1 flex items-start gap-1 text-[11px] font-medium text-slate-500">
-                          <MapPin className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <div className="mt-0.5 flex items-start gap-1 text-[10px] font-medium text-slate-500">
+                          <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
                           <span className="line-clamp-2 leading-snug">{b.address}</span>
                         </div>
                         
-                        <div className="mt-2 flex items-center gap-3 text-[11px] font-medium text-slate-600">
+                        <div className="mt-1.5 flex items-center gap-2 text-[10px] font-medium text-slate-600">
                           {qty && (
                             <span className="flex items-center gap-1">
-                              <ClipboardList className="h-3.5 w-3.5" /> Qty: {qty}
+                              <ClipboardList className="h-3 w-3" /> Qty: {qty}
                             </span>
                           )}
                           <span className="flex items-center gap-1">
-                            <UserRound className="h-3.5 w-3.5" /> {b.assignedWorker ? '1 Worker' : 'Seeking Workers'}
+                            <UserRound className="h-3 w-3" /> {b.assignedWorker ? '1 Worker' : 'Seeking Workers'}
                           </span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="mt-4 flex items-center gap-3">
+                    <div className="mt-3 flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => navigate(`/app/bookings?ref=${encodeURIComponent(b.ref || '')}`)}
-                        className="flex-1 rounded-[12px] bg-[#F4CC34] px-4 py-2.5 text-[13px] font-bold text-slate-900 shadow-sm transition hover:brightness-[1.05] active:scale-[0.98]"
+                        className="flex-1 rounded-[10px] bg-[#F4CC34] px-3 py-2 text-[12px] font-bold text-slate-900 shadow-sm transition hover:brightness-[1.05] active:scale-[0.98]"
                       >
                         Track
                       </button>
                       <button
                         type="button"
                         onClick={() => navigate(`/app/bookings?rebookFrom=${encodeURIComponent(b.ref || '')}`)}
-                        className="flex-1 rounded-[12px] border-2 border-[#F4CC34] bg-white px-4 py-2.5 text-[13px] font-bold text-[#F4CC34] shadow-sm transition hover:bg-slate-50 active:scale-[0.98]"
+                        className="flex-1 rounded-[10px] border-2 border-[#F4CC34] bg-white px-3 py-2 text-[12px] font-bold text-[#F4CC34] shadow-sm transition hover:bg-slate-50 active:scale-[0.98]"
                       >
                         Rebook
                       </button>
