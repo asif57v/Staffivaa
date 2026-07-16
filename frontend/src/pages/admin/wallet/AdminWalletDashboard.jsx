@@ -677,6 +677,29 @@ export function AdminWalletDashboard() {
                         <span className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-bold ${getStatusColor(tx.status)}`}>
                           {tx.status}
                         </span>
+                        {tx.status === 'Pending' && tx.source?.toLowerCase().includes('withdrawal') && (
+                          <div className="mt-1.5">
+                            <button
+                              onClick={() => {
+                                const withdrawal = withdrawalsList.find(w => 
+                                  w.status === 'Pending' && 
+                                  w.amount === tx.amount && 
+                                  (w.requestedBy?._id === tx.payerId || w.requestedBy === tx.payerId || w.requestedBy?._id === tx.clientId?._id)
+                                );
+                                if (withdrawal) {
+                                  setSelectedWithdrawal(withdrawal);
+                                  setUtr('');
+                                  setRejectionReason('');
+                                } else {
+                                  toast.error('Withdrawal details not found. Please check Pending Payouts section.');
+                                }
+                              }}
+                              className="bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg active:scale-95 transition"
+                            >
+                              Review & Pay
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))

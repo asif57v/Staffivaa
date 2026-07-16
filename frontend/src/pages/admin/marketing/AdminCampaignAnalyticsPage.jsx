@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { LineChart, BarChart3, Activity } from 'lucide-react'
 import { GlassPanel } from '../../../components/ui/GlassPanel.jsx'
 import { useAuth } from '../../../hooks/useAuth.js'
+import { apiClient } from '../../../api/http.js'
 
 export function AdminCampaignAnalyticsPage() {
   const { token } = useAuth()

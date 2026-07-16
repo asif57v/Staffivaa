@@ -43,6 +43,7 @@ import {
   formatAppUserLocationLabel,
   hasAppUserLocation,
   readAppUserLocation,
+  parseAppUserLocation,
 } from '../../../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../../../components/app/AppUserLocationModal.jsx'
 import { LabourCheckOutConfirmModal } from '../../../components/labour/LabourCheckOutConfirmModal.jsx'
@@ -374,6 +375,9 @@ export function LabourHomeScreen({ user }) {
 
   const hasWorkLocation = useMemo(() => hasAppUserLocation(appLocation), [appLocation])
   const locationLabel = formatAppUserLocationLabel(appLocation) || 'Set your work area'
+  const { area: labourLocationTitle, detail: labourLocationSubtitle } = useMemo(() => {
+    return parseAppUserLocation(appLocation)
+  }, [appLocation])
   const siteLabel = lastIn?.projectLabel && lastIn.projectLabel !== 'Unassigned'
     ? lastIn.projectLabel
     : todayJob?.siteName || todayJob?.title || 'No site assigned'
@@ -477,27 +481,43 @@ export function LabourHomeScreen({ user }) {
           className="relative overflow-hidden rounded-b-[2rem] border-b border-slate-200 bg-white text-slate-900 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.1)]"
         >
           <motion.div className="relative pb-2 sm:pb-3">
-            <div className="flex items-center justify-between gap-2 bg-[#FFDF20] px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-3 sm:px-5">
-              {/* Location (styled like the image) */}
+            <div className="flex items-center justify-between gap-3 px-4 pb-1.5 pt-2 bg-[#FFD100] shadow-sm min-h-[56px]">
+              {/* Location */}
               <button
                 type="button"
                 onClick={() => setWorkAreaModalOpen(true)}
-                className="flex min-w-0 flex-1 flex-col items-start text-left outline-none transition active:opacity-70"
+                className="flex items-center gap-2 min-w-0 flex-1 text-left outline-none transition active:opacity-70 group"
               >
-                <span className="text-[9px] font-bold uppercase tracking-wide text-slate-800/70">Location</span>
-                <div className="mt-0.5 flex w-full items-center gap-0.5">
-                  <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-900" fill="currentColor" />
-                  <span className="truncate text-xs font-extrabold tracking-tight text-slate-900">
-                    {locationLabel}
-                  </span>
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-900/70" />
+                <div className="flex shrink-0 items-center justify-center">
+                  <MapPin className="h-[24px] w-[24px] text-slate-900" strokeWidth={2} />
                 </div>
+                
+                <AnimatePresence mode="popLayout">
+                  <motion.div
+                    key={labourLocationTitle + labourLocationSubtitle}
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex flex-col items-start min-w-0 w-full"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0 w-full">
+                      <span className="truncate min-w-0 text-[17px] font-extrabold tracking-tight text-[#111827]">
+                        {labourLocationTitle}
+                      </span>
+                      <ChevronDown className="h-4 w-4 shrink-0 text-slate-600 transition-transform group-hover:translate-y-0.5" strokeWidth={2.5} />
+                    </div>
+                    <span className="truncate min-w-0 w-full text-[10px] font-semibold tracking-wider uppercase text-slate-600">
+                      {labourLocationSubtitle}
+                    </span>
+                  </motion.div>
+                </AnimatePresence>
               </button>
 
-              {/* Right Side Icons */}
-              <div className="flex shrink-0 items-center gap-1.5">
+              {/* Right action icons — fixed, never shrink */}
+              <div className="flex shrink-0 items-center gap-2">
                 {/* Online/Offline Toggle */}
-                <div className="flex flex-col items-center justify-center mr-1">
+                <div className="flex flex-col items-center justify-center mr-0.5">
                   <button
                     type="button"
                     onClick={() => {
@@ -528,27 +548,25 @@ export function LabourHomeScreen({ user }) {
                 <button
                   type="button"
                   onClick={openDrawer}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/90 text-slate-800 shadow-sm transition hover:bg-white active:scale-95"
+                  className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
                   aria-label="Open menu"
                 >
-                  <Menu className="h-4 w-4" />
+                  <Menu className="h-[18px] w-[18px]" />
                 </button>
 
                 <button
                   type="button"
                   onClick={() => navigate('/app/notifications')}
-                  className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-white/90 text-slate-800 shadow-sm transition hover:bg-white active:scale-95"
+                  className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
                   aria-label={
                     notifications.unreadCount > 0
                       ? `Notifications, ${notifications.unreadCount} unread`
                       : 'Notifications'
                   }
                 >
-                  <Bell className="h-4 w-4" />
+                  <Bell className="h-[18px] w-[18px]" />
                   {notifications.unreadCount > 0 ? (
-                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white shadow-md ring-1 ring-white">
-                      {notifications.unreadCount > 9 ? '9+' : notifications.unreadCount}
-                    </span>
+                    <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-red-500 ring-2 ring-white" />
                   ) : null}
                 </button>
               </div>

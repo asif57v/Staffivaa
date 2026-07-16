@@ -348,7 +348,7 @@ export const reviewWithdrawal = asyncHandler(async (req, res) => {
   // Find the matching transaction
   const transaction = await WalletTransaction.findOne({
     payerId: withdrawal.requestedBy,
-    type: 'Withdrawal',
+    type: { $in: ['Withdrawal', 'Debit'] },
     amount: withdrawal.amount,
     status: 'Pending'
   }).sort({ createdAt: -1 })

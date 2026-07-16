@@ -63,6 +63,13 @@ const walletTransactionSchema = new mongoose.Schema(
     razorpayPaymentId: {
       type: String,
     },
+    referenceModel: {
+      type: String,
+    },
+    referenceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      refPath: 'referenceModel',
+    },
   },
   { timestamps: true }
 )

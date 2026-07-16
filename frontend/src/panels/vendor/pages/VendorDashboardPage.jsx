@@ -164,7 +164,7 @@ export function VendorDashboardPage() {
         <section>
           <div className="flex items-center justify-between mb-4 px-1">
             <h3 className="text-[17px] font-extrabold tracking-tight text-slate-900">Current Requests</h3>
-            {requests.length > 4 && (
+            {requests.length > 2 && (
               <Link to="/vendor/requests" className="text-[13px] font-bold text-[#FFC107] hover:underline">
                 View all
               </Link>
@@ -183,7 +183,7 @@ export function VendorDashboardPage() {
             </div>
           ) : (
             <ul className="space-y-3">
-              {requests.slice(0, 4).map((req) => (
+              {requests.slice(0, 2).map((req) => (
                 <li key={req._id}>
                   <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-100 transition active:scale-[0.98]">
                     <div className="flex items-start justify-between gap-2">
