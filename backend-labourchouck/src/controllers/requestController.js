@@ -219,23 +219,47 @@ export const createRequest = asyncHandler(async (req, res) => {
     }).limit(50)
 
     if (workers.length > 0) {
-      const allocation = await Allocation.create({
-        requestId: request._id,
-        notes: 'Auto-allocated by skill match for individual booking',
-      })
+      // Filter by radius: location MUST be available
+      let matchingWorkers = [];
+      if (request.locationLat && request.locationLng) {
+        matchingWorkers = workers.filter(w => {
+          if (!w.labourProfile || !w.labourProfile.locationLat || !w.labourProfile.locationLng) {
+            return false; // Skip if worker has no location set
+          }
+          const radius = w.labourProfile.workRadius || 15; // default 15km
+          
+          const R = 6371; // Radius of the earth in km
+          const dLat = (w.labourProfile.locationLat - request.locationLat) * (Math.PI/180);
+          const dLon = (w.labourProfile.locationLng - request.locationLng) * (Math.PI/180);
+          const a = 
+            Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(request.locationLat * (Math.PI/180)) * Math.cos(w.labourProfile.locationLat * (Math.PI/180)) * 
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+          const distance = R * c;
+          
+          return distance <= radius;
+        });
+      }
 
-      const LabourCategory = mongoose.model('LabourCategory')
-      const category = await LabourCategory.findById(categoryId)
-      const baseRate = category?.baseRate || 800
+      if (matchingWorkers.length > 0) {
+        const allocation = await Allocation.create({
+          requestId: request._id,
+          notes: 'Auto-allocated by skill and distance match for individual booking',
+        })
 
-      const assignmentsToCreate = workers.map((worker) => ({
-        allocationId: allocation._id,
-        requestId: request._id,
-        labourId: worker._id,
-        categoryId,
-        status: ASSIGNMENT_STATUS.OFFERED,
-        perDayRate: baseRate,
-      }))
+        const LabourCategory = mongoose.model('LabourCategory')
+        const category = await LabourCategory.findById(categoryId)
+        const baseRate = category?.baseRate || 800
+
+        const assignmentsToCreate = matchingWorkers.map((worker) => ({
+          allocationId: allocation._id,
+          requestId: request._id,
+          labourId: worker._id,
+          categoryId,
+          status: ASSIGNMENT_STATUS.OFFERED,
+          perDayRate: baseRate,
+        }))
 
       const createdAssignments = await Assignment.insertMany(assignmentsToCreate)
       // Keep status as SEARCHING until a worker accepts
@@ -245,6 +269,7 @@ export const createRequest = asyncHandler(async (req, res) => {
         emitToUser('labour', assignment.labourId.toString(), 'assignment_assigned', { assignmentId: assignment._id.toString() })
         sendNotificationToUser(assignment.labourId.toString(), 'New Job Available!', 'A new job matching your skills is available. Tap to view.', { url: '/app/jobs' })
       })
+      }
     }
   }
 

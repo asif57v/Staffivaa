@@ -101,6 +101,15 @@ export const updateMe = asyncHandler(async (req, res) => {
     if (req.body.labourProfile.availabilityStatus !== undefined) {
       user.labourProfile.availabilityStatus = req.body.labourProfile.availabilityStatus
     }
+    if (req.body.labourProfile.workRadius !== undefined) {
+      user.labourProfile.workRadius = Number(req.body.labourProfile.workRadius)
+    }
+    if (req.body.labourProfile.locationLat !== undefined) {
+      user.labourProfile.locationLat = Number(req.body.labourProfile.locationLat)
+    }
+    if (req.body.labourProfile.locationLng !== undefined) {
+      user.labourProfile.locationLng = Number(req.body.labourProfile.locationLng)
+    }
   }
 
   await user.save()

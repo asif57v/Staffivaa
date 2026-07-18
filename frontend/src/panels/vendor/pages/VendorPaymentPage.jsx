@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, CheckCircle2, FileText, Banknote, Building2, Calendar, Users } from 'lucide-react'
 import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
-import { useGetRequestQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation } from '../../../store/api/workforceApi.js'
+import { useGetVendorJobsQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation } from '../../../store/api/workforceApi.js'
 import { loadRazorpayScript } from '../../../lib/razorpay.js'
 
 function formatDate(d) {
@@ -10,19 +10,17 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-export function CorporatePaymentPage() {
+export function VendorPaymentPage() {
   const { id } = useParams()
   
-  const { data, isLoading, isError } = useGetRequestQuery(id, { skip: !id })
+  const { data, isLoading, isError } = useGetVendorJobsQuery()
   const [createOrder, { isLoading: isCreatingOrder }] = useCreateRazorpayOrderMutation()
   const [verifyPayment, { isLoading: isVerifying }] = useVerifyRazorpayPaymentMutation()
 
   const [paymentSuccess, setPaymentSuccess] = useState(false)
 
-  const request = data?.request
-  const allocation = data?.allocation
-  const assignments = data?.assignments ?? []
-  const summary = data?.paymentSummary
+  const allocation = (data?.allocations ?? []).find((a) => String(a._id) === String(id))
+  const request = allocation?.requestId
 
   if (isLoading) {
     return (
@@ -32,12 +30,12 @@ export function CorporatePaymentPage() {
     )
   }
 
-  if (isError || !request || !summary) {
+  if (isError || !request) {
     return (
       <div className="min-h-screen bg-slate-50/50 p-4">
         <AppSurface className="border-rose-200/90 bg-rose-50/50">
-          <p className="text-sm font-semibold text-rose-800">Request not found or payment summary unavailable.</p>
-          <Link to="/corporate/requests" className="mt-3 inline-block text-sm font-bold text-brand">Back</Link>
+          <p className="text-sm font-semibold text-rose-800">Job not found.</p>
+          <Link to="/vendor/jobs" className="mt-3 inline-block text-sm font-bold text-brand">Back</Link>
         </AppSurface>
       </div>
     )
@@ -51,19 +49,19 @@ export function CorporatePaymentPage() {
         return
       }
 
-      const orderData = await createOrder(id).unwrap()
+      const orderData = await createOrder(request._id).unwrap()
 
       const options = {
         key: orderData.keyId,
         amount: orderData.amount,
         currency: orderData.currency,
         name: 'Staffivaa',
-        description: `Final Payment for ${request.reference}`,
+        description: `Platform Fee for ${request.reference}`,
         order_id: orderData.orderId,
         handler: async function (response) {
           try {
             await verifyPayment({
-              id,
+              id: request._id,
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature
@@ -99,13 +97,13 @@ export function CorporatePaymentPage() {
         </div>
         <h2 className="text-2xl font-black text-slate-900 mb-2">Payment Successful</h2>
         <p className="text-slate-500 font-medium max-w-sm mx-auto mb-8">
-          Your payment has been processed successfully. Thank you for using Staffivaa.
+          Your platform fee payment has been processed successfully. You can now start assigning workers!
         </p>
         <div className="w-full max-w-xs space-y-3">
-          <Link to={`/corporate/requests/${id}`} className="flex w-full items-center justify-center rounded-[16px] bg-[#FFC107] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800]">
-            View Project
+          <Link to={`/vendor/jobs/${id}`} className="flex w-full items-center justify-center rounded-[16px] bg-[#FFC107] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800]">
+            View Job
           </Link>
-          <Link to="/corporate/requests" className="flex w-full items-center justify-center rounded-[16px] bg-slate-100 py-3.5 text-[15px] font-bold text-slate-700 transition hover:bg-slate-200">
+          <Link to="/vendor/jobs" className="flex w-full items-center justify-center rounded-[16px] bg-slate-100 py-3.5 text-[15px] font-bold text-slate-700 transition hover:bg-slate-200">
             Back to Dashboard
           </Link>
         </div>
@@ -117,11 +115,11 @@ export function CorporatePaymentPage() {
     <div className="min-h-screen bg-slate-50 pb-32">
       {/* Sticky Header */}
       <header className="bg-[#FFC107] px-4 pt-[max(0.5rem,env(safe-area-inset-top,0px))] pb-3 sticky top-0 z-30 shadow-sm flex items-center gap-3">
-        <Link to={`/corporate/requests/${id}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black/10 transition active:scale-95">
+        <Link to={`/vendor/jobs/${id}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black/10 transition active:scale-95">
           <ArrowLeft className="h-5 w-5 text-slate-900" />
         </Link>
         <h1 className="text-base font-extrabold text-slate-900">
-          {request.status === 'payment_pending' ? 'Advance Payment Checkout' : 'Final Settlement Checkout'}
+          Platform Fee Checkout
         </h1>
       </header>
 
@@ -131,20 +129,15 @@ export function CorporatePaymentPage() {
         <AppSurface className="rounded-[24px] p-5">
           <div className="flex items-center gap-2 mb-4">
             <FileText className="h-5 w-5 text-brand" />
-            <h2 className="text-[16px] font-extrabold text-slate-900">Project Summary</h2>
+            <h2 className="text-[16px] font-extrabold text-slate-900">Job Summary</h2>
           </div>
           
           <div className="space-y-3.5">
             <div className="flex justify-between items-start gap-4">
-              <span className="text-[13px] font-bold text-slate-500">Project Name</span>
-              <span className="text-[13px] font-bold text-slate-900 text-right">{request.projectId?.name || 'Maiyur'}</span>
-            </div>
-            
-            <div className="flex justify-between items-start gap-4">
-              <span className="text-[13px] font-bold text-slate-500">Vendor Partner</span>
+              <span className="text-[13px] font-bold text-slate-500">Corporate Client</span>
               <span className="text-[13px] font-bold text-slate-900 text-right flex items-center gap-1.5">
                 <Building2 className="h-3 w-3 text-slate-400" />
-                {allocation?.vendorId?.contractorProfile?.companyName || allocation?.vendorId?.fullName || 'Vendor'}
+                {request.clientId?.corporateProfile?.companyName || request.clientId?.fullName || 'Client'}
               </span>
             </div>
 
@@ -157,39 +150,10 @@ export function CorporatePaymentPage() {
               <span className="text-[13px] font-bold text-slate-500">Duration</span>
               <span className="text-[13px] font-bold text-slate-900 text-right flex items-center gap-1.5">
                 <Calendar className="h-3 w-3 text-slate-400" />
-                {formatDate(request.startDate)} to {formatDate(request.endDate || request.startDate)} ({summary.totalDurationInDays} Days)
+                {formatDate(request.startDate)} to {formatDate(request.endDate || request.startDate)}
               </span>
             </div>
           </div>
-        </AppSurface>
-
-        {/* Assigned Workers Details */}
-        <AppSurface className="rounded-[24px] p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Users className="h-5 w-5 text-slate-700" />
-            <h2 className="text-[16px] font-extrabold text-slate-900">Labour Costs</h2>
-          </div>
-          
-          {assignments.length === 0 ? (
-            <p className="text-[13px] text-slate-500 font-medium">No workers assigned.</p>
-          ) : (
-            <div className="space-y-4">
-              {assignments.map(a => (
-                <div key={a._id} className="flex justify-between items-start border-b border-slate-100 pb-3 last:border-0 last:pb-0">
-                  <div>
-                    <p className="text-[14px] font-bold text-slate-900">{a.labourId?.fullName || 'Worker'}</p>
-                    <p className="text-[12px] font-medium text-slate-500 capitalize">{a.categoryId?.name || 'Worker'}</p>
-                    <p className="text-[11px] font-medium text-slate-400 mt-0.5">
-                      ₹{a.perDayRate || 0}/day × {summary.totalDurationInDays} days
-                    </p>
-                  </div>
-                  <div className="text-[14px] font-black text-slate-900">
-                    ₹{(a.perDayRate || 0) * summary.totalDurationInDays}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </AppSurface>
 
         {/* Invoice Total */}
@@ -197,29 +161,21 @@ export function CorporatePaymentPage() {
           <div className="flex items-center gap-2 mb-6">
             <Banknote className="h-5 w-5 text-[#FFC107]" />
             <h2 className="text-[16px] font-extrabold text-white">
-              Platform Fee Details
+              Fee Details
             </h2>
           </div>
 
           <div className="space-y-3 mb-4">
-            <div className="flex justify-between items-center text-[14px]">
-              <span className="font-medium text-slate-300">Total Project Value</span>
-              <span className="font-bold text-white">₹{summary.totalLabourCost}</span>
-            </div>
             <div className="flex justify-between items-center text-[14px] text-yellow-400 font-bold">
               <span>Platform Fee</span>
-              <span>₹{summary.userPlatformFee}</span>
-            </div>
-            <div className="flex justify-between items-center text-[13px] text-slate-400">
-              <span>Platform GST ({summary.gstRate || 18}%)</span>
-              <span>₹{summary.gstAmount}</span>
+              <span>₹{request.labourPlatformFee}</span>
             </div>
           </div>
           
           <div className="pt-4 border-t border-slate-700/50 flex justify-between items-center">
             <span className="text-[16px] font-bold text-slate-200">Amount to Pay</span>
             <span className="text-[24px] font-black text-[#FFC107]">
-              ₹{summary.userPlatformFee + summary.gstAmount}
+              ₹{request.labourPlatformFee}
             </span>
           </div>
         </AppSurface>
@@ -230,13 +186,22 @@ export function CorporatePaymentPage() {
       <div className="fixed bottom-[calc(68px+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-slate-100 p-4 pb-4 shadow-[0_-10px_30px_-10px_rgba(0,0,0,0.05)] z-40">
         <button 
           onClick={handlePayment}
-          disabled={isCreatingOrder || isVerifying || (request.status === 'payment_pending' && request.advancePaymentStatus === 'paid') || (request.status !== 'payment_pending' && request.finalPaymentStatus === 'paid')}
+          disabled={isCreatingOrder || isVerifying || request.labourPaymentStatus === 'paid'}
           className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#FFC107] py-4 text-[16px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm disabled:opacity-50"
         >
-          {isCreatingOrder || isVerifying ? 'Processing...' : `Pay ₹${summary.userPlatformFee + summary.gstAmount} Securely`}
+          {isCreatingOrder || isVerifying ? (
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-900 border-t-transparent" />
+          ) : request.labourPaymentStatus === 'paid' ? (
+            <>
+              <CheckCircle2 className="h-5 w-5" /> Paid
+            </>
+          ) : (
+            <>
+              Pay ₹{request.labourPlatformFee} Now
+            </>
+          )}
         </button>
       </div>
-
     </div>
   )
 }

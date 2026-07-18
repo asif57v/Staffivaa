@@ -37,6 +37,7 @@ import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
 import { AppSecondaryButton } from '../../../components/app/AppSecondaryButton.jsx'
 import { AppSectionHeader } from '../../../components/app-ui/layout/AppSectionHeader.jsx'
 import { GlassPanel } from '../../../components/ui/GlassPanel.jsx'
+import { LabourProjectEarningsCard } from '../../../components/app/LabourProjectEarningsCard.jsx'
 import { useNow } from '../../../hooks/useNow.js'
 import { formatSecondsAsClock } from '../../../lib/formatDurationClock.js'
 import {
@@ -931,6 +932,15 @@ export function LabourHomeScreen({ user }) {
                 Open map
               </AppSecondaryButton>
             </GlassPanel>
+          </section>
+          </FadeInSection>
+        ) : null}
+
+        {/* Project Earnings Card */}
+        {todayJob?.projectId ? (
+          <FadeInSection>
+          <section aria-label="Project Earnings" className="mt-6">
+            <LabourProjectEarningsCard projectId={todayJob.projectId} />
           </section>
           </FadeInSection>
         ) : null}

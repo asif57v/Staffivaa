@@ -20,6 +20,8 @@ import adminSupportTicketRoutes from './adminSupportTicketRoutes.js'
 import adminSettingsRoutes from './adminSettingsRoutes.js'
 import adminMarketingRoutes from './adminMarketingRoutes.js'
 import marketingRoutes from './marketingRoutes.js'
+import payrollRoutes from './payrollRouter.js'
+
 const router = Router()
 
 router.use('/auth', authRoutes)
@@ -43,5 +45,6 @@ router.use('/admin/tickets', adminSupportTicketRoutes)
 router.use('/admin/settings', adminSettingsRoutes)
 router.use('/admin/marketing', adminMarketingRoutes)
 router.use('/marketing', marketingRoutes)
+router.use('/payroll', payrollRoutes)
 
 export default router

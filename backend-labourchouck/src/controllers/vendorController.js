@@ -22,6 +22,7 @@ import {
   validateVendorProfileForSubmit,
 } from '../utils/vendorVerification.js'
 import { emitToCorporate, emitToRole } from '../utils/socket.js'
+import { payrollService } from '../services/payroll.service.js'
 
 function requireApprovedVendor(user) {
   if (user.role !== USER_ROLES.CONTRACTOR) return 'Vendor account required'
@@ -234,7 +235,7 @@ export const listVendorJobs = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .populate({
       path: 'requestId',
-      select: 'reference status locationText startDate endDate lines scheduleType shiftStart shiftEnd clientId projectId advancePaymentStatus finalPaymentStatus createdAt',
+      select: 'reference status locationText startDate endDate lines scheduleType shiftStart shiftEnd clientId projectId advancePaymentStatus finalPaymentStatus createdAt labourPlatformFee labourPaymentStatus',
       populate: [
         {
           path: 'lines.categoryId',
@@ -242,7 +243,7 @@ export const listVendorJobs = asyncHandler(async (req, res) => {
         },
         {
           path: 'clientId',
-          select: 'fullName corporateProfile.companyName',
+          select: 'fullName corporateProfile.companyName phone',
         },
         {
           path: 'projectId',
@@ -453,6 +454,17 @@ export const assignWorkforce = asyncHandler(async (req, res) => {
   }))
 
   await Assignment.insertMany(assignmentDocs)
+
+  // Create WageAssignments in Payroll system
+  for (const assignment of assignments) {
+    await payrollService.setDailyWageRate({
+      vendorId: req.user._id,
+      labourId: assignment.labourId,
+      projectId: request.projectId,
+      dailyRate: Number(assignment.perDayRate),
+      setById: req.user._id,
+    })
+  }
 
   // Update allocation cost
   allocation.totalLabourCost = totalLabourCost

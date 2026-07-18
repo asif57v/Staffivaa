@@ -24,8 +24,8 @@ const UserBookingPricingSchema = new mongoose.Schema({
 
 const CorporatePricingSchema = new mongoose.Schema({
   platformFee: {
-    type: { type: String, enum: ['percentage', 'fixed', 'perWorker', 'perWorkerPerDay'], default: 'perWorkerPerDay' },
-    value: { type: Number, default: 25, min: 0 },
+    type: { type: String, enum: ['percentage', 'fixed', 'perWorker', 'perWorkerPerDay'], default: 'percentage' },
+    value: { type: Number, default: 5, min: 0 },
     minFee: { type: Number, default: 0, min: 0 },
     maxFee: { type: Number, default: 0, min: 0 }
   },

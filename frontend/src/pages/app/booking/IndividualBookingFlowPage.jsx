@@ -433,6 +433,10 @@ export function IndividualBookingFlowPage() {
       setFormError('Add your work location to continue.')
       return false
     }
+    if (!draft.lat || !draft.lng) {
+      setFormError('Please use the "Locate me" button or select an exact address from the map dropdown so we can find workers near you.')
+      return false
+    }
     if (draft.bookingType === 'scheduled') {
       if (!draft.serviceDate) {
         setFormError('Choose a date for scheduled booking.')
@@ -695,7 +699,7 @@ export function IndividualBookingFlowPage() {
               >
                 <AppTextInput
                   value={draft.address || ''}
-                  onChange={(e) => syncDraft({ address: e.target.value })}
+                  onChange={(e) => syncDraft({ address: e.target.value, lat: undefined, lng: undefined })}
                   placeholder="House, street, area, city"
                   leftSlot={<MapPin className="h-4 w-4" aria-hidden />}
                 />
@@ -703,7 +707,7 @@ export function IndividualBookingFlowPage() {
             ) : (
               <AppTextInput
                 value={draft.address || ''}
-                onChange={(e) => syncDraft({ address: e.target.value })}
+                onChange={(e) => syncDraft({ address: e.target.value, lat: undefined, lng: undefined })}
                 placeholder="House, street, area, city"
                 leftSlot={<MapPin className="h-4 w-4" aria-hidden />}
               />

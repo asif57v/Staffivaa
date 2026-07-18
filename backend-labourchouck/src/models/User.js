@@ -83,6 +83,9 @@ const labourProfileSchema = new mongoose.Schema(
       enum: ['available', 'busy', 'offline'],
       default: 'available',
     },
+    workRadius: { type: Number, default: 15 }, // Default radius in km
+    locationLat: { type: Number },
+    locationLng: { type: Number },
   },
   { _id: false },
 )

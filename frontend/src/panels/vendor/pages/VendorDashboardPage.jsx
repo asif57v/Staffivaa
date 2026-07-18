@@ -141,20 +141,19 @@ export function VendorDashboardPage() {
           </div>
       </section>
 
-      {/* Stats Grid */}
-      <div className="relative z-10 mt-6 px-4 grid grid-cols-3 gap-3">
+      <div className="relative z-10 mt-5 px-4 grid grid-cols-3 gap-2">
         {[
           { label: 'CREW', value: isLoading ? '—' : stats.crewCount ?? 0, icon: Users, tone: 'text-indigo-500 bg-indigo-50', sub: 'Linked' },
           { label: 'OPEN', value: isLoading ? '—' : stats.openJobs ?? 0, icon: ClipboardList, tone: 'text-orange-500 bg-orange-50', sub: 'Jobs' },
           { label: 'ACTIVE', value: isLoading ? '—' : stats.activeAssignments ?? 0, icon: Hammer, tone: 'text-emerald-500 bg-emerald-50', sub: 'Deployments' },
         ].map((stat, i) => (
-          <div key={i} className="flex flex-col items-center justify-center rounded-2xl bg-white px-2 py-4 shadow-[0_2px_12px_rgb(0,0,0,0.03)] border-transparent">
-            <span className={`mb-3 flex h-10 w-10 items-center justify-center rounded-full ${stat.tone}`}>
-              <stat.icon className="h-5 w-5" />
+          <div key={i} className="flex flex-col items-center justify-center rounded-lg bg-white px-2 py-2 shadow-[0_2px_12px_rgb(0,0,0,0.03)] border-transparent">
+            <span className={`mb-1.5 flex h-6 w-6 items-center justify-center rounded-full ${stat.tone}`}>
+              <stat.icon className="h-[14px] w-[14px]" />
             </span>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-900 text-center">{stat.label}</p>
-            <p className="mt-1 text-[22px] font-black text-slate-900">{stat.value}</p>
-            <p className="mt-1 text-[11px] font-medium text-slate-500 text-center truncate w-full">{stat.sub}</p>
+            <p className="text-[8px] font-bold uppercase tracking-wider text-slate-900 text-center">{stat.label}</p>
+            <p className="text-[16px] font-black leading-none text-slate-900 my-0.5">{stat.value}</p>
+            <p className="text-[9px] font-medium text-slate-500 text-center truncate w-full">{stat.sub}</p>
           </div>
         ))}
       </div>
@@ -188,8 +187,8 @@ export function VendorDashboardPage() {
                   <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-100 transition active:scale-[0.98]">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-3">
-                        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand">
-                          <FileText className="h-5 w-5" />
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-[0_8px_16px_-6px_rgba(79,70,229,0.5)] ring-1 ring-white/20">
+                          <FileText className="h-6 w-6" strokeWidth={1.75} />
                         </span>
                         <div>
                           <p className="text-sm font-extrabold text-slate-900">{req.clientId?.corporateProfile?.companyName || req.clientId?.fullName || 'Corporate Client'}</p>
@@ -197,7 +196,7 @@ export function VendorDashboardPage() {
                         </div>
                       </div>
                       <span className="rounded-md bg-brand/10 px-2 py-1 text-[9px] font-extrabold uppercase tracking-wide text-brand">
-                        {req.status.replace('_', ' ')}
+                        {String(req.status || '').replace('_', ' ')}
                       </span>
                     </div>
                     <div className="mt-4 flex gap-2">

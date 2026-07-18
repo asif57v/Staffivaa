@@ -248,15 +248,11 @@ export function VendorJobDetailPage() {
                 <span>Quoted Total</span>
                 <span>₹{quotation.grandTotal.toLocaleString()}</span>
               </div>
-              {quotation.status === 'approved' && (
+              {quotation.status === 'approved' && req?.labourPlatformFee !== undefined && (
                 <div className="pt-2 mt-2 border-t border-slate-100 border-dashed space-y-1.5">
-                  <div className="flex justify-between text-[12px] font-bold text-emerald-600">
-                    <span>{req?.advancePaymentStatus === 'paid' ? `Advance Received (${advancePercentage}%)` : `Advance Pending (${advancePercentage}%)`}</span>
-                    <span>₹{Math.round(quotation.grandTotal * (advancePercentage / 100)).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-[12px] font-bold text-amber-600">
-                    <span>{req?.finalPaymentStatus === 'paid' ? 'Balance Paid' : 'Remaining Balance'}</span>
-                    <span>₹{Math.round(quotation.grandTotal * (1 - (advancePercentage / 100))).toLocaleString()}</span>
+                  <div className={`flex justify-between text-[12px] font-bold ${req?.labourPaymentStatus === 'paid' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    <span>{req?.labourPaymentStatus === 'paid' ? 'Platform Fee Paid' : 'Platform Fee Payable'}</span>
+                    <span>₹{req?.labourPlatformFee.toLocaleString()}</span>
                   </div>
                 </div>
               )}
@@ -382,9 +378,15 @@ export function VendorJobDetailPage() {
               <p className="text-[15px] font-black text-slate-900">
                 {companyName}
               </p>
-              <p className="text-[13px] font-medium text-slate-500 mt-1">
-                {req.clientId?.phone || 'Client Phone'}
-              </p>
+              {['project_active', 'in_progress', 'completed', 'settlement_pending', 'settlement_completed'].includes(req?.status) ? (
+                <p className="text-[13px] font-medium text-emerald-600 mt-1 flex items-center gap-1.5">
+                  <Phone className="h-3.5 w-3.5" /> {req.clientId?.phone || 'Client Phone'}
+                </p>
+              ) : (
+                <p className="text-[12px] font-bold text-amber-500 mt-1 flex items-center gap-1.5">
+                  <Phone className="h-3.5 w-3.5" /> Number hidden until fee paid
+                </p>
+              )}
               <p className="text-[12px] text-slate-500 mt-1.5 leading-relaxed">
                 {req.clientId?.corporateProfile?.registeredAddress || 'No address provided'}
               </p>
@@ -436,7 +438,6 @@ export function VendorJobDetailPage() {
             )}
           </div>
         )}
-
       </div>
 
       {/* Bottom Actions */}
@@ -456,6 +457,10 @@ export function VendorJobDetailPage() {
         ) : quotation && ['draft', 'submitted', 'under_review', 'revision_requested', 'revised'].includes(quotation.status) ? (
           <button onClick={() => setShowEditor(true)} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
             <FileText className="h-4 w-4" /> {quotation.status === 'revision_requested' ? 'Edit & Resubmit Quotation' : 'Edit Quotation'}
+          </button>
+        ) : (req?.status === 'platform_fee_pending' || req?.status === 'payment_pending') && quotation?.status === 'approved' && req?.labourPaymentStatus !== 'paid' ? (
+          <button onClick={() => navigate(`/vendor/jobs/${id}/payment`)} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
+            Pay Platform Fee
           </button>
         ) : null}
         

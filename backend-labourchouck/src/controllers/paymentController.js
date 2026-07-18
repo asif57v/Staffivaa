@@ -33,7 +33,7 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
   }
   
-  const isLabour = req.user.role === USER_ROLES.LABOUR;
+  const isLabour = req.user.role === USER_ROLES.LABOUR || req.user.role === USER_ROLES.CONTRACTOR;
   const isClient = String(request.clientId._id || request.clientId) === String(req.user._id);
 
   if (!isLabour && !isClient && req.user.role !== USER_ROLES.ADMIN) {
@@ -57,38 +57,16 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
     }
   } else {
     if (request.sourceType === 'corporate') {
-      const { SystemPricing } = await import('../models/SystemPricing.js')
-      const { Allocation } = await import('../models/Allocation.js')
-      const { ExtraWorkRequest } = await import('../models/ExtraWorkRequest.js')
-
-      const pricing = await SystemPricing.findOne().lean()
-      const advancePercent = pricing?.corporate?.advancePercentage || 30
-
-      const allocation = await Allocation.findOne({ requestId: request._id }).lean()
-      const extraWorkRequests = await ExtraWorkRequest.find({ bookingId: request._id, status: 'accepted' }).lean()
-
-      let extraCost = 0
-      extraWorkRequests.forEach(ew => {
-        extraCost += ew.revisedAmount != null ? ew.revisedAmount : ew.extraAmount
-      })
-
-      const totalLabourCost = allocation?.totalLabourCost || 0
       const userPlatformFee = request.userPlatformFee !== undefined ? request.userPlatformFee : 0
       const convenienceFee = request.convenienceFee !== undefined ? request.convenienceFee : 0
       const gstRate = request.userGstRate !== undefined ? request.userGstRate : 18
       const gstAmount = Math.round((userPlatformFee * gstRate) / 100)
-      const grandTotal = totalLabourCost + userPlatformFee + gstAmount + convenienceFee + extraCost
 
-      if (request.status === 'payment_pending') {
-        if (request.advancePaymentStatus === 'paid') {
-          return sendError(res, { message: 'Advance payment already completed', statusCode: HTTP_STATUS.BAD_REQUEST })
+      if (request.status === 'platform_fee_pending' || request.status === 'payment_pending') {
+        if (request.userPaymentStatus === 'paid') {
+          return sendError(res, { message: 'Platform fee already completed', statusCode: HTTP_STATUS.BAD_REQUEST })
         }
-        totalAmount = Math.round((grandTotal * advancePercent) / 100)
-      } else if (request.status === 'completed' || request.status === 'settlement_pending') {
-        if (request.finalPaymentStatus === 'paid') {
-          return sendError(res, { message: 'Final payment already completed', statusCode: HTTP_STATUS.BAD_REQUEST })
-        }
-        totalAmount = grandTotal - Math.round((grandTotal * advancePercent) / 100)
+        totalAmount = userPlatformFee + gstAmount + convenienceFee
       } else {
         return sendError(res, { message: `Payment is not due or requested yet. Current status: ${request.status}`, statusCode: HTTP_STATUS.BAD_REQUEST })
       }
@@ -149,162 +127,18 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Payment verification failed', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
 
-  if (request.sourceType === 'corporate') {
-    if (request.status === 'payment_pending') {
-      request.advancePaymentStatus = 'paid';
-      request.status = 'advance_paid';
-      const startDate = new Date(request.startDate);
-      if (new Date() >= startDate) {
-        request.status = 'project_active';
-      }
-
-      // Credit advance share to vendor
-      try {
-        const { SystemPricing } = await import('../models/SystemPricing.js')
-        const pricing = await SystemPricing.findOne().lean()
-        const advancePercent = pricing?.corporate?.advancePercentage || 30
-
-        const { Allocation } = await import('../models/Allocation.js')
-        const allocation = await Allocation.findOne({ requestId: request._id })
-
-        if (allocation && allocation.vendorId) {
-          const totalLabourCost = allocation.totalLabourCost || 0
-          const vendorAdvance = Math.round((totalLabourCost * advancePercent) / 100)
-
-          allocation.vendorAdvancePaidAmount = vendorAdvance
-          await allocation.save()
-
-          const { Settlement } = await import('../models/Settlement.js')
-          await Settlement.create({
-            reference: `STL-ADV-${Date.now()}`,
-            requestId: request._id,
-            vendorId: allocation.vendorId,
-            clientId: request.clientId,
-            projectId: request.projectId,
-            milestone: 'advance',
-            status: 'settlement_completed',
-            financials: {
-              grossEarnings: vendorAdvance,
-              platformFee: 0,
-              gst: 0,
-              otherDeductions: 0,
-              netSettlement: vendorAdvance
-            }
-          })
-
-          const { User } = await import('../models/User.js')
-          await User.findByIdAndUpdate(allocation.vendorId, {
-            $inc: { walletBalance: vendorAdvance }
-          })
-
-          const { WalletTransaction } = await import('../models/WalletTransaction.js')
-          await WalletTransaction.create({
-            transactionId: `TXN-ADV-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-            bookingId: request._id,
-            payerId: request.clientId,
-            payerName: req.user.fullName || 'Corporate Client',
-            payerType: 'corporate',
-            labourId: allocation.vendorId,
-            type: 'Settlement',
-            source: 'Project Advance Credit (Vendor Share)',
-            amount: vendorAdvance,
-            status: 'Completed'
-          })
-        }
-      } catch (err) {
-        console.error('[verifyRazorpayPayment] Vendor advance credit failed:', err.message)
-      }
-
-      emitRequestStatusUpdate(request._id.toString(), { requestStatus: request.status });
-    } else if (request.status === 'completed' || request.status === 'settlement_pending') {
-      request.finalPaymentStatus = 'paid';
-      request.status = 'settlement_completed';
-      
-      try {
-        const { SystemPricing } = await import('../models/SystemPricing.js')
-        const pricing = await SystemPricing.findOne().lean()
-        const commissionConfig = pricing?.vendor?.platformCommission || { type: 'percentage', value: 2 }
-
-        const { Allocation } = await import('../models/Allocation.js')
-        const allocation = await Allocation.findOne({ requestId: request._id })
-
-        const totalLabourCost = allocation?.totalLabourCost || 0
-
-        let vendorPlatformFee = 0
-        if (commissionConfig.type === 'percentage') {
-          vendorPlatformFee = Math.round((totalLabourCost * (commissionConfig.value ?? 2)) / 100)
-        } else {
-          vendorPlatformFee = commissionConfig.value ?? 20
-        }
-
-        const { ExtraWorkRequest } = await import('../models/ExtraWorkRequest.js')
-        const extraWorkRequests = await ExtraWorkRequest.find({ bookingId: request._id, status: 'accepted' }).lean()
-        let extraCost = 0
-        extraWorkRequests.forEach(ew => {
-          extraCost += ew.revisedAmount != null ? ew.revisedAmount : ew.extraAmount
-        })
-
-        const vendorAdvancePaidAmount = allocation?.vendorAdvancePaidAmount || 0
-        const netAmountToVendor = totalLabourCost + extraCost - vendorPlatformFee - vendorAdvancePaidAmount
-
-        if (allocation && allocation.vendorId) {
-          const { Settlement } = await import('../models/Settlement.js')
-          await Settlement.create({
-            reference: `STL-FIN-${Date.now()}`,
-            requestId: request._id,
-            vendorId: allocation.vendorId,
-            clientId: request.clientId,
-            projectId: request.projectId,
-            milestone: 'final',
-            status: 'settlement_completed',
-            financials: {
-              grossEarnings: totalLabourCost + extraCost,
-              platformFee: vendorPlatformFee,
-              gst: 0,
-              otherDeductions: vendorAdvancePaidAmount,
-              netSettlement: netAmountToVendor
-            }
-          })
-
-          const { User } = await import('../models/User.js')
-          await User.findByIdAndUpdate(allocation.vendorId, {
-            $inc: { walletBalance: netAmountToVendor }
-          })
-
-          const { WalletTransaction } = await import('../models/WalletTransaction.js')
-          await WalletTransaction.create({
-            transactionId: `TXN-VND-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-            bookingId: request._id,
-            payerId: request.clientId,
-            payerName: req.user.fullName || 'Corporate Client',
-            payerType: 'corporate',
-            labourId: allocation.vendorId,
-            type: 'Settlement',
-            source: 'Project Final Settlement Credit (Vendor Share)',
-            amount: netAmountToVendor,
-            status: 'Completed'
-          })
-        }
-      } catch (err) {
-        console.error('[verifyRazorpayPayment] Vendor settlement failed:', err.message)
-      }
-      
-      emitRequestStatusUpdate(request._id.toString(), { requestStatus: request.status });
-    }
+  if (isLabourOrder) {
+    request.labourPaymentStatus = 'paid';
+  } else if (isUserOrder) {
+    request.userPaymentStatus = 'paid';
   } else {
-    if (isLabourOrder) {
-      request.labourPaymentStatus = 'paid';
-    } else if (isUserOrder) {
-      request.userPaymentStatus = 'paid';
-    } else {
-      request.paymentStatus = 'paid';
-    }
-    
-    // Overall status check
-    if (request.userPaymentStatus === 'paid' && request.labourPaymentStatus === 'paid') {
-      request.status = 'confirmed'; 
-      emitRequestStatusUpdate(request._id.toString(), { requestStatus: request.status })
-    }
+    request.paymentStatus = 'paid';
+  }
+  
+  // Overall status check
+  if (request.userPaymentStatus === 'paid' && request.labourPaymentStatus === 'paid') {
+    request.status = request.sourceType === 'corporate' ? 'project_active' : 'confirmed'; 
+    emitRequestStatusUpdate(request._id.toString(), { requestStatus: request.status })
   }
 
   request.razorpayPaymentId = razorpay_payment_id
@@ -354,8 +188,8 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
           totalRevenue: amountPaid,
           totalCredits: amountPaid,
           totalPlatformRevenue: amountPaid,
-          pendingSettlements: isUserOrder ? amountPaid : 0,
-          platformEarnings: isLabourOrder ? amountPaid : 0,
+          pendingSettlements: (isUserOrder && request.sourceType !== 'corporate') ? amountPaid : 0,
+          platformEarnings: (isLabourOrder || request.sourceType === 'corporate') ? amountPaid : 0,
         }
       }
 

@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { LogOut, Menu, Sparkles, X, MapPin, ChevronDown, Bell } from 'lucide-react'
+import { LogOut, Menu, Sparkles, X, MapPin, ChevronDown, Bell, ShoppingCart, MoreVertical } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth.js'
 import { useDispatch } from 'react-redux'
 import { workforceApi } from '../store/api/workforceApi.js'
@@ -13,7 +13,7 @@ import { GlassPanel } from '../components/ui/GlassPanel.jsx'
 import { AppBottomNav } from '../components/app-ui/navigation/AppBottomNav.jsx'
 import { AppBadge } from '../components/app-ui/data-display/AppBadge.jsx'
 import { adminInitials } from '../lib/formatAdminLastLogin.js'
-import { readAppUserLocation } from '../lib/appUserLocationStorage.js'
+import { readAppUserLocation, parseAppUserLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { useVendorNotificationCount } from '../hooks/useVendorNotificationCount.js'
 import { connectSocket } from '../services/socket.js'
@@ -177,6 +177,7 @@ export function PanelShell({
   const displayCount = panelId === 'vendor' ? notifCounts.total : 3
 
   const hideShellHeader =
+    pathname.includes('/notifications') ||
     pathname.includes('/profile') ||
     pathname.includes('/support') ||
     pathname.endsWith('/new') ||
@@ -221,17 +222,12 @@ export function PanelShell({
     return () => window.removeEventListener('lc-app-user-location-changed', onLoc)
   }, [])
 
-  const { individualLocationTitle } = useMemo(() => {
-    const addr = appLocation?.address?.trim()
-    const la = appLocation?.lat
-    const ln = appLocation?.lng
-    if (addr) {
-      return { individualLocationTitle: addr }
+  const { individualLocationTitle, individualLocationSubtitle } = useMemo(() => {
+    const parsed = parseAppUserLocation(appLocation)
+    return {
+      individualLocationTitle: parsed.area,
+      individualLocationSubtitle: parsed.detail,
     }
-    if (la != null && ln != null) {
-      return { individualLocationTitle: 'Current location' }
-    }
-    return { individualLocationTitle: 'Set your location' }
   }, [appLocation])
 
   return (
@@ -332,52 +328,75 @@ export function PanelShell({
 
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-lg flex-col">
         {!hideShellHeader ? (
-          <header className={`sticky top-0 z-30 px-4 pt-3 pb-3 sm:px-5 transition-all duration-300 ease-in-out ${
+          <header className={`sticky top-0 z-30 transition-all duration-300 ease-in-out ${
             scrollData.y > 10
-              ? 'bg-[#FFC107]/90 backdrop-blur-md shadow-[0_4px_20px_-10px_rgba(0,0,0,0.3)]'
-              : 'bg-[#FFC107] shadow-none'
+              ? 'bg-[#FFD100]/95 backdrop-blur-md shadow-[0_4px_20px_-10px_rgba(0,0,0,0.3)]'
+              : 'bg-[#FFD100] shadow-sm'
           } ${
             scrollData.direction === 'down' && scrollData.y > 50
               ? '-translate-y-full opacity-0 pointer-events-none'
               : 'translate-y-0 opacity-100 pointer-events-auto'
           }`}>
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3 px-4 pb-1.5 pt-3 min-h-[56px]">
               <button
                 type="button"
                 onClick={() => setLocationModalOpen(true)}
-                className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none transition active:opacity-70"
+                className="flex items-center gap-2 min-w-0 flex-1 text-left outline-none transition active:opacity-70 group"
               >
-                <MapPin className="h-5 w-5 shrink-0 text-slate-900" fill="currentColor" />
-                <div className="flex flex-col min-w-0">
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-800/80 mb-0.5">Location</span>
-                  <div className="flex w-full items-center gap-1">
-                    <span className="truncate text-[13px] font-extrabold tracking-tight text-slate-900">
-                      {individualLocationTitle}
-                    </span>
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-900" />
-                  </div>
+                <div className="flex shrink-0 items-center justify-center">
+                  <MapPin className="h-[24px] w-[24px] text-slate-900" strokeWidth={2} />
                 </div>
+                
+                <AnimatePresence mode="popLayout">
+                  <motion.div
+                    key={individualLocationTitle + individualLocationSubtitle}
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex flex-col items-start min-w-0 w-full"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0 w-full">
+                      <span className="truncate min-w-0 text-[17px] font-extrabold tracking-tight text-[#111827]">
+                        {individualLocationTitle}
+                      </span>
+                      <ChevronDown className="h-4 w-4 shrink-0 text-slate-600 transition-transform group-hover:translate-y-0.5" strokeWidth={2.5} />
+                    </div>
+                    <span className="truncate min-w-0 w-full text-[10px] font-semibold tracking-wider uppercase text-slate-600">
+                      {individualLocationSubtitle}
+                    </span>
+                  </motion.div>
+                </AnimatePresence>
               </button>
 
               <div className="flex shrink-0 items-center gap-2">
+                {panelId === 'vendor' ? (
+                  <button
+                    type="button"
+                    onClick={() => setDrawerOpen(true)}
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
+                    aria-label="Menu"
+                  >
+                    <MoreVertical className="h-[18px] w-[18px]" />
+                  </button>
+                ) : (
+                  <Link
+                    to="/app/buildmart"
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
+                    aria-label="BuildMart Cart"
+                  >
+                    <ShoppingCart className="h-[18px] w-[18px]" />
+                  </Link>
+                )}
                 <button
                   type="button"
-                  onClick={() => setDrawerOpen(true)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-800 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.1)] transition hover:bg-slate-50 active:scale-95"
-                  aria-label="Open menu"
-                >
-                  <Menu className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-800 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.1)] transition hover:bg-slate-50 active:scale-95"
+                  onClick={() => navigate(`/${panelId === 'app' ? 'app/labour' : panelId}/notifications`)}
+                  className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
                   aria-label="Notifications"
                 >
-                  <Bell className="h-4 w-4" />
+                  <Bell className="h-[18px] w-[18px]" />
                   {displayCount > 0 && (
-                    <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white ring-2 ring-[#FFC107]">
-                      {displayCount}
-                    </span>
+                    <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-red-500 ring-2 ring-white" />
                   )}
                 </button>
               </div>

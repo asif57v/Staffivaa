@@ -199,9 +199,31 @@ export const respondToQuotationCorporate = asyncHandler(async (req, res) => {
   }
 
   if (action === 'approve') {
+    const pricing = await SystemPricing.findOne().lean()
+    
+    // Calculate platform fees based on pricing type (fixed or percentage)
+    const corporateFeeType = pricing?.corporate?.platformFee?.type || 'percentage'
+    const corporateFeeValue = pricing?.corporate?.platformFee?.value || 5
+    const vendorFeeType = pricing?.vendor?.platformCommission?.type || 'percentage'
+    const vendorFeeValue = pricing?.vendor?.platformCommission?.value || 2
+    
+    const corporateFee = corporateFeeType === 'fixed' 
+      ? corporateFeeValue 
+      : Math.round((quotation.grandTotal * corporateFeeValue) / 100)
+      
+    const vendorFee = vendorFeeType === 'fixed'
+      ? vendorFeeValue
+      : Math.round((quotation.grandTotal * vendorFeeValue) / 100)
+    
     quotation.status = 'approved'
-    request.status = 'payment_pending' // update request status to payment_pending
-    request.labourCharge = quotation.grandTotal // set labourCharge as quotation grandTotal
+    
+    request.status = 'platform_fee_pending'
+    request.labourCharge = quotation.grandTotal
+    request.userPlatformFee = corporateFee
+    request.labourPlatformFee = vendorFee
+    request.userPaymentStatus = 'pending'
+    request.labourPaymentStatus = 'pending'
+    
     await request.save()
   } else if (action === 'reject') {
     quotation.status = 'rejected'
@@ -264,9 +286,20 @@ export const approveQuotation = asyncHandler(async (req, res) => {
   quotation.status = 'approved'
   await quotation.save()
 
+  const pricing = await SystemPricing.findOne().lean()
+  const corporateFeePercent = pricing?.corporate?.platformFee?.value || 5
+  const vendorFeePercent = pricing?.vendor?.platformCommission?.value || 2
+  
+  const corporateFee = Math.round((quotation.grandTotal * corporateFeePercent) / 100)
+  const vendorFee = Math.round((quotation.grandTotal * vendorFeePercent) / 100)
+
   const request = await WorkforceRequest.findByIdAndUpdate(quotation.requestId, {
-    status: 'payment_pending',
-    labourCharge: quotation.grandTotal
+    status: 'platform_fee_pending',
+    labourCharge: quotation.grandTotal,
+    userPlatformFee: corporateFee,
+    labourPlatformFee: vendorFee,
+    userPaymentStatus: 'pending',
+    labourPaymentStatus: 'pending'
   }, { new: true })
 
   // Emit updates

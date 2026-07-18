@@ -2,7 +2,7 @@ import { Loader2 } from 'lucide-react'
 
 const variants = {
   primary:
-    'text-slate-900 bg-[#F4CC34] hover:brightness-[1.06] shadow-[0_12px_32px_-12px_rgba(244,204,52,0.35)] rounded-xl disabled:shadow-none',
+    'text-slate-900 bg-gradient-to-b from-[#FFE76B] to-[#F4CC34] hover:brightness-[1.05] shadow-[0_8px_16px_-6px_rgba(244,204,52,0.4)] rounded-xl disabled:shadow-none ring-1 ring-inset ring-white/40',
   secondary:
     'text-white bg-[#0f172a] hover:brightness-[1.06] shadow-[0_12px_32px_-12px_rgba(15,23,42,0.35)] rounded-xl',
   ghost: 'border border-transparent bg-transparent text-[#0f172a] hover:bg-slate-50 rounded-xl',

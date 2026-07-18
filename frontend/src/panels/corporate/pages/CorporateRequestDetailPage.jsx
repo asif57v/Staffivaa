@@ -17,12 +17,11 @@ const TIMELINE_STEPS = [
   { label: 'Quotation Submitted', statusKey: 'quote_submitted' },
   { label: 'Corporate Reviewing Quote', statusKey: 'quote_review' },
   { label: 'Quote Approved', statusKey: 'quote_approved' },
-  { label: 'Advance Payment', statusKey: 'advance_payment' },
+  { label: 'Platform Fee / Payment', statusKey: 'advance_payment' },
   { label: 'Project Active', statusKey: 'project_active' },
   { label: 'Workers Check-In', statusKey: 'check_in' },
   { label: 'Attendance Running', statusKey: 'attendance' },
   { label: 'Project Completed', statusKey: 'completed' },
-  { label: 'Final Settlement', statusKey: 'settlement' },
 ]
 
 const getTimelineStepStatus = (stepKey, request, quotation, assignments) => {
@@ -52,7 +51,7 @@ const getTimelineStepStatus = (stepKey, request, quotation, assignments) => {
       return 'pending'
     case 'advance_payment':
       if (['advance_paid', 'project_active', 'attendance_tracking', 'completed', 'settlement_pending', 'settlement_completed'].includes(requestStatus)) return 'completed'
-      if (requestStatus === 'payment_pending') return 'active'
+      if (['payment_pending', 'platform_fee_pending'].includes(requestStatus)) return 'active'
       return 'pending'
     case 'project_active':
       if (['project_active', 'attendance_tracking', 'completed', 'settlement_pending', 'settlement_completed'].includes(requestStatus)) return 'completed'
@@ -67,10 +66,6 @@ const getTimelineStepStatus = (stepKey, request, quotation, assignments) => {
       return 'pending'
     case 'completed':
       if (['completed', 'settlement_pending', 'settlement_completed'].includes(requestStatus)) return 'completed'
-      return 'pending'
-    case 'settlement':
-      if (requestStatus === 'settlement_completed') return 'completed'
-      if (requestStatus === 'settlement_pending') return 'active'
       return 'pending'
     default:
       return 'pending'
@@ -443,8 +438,15 @@ export function CorporateRequestDetailPage() {
           
           {showTimeline && (
             <div className="mt-4 pt-4 border-t border-slate-100 pl-2 space-y-4">
-              {TIMELINE_STEPS.map((step, idx) => {
-                const status = getTimelineStepStatus(step.statusKey, request, quotation, assignments)
+              {TIMELINE_STEPS
+                .map((step) => ({ ...step, computedStatus: getTimelineStepStatus(step.statusKey, request, quotation, assignments) }))
+                .filter((step, idx, arr) => {
+                  if (step.computedStatus !== 'pending') return true;
+                  const firstPendingIdx = arr.findIndex(s => s.computedStatus === 'pending');
+                  return idx === firstPendingIdx; // only show the first pending step
+                })
+                .map((step, idx, arr) => {
+                const status = step.computedStatus
                 let badgeColor = 'bg-slate-100 text-slate-400'
                 let lineCol = 'bg-slate-100'
                 let bullet = <span className="h-2 w-2 rounded-full bg-slate-300" />
@@ -462,7 +464,7 @@ export function CorporateRequestDetailPage() {
                 return (
                   <div key={idx} className="flex gap-3 items-start relative">
                     {/* Bullet line */}
-                    {idx < TIMELINE_STEPS.length - 1 && (
+                    {idx < arr.length - 1 && (
                       <div className={`absolute left-4 top-8 w-[2px] h-6 -ml-[1px] ${lineCol}`} />
                     )}
                     <div className={`h-8 w-8 rounded-full border flex items-center justify-center shrink-0 ${status === 'completed' ? 'bg-emerald-500 border-emerald-500' : 'bg-white border-slate-200'}`}>
@@ -514,6 +516,17 @@ export function CorporateRequestDetailPage() {
                   <Award className="h-3 w-3 text-indigo-500 shrink-0" />
                   <span>{quotation.vendorId?.contractorProfile?.experience || '5+'} Years Exp.</span>
                 </div>
+                {['project_active', 'in_progress', 'completed', 'settlement_pending', 'settlement_completed'].includes(request.status) ? (
+                  <div className="flex items-center gap-1.5 text-[12px] text-emerald-600 font-bold mt-1">
+                    <Phone className="h-3.5 w-3.5" />
+                    <span>{quotation.vendorId?.phone || '+91-XXXXXXXXXX'}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-[11px] text-amber-500 font-bold mt-1">
+                    <Phone className="h-3.5 w-3.5" />
+                    <span>Number hidden until fee paid</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -556,41 +569,47 @@ export function CorporateRequestDetailPage() {
                 <span className="font-extrabold text-slate-900">₹{quotation.gst.toLocaleString()}</span>
               </div>
 
-              {paymentSummary && paymentSummary.userPlatformFee > 0 && (
-                <>
-                  <div className="flex justify-between items-center py-1 border-t border-slate-100 pt-2">
-                    <span className="font-bold text-slate-500">Platform Convenience Fee</span>
-                    <span className="font-extrabold text-slate-900">₹{paymentSummary.userPlatformFee.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1">
-                    <span className="font-bold text-slate-500">Platform GST ({paymentSummary.gstRate}%)</span>
-                    <span className="font-extrabold text-slate-900">₹{paymentSummary.gstAmount.toLocaleString()}</span>
-                  </div>
-                </>
-              )}
-
-              {/* Grand Total box */}
+              {/* Grand Total box (Only Vendor part) */}
               <div className="flex justify-between items-center bg-slate-900 p-4 rounded-2xl text-white font-extrabold mt-3 shadow-sm border border-slate-900">
                 <span className="text-slate-300 text-[13px]">Total Project Value</span>
-                <span className="text-[18px]">₹{(paymentSummary ? paymentSummary.grandTotal : quotation.grandTotal).toLocaleString()}</span>
+                <span className="text-[18px]">₹{quotation.grandTotal.toLocaleString()}</span>
               </div>
+
+              {paymentSummary && paymentSummary.userPlatformFee > 0 && (
+                <div className="mt-4 pt-4 border-t border-slate-200 border-dashed space-y-2.5">
+                  <div className="flex justify-between items-center py-1">
+                    <span className="font-bold text-amber-600">Platform Convenience Fee</span>
+                    <span className="font-extrabold text-amber-700">₹{paymentSummary.userPlatformFee.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1">
+                    <span className="font-bold text-amber-600">Platform GST ({paymentSummary.gstRate}%)</span>
+                    <span className="font-extrabold text-amber-700">₹{paymentSummary.gstAmount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center bg-amber-50 p-3 rounded-xl text-amber-900 font-extrabold mt-2 border border-amber-200">
+                    <span className="text-[13px]">Total Platform Payable</span>
+                    <span className="text-[16px]">₹{(paymentSummary.userPlatformFee + paymentSummary.gstAmount).toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Estimated Advance & Remaining breakdowns */}
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div className="bg-emerald-50/50 border border-emerald-100 p-3 rounded-2xl text-center">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Estimated Advance ({paymentSummary?.advancePercentage || 30}%)</p>
-                <p className="text-base font-black text-emerald-800 mt-1">
-                  ₹{(paymentSummary ? paymentSummary.advanceAmount : Math.round(quotation.grandTotal * 0.3)).toLocaleString()}
-                </p>
+            {/* Platform Fee Status */}
+            {((request.status === 'platform_fee_pending' || request.status === 'payment_pending' || request.userPlatformFee > 0) && quotation?.status === 'approved') && (
+              <div className="grid grid-cols-1 gap-3 pt-1">
+                <div className={`border p-3 rounded-2xl text-center transition-colors ${request.userPaymentStatus === 'paid' ? 'bg-emerald-50 border-emerald-300' : 'bg-amber-50/50 border-amber-200'}`}>
+                  <p className={`text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 ${request.userPaymentStatus === 'paid' ? 'text-emerald-700' : 'text-amber-600'}`}>
+                    {request.userPaymentStatus === 'paid' && <CheckCircle2 className="h-3.5 w-3.5" />}
+                    {request.userPaymentStatus === 'paid' ? 'Platform Fee Paid' : 'Platform Fee Payable'}
+                  </p>
+                  <p className={`text-xl font-black mt-1 ${request.userPaymentStatus === 'paid' ? 'text-emerald-800' : 'text-amber-800'}`}>
+                    ₹{request.userPlatformFee ? request.userPlatformFee.toLocaleString() : (paymentSummary ? paymentSummary.userPlatformFee : 0).toLocaleString()}
+                  </p>
+                  <p className="text-[10px] font-medium text-slate-500 mt-1">
+                    (Project value to be settled directly with vendor)
+                  </p>
+                </div>
               </div>
-              <div className="bg-slate-50 border border-slate-200/60 p-3 rounded-2xl text-center">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Remaining (70%)</p>
-                <p className="text-base font-black text-slate-800 mt-1">
-                  ₹{(paymentSummary ? paymentSummary.remainingAmount : Math.round(quotation.grandTotal * 0.7)).toLocaleString()}
-                </p>
-              </div>
-            </div>
+            )}
 
             {/* Included Services Checks */}
             <div className="border-t border-slate-100 pt-4">
@@ -771,12 +790,20 @@ export function CorporateRequestDetailPage() {
               <p className="text-[15px] font-black text-slate-900">
                 {allocation.vendorId?.contractorProfile?.companyName || allocation.vendorId?.fullName || 'Vendor Name N/A'}
               </p>
-              <p className="text-[13px] font-medium text-slate-500 mt-1">
-                {allocation.vendorId?.phone || 'Phone N/A'}
-              </p>
-              <p className="text-[12px] text-slate-500 mt-1.5 leading-relaxed">
-                {allocation.vendorId?.contractorProfile?.businessAddress || 'Business Address N/A'}
-              </p>
+              {['project_active', 'in_progress', 'completed', 'settlement_pending', 'settlement_completed'].includes(request.status) ? (
+                <>
+                  <p className="text-[13px] font-medium text-emerald-600 mt-1 flex items-center gap-1.5">
+                    <Phone className="h-3.5 w-3.5" /> {allocation.vendorId?.phone || 'Phone N/A'}
+                  </p>
+                  <p className="text-[12px] text-slate-500 mt-1.5 leading-relaxed">
+                    {allocation.vendorId?.contractorProfile?.businessAddress || 'Business Address N/A'}
+                  </p>
+                </>
+              ) : (
+                <p className="text-[12px] font-bold text-amber-500 mt-1 flex items-center gap-1.5">
+                  <Phone className="h-3.5 w-3.5" /> Information hidden until fee paid
+                </p>
+              )}
               <div className="mt-3 inline-block rounded bg-amber-100 px-2 py-1 text-[9px] font-black uppercase text-amber-700 tracking-wider">
                 ACCEPTED JOB
               </div>
@@ -815,7 +842,9 @@ export function CorporateRequestDetailPage() {
                       <p className="text-[14px] font-bold text-slate-900">
                         {a.labourId?.fullName || 'Worker'}
                       </p>
-                      <p className="text-[11px] text-slate-500 font-medium">{a.labourId?.phone || a.status}</p>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        {['project_active', 'in_progress', 'completed', 'settlement_pending', 'settlement_completed'].includes(request.status) ? (a.labourId?.phone || a.status) : 'Number hidden'}
+                      </p>
                     </div>
                   </div>
                   <span className="rounded-full bg-white border border-slate-200 px-2.5 py-1 text-[10px] font-black uppercase text-slate-600">
@@ -831,18 +860,14 @@ export function CorporateRequestDetailPage() {
 
       {/* Bottom Actions */}
       <div className="mt-4 p-4 pb-24 max-w-md mx-auto flex flex-col gap-3">
-        {request.status === 'payment_pending' && quotation?.status === 'approved' ? (
+        {(request.status === 'platform_fee_pending' || request.status === 'payment_pending') && quotation?.status === 'approved' && request.userPaymentStatus !== 'paid' ? (
           <Link to={`/corporate/requests/${id}/payment`} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
-            Proceed to Advance Payment
+            Pay Platform Fee to Confirm
           </Link>
-        ) : request.status === 'payment_pending' && quotation?.status !== 'approved' ? (
-          <button disabled className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-slate-200 py-3.5 text-[15px] font-bold text-slate-400 cursor-not-allowed">
-            Proceed to Advance Payment (Awaiting Quotation Approval)
+        ) : request.status === 'platform_fee_pending' && request.userPaymentStatus === 'paid' && request.labourPaymentStatus !== 'paid' ? (
+          <button disabled className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-emerald-50 border border-emerald-200 py-3.5 text-[15px] font-bold text-emerald-600 cursor-not-allowed">
+            Waiting for Vendor Platform Fee
           </button>
-        ) : request.status === 'settlement_pending' || (request.status === 'completed' && request.finalPaymentStatus !== 'paid') ? (
-          <Link to={`/corporate/requests/${id}/payment`} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
-            Proceed to Final Payment
-          </Link>
         ) : (
           <>
             <button className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">

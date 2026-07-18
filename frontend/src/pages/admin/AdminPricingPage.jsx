@@ -42,12 +42,6 @@ export function AdminPricingPage() {
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [revisionReason, setRevisionReason] = useState('')
 
-  // Pricing preview calculator inputs
-  const [mockWorkers, setMockWorkers] = useState(25)
-  const [mockDays, setMockDays] = useState(30)
-  const [mockDailyWage, setMockDailyWage] = useState(700)
-  const [mockVendorCharge, setMockVendorCharge] = useState(25000)
-
   // Local config to edit
   const [config, setConfig] = useState(null)
 
@@ -170,8 +164,6 @@ export function AdminPricingPage() {
         errs['corporate.platformFee.minFee'] = 'Minimum fee exceeds maximum fee'
       }
     }
-    checkPct(corp.advancePercentage, 'corporate.advancePercentage', 'Corporate Advance percentage')
-    checkPct(corp.latePenalty, 'corporate.latePenalty', 'Corporate Late penalty')
     if (corp.gst) checkPct(corp.gst.rate, 'corporate.gst.rate', 'Corporate GST rate')
 
     // Vendor
@@ -320,57 +312,6 @@ export function AdminPricingPage() {
     }
   }
 
-  // Calculate live preview totals based on current settings
-  const calculatePreview = () => {
-    const workers = Number(mockWorkers) || 0
-    const days = Number(mockDays) || 0
-    const dailyWage = Number(mockDailyWage) || 0
-    const vendorCharge = Number(mockVendorCharge) || 0
-
-    const labourCost = workers * days * dailyWage
-
-    // Platform Fee formula
-    const corp = config.corporate || {}
-    let platformFee = 0
-    const value = corp.platformFee?.value || 0
-    const type = corp.platformFee?.type || 'perWorkerPerDay'
-
-    if (type === 'percentage') {
-      platformFee = (labourCost * value) / 100
-    } else if (type === 'fixed') {
-      platformFee = value
-    } else if (type === 'perWorker') {
-      platformFee = value * workers
-    } else if (type === 'perWorkerPerDay') {
-      platformFee = value * workers * days
-    }
-
-    // Min Max Bounding
-    if (corp.platformFee?.minFee && platformFee < corp.platformFee.minFee) {
-      platformFee = corp.platformFee.minFee
-    }
-    if (corp.platformFee?.maxFee && corp.platformFee.maxFee > 0 && platformFee > corp.platformFee.maxFee) {
-      platformFee = corp.platformFee.maxFee
-    }
-
-    // GST calculated on Platform Fee + Vendor Service Charge?
-    // In prompt: Platform Fee = 16500, GST = 2970. 16500 * 18% = 2970.
-    // So GST is calculated on Platform Fee only! Let's follow this.
-    const gstRate = corp.gst?.enabled ? (corp.gst.rate || 0) : 0
-    const gst = (platformFee * gstRate) / 100
-
-    const grandTotal = labourCost + vendorCharge + platformFee + gst
-
-    return {
-      labourCost,
-      vendorCharge,
-      platformFee,
-      gst,
-      grandTotal
-    }
-  }
-
-  const preview = calculatePreview()
 
   // Match search filter
   const matchesSearch = (text, label = '', desc = '') => {
@@ -717,56 +658,6 @@ export function AdminPricingPage() {
 
                   <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-slate-100">
                     <div>
-                      <label className="text-xs font-bold text-slate-600 block mb-1.5">Corporate Project Advance (%)</label>
-                      <div className="grid grid-cols-4 gap-2">
-                        {[20, 30, 50].map((num) => (
-                          <button
-                            key={num}
-                            type="button"
-                            onClick={() => updateField('corporate.advancePercentage', num)}
-                            className={`rounded-xl border py-2 text-xs font-bold transition ${
-                              config.corporate?.advancePercentage === num
-                                ? 'border-yellow-400 bg-yellow-50/20 text-slate-950'
-                                : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                            }`}
-                          >
-                            {num}%
-                          </button>
-                        ))}
-                        <input
-                          type="number"
-                          placeholder="Custom %"
-                          value={config.corporate?.advancePercentage !== 20 && config.corporate?.advancePercentage !== 30 && config.corporate?.advancePercentage !== 50 ? config.corporate?.advancePercentage : ''}
-                          onChange={(e) => updateField('corporate.advancePercentage', e.target.value)}
-                          className="rounded-xl border border-slate-200 text-center text-xs font-bold outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-slate-600 block mb-1.5">Corporate Settlement Cycle</label>
-                      <select
-                        value={config.corporate?.settlementCycle || 'weekly'}
-                        onChange={(e) => updateField('corporate.settlementCycle', e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-3.5 text-sm font-semibold text-slate-700 outline-none"
-                      >
-                        <option value="weekly">Weekly</option>
-                        <option value="fortnightly">Fortnightly</option>
-                        <option value="monthly">Monthly</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-slate-600 block mb-1.5">Late Payment Penalty (%)</label>
-                      <input
-                        type="number"
-                        value={config.corporate?.latePenalty ?? ''}
-                        onChange={(e) => updateField('corporate.latePenalty', e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 py-2.5 px-4 text-sm font-medium outline-none"
-                      />
-                    </div>
-
-                    <div>
                       <label className="text-xs font-bold text-slate-600 block mb-1.5">GST Rate (%)</label>
                       <input
                         type="number"
@@ -774,19 +665,6 @@ export function AdminPricingPage() {
                         onChange={(e) => updateField('corporate.gst.rate', e.target.value)}
                         className="w-full rounded-xl border border-slate-200 py-2.5 px-4 text-sm font-medium outline-none"
                       />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-slate-600 block mb-1.5">Payment Due Before Start Date</label>
-                      <select
-                        value={config.corporate?.paymentDueBeforeStartHours || 48}
-                        onChange={(e) => updateField('corporate.paymentDueBeforeStartHours', Number(e.target.value))}
-                        className="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-3.5 text-sm font-semibold text-slate-700 outline-none"
-                      >
-                        <option value={24}>24 Hours</option>
-                        <option value={48}>48 Hours</option>
-                        <option value={72}>72 Hours</option>
-                      </select>
                     </div>
 
                     <div>
@@ -837,7 +715,7 @@ export function AdminPricingPage() {
                   </div>
 
                   <div className="sm:col-span-2">
-                    <label className="text-xs font-bold text-slate-600 block mb-1.5">Platform Commission</label>
+                    <label className="text-xs font-bold text-slate-600 block mb-1.5">Platform Fee</label>
                     <div className="flex rounded-xl border border-slate-200 bg-white focus-within:ring-2 focus-within:ring-yellow-400/40 focus-within:border-yellow-400 overflow-hidden shadow-sm">
                       <input
                         type="number"
@@ -1353,89 +1231,6 @@ export function AdminPricingPage() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* RIGHT COLUMN: LIVE PRICING PREVIEW CALCULATOR */}
-        <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm sticky top-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
-              <h3 className="text-base font-extrabold text-slate-950 flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-yellow-500" />
-                Live Pricing Calculator
-              </h3>
-              <span className="rounded-md bg-yellow-50 px-2 py-0.5 text-[10px] font-black text-yellow-600 border border-yellow-100">
-                Corporate Project
-              </span>
-            </div>
-
-            <div className="space-y-3.5">
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Workers Quantity</label>
-                <input
-                  type="number"
-                  value={mockWorkers}
-                  onChange={(e) => setMockWorkers(Math.max(1, Number(e.target.value)))}
-                  className="w-full rounded-xl border border-slate-200 py-2 px-3.5 text-xs font-bold outline-none focus:ring-1 focus:ring-yellow-400"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Project Duration (Days)</label>
-                <input
-                  type="number"
-                  value={mockDays}
-                  onChange={(e) => setMockDays(Math.max(1, Number(e.target.value)))}
-                  className="w-full rounded-xl border border-slate-200 py-2 px-3.5 text-xs font-bold outline-none focus:ring-1 focus:ring-yellow-400"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Labour Daily Wage (₹)</label>
-                <input
-                  type="number"
-                  value={mockDailyWage}
-                  onChange={(e) => setMockDailyWage(Math.max(0, Number(e.target.value)))}
-                  className="w-full rounded-xl border border-slate-200 py-2 px-3.5 text-xs font-bold outline-none focus:ring-1 focus:ring-yellow-400"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Vendor Service Charge (₹)</label>
-                <input
-                  type="number"
-                  value={mockVendorCharge}
-                  onChange={(e) => setMockVendorCharge(Math.max(0, Number(e.target.value)))}
-                  className="w-full rounded-xl border border-slate-200 py-2 px-3.5 text-xs font-bold outline-none focus:ring-1 focus:ring-yellow-400"
-                />
-              </div>
-
-              {/* Calculator output breakdown */}
-              <div className="space-y-3.5 rounded-2xl bg-slate-50 border border-slate-100 p-4.5 text-xs font-bold mt-4">
-                <div className="flex justify-between items-center text-slate-500">
-                  <span>Labour Cost</span>
-                  <span className="text-slate-900">₹{(preview.labourCost || 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-500">
-                  <span>Vendor Service Charge</span>
-                  <span className="text-slate-900">₹{(preview.vendorCharge || 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-500">
-                  <span>
-                    Platform Fee ({config.corporate?.platformFee?.type === 'percentage' ? `${config.corporate?.platformFee?.value}%` : 'Per Unit'})
-                  </span>
-                  <span className="text-slate-900">₹{(preview.platformFee || 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-500">
-                  <span>GST ({config.corporate?.gst?.rate || 0}%)</span>
-                  <span className="text-slate-900">₹{(preview.gst || 0).toLocaleString()}</span>
-                </div>
-                <div className="border-t border-slate-200 my-2 pt-3 flex justify-between items-center text-slate-950 font-black text-sm">
-                  <span>Grand Total</span>
-                  <span className="text-yellow-600">₹{Math.round(preview.grandTotal || 0).toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
