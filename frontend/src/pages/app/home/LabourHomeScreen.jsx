@@ -94,6 +94,9 @@ import {
   markNotificationRead,
   subscribeLabourNotifications,
 } from '../../../lib/labourNotifications.js'
+import { patchCurrentUser } from '../../../api/userProfileApi.js'
+import { setUser } from '../../../store/slices/authSlice.js'
+import { useDispatch } from 'react-redux'
 
 function getTimeGreeting() {
   const h = new Date().getHours()
@@ -265,8 +268,9 @@ function SupportCarousel({ cards, reduce }) {
  * Worker home — attendance-first dashboard with jobs, earnings, site info, and safety.
  */
 export function LabourHomeScreen({ user }) {
-  const reduce = useReducedMotion()
   const navigate = useNavigate()
+  const dispatch = useDispatch()
+  const reduce = useReducedMotion()
   const now = useNow(1000)
   const [entries, setEntries] = useState(readAttendanceEntries)
   const [wallet, setWallet] = useState(readWalletState)
@@ -309,10 +313,26 @@ export function LabourHomeScreen({ user }) {
   useEffect(() => subscribeLabourNotifications(() => setNotifTick((t) => t + 1)), [])
 
   useEffect(() => {
-    const onLoc = () => setAppLocation(readAppUserLocation())
+    const onLoc = async () => {
+      const newLoc = readAppUserLocation()
+      setAppLocation(newLoc)
+      // Automatically sync new location to backend so matching works
+      if (newLoc?.lat != null && newLoc?.lng != null) {
+        try {
+          const res = await patchCurrentUser({
+            labourProfile: { locationLat: newLoc.lat, locationLng: newLoc.lng }
+          })
+          if (res?.data?.user) {
+            dispatch(setUser(res.data.user))
+          }
+        } catch (err) {
+          console.error('Failed to sync location to backend:', err)
+        }
+      }
+    }
     window.addEventListener('lc-app-user-location-changed', onLoc)
     return () => window.removeEventListener('lc-app-user-location-changed', onLoc)
-  }, [])
+  }, [dispatch])
 
   useEffect(() => {
     if (reduce) return undefined
