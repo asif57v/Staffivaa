@@ -312,6 +312,18 @@ export function CorporateRequestDetailPage() {
     statusLabel = 'Assigned'
     statusTone = 'bg-blue-50 text-blue-700 border border-blue-100'
     StatusIcon = Users
+  } else if (request.status === 'vendor_platform_fee_pending') {
+    statusLabel = 'Awaiting Vendor Fee'
+    statusTone = 'bg-amber-50 text-amber-700 border border-amber-200'
+    StatusIcon = AlertCircle
+  } else if (request.status === 'corporate_platform_fee_pending') {
+    statusLabel = 'Platform Fee Pending'
+    statusTone = 'bg-rose-50 text-rose-700 border border-rose-200 animate-pulse'
+    StatusIcon = AlertCircle
+  } else if (request.status === 'quotation_unlocked') {
+    statusLabel = 'Quotation Phase'
+    statusTone = 'bg-blue-50 text-blue-700 border border-blue-100'
+    StatusIcon = FileText
   } else if (request.status === 'payment_pending') {
     statusLabel = 'Payment Pending'
     statusTone = 'bg-amber-50 text-amber-700 border border-amber-200'
@@ -575,41 +587,7 @@ export function CorporateRequestDetailPage() {
                 <span className="text-[18px]">₹{quotation.grandTotal.toLocaleString()}</span>
               </div>
 
-              {paymentSummary && paymentSummary.userPlatformFee > 0 && (
-                <div className="mt-4 pt-4 border-t border-slate-200 border-dashed space-y-2.5">
-                  <div className="flex justify-between items-center py-1">
-                    <span className="font-bold text-amber-600">Platform Convenience Fee</span>
-                    <span className="font-extrabold text-amber-700">₹{paymentSummary.userPlatformFee.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1">
-                    <span className="font-bold text-amber-600">Platform GST ({paymentSummary.gstRate}%)</span>
-                    <span className="font-extrabold text-amber-700">₹{paymentSummary.gstAmount.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center bg-amber-50 p-3 rounded-xl text-amber-900 font-extrabold mt-2 border border-amber-200">
-                    <span className="text-[13px]">Total Platform Payable</span>
-                    <span className="text-[16px]">₹{(paymentSummary.userPlatformFee + paymentSummary.gstAmount).toLocaleString()}</span>
-                  </div>
-                </div>
-              )}
             </div>
-
-            {/* Platform Fee Status */}
-            {((request.status === 'platform_fee_pending' || request.status === 'payment_pending' || request.userPlatformFee > 0) && quotation?.status === 'approved') && (
-              <div className="grid grid-cols-1 gap-3 pt-1">
-                <div className={`border p-3 rounded-2xl text-center transition-colors ${request.userPaymentStatus === 'paid' ? 'bg-emerald-50 border-emerald-300' : 'bg-amber-50/50 border-amber-200'}`}>
-                  <p className={`text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 ${request.userPaymentStatus === 'paid' ? 'text-emerald-700' : 'text-amber-600'}`}>
-                    {request.userPaymentStatus === 'paid' && <CheckCircle2 className="h-3.5 w-3.5" />}
-                    {request.userPaymentStatus === 'paid' ? 'Platform Fee Paid' : 'Platform Fee Payable'}
-                  </p>
-                  <p className={`text-xl font-black mt-1 ${request.userPaymentStatus === 'paid' ? 'text-emerald-800' : 'text-amber-800'}`}>
-                    ₹{request.userPlatformFee ? request.userPlatformFee.toLocaleString() : (paymentSummary ? paymentSummary.userPlatformFee : 0).toLocaleString()}
-                  </p>
-                  <p className="text-[10px] font-medium text-slate-500 mt-1">
-                    (Project value to be settled directly with vendor)
-                  </p>
-                </div>
-              </div>
-            )}
 
             {/* Included Services Checks */}
             <div className="border-t border-slate-100 pt-4">
@@ -860,13 +838,13 @@ export function CorporateRequestDetailPage() {
 
       {/* Bottom Actions */}
       <div className="mt-4 p-4 pb-24 max-w-md mx-auto flex flex-col gap-3">
-        {(request.status === 'platform_fee_pending' || request.status === 'payment_pending') && quotation?.status === 'approved' && request.userPaymentStatus !== 'paid' ? (
+        {request.status === 'corporate_platform_fee_pending' ? (
           <Link to={`/corporate/requests/${id}/payment`} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
-            Pay Platform Fee to Confirm
+            Pay Platform Fee to Unlock Quotation Phase
           </Link>
-        ) : request.status === 'platform_fee_pending' && request.userPaymentStatus === 'paid' && request.labourPaymentStatus !== 'paid' ? (
-          <button disabled className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-emerald-50 border border-emerald-200 py-3.5 text-[15px] font-bold text-emerald-600 cursor-not-allowed">
-            Waiting for Vendor Platform Fee
+        ) : request.status === 'vendor_platform_fee_pending' ? (
+          <button disabled className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-emerald-50 border border-emerald-200 py-3.5 text-[15px] font-bold text-emerald-600 cursor-not-allowed shadow-sm">
+            Waiting for Vendor to Pay Platform Fee...
           </button>
         ) : (
           <>

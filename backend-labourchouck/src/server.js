@@ -6,6 +6,7 @@ import { initSocket } from './utils/socket.js'
 import { startBookingExpirationJob } from './utils/bookingExpiration.js'
 import { startCorporatePaymentCheckJob } from './utils/corporatePaymentScheduler.js'
 import { startPayrollEngineJob } from './utils/payrollJob.js'
+import { startCommissionOverdueJob } from './utils/commissionJob.js'
 import { initializeFirebaseAdmin } from './config/firebase.js'
 
 const port = Number(process.env.PORT) || 5000
@@ -21,6 +22,7 @@ async function main() {
   startBookingExpirationJob()
   startCorporatePaymentCheckJob()
   startPayrollEngineJob()
+  startCommissionOverdueJob()
   
   server.listen(port, () => {
     console.log(`LabourChowck API listening on :${port}`)

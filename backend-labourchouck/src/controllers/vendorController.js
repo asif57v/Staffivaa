@@ -337,8 +337,18 @@ export const acceptVendorMarketplaceRequest = asyncHandler(async (req, res) => {
     notes: 'Vendor accepted directly from marketplace',
   })
 
-  // Update request status to accepted
-  request.status = REQUEST_STATUS.ACCEPTED
+  // Calculate platform fees from SystemPricing
+  const { SystemPricing } = await import('../models/SystemPricing.js')
+  const pricing = await SystemPricing.findOne().lean()
+  
+  const vendorFee = pricing?.vendor?.platformCommission?.value || 111
+  const corporateFee = pricing?.corporate?.platformFee?.value || 99
+
+  request.vendorPlatformFeeAmount = vendorFee
+  request.corporatePlatformFeeAmount = corporateFee
+  
+  // Update request status to vendor_platform_fee_pending
+  request.status = REQUEST_STATUS.VENDOR_PLATFORM_FEE_PENDING
   await request.save()
 
   // Notify corporate

@@ -16,21 +16,36 @@ export function AdminPromotionsOffersPage() {
     ctaText: 'Claim Now',
     priority: 1,
     isActive: true,
+    discountPercentage: 0,
+    maxUsageLimit: 0,
+    categories: []
   })
+  const [categories, setCategories] = useState([])
 
-  const fetchOffers = async () => {
+  const fetchOffersAndCategories = async () => {
     try {
-      const res = await apiClient.get('/admin/marketing/offers')
+      const [res, catRes] = await Promise.all([
+        apiClient.get('/admin/marketing/offers'),
+        apiClient.get('/labour-categories/grouped')
+      ])
       setOffers(res.data.data.offers)
+      
+      const allCats = []
+      if (catRes.data?.data) {
+        Object.values(catRes.data.data).forEach(group => {
+          allCats.push(...group)
+        })
+      }
+      setCategories(allCats)
     } catch (e) {
-      toast.error('Failed to load offers')
+      toast.error('Failed to load data')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchOffers()
+    fetchOffersAndCategories()
   }, [])
 
   const toggleStatus = async (id, currentStatus) => {
@@ -51,7 +66,7 @@ export function AdminPromotionsOffersPage() {
       const res = await apiClient.delete(`/admin/marketing/offers/${id}`)
       if (res.data.success) {
         toast.success('Offer deleted')
-        fetchOffers()
+        fetchOffersAndCategories()
       }
     } catch (e) {
       toast.error('Failed to delete offer')
@@ -65,8 +80,8 @@ export function AdminPromotionsOffersPage() {
       if (res.data.success) {
         toast.success('Offer created successfully!')
         setIsModalOpen(false)
-        setFormData({ title: '', description: '', image: '', ctaText: 'Claim Now', priority: 1, isActive: true })
-        fetchOffers()
+        setFormData({ title: '', description: '', image: '', ctaText: 'Claim Now', priority: 1, isActive: true, discountPercentage: 0, maxUsageLimit: 0, categories: [] })
+        fetchOffersAndCategories()
       }
     } catch (e) {
       toast.error('Failed to create offer')
@@ -95,6 +110,7 @@ export function AdminPromotionsOffersPage() {
               <tr>
                 <th className="px-6 py-4 font-semibold text-slate-700">Offer Title</th>
                 <th className="px-6 py-4 font-semibold text-slate-700">Priority</th>
+                <th className="px-6 py-4 font-semibold text-slate-700">Discount & Usage</th>
                 <th className="px-6 py-4 font-semibold text-slate-700">Dates</th>
                 <th className="px-6 py-4 font-semibold text-slate-700">Status</th>
                 <th className="px-6 py-4 font-semibold text-slate-700 text-right">Actions</th>
@@ -115,6 +131,18 @@ export function AdminPromotionsOffersPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">{offer.priority}</td>
+                  <td className="px-6 py-4 text-sm text-slate-700">
+                    {offer.discountPercentage > 0 ? (
+                      <div>
+                        <span className="font-bold text-emerald-600">{offer.discountPercentage}% Off</span>
+                        <div className="text-xs text-slate-500 mt-1">
+                          Limit: {offer.maxUsageLimit === 0 ? 'Unlimited' : `${offer.currentUsageCount || 0} / ${offer.maxUsageLimit}`}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-slate-400 text-xs">No Discount</span>
+                    )}
+                  </td>
                   <td className="px-6 py-4 text-slate-600 text-xs">
                     <div>Start: {offer.startDate ? new Date(offer.startDate).toLocaleDateString() : 'N/A'}</div>
                     <div>End: {offer.endDate ? new Date(offer.endDate).toLocaleDateString() : 'N/A'}</div>
@@ -175,8 +203,25 @@ export function AdminPromotionsOffersPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Target Category (Optional)</label>
+                    <select value={formData.categories[0] || ''} onChange={e => setFormData({...formData, categories: e.target.value ? [e.target.value] : []})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                      <option value="">All Categories</option>
+                      {categories.map(cat => (
+                        <option key={cat._id} value={cat._id}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Platform Fee Discount (%)</label>
+                    <input type="number" min="0" max="100" value={formData.discountPercentage} onChange={e => setFormData({...formData, discountPercentage: Number(e.target.value)})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. 50" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Max Usage Limit (0 = Unlimited)</label>
+                    <input type="number" min="0" value={formData.maxUsageLimit} onChange={e => setFormData({...formData, maxUsageLimit: Number(e.target.value)})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. 100" />
+                  </div>
+                  <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">CTA Text</label>
-                    <input type="text" value={formData.ctaText} onChange={e => setFormData({...formData, ctaText: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                    <input type="text" value={formData.ctaText} onChange={e => setFormData({...formData, ctaText: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. Claim Now" />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Priority (1 = Highest)</label>

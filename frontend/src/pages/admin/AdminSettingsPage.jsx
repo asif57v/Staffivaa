@@ -13,6 +13,22 @@ export function AdminSettingsPage() {
   const [enableVendorAutoAssignment, setEnableVendorAutoAssignment] = useState(false)
   const [maintenanceMode, setMaintenanceMode] = useState(false)
   const [supportEmail, setSupportEmail] = useState('support@staffivaa.com')
+  
+  // Commission settings
+  const [revenueModel, setRevenueModel] = useState('platform_fee_plus_commission')
+  const [commissionEnabled, setCommissionEnabled] = useState(true)
+  const [commissionType, setCommissionType] = useState('percentage')
+  const [commissionValue, setCommissionValue] = useState(5)
+  const [commissionTrigger, setCommissionTrigger] = useState('after_quotation_accepted')
+  const [commissionDueDays, setCommissionDueDays] = useState(7)
+
+  // Radius Module Config
+  const [defaultVendorRadius, setDefaultVendorRadius] = useState(15)
+  const [minVendorRadius, setMinVendorRadius] = useState(5)
+  const [maxVendorRadius, setMaxVendorRadius] = useState(100)
+  const [defaultCorporateSearchRadius, setDefaultCorporateSearchRadius] = useState(25)
+  const [allowUnlimitedRadius, setAllowUnlimitedRadius] = useState(true)
+  const [enableRadiusMatching, setEnableRadiusMatching] = useState(true)
 
   useEffect(() => {
     if (data?.settings) {
@@ -21,6 +37,22 @@ export function AdminSettingsPage() {
       setEnableVendorAutoAssignment(Boolean(data.settings.enableVendorAutoAssignment))
       setMaintenanceMode(Boolean(data.settings.maintenanceMode))
       setSupportEmail(data.settings.supportEmail || 'support@staffivaa.com')
+      
+      setRevenueModel(data.settings.revenueModel || 'platform_fee_plus_commission')
+      setCommissionEnabled(data.settings.commissionEnabled ?? true)
+      setCommissionType(data.settings.commissionType || 'percentage')
+      setCommissionValue(data.settings.commissionValue ?? 5)
+      setCommissionTrigger(data.settings.commissionTrigger || 'after_quotation_accepted')
+      setCommissionDueDays(data.settings.commissionDueDays ?? 7)
+
+      if (data.settings.radiusConfig) {
+        setDefaultVendorRadius(data.settings.radiusConfig.defaultVendorRadius ?? 15)
+        setMinVendorRadius(data.settings.radiusConfig.minVendorRadius ?? 5)
+        setMaxVendorRadius(data.settings.radiusConfig.maxVendorRadius ?? 100)
+        setDefaultCorporateSearchRadius(data.settings.radiusConfig.defaultCorporateSearchRadius ?? 25)
+        setAllowUnlimitedRadius(data.settings.radiusConfig.allowUnlimitedRadius ?? true)
+        setEnableRadiusMatching(data.settings.radiusConfig.enableRadiusMatching ?? true)
+      }
     }
   }, [data])
 
@@ -32,7 +64,21 @@ export function AdminSettingsPage() {
         paymentGateway,
         enableVendorAutoAssignment,
         maintenanceMode,
-        supportEmail
+        supportEmail,
+        revenueModel,
+        commissionEnabled,
+        commissionType,
+        commissionValue,
+        commissionTrigger,
+        commissionDueDays,
+        radiusConfig: {
+          defaultVendorRadius,
+          minVendorRadius,
+          maxVendorRadius,
+          defaultCorporateSearchRadius,
+          allowUnlimitedRadius,
+          enableRadiusMatching
+        }
       }).unwrap()
       toast.success('Settings updated successfully!')
     } catch (err) {
@@ -154,6 +200,150 @@ export function AdminSettingsPage() {
                   <ToggleLeft className="h-10 w-10 text-slate-300" />
                 )}
               </button>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-slate-100 space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Revenue & Commission Config</h3>
+              <p className="text-xs text-slate-500 mb-4">Settings applied to newly created workforce requests.</p>
+              
+              <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-bold text-slate-700 block">Enable Vendor Commission</label>
+                    <span className="text-xs text-slate-500">Master toggle to turn off success commission completely.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCommissionEnabled(!commissionEnabled)}
+                    className="text-slate-600 focus:outline-none"
+                  >
+                    {commissionEnabled ? (
+                      <ToggleRight className="h-10 w-10 text-brand" />
+                    ) : (
+                      <ToggleLeft className="h-10 w-10 text-slate-300" />
+                    )}
+                  </button>
+                </div>
+
+                {commissionEnabled && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-200">
+                    <div className="space-y-2">
+                      <label className="block text-sm font-bold text-slate-700">Commission Type</label>
+                      <select
+                        value={commissionType}
+                        onChange={(e) => setCommissionType(e.target.value)}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
+                      >
+                        <option value="percentage">Percentage (%)</option>
+                        <option value="fixed">Fixed Amount (₹)</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-bold text-slate-700">Commission Value</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step={commissionType === 'percentage' ? "0.1" : "1"}
+                        value={commissionValue}
+                        onChange={(e) => setCommissionValue(Number(e.target.value))}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="block text-sm font-bold text-slate-700">Commission Trigger</label>
+                      <select
+                        value={commissionTrigger}
+                        onChange={(e) => setCommissionTrigger(e.target.value)}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
+                      >
+                        <option value="after_quotation_accepted">After Quotation Accepted (Advance)</option>
+                        <option value="after_project_completed">After Project Completed (Settlement)</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="block text-sm font-bold text-slate-700">Due Days</label>
+                      <p className="text-[10px] text-slate-500">Days allowed for vendor to pay before it becomes overdue.</p>
+                      <input
+                        type="number"
+                        min="0"
+                        value={commissionDueDays}
+                        onChange={(e) => setCommissionDueDays(Number(e.target.value))}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-slate-100 space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Geographic Radius Config</h3>
+              <p className="text-xs text-slate-500 mb-4">Settings for vendor dispatching based on location distance.</p>
+              
+              <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-bold text-slate-700 block">Enable Radius Matching</label>
+                    <span className="text-xs text-slate-500">If disabled, requests are sent to all vendors regardless of distance.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEnableRadiusMatching(!enableRadiusMatching)}
+                    className="text-slate-600 focus:outline-none"
+                  >
+                    {enableRadiusMatching ? (
+                      <ToggleRight className="h-10 w-10 text-brand" />
+                    ) : (
+                      <ToggleLeft className="h-10 w-10 text-slate-300" />
+                    )}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between mt-4">
+                  <div>
+                    <label className="text-sm font-bold text-slate-700 block">Allow Unlimited Radius</label>
+                    <span className="text-xs text-slate-500">Allow vendors to select 'Unlimited' for their service area.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAllowUnlimitedRadius(!allowUnlimitedRadius)}
+                    className="text-slate-600 focus:outline-none"
+                  >
+                    {allowUnlimitedRadius ? (
+                      <ToggleRight className="h-10 w-10 text-brand" />
+                    ) : (
+                      <ToggleLeft className="h-10 w-10 text-slate-300" />
+                    )}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-200">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-bold text-slate-700">Default Corporate Search Radius (KM)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={defaultCorporateSearchRadius}
+                      onChange={(e) => setDefaultCorporateSearchRadius(Number(e.target.value))}
+                      className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-bold text-slate-700">Default Vendor Service Radius (KM)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={defaultVendorRadius}
+                      onChange={(e) => setDefaultVendorRadius(Number(e.target.value))}
+                      className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 

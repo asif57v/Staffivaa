@@ -74,7 +74,7 @@ export function LabourNotificationsPage() {
   const [tab, setTab] = useState('all')
   const [toast, setToast] = useState('')
 
-  const { data: notificationsData, refetch } = useGetNotificationsQuery(undefined, { pollingInterval: 10000 })
+  const { data: notificationsData, refetch } = useGetNotificationsQuery(undefined)
   const [markRead] = useMarkNotificationReadMutation()
   const [markAllRead] = useMarkAllNotificationsReadMutation()
   const [deleteNotif] = useDeleteNotificationMutation()

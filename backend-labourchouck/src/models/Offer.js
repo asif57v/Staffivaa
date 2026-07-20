@@ -14,6 +14,9 @@ const offerSchema = new mongoose.Schema(
     targetAudience: { type: String, default: 'ALL' },
     targetLocation: { type: String },
     categories: [{ type: String }],
+    discountPercentage: { type: Number, min: 0, max: 100, default: 0 },
+    maxUsageLimit: { type: Number, default: 0 },
+    currentUsageCount: { type: Number, default: 0 },
   },
   { timestamps: true }
 )

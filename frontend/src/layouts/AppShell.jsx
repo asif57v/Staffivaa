@@ -419,36 +419,42 @@ export function AppShell() {
                   className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4 scrollbar-thin [scrollbar-color:rgba(148,163,184,0.45)_transparent]"
                   aria-label="Main"
                 >
-                  {drawerNav.map(({ id, to, end, label, icon: Icon }) => (
-                    <NavLink
-                      key={`${id}-${to}`}
-                      to={to}
-                      end={Boolean(end)}
-                      onClick={() => setDrawerOpen(false)}
-                      className={({ isActive }) =>
-                        `group relative flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition duration-200 ${
-                          isActive
-                            ? 'bg-linear-to-r from-[#0f172a]/10 to-white text-slate-900 shadow-[inset_0_0_0_1px_rgba(79,70,229,0.15)] before:absolute before:left-0 before:top-1/2 before:z-10 before:h-9 before:w-1 before:-translate-y-1/2 before:rounded-r-full before:bg-[#0f172a] before:shadow-[2px_0_10px_-2px_rgba(79,70,229,0.4)]'
-                            : 'text-slate-700 hover:bg-slate-50'
-                        }`
-                      }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          <span
-                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm ring-1 transition ${
-                              isActive
-                                ? 'bg-[#0f172a] text-white ring-[#0f172a]/20'
-                                : 'bg-white text-slate-500 ring-slate-200/80 group-hover:text-[#0f172a] group-hover:ring-[#0f172a]/15'
-                            }`}
-                          >
-                            <Icon className="h-[18px] w-[18px]" aria-hidden />
-                          </span>
-                          <span className="min-w-0 flex-1 leading-snug">{label}</span>
-                        </>
-                      )}
-                    </NavLink>
-                  ))}
+                  {drawerNav.map((item, index) => {
+                    if (item.type === 'divider') {
+                      return <div key={`divider-${index}`} className="my-2 h-px bg-slate-200/70" aria-hidden />
+                    }
+                    const { id, to, end, label, icon: Icon } = item;
+                    return (
+                      <NavLink
+                        key={`${id}-${to}`}
+                        to={to}
+                        end={Boolean(end)}
+                        onClick={() => setDrawerOpen(false)}
+                        className={({ isActive }) =>
+                          `group relative flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition duration-200 ${
+                            isActive
+                              ? 'bg-linear-to-r from-[#0f172a]/10 to-white text-slate-900 shadow-[inset_0_0_0_1px_rgba(79,70,229,0.15)] before:absolute before:left-0 before:top-1/2 before:z-10 before:h-9 before:w-1 before:-translate-y-1/2 before:rounded-r-full before:bg-[#0f172a] before:shadow-[2px_0_10px_-2px_rgba(79,70,229,0.4)]'
+                              : 'text-slate-700 hover:bg-slate-50'
+                          }`
+                        }
+                      >
+                        {({ isActive }) => (
+                          <>
+                            <span
+                              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-sm ring-1 transition ${
+                                isActive
+                                  ? 'bg-[#0f172a] text-white ring-[#0f172a]/20'
+                                  : 'bg-white text-slate-500 ring-slate-200/80 group-hover:text-[#0f172a] group-hover:ring-[#0f172a]/15'
+                              }`}
+                            >
+                              {Icon && <Icon className="h-[18px] w-[18px]" aria-hidden />}
+                            </span>
+                            <span className="min-w-0 flex-1 leading-snug">{label}</span>
+                          </>
+                        )}
+                      </NavLink>
+                    )
+                  })}
                 </nav>
                 <div className="border-t border-slate-200/70 bg-linear-to-t from-slate-50/50 to-white px-3 pt-3 pb-10">
                   <Link

@@ -1,5 +1,6 @@
 import { Route } from 'react-router-dom'
 import { CorporateDashboardPage } from '../panels/corporate/pages/CorporateDashboardPage.jsx'
+import { CorporateNotificationsPage } from '../panels/corporate/pages/CorporateNotificationsPage.jsx'
 import { CorporateProjectsPage } from '../panels/corporate/pages/CorporateProjectsPage.jsx'
 import { CorporateProjectNewPage } from '../panels/corporate/pages/CorporateProjectNewPage.jsx'
 import { CorporateProjectDetailPage } from '../panels/corporate/pages/CorporateProjectDetailPage.jsx'
@@ -21,6 +22,7 @@ import { CorporateWalletPage } from '../panels/corporate/pages/CorporateWalletPa
 export const corporateChildRoutes = (
   <>
     <Route index element={<CorporateDashboardPage />} />
+    <Route path="notifications" element={<CorporateNotificationsPage />} />
     <Route path="projects" element={<CorporateProjectsPage />} />
     <Route path="projects/new" element={<CorporateProjectNewPage />} />
     <Route path="projects/:id" element={<CorporateProjectDetailPage />} />

@@ -4,6 +4,7 @@ import helmet from 'helmet'
 import morgan from 'morgan'
 import routes from './routes/index.js'
 import { errorHandler } from './middleware/errorHandler.js'
+import { globalLimiter } from './middleware/rateLimiters.js'
 
 const app = express()
 
@@ -23,7 +24,7 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'labourchowck-api' })
 })
 
-app.use('/api/v1', routes)
+app.use('/api/v1', globalLimiter, routes)
 
 app.use(errorHandler)
 

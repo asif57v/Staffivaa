@@ -113,6 +113,17 @@ const contractorProfileSchema = new mongoose.Schema(
     documentsSubmittedAt: Date,
     reviewedAt: Date,
     reviewNote: String,
+    
+    // Vendor Service Radius & Location Matching fields
+    currentLatitude: { type: Number },
+    currentLongitude: { type: Number },
+    currentAddress: { type: String, trim: true, maxlength: 500 },
+    serviceRadius: { type: Number, default: 15 }, // null/undefined means Unlimited
+    serviceRadiusUpdatedAt: Date,
+    locationPoint: {
+      type: { type: String, enum: ['Point'], default: 'Point' },
+      coordinates: { type: [Number], index: '2dsphere' } // [longitude, latitude]
+    },
   },
   { _id: false },
 )

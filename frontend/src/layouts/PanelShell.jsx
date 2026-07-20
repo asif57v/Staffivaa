@@ -283,22 +283,28 @@ export function PanelShell({
                   ) : null}
                 </div>
                 <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4" aria-label="Main">
-                  {drawerNav.map(({ id, to, end, label, icon: Icon }) => (
-                    <NavLink
-                      key={`${id}-${to}`}
-                      to={to}
-                      end={Boolean(end)}
-                      onClick={() => setDrawerOpen(false)}
-                      className={({ isActive }) =>
-                        `flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${
-                          isActive ? 'bg-brand/10 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
-                        }`
-                      }
-                    >
-                      <Icon className="h-[18px] w-[18px]" aria-hidden />
-                      {label}
-                    </NavLink>
-                  ))}
+                  {drawerNav.map((item, index) => {
+                    if (item.type === 'divider') {
+                      return <div key={`divider-${index}`} className="my-2 h-px bg-slate-200/70" aria-hidden />
+                    }
+                    const { id, to, end, label, icon: Icon } = item;
+                    return (
+                      <NavLink
+                        key={`${id}-${to}`}
+                        to={to}
+                        end={Boolean(end)}
+                        onClick={() => setDrawerOpen(false)}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${
+                            isActive ? 'bg-brand/10 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                          }`
+                        }
+                      >
+                        {Icon && <Icon className="h-[18px] w-[18px]" aria-hidden />}
+                        {label}
+                      </NavLink>
+                    )
+                  })}
                 </nav>
                 <div className="border-t border-slate-200/70 px-3 pt-3 pb-10">
                   <Link
@@ -370,24 +376,14 @@ export function PanelShell({
               </button>
 
               <div className="flex shrink-0 items-center gap-2">
-                {panelId === 'vendor' ? (
                   <button
                     type="button"
                     onClick={() => setDrawerOpen(true)}
                     className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
                     aria-label="Menu"
                   >
-                    <MoreVertical className="h-[18px] w-[18px]" />
+                    <Menu className="h-[18px] w-[18px]" />
                   </button>
-                ) : (
-                  <Link
-                    to="/app/buildmart"
-                    className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
-                    aria-label="BuildMart Cart"
-                  >
-                    <ShoppingCart className="h-[18px] w-[18px]" />
-                  </Link>
-                )}
                 <button
                   type="button"
                   onClick={() => navigate(`/${panelId === 'app' ? 'app/labour' : panelId}/notifications`)}

@@ -15,6 +15,8 @@ import { VendorProfilePage } from '../panels/vendor/pages/VendorProfilePage.jsx'
 import { VendorSupportPage } from '../panels/vendor/pages/VendorSupportPage.jsx'
 import { VendorPayrollPage } from '../panels/vendor/pages/VendorPayrollPage.jsx'
 import { VendorNotificationsPage } from '../panels/vendor/pages/VendorNotificationsPage.jsx'
+import { VendorRadiusSettingsPage } from '../panels/vendor/pages/VendorRadiusSettingsPage.jsx'
+import VendorCommissionPage from '../panels/vendor/pages/VendorCommissionPage.jsx'
 
 /** Nested `/vendor/*` routes — Fragment of `<Route>` nodes for React Router. */
 export const vendorChildRoutes = (
@@ -33,7 +35,9 @@ export const vendorChildRoutes = (
     <Route path="attendance/:projectId/worker/:workerId" element={<VendorAttendanceWorkerPage />} />
     <Route path="earnings" element={<VendorEarningsPage />} />
     <Route path="payroll" element={<VendorPayrollPage />} />
+    <Route path="commission" element={<VendorCommissionPage />} />
     <Route path="profile" element={<VendorProfilePage />} />
+    <Route path="settings" element={<VendorRadiusSettingsPage />} />
     <Route path="support" element={<VendorSupportPage />} />
   </>
 )

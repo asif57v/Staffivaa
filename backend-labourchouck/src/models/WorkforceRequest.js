@@ -39,6 +39,12 @@ const workforceRequestSchema = new mongoose.Schema(
     locationText: { type: String, trim: true },
     locationLat: { type: Number },
     locationLng: { type: Number },
+    locationPoint: {
+      type: { type: String, enum: ['Point'], default: 'Point' },
+      coordinates: { type: [Number] } // [longitude, latitude]
+    },
+    vendorSearchRadius: { type: Number }, // null means Unlimited
+    distanceCalculationVersion: { type: String, default: '1.0' },
     notes: { type: String, trim: true, maxlength: 2000 },
     billingMode: {
       type: String,
@@ -52,6 +58,9 @@ const workforceRequestSchema = new mongoose.Schema(
     convenienceFee: { type: Number },
     platformFeeType: { type: String },
     platformFeeValue: { type: Number },
+    originalPlatformFee: { type: Number },
+    appliedOfferId: { type: mongoose.Schema.Types.ObjectId, ref: 'Offer' },
+    offerUsageIncremented: { type: Boolean, default: false },
     distanceKm: { type: Number },
     paymentStatus: {
       type: String,
@@ -91,6 +100,32 @@ const workforceRequestSchema = new mongoose.Schema(
       default: 'pending',
     },
     paymentDeadlineExtendedAt: Date,
+    
+    // Corporate-Vendor Lead Fee flow tracking
+    vendorPlatformFeeStatus: {
+      type: String,
+      enum: ['pending', 'paid'],
+      default: 'pending'
+    },
+    corporatePlatformFeeStatus: {
+      type: String,
+      enum: ['pending', 'paid'],
+      default: 'pending'
+    },
+    vendorPlatformFeeAmount: { type: Number },
+    corporatePlatformFeeAmount: { type: Number },
+    vendorPlatformFeePaidAt: Date,
+    corporatePlatformFeePaidAt: Date,
+    quotationUnlocked: { type: Boolean, default: false },
+
+    // Revenue Configuration Snapshot (Phase 1)
+    revenueModel: { type: String, enum: ['platform_fee_only', 'platform_fee_plus_commission'], default: 'platform_fee_plus_commission' },
+    commissionEnabled: { type: Boolean, default: true },
+    commissionType: { type: String, enum: ['percentage', 'fixed'], default: 'percentage' },
+    commissionValue: { type: Number, default: 5 },
+    commissionTrigger: { type: String, enum: ['after_quotation_accepted', 'after_project_completed'], default: 'after_quotation_accepted' },
+    commissionDueDays: { type: Number, default: 7 },
+
     adminNote: { type: String, trim: true, maxlength: 500 },
     reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     reviewedAt: Date,

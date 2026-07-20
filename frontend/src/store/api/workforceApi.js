@@ -1,4 +1,5 @@
 import { baseApi } from './baseApi.js'
+import { getSocket } from '../../services/socket.js'
 
 function unwrap(response) {
   return response?.data ?? response
@@ -61,7 +62,12 @@ export const workforceApi = baseApi.injectEndpoints({
         body,
       }),
       transformResponse: unwrap,
-      invalidatesTags: (_r, _e, { id }) => [{ type: 'Requests', id }],
+      invalidatesTags: (_r, _e, { id }) => [{ type: 'Requests', id }, 'VendorJobs', 'CorporateDashboard'],
+    }),
+    payPlatformFee: build.mutation({
+      query: (id) => ({ url: `/workforce/requests/${id}/pay-platform-fee`, method: 'POST' }),
+      transformResponse: unwrap,
+      invalidatesTags: (_r, _e, id) => [{ type: 'Requests', id }, 'VendorJobs', 'CorporateDashboard'],
     }),
     createExtraWork: build.mutation({
       query: ({ id, ...body }) => ({ url: `/workforce/requests/${id}/extra-work`, method: 'POST', body }),
@@ -449,6 +455,22 @@ export const workforceApi = baseApi.injectEndpoints({
       query: () => '/admin/dashboard/stats',
       transformResponse: unwrap,
       providesTags: ['AdminDashboard'],
+      async onCacheEntryAdded(arg, { updateCachedData, cacheDataLoaded, cacheEntryRemoved, dispatch }) {
+        const socket = getSocket()
+        if (!socket) return
+
+        try {
+          await cacheDataLoaded
+
+          const listener = () => {
+            dispatch(workforceApi.util.invalidateTags(['AdminDashboard']))
+          }
+          socket.on('dashboard:updated', listener)
+          
+          await cacheEntryRemoved
+          socket.off('dashboard:updated', listener)
+        } catch {}
+      }
     }),
     getAdminDashboardAnalytics: build.query({
       query: () => '/admin/dashboard/analytics',
@@ -463,6 +485,27 @@ export const workforceApi = baseApi.injectEndpoints({
       query: () => '/notifications',
       transformResponse: unwrap,
       providesTags: ['Notifications'],
+      async onCacheEntryAdded(arg, { updateCachedData, cacheDataLoaded, cacheEntryRemoved, dispatch }) {
+        const socket = getSocket()
+        if (!socket) return
+
+        try {
+          await cacheDataLoaded
+
+          const listener = (newNotification) => {
+            updateCachedData((draft) => {
+              if (draft && draft.notifications) {
+                draft.notifications.unshift(newNotification)
+                draft.unreadCount = (draft.unreadCount || 0) + 1
+              }
+            })
+          }
+          socket.on('notification:new', listener)
+          
+          await cacheEntryRemoved
+          socket.off('notification:new', listener)
+        } catch {}
+      }
     }),
     markNotificationRead: build.mutation({
       query: (id) => ({ url: `/notifications/${id}/read`, method: 'PATCH' }),
@@ -528,6 +571,7 @@ export const {
   useCreateRequestMutation,
   useCreateRazorpayOrderMutation,
   useVerifyRazorpayPaymentMutation,
+  usePayPlatformFeeMutation,
   useCreateExtraWorkMutation,
   useGetExtraWorkQuery,
   useUpdateExtraWorkStatusMutation,

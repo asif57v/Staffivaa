@@ -126,8 +126,7 @@ export function AdminLayout() {
   }, [])
 
   const { data: stats } = useGetAdminDashboardStatsQuery(undefined, {
-    skip: !user || user.role !== 'admin',
-    pollingInterval: 60000
+    skip: !user || user.role !== 'admin'
   })
 
   const [lastSeen, setLastSeen] = useState(() => {

@@ -12,6 +12,7 @@ function formatDate(d) {
 
 export function VendorPaymentPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   
   const { data, isLoading, isError } = useGetVendorJobsQuery()
   const [createOrder, { isLoading: isCreatingOrder }] = useCreateRazorpayOrderMutation()
@@ -167,15 +168,15 @@ export function VendorPaymentPage() {
 
           <div className="space-y-3 mb-4">
             <div className="flex justify-between items-center text-[14px] text-yellow-400 font-bold">
-              <span>Platform Fee</span>
-              <span>₹{request.labourPlatformFee}</span>
+              <span>Vendor Platform Fee</span>
+              <span>₹{request.vendorPlatformFeeAmount || 111}</span>
             </div>
           </div>
           
           <div className="pt-4 border-t border-slate-700/50 flex justify-between items-center">
             <span className="text-[16px] font-bold text-slate-200">Amount to Pay</span>
             <span className="text-[24px] font-black text-[#FFC107]">
-              ₹{request.labourPlatformFee}
+              ₹{request.vendorPlatformFeeAmount || 111}
             </span>
           </div>
         </AppSurface>
@@ -186,18 +187,18 @@ export function VendorPaymentPage() {
       <div className="fixed bottom-[calc(68px+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-slate-100 p-4 pb-4 shadow-[0_-10px_30px_-10px_rgba(0,0,0,0.05)] z-40">
         <button 
           onClick={handlePayment}
-          disabled={isCreatingOrder || isVerifying || request.labourPaymentStatus === 'paid'}
+          disabled={isCreatingOrder || isVerifying || request.vendorPlatformFeeStatus === 'paid'}
           className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#FFC107] py-4 text-[16px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm disabled:opacity-50"
         >
           {isCreatingOrder || isVerifying ? (
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-900 border-t-transparent" />
-          ) : request.labourPaymentStatus === 'paid' ? (
+          ) : request.vendorPlatformFeeStatus === 'paid' ? (
             <>
               <CheckCircle2 className="h-5 w-5" /> Paid
             </>
           ) : (
             <>
-              Pay ₹{request.labourPlatformFee} Now
+              Pay ₹{request.vendorPlatformFeeAmount || 111} Securely
             </>
           )}
         </button>

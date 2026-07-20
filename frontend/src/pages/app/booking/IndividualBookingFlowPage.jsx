@@ -114,6 +114,23 @@ export function IndividualBookingFlowPage() {
   const [isLocating, setIsLocating] = useState(false)
   const [autocomplete, setAutocomplete] = useState(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [activeOffers, setActiveOffers] = useState([])
+
+  useEffect(() => {
+    const fetchOffers = async () => {
+      try {
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1'
+        const res = await fetch(`${baseUrl}/marketing/offers`)
+        if (res.ok) {
+          const data = await res.json()
+          setActiveOffers(data?.data?.offers || [])
+        }
+      } catch (err) {
+        console.error('Failed to fetch offers:', err)
+      }
+    }
+    fetchOffers()
+  }, [])
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
@@ -369,8 +386,26 @@ export function IndividualBookingFlowPage() {
       },
     ]
     const days = durationKindToDays(draft.durationKind, draft.durationDays)
-    return estimateIndividualBooking({ lines, durationDays: days }, pricingData?.pricing)
-  }, [draft.durationDays, draft.durationKind, draft.selectedWorkers, pricingData])
+    let est = estimateIndividualBooking({ lines, durationDays: days }, pricingData?.pricing)
+    
+    // Apply dynamic category offers
+    const applicableOffer = activeOffers.find(o => 
+      o.isActive && 
+      o.discountPercentage > 0 &&
+      (o.categories.length === 0 || o.categories.includes(draft.categoryId)) &&
+      (o.maxUsageLimit === 0 || o.currentUsageCount < o.maxUsageLimit)
+    )
+
+    if (applicableOffer) {
+      est.originalPlatformFee = est.platformFee
+      const discount = (est.platformFee * applicableOffer.discountPercentage) / 100
+      est.platformFee = Math.max(0, est.platformFee - discount)
+      est.grandTotal = est.estimatedSubtotal + est.platformFee + est.gst + est.convenienceFee
+      est.appliedOffer = applicableOffer
+    }
+
+    return est
+  }, [draft.durationDays, draft.durationKind, draft.selectedWorkers, draft.categoryId, pricingData, activeOffers])
 
   const pickLocation = () => {
     if (!navigator.geolocation) {
@@ -903,8 +938,13 @@ export function IndividualBookingFlowPage() {
                 <span>{formatInr(estimate.estimatedSubtotal)}</span>
               </div>
               <div className="flex justify-between text-slate-500">
-                <span>Platform fee</span>
-                <span>{formatInr(estimate.platformFee)}</span>
+                <span>Platform fee {estimate.appliedOffer && <span className="ml-1 text-[10px] font-bold text-emerald-600 px-1.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-100">{estimate.appliedOffer.discountPercentage}% OFF</span>}</span>
+                <span>
+                  {estimate.originalPlatformFee !== undefined ? (
+                    <span className="line-through text-slate-300 mr-2">{formatInr(estimate.originalPlatformFee)}</span>
+                  ) : null}
+                  {formatInr(estimate.platformFee)}
+                </span>
               </div>
               <div className="mt-2 flex justify-between text-base font-black text-brand">
                 <span>Total</span>

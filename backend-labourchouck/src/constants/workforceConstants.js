@@ -11,6 +11,18 @@ export const REQUEST_STATUS = {
   ASSIGNED: 'assigned',
   ACCEPTED: 'accepted',
   PLATFORM_FEE_PENDING: 'platform_fee_pending',
+  
+  // New Corporate-Vendor B2B Lead Fee flow statuses
+  VENDOR_ACCEPTED: 'vendor_accepted',
+  VENDOR_PLATFORM_FEE_PENDING: 'vendor_platform_fee_pending',
+  VENDOR_PLATFORM_FEE_PAID: 'vendor_platform_fee_paid',
+  CORPORATE_PLATFORM_FEE_PENDING: 'corporate_platform_fee_pending',
+  CORPORATE_PLATFORM_FEE_PAID: 'corporate_platform_fee_paid',
+  QUOTATION_UNLOCKED: 'quotation_unlocked',
+  QUOTATION_SENT: 'quotation_sent',
+  QUOTATION_ACCEPTED: 'quotation_accepted',
+  WORK_STARTED: 'work_started',
+  
   IN_PROGRESS: 'in_progress',
   ON_SITE: 'on_site',
   ATTENDANCE: 'attendance_tracking',

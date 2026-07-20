@@ -4,10 +4,11 @@ import mongoose from 'mongoose'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { Wallet } from '../models/Wallet.js'
 import { WalletTransaction } from '../models/WalletTransaction.js'
+import { Offer } from '../models/Offer.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { USER_ROLES } from '../constants/roles.js'
-import { emitRequestStatusUpdate, emitToVendor, emitToUser } from '../utils/socket.js'
+import { emitRequestStatusUpdate, emitToVendor, emitToUser, emitToCorporate } from '../utils/socket.js'
 import { sendNotificationToUser } from '../services/notificationService.js'
 
 // Cache the instance
@@ -41,34 +42,49 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
   }
 
   let totalAmount = 0;
+  let isVendorFee = false;
+  let isCorporateFee = false;
+
   if (isLabour) {
-    if (request.labourPaymentStatus === 'paid') return sendError(res, { message: 'Already paid by labour', statusCode: HTTP_STATUS.BAD_REQUEST });
-    totalAmount = request.labourPlatformFee !== undefined ? request.labourPlatformFee : 20;
-    
-    // Bypass Razorpay if fee is exactly 0
-    if (totalAmount === 0) {
-      request.labourPaymentStatus = 'paid';
-      if (request.userPaymentStatus === 'paid') {
-        request.status = 'confirmed';
-        emitRequestStatusUpdate(request._id.toString(), { requestStatus: request.status });
+    if (request.status === 'vendor_platform_fee_pending') {
+      if (request.vendorPlatformFeeStatus === 'paid') return sendError(res, { message: 'Already paid vendor fee', statusCode: HTTP_STATUS.BAD_REQUEST });
+      totalAmount = request.vendorPlatformFeeAmount || 111;
+      isVendorFee = true;
+    } else {
+      if (request.labourPaymentStatus === 'paid') return sendError(res, { message: 'Already paid by labour', statusCode: HTTP_STATUS.BAD_REQUEST });
+      totalAmount = request.labourPlatformFee !== undefined ? request.labourPlatformFee : 20;
+      
+      // Bypass Razorpay if fee is exactly 0
+      if (totalAmount === 0) {
+        request.labourPaymentStatus = 'paid';
+        if (request.userPaymentStatus === 'paid') {
+          request.status = 'confirmed';
+          emitRequestStatusUpdate(request._id.toString(), { requestStatus: request.status });
+        }
+        await request.save();
+        return sendSuccess(res, { data: { bypassPayment: true } });
       }
-      await request.save();
-      return sendSuccess(res, { data: { bypassPayment: true } });
     }
   } else {
     if (request.sourceType === 'corporate') {
-      const userPlatformFee = request.userPlatformFee !== undefined ? request.userPlatformFee : 0
-      const convenienceFee = request.convenienceFee !== undefined ? request.convenienceFee : 0
-      const gstRate = request.userGstRate !== undefined ? request.userGstRate : 18
-      const gstAmount = Math.round((userPlatformFee * gstRate) / 100)
-
-      if (request.status === 'platform_fee_pending' || request.status === 'payment_pending') {
-        if (request.userPaymentStatus === 'paid') {
-          return sendError(res, { message: 'Platform fee already completed', statusCode: HTTP_STATUS.BAD_REQUEST })
-        }
-        totalAmount = userPlatformFee + gstAmount + convenienceFee
+      if (request.status === 'corporate_platform_fee_pending') {
+        if (request.corporatePlatformFeeStatus === 'paid') return sendError(res, { message: 'Already paid corporate fee', statusCode: HTTP_STATUS.BAD_REQUEST });
+        totalAmount = request.corporatePlatformFeeAmount || 99;
+        isCorporateFee = true;
       } else {
-        return sendError(res, { message: `Payment is not due or requested yet. Current status: ${request.status}`, statusCode: HTTP_STATUS.BAD_REQUEST })
+        const userPlatformFee = request.userPlatformFee !== undefined ? request.userPlatformFee : 0
+        const convenienceFee = request.convenienceFee !== undefined ? request.convenienceFee : 0
+        const gstRate = request.userGstRate !== undefined ? request.userGstRate : 18
+        const gstAmount = Math.round((userPlatformFee * gstRate) / 100)
+
+        if (request.status === 'platform_fee_pending' || request.status === 'payment_pending') {
+          if (request.userPaymentStatus === 'paid') {
+            return sendError(res, { message: 'Platform fee already completed', statusCode: HTTP_STATUS.BAD_REQUEST })
+          }
+          totalAmount = userPlatformFee + gstAmount + convenienceFee
+        } else {
+          return sendError(res, { message: `Payment is not due or requested yet. Current status: ${request.status}`, statusCode: HTTP_STATUS.BAD_REQUEST })
+        }
       }
     } else {
       if (request.userPaymentStatus === 'paid') return sendError(res, { message: 'Already paid by user', statusCode: HTTP_STATUS.BAD_REQUEST });
@@ -118,9 +134,21 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
   const isUserOrder = request.userRazorpayOrderId === razorpay_order_id;
 
   if (generatedSignature !== razorpay_signature) {
-    if (isLabourOrder) request.labourPaymentStatus = 'failed';
-    else if (isUserOrder) request.userPaymentStatus = 'failed';
-    else request.paymentStatus = 'failed';
+    if (isLabourOrder) {
+      if (request.status === 'vendor_platform_fee_pending') {
+        request.vendorPlatformFeeStatus = 'failed';
+      } else {
+        request.labourPaymentStatus = 'failed';
+      }
+    } else if (isUserOrder) {
+      if (request.status === 'corporate_platform_fee_pending') {
+        request.corporatePlatformFeeStatus = 'failed';
+      } else {
+        request.userPaymentStatus = 'failed';
+      }
+    } else {
+      request.paymentStatus = 'failed';
+    }
 
     await request.save()
     sendNotificationToUser(req.user._id.toString(), 'Payment Failed', 'Your recent payment transaction failed. Please try again.', { url: '/app/wallet' })
@@ -128,15 +156,43 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
   }
 
   if (isLabourOrder) {
-    request.labourPaymentStatus = 'paid';
+    if (request.status === 'vendor_platform_fee_pending') {
+      request.vendorPlatformFeeStatus = 'paid';
+      request.vendorPlatformFeePaidAt = new Date();
+      if (request.corporatePlatformFeeStatus === 'paid') {
+        request.quotationUnlocked = true;
+        request.status = 'quotation_unlocked';
+      } else {
+        request.status = 'corporate_platform_fee_pending';
+        emitToCorporate(request.clientId?.toString(), 'corporate_fee_pending', { requestId: request._id.toString() });
+      }
+    } else {
+      request.labourPaymentStatus = 'paid';
+    }
   } else if (isUserOrder) {
-    request.userPaymentStatus = 'paid';
+    if (request.status === 'corporate_platform_fee_pending') {
+      request.corporatePlatformFeeStatus = 'paid';
+      request.corporatePlatformFeePaidAt = new Date();
+      if (request.vendorPlatformFeeStatus === 'paid') {
+        request.quotationUnlocked = true;
+        request.status = 'quotation_unlocked';
+        import('../models/Allocation.js').then(({ Allocation }) => {
+          Allocation.findOne({ requestId: request._id }).then(allocation => {
+            if (allocation && allocation.vendorId) {
+              emitToVendor(allocation.vendorId.toString(), 'quotation_unlocked', { requestId: request._id.toString() });
+            }
+          });
+        });
+      }
+    } else {
+      request.userPaymentStatus = 'paid';
+    }
   } else {
     request.paymentStatus = 'paid';
   }
   
-  // Overall status check
-  if (request.userPaymentStatus === 'paid' && request.labourPaymentStatus === 'paid') {
+  // Overall status check for older flow
+  if (request.userPaymentStatus === 'paid' && request.labourPaymentStatus === 'paid' && request.status !== 'quotation_unlocked') {
     request.status = request.sourceType === 'corporate' ? 'project_active' : 'confirmed'; 
     emitRequestStatusUpdate(request._id.toString(), { requestStatus: request.status })
   }
@@ -144,7 +200,23 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
   request.razorpayPaymentId = razorpay_payment_id
   request.razorpaySignature = razorpay_signature
 
+  // Increment Offer Usage if applicable and this is the first successful payment
+  if (isUserOrder && request.appliedOfferId && request.userPaymentStatus === 'paid' && !request.offerUsageIncremented) {
+    try {
+      await Offer.findByIdAndUpdate(request.appliedOfferId, { $inc: { currentUsageCount: 1 } })
+      request.offerUsageIncremented = true
+    } catch (err) {
+      console.error('Failed to increment offer usage', err)
+    }
+  }
+
   await request.save()
+  
+  // Emit status update for any status change
+  emitRequestStatusUpdate(request._id.toString(), { 
+    requestId: request._id.toString(), 
+    requestStatus: request.status 
+  })
   
   sendNotificationToUser(req.user._id.toString(), 'Payment Successful', 'Your payment was successfully processed.', { url: '/corporate/requests' })
 

@@ -47,6 +47,7 @@ export const baseApi = createApi({
     'Wallet',
     'PayoutBatches',
     'Earnings',
+    'Commissions',
   ],
   endpoints: () => ({}),
 })

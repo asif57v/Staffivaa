@@ -12,6 +12,7 @@ function formatDate(d) {
 
 export function CorporatePaymentPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   
   const { data, isLoading, isError } = useGetRequestQuery(id, { skip: !id })
   const [createOrder, { isLoading: isCreatingOrder }] = useCreateRazorpayOrderMutation()
@@ -58,7 +59,7 @@ export function CorporatePaymentPage() {
         amount: orderData.amount,
         currency: orderData.currency,
         name: 'Staffivaa',
-        description: `Final Payment for ${request.reference}`,
+        description: `Platform Fee for ${request.reference}`,
         order_id: orderData.orderId,
         handler: async function (response) {
           try {
@@ -121,7 +122,7 @@ export function CorporatePaymentPage() {
           <ArrowLeft className="h-5 w-5 text-slate-900" />
         </Link>
         <h1 className="text-base font-extrabold text-slate-900">
-          {request.status === 'payment_pending' ? 'Advance Payment Checkout' : 'Final Settlement Checkout'}
+          Corporate Platform Fee Checkout
         </h1>
       </header>
 
@@ -171,7 +172,7 @@ export function CorporatePaymentPage() {
           </div>
           
           {assignments.length === 0 ? (
-            <p className="text-[13px] text-slate-500 font-medium">No workers assigned.</p>
+            <p className="text-[13px] text-slate-500 font-medium">Wait for Vendor to assign workers before quotation phase.</p>
           ) : (
             <div className="space-y-4">
               {assignments.map(a => (
@@ -204,22 +205,18 @@ export function CorporatePaymentPage() {
           <div className="space-y-3 mb-4">
             <div className="flex justify-between items-center text-[14px]">
               <span className="font-medium text-slate-300">Total Project Value</span>
-              <span className="font-bold text-white">₹{summary.totalLabourCost}</span>
+              <span className="font-bold text-white">₹{summary?.totalLabourCost || 0}</span>
             </div>
             <div className="flex justify-between items-center text-[14px] text-yellow-400 font-bold">
               <span>Platform Fee</span>
-              <span>₹{summary.userPlatformFee}</span>
-            </div>
-            <div className="flex justify-between items-center text-[13px] text-slate-400">
-              <span>Platform GST ({summary.gstRate || 18}%)</span>
-              <span>₹{summary.gstAmount}</span>
+              <span>₹{request.corporatePlatformFeeAmount || 99}</span>
             </div>
           </div>
           
           <div className="pt-4 border-t border-slate-700/50 flex justify-between items-center">
             <span className="text-[16px] font-bold text-slate-200">Amount to Pay</span>
             <span className="text-[24px] font-black text-[#FFC107]">
-              ₹{summary.userPlatformFee + summary.gstAmount}
+              ₹{request.corporatePlatformFeeAmount || 99}
             </span>
           </div>
         </AppSurface>
@@ -230,10 +227,10 @@ export function CorporatePaymentPage() {
       <div className="fixed bottom-[calc(68px+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 w-full max-w-[430px] bg-white border-t border-slate-100 p-4 pb-4 shadow-[0_-10px_30px_-10px_rgba(0,0,0,0.05)] z-40">
         <button 
           onClick={handlePayment}
-          disabled={isCreatingOrder || isVerifying || (request.status === 'payment_pending' && request.advancePaymentStatus === 'paid') || (request.status !== 'payment_pending' && request.finalPaymentStatus === 'paid')}
+          disabled={isCreatingOrder || isVerifying || request.corporatePlatformFeeStatus === 'paid'}
           className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#FFC107] py-4 text-[16px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm disabled:opacity-50"
         >
-          {isCreatingOrder || isVerifying ? 'Processing...' : `Pay ₹${summary.userPlatformFee + summary.gstAmount} Securely`}
+          {isCreatingOrder || isVerifying ? 'Processing...' : `Pay ₹${request.corporatePlatformFeeAmount || 99} Securely`}
         </button>
       </div>
 

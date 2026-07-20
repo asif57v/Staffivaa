@@ -126,11 +126,23 @@ export function VendorJobDetailPage() {
   let statusTone = pending ? 'bg-orange-50 text-orange-700' : 'bg-emerald-50 text-emerald-700'
   let StatusIcon = pending ? AlertCircle : CheckCircle2
   
-  if (allocation.status === 'completed') {
+  if (req?.status === 'vendor_platform_fee_pending') {
+    statusLabel = 'Platform Fee Pending'
+    statusTone = 'bg-rose-50 text-rose-700 animate-pulse'
+    StatusIcon = AlertCircle
+  } else if (req?.status === 'corporate_platform_fee_pending') {
+    statusLabel = 'Awaiting Corporate Fee'
+    statusTone = 'bg-amber-50 text-amber-700'
+    StatusIcon = Clock
+  } else if (req?.status === 'quotation_unlocked') {
+    statusLabel = 'Quotation Phase'
+    statusTone = 'bg-blue-50 text-blue-700'
+    StatusIcon = FileText
+  } else if (allocation.status === 'completed' || req?.status === 'completed') {
     statusLabel = 'Completed'
     statusTone = 'bg-emerald-50 text-emerald-700'
     StatusIcon = CheckCircle2
-  } else if (allocation.status === 'cancelled') {
+  } else if (allocation.status === 'cancelled' || req?.status === 'cancelled') {
     statusLabel = 'Cancelled'
     statusTone = 'bg-rose-50 text-rose-700'
     StatusIcon = XCircle
@@ -248,14 +260,6 @@ export function VendorJobDetailPage() {
                 <span>Quoted Total</span>
                 <span>₹{quotation.grandTotal.toLocaleString()}</span>
               </div>
-              {quotation.status === 'approved' && req?.labourPlatformFee !== undefined && (
-                <div className="pt-2 mt-2 border-t border-slate-100 border-dashed space-y-1.5">
-                  <div className={`flex justify-between text-[12px] font-bold ${req?.labourPaymentStatus === 'paid' ? 'text-emerald-600' : 'text-amber-600'}`}>
-                    <span>{req?.labourPaymentStatus === 'paid' ? 'Platform Fee Paid' : 'Platform Fee Payable'}</span>
-                    <span>₹{req?.labourPlatformFee.toLocaleString()}</span>
-                  </div>
-                </div>
-              )}
             </div>
 
             {['draft', 'submitted', 'under_review', 'revision_requested', 'revised'].includes(quotation.status) && (
@@ -268,7 +272,7 @@ export function VendorJobDetailPage() {
             )}
           </div>
         ) : (
-          !pending && totalAssigned === totalRequired && (
+          !pending && !quotation && (['quotation_unlocked', 'accepted', 'project_active', 'allocated', 'assigned'].includes(req?.status)) && totalAssigned >= totalRequired && (
             <div className="rounded-[20px] bg-slate-900 p-5 text-white border border-slate-900 space-y-3">
               <div className="flex justify-between items-start">
                 <div>
@@ -446,21 +450,25 @@ export function VendorJobDetailPage() {
           <button onClick={() => acceptJob(id)} disabled={accepting} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm disabled:opacity-50">
             <CheckCircle2 className="h-4 w-4" /> Accept Job
           </button>
-        ) : (req?.status === 'accepted' || req?.status === 'allocated' || req?.status === 'assigned') && totalAssigned < totalRequired ? (
+        ) : req?.status === 'vendor_platform_fee_pending' ? (
+          <button onClick={() => navigate(`/vendor/jobs/${id}/payment`)} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
+            Pay Platform Fee to Unlock Next Step
+          </button>
+        ) : req?.status === 'corporate_platform_fee_pending' ? (
+          <button disabled className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-slate-100 border border-slate-200 py-3.5 text-[15px] font-black text-slate-400 transition shadow-sm opacity-80">
+            Waiting for Corporate to Pay Platform Fee...
+          </button>
+        ) : (['accepted', 'allocated', 'assigned', 'quotation_unlocked', 'project_active'].includes(req?.status)) && totalAssigned < totalRequired ? (
           <button onClick={() => navigate(`/vendor/jobs/${id}/assign`)} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
             <Users className="h-4 w-4" /> Assign Workers
           </button>
-        ) : !quotation && totalAssigned === totalRequired ? (
+        ) : !quotation && (['quotation_unlocked', 'accepted', 'project_active', 'allocated', 'assigned'].includes(req?.status)) && totalAssigned >= totalRequired ? (
           <button onClick={() => setShowEditor(true)} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
             <FileText className="h-4 w-4" /> Create & Submit Quotation
           </button>
         ) : quotation && ['draft', 'submitted', 'under_review', 'revision_requested', 'revised'].includes(quotation.status) ? (
           <button onClick={() => setShowEditor(true)} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
             <FileText className="h-4 w-4" /> {quotation.status === 'revision_requested' ? 'Edit & Resubmit Quotation' : 'Edit Quotation'}
-          </button>
-        ) : (req?.status === 'platform_fee_pending' || req?.status === 'payment_pending') && quotation?.status === 'approved' && req?.labourPaymentStatus !== 'paid' ? (
-          <button onClick={() => navigate(`/vendor/jobs/${id}/payment`)} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
-            Pay Platform Fee
           </button>
         ) : null}
         

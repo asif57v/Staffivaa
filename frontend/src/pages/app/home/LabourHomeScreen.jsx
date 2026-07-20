@@ -369,7 +369,7 @@ export function LabourHomeScreen({ user }) {
     [entries, wallet.ratePaisePerMin, withdrawnPaise],
   )
 
-  const { data: notifRes } = useGetNotificationsQuery(undefined, { pollingInterval: 10000 })
+  const { data: notifRes } = useGetNotificationsQuery(undefined)
   const notifications = useMemo(() => ({
     unreadCount: notifRes?.data?.unreadCount || 0
   }), [notifRes])

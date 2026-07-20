@@ -25,6 +25,7 @@ import {
   Megaphone,
   MonitorPlay,
   ImagePlus,
+  Percent,
 } from 'lucide-react'
 
 /**
@@ -90,7 +91,7 @@ export const ADMIN_NAV_SECTIONS = [
     title: 'Finance',
     items: [
       { to: '/admin/wallet', label: 'Admin Wallet', icon: Wallet },
-      { to: '/admin/billing', label: 'Payments & billing', icon: ClipboardList },
+      { to: '/admin/commission', label: 'Commissions', icon: Percent },
       { to: '/admin/pricing', label: 'Pricing Management', icon: BadgeIndianRupee },
     ],
   },
@@ -121,7 +122,6 @@ const ROUTE_TITLES = [
   { prefix: '/admin/settings', title: 'Settings' },
   { prefix: '/admin/reports', title: 'Reports & analytics' },
   { prefix: '/admin/pricing', title: 'Pricing Management' },
-  { prefix: '/admin/billing', title: 'Payments & billing' },
   { prefix: '/admin/payments', title: 'Payment Details' },
   { prefix: '/admin/wallet', title: 'Admin Wallet' },
   { prefix: '/admin/attendance', title: 'Attendance' },

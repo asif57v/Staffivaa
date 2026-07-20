@@ -5,6 +5,7 @@ import { Allocation } from '../models/Allocation.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { emitToCorporate, emitToVendor } from '../utils/socket.js'
+import CommissionService from '../services/CommissionService.js'
 
 export const submitQuotationVendor = asyncHandler(async (req, res) => {
   const { requestId } = req.body
@@ -15,8 +16,12 @@ export const submitQuotationVendor = asyncHandler(async (req, res) => {
   }
 
   // Ensure request is in accepted or assigned state
-  if (!['accepted', 'allocated', 'assigned'].includes(request.status)) {
+  if (!['accepted', 'allocated', 'assigned', 'quotation_unlocked'].includes(request.status)) {
     return sendError(res, { message: 'Cannot submit quotation for this request status', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+  
+  if (request.sourceType === 'corporate' && request.quotationUnlocked !== true) {
+    return sendError(res, { message: 'Quotation cannot be submitted until both platform fees are paid', statusCode: HTTP_STATUS.FORBIDDEN })
   }
 
   const {
@@ -199,32 +204,22 @@ export const respondToQuotationCorporate = asyncHandler(async (req, res) => {
   }
 
   if (action === 'approve') {
-    const pricing = await SystemPricing.findOne().lean()
-    
-    // Calculate platform fees based on pricing type (fixed or percentage)
-    const corporateFeeType = pricing?.corporate?.platformFee?.type || 'percentage'
-    const corporateFeeValue = pricing?.corporate?.platformFee?.value || 5
-    const vendorFeeType = pricing?.vendor?.platformCommission?.type || 'percentage'
-    const vendorFeeValue = pricing?.vendor?.platformCommission?.value || 2
-    
-    const corporateFee = corporateFeeType === 'fixed' 
-      ? corporateFeeValue 
-      : Math.round((quotation.grandTotal * corporateFeeValue) / 100)
-      
-    const vendorFee = vendorFeeType === 'fixed'
-      ? vendorFeeValue
-      : Math.round((quotation.grandTotal * vendorFeeValue) / 100)
-    
     quotation.status = 'approved'
     
-    request.status = 'platform_fee_pending'
+    // In new flow, fees are paid upfront. Once quotation is approved, project becomes active.
+    request.status = 'project_active'
     request.labourCharge = quotation.grandTotal
-    request.userPlatformFee = corporateFee
-    request.labourPlatformFee = vendorFee
-    request.userPaymentStatus = 'pending'
-    request.labourPaymentStatus = 'pending'
     
     await request.save()
+
+    // Trigger Commission Generation if applicable
+    if (request.revenueModel === 'platform_fee_plus_commission' && request.commissionTrigger === 'after_quotation_accepted') {
+      try {
+        await CommissionService.generateCommission(request, quotation)
+      } catch (err) {
+        console.error('Failed to generate commission on quotation approval:', err)
+      }
+    }
   } else if (action === 'reject') {
     quotation.status = 'rejected'
     request.status = 'rejected'

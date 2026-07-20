@@ -12,13 +12,17 @@ import { Allocation } from '../models/Allocation.js'
 import { User } from '../models/User.js'
 import { ExtraWorkRequest } from '../models/ExtraWorkRequest.js'
 import { SystemPricing } from '../models/SystemPricing.js'
+import { Offer } from '../models/Offer.js'
 import { Quotation } from '../models/Quotation.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { emitToUser, emitToRole, emitToCorporate, emitToVendor } from '../utils/socket.js'
 import { sendNotificationToUser } from '../services/notificationService.js'
 import { logAudit } from '../utils/auditLogger.js'
+import CommissionService from '../services/CommissionService.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
+import { SystemSettings } from '../models/SystemSettings.js'
+import LocationMatchingService from '../services/LocationMatchingService.js'
 
 function parseLines(lines) {
   if (!Array.isArray(lines) || !lines.length) return null
@@ -55,6 +59,7 @@ export const createRequest = asyncHandler(async (req, res) => {
     shiftEnd,
     lines,
     locationText,
+    vendorSearchRadius,
     notes,
     billingMode,
     bookingType,
@@ -81,6 +86,12 @@ export const createRequest = asyncHandler(async (req, res) => {
   let pricing = await SystemPricing.findOne()
   if (!pricing) {
     pricing = await SystemPricing.create({})
+  }
+  
+  // Load system settings for revenue config snapshot
+  let settings = await SystemSettings.findOne({ singletonId: 'SYSTEM_SETTINGS' })
+  if (!settings) {
+    settings = await SystemSettings.create({ singletonId: 'SYSTEM_SETTINGS' })
   }
 
   // Estimate total labor cost to compute percentage fees
@@ -139,6 +150,8 @@ export const createRequest = asyncHandler(async (req, res) => {
     if (pricing.userBooking.convenienceFee?.enabled) {
       convFee = pricing.userBooking.convenienceFee.amount || 20
     }
+
+
   } else {
     // Corporate
     const pfConfig = pricing.corporate.platformFee
@@ -168,6 +181,39 @@ export const createRequest = asyncHandler(async (req, res) => {
     } else {
       userGstRate = 0
     }
+    
+    if (pricing.corporate.convenienceFee?.enabled) {
+      convFee = pricing.corporate.convenienceFee.amount || 20
+    }
+  }
+
+  // Check for dynamic category offers (applies to both Individual and Corporate)
+  let appliedOfferId = null
+  let originalPlatformFee = userPlatformFee
+  
+  if (userPlatformFee > 0 && Array.isArray(parsedLines) && parsedLines.length > 0) {
+    const primaryCategoryId = parsedLines[0].categoryId
+    
+    const activeOffer = await Offer.findOne({
+      isActive: true,
+      discountPercentage: { $gt: 0 },
+      $or: [
+        { categories: { $size: 0 } },
+        { categories: primaryCategoryId.toString() }
+      ],
+      $expr: {
+        $or: [
+          { $eq: ['$maxUsageLimit', 0] },
+          { $lt: ['$currentUsageCount', '$maxUsageLimit'] }
+        ]
+      }
+    })
+
+    if (activeOffer) {
+      const discountValue = (userPlatformFee * activeOffer.discountPercentage) / 100
+      userPlatformFee = Math.max(0, userPlatformFee - discountValue)
+      appliedOfferId = activeOffer._id
+    }
   }
 
   let labourPlatformFeeValue = 20
@@ -195,6 +241,10 @@ export const createRequest = asyncHandler(async (req, res) => {
     locationText,
     locationLat: Number.isFinite(Number(req.body.locationLat)) ? Number(req.body.locationLat) : undefined,
     locationLng: Number.isFinite(Number(req.body.locationLng)) ? Number(req.body.locationLng) : undefined,
+    locationPoint: (Number.isFinite(Number(req.body.locationLat)) && Number.isFinite(Number(req.body.locationLng))) 
+      ? { type: 'Point', coordinates: [Number(req.body.locationLng), Number(req.body.locationLat)] } 
+      : undefined,
+    vendorSearchRadius: Number.isFinite(Number(vendorSearchRadius)) ? Number(vendorSearchRadius) : undefined,
     notes,
     billingMode,
     bookingType,
@@ -204,6 +254,18 @@ export const createRequest = asyncHandler(async (req, res) => {
     convenienceFee: convFee,
     platformFeeType,
     platformFeeValue,
+    appliedOfferId: appliedOfferId || undefined,
+    originalPlatformFee: originalPlatformFee || undefined,
+    workers: [],
+    
+    // Inject Commission Snapshot Config from SystemSettings
+    revenueModel: settings.revenueModel,
+    commissionEnabled: settings.commissionEnabled,
+    commissionType: settings.commissionType,
+    commissionValue: settings.commissionValue,
+    commissionTrigger: settings.commissionTrigger,
+    commissionDueDays: settings.commissionDueDays,
+
     status: sourceType === REQUEST_SOURCE.INDIVIDUAL ? REQUEST_STATUS.SEARCHING : REQUEST_STATUS.ALLOCATING,
     ...(sourceType === REQUEST_SOURCE.INDIVIDUAL && { expiresAt: new Date(Date.now() + 3 * 60 * 1000) }),
   })
@@ -275,9 +337,19 @@ export const createRequest = asyncHandler(async (req, res) => {
 
   emitToUser('individual', user._id.toString(), 'request_created', { requestId: request._id.toString() })
   if (sourceType === REQUEST_SOURCE.CORPORATE) {
-    console.log(`[Socket] Emitting corporate_request_created to contractor and vendor roles`)
-    emitToRole('contractor', 'corporate_request_created', { requestId: request._id.toString() })
-    emitToRole('vendor', 'corporate_request_created', { requestId: request._id.toString() })
+    if (settings?.radiusConfig?.enableRadiusMatching) {
+      console.log(`[LocationMatching] Finding eligible vendors for request ${request._id}`)
+      const eligibleVendorIds = await LocationMatchingService.findEligibleVendors(request, settings.radiusConfig)
+      
+      console.log(`[LocationMatching] Found ${eligibleVendorIds.length} eligible vendors. Dispatching sockets...`)
+      for (const vId of eligibleVendorIds) {
+        emitToVendor(vId, 'corporate_request_created', { requestId: request._id.toString() })
+      }
+    } else {
+      console.log(`[Socket] Emitting corporate_request_created to contractor and vendor roles (radius matching disabled)`)
+      emitToRole('contractor', 'corporate_request_created', { requestId: request._id.toString() })
+      emitToRole('vendor', 'corporate_request_created', { requestId: request._id.toString() })
+    }
   }
 
   sendSuccess(res, { data: { request } }, HTTP_STATUS.CREATED)
@@ -432,6 +504,18 @@ export const patchRequestStatusAdmin = asyncHandler(async (req, res) => {
     module: 'Operations',
     req
   })
+
+  // Trigger Commission if completed
+  if (status === 'completed' && request.revenueModel === 'platform_fee_plus_commission' && request.commissionTrigger === 'after_project_completed') {
+    try {
+      const quotation = await Quotation.findOne({ requestId: request._id, status: 'approved' })
+      if (quotation) {
+        await CommissionService.generateCommission(request, quotation)
+      }
+    } catch (err) {
+      console.error('Failed to generate commission on project completion:', err)
+    }
+  }
 
   // Trigger Notification to client
   await triggerNotification({
@@ -754,4 +838,86 @@ export const addFinanceNoteAdmin = asyncHandler(async (req, res) => {
   await request.save()
 
   sendSuccess(res, { message: 'Finance note added', request })
+})
+
+export const payPlatformFee = asyncHandler(async (req, res) => {
+  const request = await WorkforceRequest.findById(req.params.id)
+  if (!request) return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
+
+  const user = await User.findById(req.user._id)
+  if (!user) return sendError(res, { message: 'User not found', statusCode: HTTP_STATUS.NOT_FOUND })
+
+  const { WalletTransaction } = await import('../models/WalletTransaction.js')
+
+  let feeAmount = 0
+  let isCorporate = false
+
+  if (req.user.role === USER_ROLES.CONTRACTOR) {
+    if (request.vendorPlatformFeeStatus === 'paid') {
+      return sendError(res, { message: 'Vendor platform fee already paid', statusCode: HTTP_STATUS.BAD_REQUEST })
+    }
+    feeAmount = request.vendorPlatformFeeAmount || 111
+  } else if (req.user.role === USER_ROLES.CORPORATE) {
+    isCorporate = true
+    if (request.corporatePlatformFeeStatus === 'paid') {
+      return sendError(res, { message: 'Corporate platform fee already paid', statusCode: HTTP_STATUS.BAD_REQUEST })
+    }
+    feeAmount = request.corporatePlatformFeeAmount || 99
+  } else {
+    return sendError(res, { message: 'Forbidden', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  if (user.walletBalance < feeAmount) {
+    return sendError(res, { message: 'Insufficient wallet balance to pay platform fee', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  user.walletBalance -= feeAmount
+  await user.save()
+
+  await WalletTransaction.create({
+    transactionId: `FEE-${isCorporate ? 'CORP' : 'VEND'}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    bookingId: request._id,
+    payerId: user._id,
+    payerName: user.fullName || (isCorporate ? 'Corporate' : 'Vendor'),
+    payerType: isCorporate ? 'corporate' : 'vendor',
+    labourId: user._id,
+    type: 'Debit',
+    source: 'Lead Generation Platform Fee',
+    amount: feeAmount,
+    status: 'Completed'
+  })
+  
+
+  if (isCorporate) {
+    request.corporatePlatformFeeStatus = 'paid'
+    request.corporatePlatformFeePaidAt = new Date()
+    
+    if (request.vendorPlatformFeeStatus === 'paid') {
+      request.quotationUnlocked = true
+      request.status = REQUEST_STATUS.QUOTATION_UNLOCKED
+      Allocation.findOne({ requestId: request._id }).then(allocation => {
+        if (allocation && allocation.vendorId) {
+           emitToVendor(allocation.vendorId.toString(), 'quotation_unlocked', { requestId: request._id.toString() })
+        }
+      })
+    } else {
+      request.status = REQUEST_STATUS.VENDOR_PLATFORM_FEE_PENDING
+    }
+  } else {
+    request.vendorPlatformFeeStatus = 'paid'
+    request.vendorPlatformFeePaidAt = new Date()
+    
+    if (request.corporatePlatformFeeStatus === 'paid') {
+      request.quotationUnlocked = true
+      request.status = REQUEST_STATUS.QUOTATION_UNLOCKED
+    } else {
+      request.status = REQUEST_STATUS.CORPORATE_PLATFORM_FEE_PENDING
+      emitToCorporate(request.clientId?.toString(), 'corporate_fee_pending', { requestId: request._id.toString() })
+    }
+  }
+
+  await request.save()
+  emitToCorporate(request.clientId?.toString(), 'request_status_update', { requestId: request._id.toString(), status: request.status })
+
+  sendSuccess(res, { message: 'Platform fee paid successfully', request })
 })

@@ -683,6 +683,17 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
     targetField = isApp ? 'fcmTokensMobile' : 'fcmTokensWeb';
   }
 
+  // Remove this token from all other users first to prevent wrong device routing
+  await User.updateMany(
+    { _id: { $ne: req.user._id } },
+    { 
+      $pull: { 
+        fcmTokensWeb: token, 
+        fcmTokensMobile: token 
+      } 
+    }
+  )
+
   // Retrieve user document to mutate token array safely (using lean to bypass version tracking)
   const user = await User.findById(req.user._id).lean()
   if (!user) {
@@ -865,4 +876,47 @@ export const getUserTimelineAdmin = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .lean()
   return sendSuccess(res, { data: { logs } })
+})
+
+/** Vendor: Update service radius and location */
+export const updateVendorRadius = asyncHandler(async (req, res) => {
+  const user = req.user
+  if (user.role !== USER_ROLES.CONTRACTOR) {
+    return sendError(res, { message: 'Only vendors can update their service radius', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  const { serviceRadius, currentLatitude, currentLongitude, currentAddress } = req.body
+
+  user.contractorProfile = user.contractorProfile || {}
+  
+  if (serviceRadius !== undefined) {
+    user.contractorProfile.serviceRadius = serviceRadius === null ? null : Number(serviceRadius)
+    user.contractorProfile.serviceRadiusUpdatedAt = new Date()
+  }
+
+  if (currentLatitude !== undefined && currentLongitude !== undefined) {
+    user.contractorProfile.currentLatitude = Number(currentLatitude)
+    user.contractorProfile.currentLongitude = Number(currentLongitude)
+    user.contractorProfile.locationPoint = {
+      type: 'Point',
+      coordinates: [Number(currentLongitude), Number(currentLatitude)]
+    }
+  }
+
+  if (currentAddress !== undefined) {
+    user.contractorProfile.currentAddress = String(currentAddress).trim()
+  }
+
+  await user.save()
+
+  // Trigger push notification to vendor to confirm update
+  sendNotificationToUser(
+    user._id.toString(),
+    'Service Area Updated',
+    `Your service area and location have been successfully updated.`,
+    { url: '/vendor/profile' }
+  )
+
+  const safeUser = user.toSafeObject()
+  return sendSuccess(res, { message: 'Service radius updated successfully', data: { user: safeUser } })
 })

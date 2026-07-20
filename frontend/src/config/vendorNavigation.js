@@ -7,6 +7,8 @@ import {
   UserRound,
   Users,
   FileText,
+  Percent,
+  Settings,
 } from 'lucide-react'
 
 export const vendorNavigation = {
@@ -25,6 +27,9 @@ export const vendorNavigation = {
     { id: 'crew', to: '/vendor/crew', label: 'Workforce', icon: Users },
     { id: 'attendance', to: '/vendor/attendance', label: 'Attendance', icon: Clock },
     { id: 'earnings', to: '/vendor/earnings', label: 'Earnings', icon: IndianRupee },
+    { id: 'commission', to: '/vendor/commission', label: 'Commission', icon: Percent },
+    { type: 'divider' },
+    { id: 'settings', to: '/vendor/settings', label: 'Settings', icon: Settings },
     { id: 'support', to: '/vendor/support', label: 'Support', icon: LifeBuoy },
     { id: 'profile', to: '/vendor/profile', label: 'Profile', icon: UserRound },
   ],
@@ -40,6 +45,7 @@ export function getVendorTitle(pathname) {
   if (pathname.startsWith('/vendor/attendance')) return 'Attendance'
   if (pathname.startsWith('/vendor/earnings')) return 'Earnings'
   if (pathname.startsWith('/vendor/support')) return 'Support'
+  if (pathname.startsWith('/vendor/settings')) return 'Settings'
   if (pathname.startsWith('/vendor/profile')) return 'Profile'
   return 'Dashboard'
 }

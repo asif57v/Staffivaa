@@ -32,7 +32,6 @@ const AdminBuildMartLeadsPage = lazy(() => import('./pages/admin/AdminBuildMartL
 const AdminBookingsPage = lazy(() => import('./pages/admin/AdminBookingsPage.jsx').then(m => ({ default: m.AdminBookingsPage })))
 const AdminAllocationsPage = lazy(() => import('./pages/admin/AdminAllocationsPage.jsx').then(m => ({ default: m.AdminAllocationsPage })))
 const AdminAttendancePage = lazy(() => import('./pages/admin/AdminAttendancePage.jsx').then(m => ({ default: m.AdminAttendancePage })))
-const AdminBillingPage = lazy(() => import('./pages/admin/AdminBillingPage.jsx').then(m => ({ default: m.AdminBillingPage })))
 const AdminPaymentDetailPage = lazy(() => import('./pages/admin/AdminPaymentDetailPage.jsx').then(m => ({ default: m.AdminPaymentDetailPage })))
 const AdminPricingPage = lazy(() => import('./pages/admin/AdminPricingPage.jsx').then(m => ({ default: m.AdminPricingPage })))
 const AdminWalletDashboard = lazy(() => import('./pages/admin/wallet/AdminWalletDashboard.jsx').then(m => ({ default: m.AdminWalletDashboard })))
@@ -44,6 +43,7 @@ const AdminPromotionsOffersPage = lazy(() => import('./pages/admin/marketing/Adm
 const AdminSponsoredAdsPage = lazy(() => import('./pages/admin/marketing/AdminSponsoredAdsPage.jsx').then(m => ({ default: m.AdminSponsoredAdsPage })))
 const AdminBannerManagementPage = lazy(() => import('./pages/admin/marketing/AdminBannerManagementPage.jsx').then(m => ({ default: m.AdminBannerManagementPage })))
 const AdminCampaignAnalyticsPage = lazy(() => import('./pages/admin/marketing/AdminCampaignAnalyticsPage.jsx').then(m => ({ default: m.AdminCampaignAnalyticsPage })))
+const AdminCommissionPage = lazy(() => import('./panels/admin/pages/AdminCommissionPage.jsx').then(m => ({ default: m.default })))
 
 function App() {
   return (
@@ -130,10 +130,10 @@ function App() {
               <Route path="bookings" element={<AdminBookingsPage />} />
               <Route path="allocations" element={<AdminAllocationsPage />} />
               <Route path="attendance" element={<AdminAttendancePage />} />
-              <Route path="billing" element={<AdminBillingPage />} />
               <Route path="payments/:id" element={<AdminPaymentDetailPage />} />
               <Route path="pricing" element={<AdminPricingPage />} />
               <Route path="wallet" element={<AdminWalletDashboard />} />
+              <Route path="commission" element={<AdminCommissionPage />} />
               <Route path="reports" element={<AdminReportsPage />} />
               <Route path="settings" element={<AdminSettingsPage />} />
               <Route path="marketing/promotions" element={<AdminPromotionsOffersPage />} />

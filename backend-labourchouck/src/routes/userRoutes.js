@@ -30,6 +30,19 @@ router.patch(
   user.updateLabourCategories,
 )
 
+router.put(
+  '/me/vendor-radius',
+  restrictTo(USER_ROLES.CONTRACTOR),
+  [
+    body('serviceRadius').optional({ nullable: true }).isNumeric(),
+    body('currentLatitude').optional().isNumeric(),
+    body('currentLongitude').optional().isNumeric(),
+    body('currentAddress').optional().isString()
+  ],
+  validateRequest,
+  user.updateVendorRadius,
+)
+
 router.post(
   '/me/labour/kyc/submit',
   restrictTo(USER_ROLES.LABOUR),

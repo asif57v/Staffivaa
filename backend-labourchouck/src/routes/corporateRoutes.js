@@ -18,6 +18,7 @@ import {
   getQuotationForRequest,
   respondToQuotationCorporate,
 } from '../controllers/quotationController.js'
+import { bookingLimiter } from '../middleware/rateLimiters.js'
 
 const router = Router()
 
@@ -30,7 +31,7 @@ router.delete('/documents/:docId', removeCorporateDocument)
 router.post('/verification/submit', submitCorporateVerification)
 router.get('/dashboard', getCorporateDashboard)
 router.get('/projects', listCorporateProjects)
-router.post('/projects', createCorporateProject)
+router.post('/projects', bookingLimiter, createCorporateProject)
 router.get('/projects/:id', getCorporateProject)
 router.post('/projects/:projectId/sites', addCorporateSite)
 router.get('/invoices', listCorporateInvoices)

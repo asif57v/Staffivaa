@@ -67,7 +67,7 @@ const KIND_TONE = {
   system: 'from-slate-500/15 to-slate-50 text-slate-700 ring-slate-200/80',
 }
 
-export function VendorNotificationsPage() {
+export function CorporateNotificationsPage() {
   const reduce = useReducedMotion()
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -124,10 +124,10 @@ export function VendorNotificationsPage() {
     }
     
     // Simple navigation logic based on kind
-    if (n.kind === 'kyc') navigate('/app/kyc')
-    else if (n.kind === 'attendance') navigate('/app/attendance')
-    else if (n.kind === 'earnings') navigate('/app/earnings')
-    else if (n.kind === 'assignment' || n.kind === 'job_request') navigate('/app/jobs')
+    if (n.kind === 'kyc') navigate('/corporate/profile')
+    else if (n.kind === 'attendance') navigate('/corporate/attendance')
+    else if (n.kind === 'earnings') navigate('/corporate/billing')
+    else if (n.kind === 'assignment' || n.kind === 'job_request') navigate('/corporate/requests')
   }
 
   const handleDismiss = async (id, e) => {

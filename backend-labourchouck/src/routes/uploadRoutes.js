@@ -6,6 +6,7 @@ import {
   uploadMediaMulter,
 } from '../middleware/uploadMiddleware.js'
 import * as upload from '../controllers/uploadController.js'
+import { uploadLimiter } from '../middleware/rateLimiters.js'
 
 const router = Router()
 
@@ -15,6 +16,7 @@ router.get('/config', upload.getUploadConfig)
 
 router.post(
   '/media',
+  uploadLimiter,
   (req, res, next) => {
     uploadMediaMulter(req, res, (err) => {
       if (err) return handleMulterError(err, req, res, next)
@@ -26,6 +28,7 @@ router.post(
 
 router.post(
   '/document',
+  uploadLimiter,
   (req, res, next) => {
     uploadDocumentMulter(req, res, (err) => {
       if (err) return handleMulterError(err, req, res, next)

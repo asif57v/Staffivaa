@@ -19,13 +19,40 @@ export const updateSettings = asyncHandler(async (req, res) => {
 
   const oldSettings = settings.toObject()
 
-  const { otpProvider, paymentGateway, enableVendorAutoAssignment, maintenanceMode, supportEmail } = req.body
+  const { 
+    otpProvider, 
+    paymentGateway, 
+    enableVendorAutoAssignment, 
+    maintenanceMode, 
+    supportEmail,
+    revenueModel,
+    commissionEnabled,
+    commissionType,
+    commissionValue,
+    commissionTrigger,
+    commissionDueDays,
+    radiusConfig
+  } = req.body
 
   if (otpProvider != null) settings.otpProvider = otpProvider
   if (paymentGateway != null) settings.paymentGateway = paymentGateway
   if (enableVendorAutoAssignment != null) settings.enableVendorAutoAssignment = Boolean(enableVendorAutoAssignment)
   if (maintenanceMode != null) settings.maintenanceMode = Boolean(maintenanceMode)
   if (supportEmail != null) settings.supportEmail = String(supportEmail).trim()
+  
+  if (revenueModel != null) settings.revenueModel = String(revenueModel)
+  if (commissionEnabled != null) settings.commissionEnabled = Boolean(commissionEnabled)
+  if (commissionType != null) settings.commissionType = String(commissionType)
+  if (commissionValue != null) settings.commissionValue = Number(commissionValue)
+  if (commissionTrigger != null) settings.commissionTrigger = String(commissionTrigger)
+  if (commissionDueDays != null) settings.commissionDueDays = Number(commissionDueDays)
+
+  if (radiusConfig != null && typeof radiusConfig === 'object') {
+    settings.radiusConfig = {
+      ...settings.radiusConfig,
+      ...radiusConfig
+    }
+  }
 
   await settings.save()
 

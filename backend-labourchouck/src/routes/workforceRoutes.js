@@ -5,6 +5,7 @@ import {
   createRequest,
   listMyRequests,
   getRequest,
+  payPlatformFee,
 } from '../controllers/requestController.js'
 import {
   listLabourAssignments,
@@ -30,18 +31,20 @@ import {
   updateExtraWorkStatus,
 } from '../controllers/extraWorkController.js'
 import { getSystemPricing } from '../controllers/systemPricingController.js'
+import { bookingLimiter, paymentLimiter } from '../middleware/rateLimiters.js'
 
 const router = Router()
 
 router.use(protect)
 
 router.get('/system-pricing', restrictTo(...APP_ROLES), getSystemPricing)
-router.post('/requests', restrictTo(USER_ROLES.INDIVIDUAL, USER_ROLES.CORPORATE), createRequest)
+router.post('/requests', bookingLimiter, restrictTo(USER_ROLES.INDIVIDUAL, USER_ROLES.CORPORATE), createRequest)
 router.get('/requests', restrictTo(...APP_ROLES), listMyRequests)
 router.get('/requests/:id', restrictTo(...APP_ROLES, USER_ROLES.ADMIN), getRequest)
 
-router.post('/requests/:id/payment/order', restrictTo(...APP_ROLES), createRazorpayOrder)
-router.post('/requests/:id/payment/verify', restrictTo(...APP_ROLES), verifyRazorpayPayment)
+router.post('/requests/:id/payment/order', paymentLimiter, restrictTo(...APP_ROLES), createRazorpayOrder)
+router.post('/requests/:id/payment/verify', paymentLimiter, restrictTo(...APP_ROLES), verifyRazorpayPayment)
+router.post('/requests/:id/pay-platform-fee', restrictTo(USER_ROLES.CORPORATE, USER_ROLES.CONTRACTOR), payPlatformFee)
 
 router.post('/requests/:id/extra-work', restrictTo(USER_ROLES.INDIVIDUAL), createExtraWork)
 router.get('/requests/:id/extra-work', restrictTo(...APP_ROLES), getExtraWorkForBooking)

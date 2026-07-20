@@ -46,6 +46,7 @@ export function CorporateRequestNewPage() {
   const [locationText, setLocationText] = useState('')
   const [locationLat, setLocationLat] = useState(null)
   const [locationLng, setLocationLng] = useState(null)
+  const [vendorSearchRadius, setVendorSearchRadius] = useState('')
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState([emptyLine()])
   const [categories, setCategories] = useState([])
@@ -184,6 +185,7 @@ export function CorporateRequestNewPage() {
         locationText: locationText.trim() || undefined,
         locationLat: locationLat || undefined,
         locationLng: locationLng || undefined,
+        vendorSearchRadius: vendorSearchRadius === 'unlimited' ? null : (vendorSearchRadius ? Number(vendorSearchRadius) : undefined),
         notes: notes.trim() || undefined,
         lines: validLines.map((l) => ({
           categoryId: l.categoryId,
@@ -421,6 +423,30 @@ export function CorporateRequestNewPage() {
                  <button type="button" onClick={pickLocation} disabled={isFetchingLocation} className="shrink-0 w-[38px] rounded-[10px] bg-slate-900 text-[#FFC107] flex items-center justify-center disabled:opacity-70 active:scale-95 transition-transform">
                     {isFetchingLocation ? <RefreshCw className="h-3.5 w-3.5 animate-spin text-white" /> : <Navigation className="h-3.5 w-3.5 fill-current" />}
                  </button>
+               </div>
+               
+               {/* Vendor Search Radius Settings */}
+               <div className="border-t border-slate-100 p-2 bg-slate-50 flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold text-slate-800">Search Radius</span>
+                    <span className="text-[9px] font-medium text-slate-500">Find vendors within distance</span>
+                  </div>
+                  <div className="relative w-[110px]">
+                    <select 
+                      className="w-full bg-white border border-slate-200 shadow-sm rounded-[8px] h-[32px] px-2 text-[11px] font-bold text-slate-700 outline-none appearance-none"
+                      value={vendorSearchRadius}
+                      onChange={(e) => setVendorSearchRadius(e.target.value)}
+                    >
+                      <option value="">Default (25 KM)</option>
+                      <option value="5">5 KM</option>
+                      <option value="10">10 KM</option>
+                      <option value="20">20 KM</option>
+                      <option value="50">50 KM</option>
+                      <option value="100">100 KM</option>
+                      <option value="unlimited">Unlimited</option>
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none h-3 w-3 text-slate-400" />
+                  </div>
                </div>
             </div>
           </div>
