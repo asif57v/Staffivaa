@@ -27,6 +27,7 @@ export const listGrouped = asyncHandler(async (_req, res) => {
       slug: c.slug,
       subtitle: c.subtitle,
       imageUrl: c.imageUrl || '',
+      baseRate: c.baseRate,
       sortOrder: c.sortOrder,
     })
   }
