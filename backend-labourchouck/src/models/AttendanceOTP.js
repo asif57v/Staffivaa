@@ -37,7 +37,6 @@ const attendanceOtpSchema = new mongoose.Schema(
     expiresAt: {
       type: Date,
       required: true,
-      index: true,
     },
     isVerified: {
       type: Boolean,

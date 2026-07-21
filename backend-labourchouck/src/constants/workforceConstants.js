@@ -52,6 +52,7 @@ export const ASSIGNMENT_STATUS = {
   ACCEPTED: 'accepted',
   DECLINED: 'declined',
   ON_SITE: 'on_site',
+  IN_PROGRESS: 'in_progress',
   COMPLETED: 'completed',
   REPLACED: 'replaced',
 }
