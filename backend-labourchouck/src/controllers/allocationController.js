@@ -194,6 +194,18 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
   const assignment = await Assignment.findOne({ _id: req.params.id, labourId: req.user._id })
   if (!assignment) return sendError(res, { message: 'Not found', statusCode: HTTP_STATUS.NOT_FOUND })
   if (action === 'accept') {
+    const activeAssignments = await Assignment.find({
+      labourId: req.user._id,
+      status: { $in: [ASSIGNMENT_STATUS.ACCEPTED, ASSIGNMENT_STATUS.ON_SITE] },
+      _id: { $ne: req.params.id }
+    }).populate('requestId');
+
+    const hasRealActive = activeAssignments.some(a => a.requestId != null);
+
+    if (hasRealActive) {
+      return sendError(res, { message: 'You already have an active job. Please complete or cancel it before accepting a new one.', statusCode: HTTP_STATUS.BAD_REQUEST });
+    }
+
     assignment.status = ASSIGNMENT_STATUS.ACCEPTED
     assignment.acceptedAt = new Date()
 
@@ -213,7 +225,9 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
           labourName: req.user.fullName,
           labourPhone: req.user.phone,
           acceptedAt: new Date(),
-          acceptedBy: req.user._id
+          acceptedBy: req.user._id,
+          platformFeePendingAt: new Date(),
+          platformFeePaymentLifecycle: 'none'
         }
       },
       { new: true }

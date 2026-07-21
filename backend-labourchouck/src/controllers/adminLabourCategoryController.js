@@ -68,7 +68,7 @@ export const patchGroup = asyncHandler(async (req, res) => {
 })
 
 export const createCategory = asyncHandler(async (req, res) => {
-  const { groupId, name, subtitle = '', sortOrder = 0, imageUrl } = req.body
+  const { groupId, name, subtitle = '', sortOrder = 0, imageUrl, baseRate = 800 } = req.body
   const group = await LabourCategoryGroup.findById(groupId)
   if (!group) {
     return sendError(res, { message: 'Group not found', statusCode: HTTP_STATUS.NOT_FOUND, code: 'NOT_FOUND' })
@@ -99,6 +99,7 @@ export const createCategory = asyncHandler(async (req, res) => {
     slug,
     subtitle,
     imageUrl: image,
+    baseRate: Number(baseRate) || 800,
     sortOrder,
     isActive: true,
   })
@@ -110,11 +111,12 @@ export const patchCategory = asyncHandler(async (req, res) => {
   if (!c) {
     return sendError(res, { message: 'Category not found', statusCode: HTTP_STATUS.NOT_FOUND, code: 'NOT_FOUND' })
   }
-  const { name, subtitle, sortOrder, isActive, groupId, imageUrl } = req.body
+  const { name, subtitle, sortOrder, isActive, imageUrl, baseRate, groupId } = req.body
   if (name != null) c.name = String(name).trim()
-  if (subtitle != null) c.subtitle = String(subtitle)
+  if (subtitle != null) c.subtitle = String(subtitle).trim()
   if (sortOrder != null) c.sortOrder = Number(sortOrder)
   if (isActive != null) c.isActive = Boolean(isActive)
+  if (baseRate != null) c.baseRate = Number(baseRate)
   if (imageUrl !== undefined) {
     const normalized = normalizeImageUrl(imageUrl)
     if (normalized === null) {

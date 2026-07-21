@@ -31,6 +31,7 @@ export const otpRequestLimiter = rateLimit({
 export const authVerifyLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5,
+  skipSuccessfulRequests: true,
   message: { success: false, message: 'Too many failed attempts. Please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,

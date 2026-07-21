@@ -23,20 +23,22 @@ import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
 import { AdminSubcategoryImageEditor } from '../../components/admin/AdminSubcategoryImageEditor.jsx'
 import { getCategoryImageUrl } from '../../lib/labourCategoryDisplay.js'
 
-function CategoryModal({ groupLabel, initialName = '', isEdit = false, onClose, onSubmit, busy, error, reduceMotion }) {
+function CategoryModal({ groupLabel, initialName = '', initialBaseRate = 800, isEdit = false, onClose, onSubmit, busy, error, reduceMotion }) {
   const inputRef = useRef(null)
 
   const [name, setName] = useState(initialName)
+  const [baseRate, setBaseRate] = useState(initialBaseRate)
 
   useEffect(() => {
     setName(initialName)
+    setBaseRate(initialBaseRate)
     const t = window.setTimeout(() => inputRef.current?.focus(), 50)
     return () => window.clearTimeout(t)
-  }, [initialName])
+  }, [initialName, initialBaseRate])
 
   function handleSubmit(e) {
     e.preventDefault()
-    onSubmit(name.trim())
+    onSubmit({ name: name.trim(), baseRate })
   }
 
   return (
@@ -94,6 +96,20 @@ function CategoryModal({ groupLabel, initialName = '', isEdit = false, onClose, 
               placeholder="e.g. Tower crane operator"
               className="w-full rounded-xl border border-slate-200/90 bg-white px-4 py-3 text-sm outline-none ring-slate-200/80 focus:ring-2 focus:ring-brand/35"
             />
+            
+            <label htmlFor="modal-cat-baserate" className="mt-4 mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              Visiting Charge (₹)
+            </label>
+            <input
+              id="modal-cat-baserate"
+              type="number"
+              min="0"
+              value={baseRate}
+              onChange={(e) => setBaseRate(Number(e.target.value))}
+              placeholder="e.g. 800"
+              className="w-full rounded-xl border border-slate-200/90 bg-white px-4 py-3 text-sm outline-none ring-slate-200/80 focus:ring-2 focus:ring-brand/35"
+            />
+            
             <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
               Workers pick this under the main category you selected. You can hide it anytime from the list.
             </p>
@@ -188,7 +204,7 @@ export function AdminLabourCategoriesPage() {
     }
   }
 
-  async function handleModalSubmit(name) {
+  async function handleModalSubmit({ name, baseRate }) {
     if (!name) {
       setModalError('Enter a name')
       return
@@ -197,7 +213,7 @@ export function AdminLabourCategoriesPage() {
     setModalBusy(true)
     try {
       if (editingCategory) {
-        await patchAdminLabourCategory(editingCategory._id, { name })
+        await patchAdminLabourCategory(editingCategory._id, { name, baseRate })
       } else {
         if (!selectedGroupId) {
           setModalError('No group selected')
@@ -207,6 +223,7 @@ export function AdminLabourCategoriesPage() {
         await createAdminLabourCategory({
           groupId: selectedGroupId,
           name,
+          baseRate,
           sortOrder: 999,
         })
       }
@@ -440,6 +457,7 @@ export function AdminLabourCategoriesPage() {
             key="category-modal"
             groupLabel={groupLabel}
             initialName={editingCategory ? editingCategory.name : ''}
+            initialBaseRate={editingCategory?.baseRate ?? 800}
             isEdit={!!editingCategory}
             onClose={() => {
               if (!modalBusy) {

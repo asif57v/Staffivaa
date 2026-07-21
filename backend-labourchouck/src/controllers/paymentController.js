@@ -58,8 +58,11 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
       if (totalAmount === 0) {
         request.labourPaymentStatus = 'paid';
         if (request.userPaymentStatus === 'paid') {
+          request.platformFeePaymentLifecycle = 'completed';
           request.status = 'confirmed';
           emitRequestStatusUpdate(request._id.toString(), { requestStatus: request.status });
+        } else {
+          request.platformFeePaymentLifecycle = 'partial';
         }
         await request.save();
         return sendSuccess(res, { data: { bypassPayment: true } });
@@ -192,9 +195,14 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
   }
   
   // Overall status check for older flow
-  if (request.userPaymentStatus === 'paid' && request.labourPaymentStatus === 'paid' && request.status !== 'quotation_unlocked') {
-    request.status = request.sourceType === 'corporate' ? 'project_active' : 'confirmed'; 
-    emitRequestStatusUpdate(request._id.toString(), { requestStatus: request.status })
+  if (request.userPaymentStatus === 'paid' && request.labourPaymentStatus === 'paid') {
+    request.platformFeePaymentLifecycle = 'completed';
+    if (request.status !== 'quotation_unlocked') {
+      request.status = request.sourceType === 'corporate' ? 'project_active' : 'confirmed'; 
+      emitRequestStatusUpdate(request._id.toString(), { requestStatus: request.status })
+    }
+  } else if (request.userPaymentStatus === 'paid' || request.labourPaymentStatus === 'paid') {
+    request.platformFeePaymentLifecycle = 'partial';
   }
 
   request.razorpayPaymentId = razorpay_payment_id

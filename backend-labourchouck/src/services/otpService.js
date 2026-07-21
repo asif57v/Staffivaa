@@ -12,9 +12,10 @@ function generateSixDigitCode() {
 async function sendRealSms(phone, code) {
   try {
     const apiKey = process.env.SMSINDIAHUB_API_KEY || 'BCIYO13pGkmdHgmGGFSqhA';
-    const senderId = process.env.SMSINDIAHUB_SENDER_ID || 'SMSHUB';
+    const senderId = process.env.SMSINDIAHUB_SENDER_ID || 'BGADEC';
     
-    const message = `Welcome to the Staffivaa powered by SMSINDIAHUB. Your OTP for registration is ${code}`;
+    // Must strictly match DLT Template: Welcome to the ##var## powered by Appzeto.Your OTP for registration is ##var##.BGADEC
+    const message = `Welcome to the Staffivaa powered by Appzeto.Your OTP for registration is ${code}.BGADEC`;
     
     const url = `http://cloud.smsindiahub.in/vendorsms/pushsms.aspx?APIKey=${apiKey}&sid=${senderId}&msisdn=${phone}&fl=0&gwid=2&msg=${encodeURIComponent(message)}`;
     

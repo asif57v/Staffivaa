@@ -116,8 +116,13 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
   
   useEffect(() => {
     if (!requestId) return
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1'
-    const socketUrl = baseUrl.replace('/api/v1', '')
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
+    let socketUrl = baseUrl.replace('/api/v1', '')
+    if (socketUrl.includes('5000')) {
+      socketUrl = socketUrl.replace('5000', '5001')
+    } else if (!socketUrl.includes('5001')) {
+      socketUrl = 'http://localhost:5001'
+    }
     const socket = io(socketUrl, { 
       withCredentials: true,
       transports: ['websocket', 'polling']
@@ -132,12 +137,18 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
     socket.on('extra_work_requested', () => refetchEw())
     socket.on('extra_work_updated', () => refetchEw())
     
+    socket.on('booking_cancelled', (payload) => {
+      alert(`Booking Cancelled:\n${payload.message}`)
+      navigate('/app/jobs', { replace: true })
+    })
+    
     return () => {
       socket.off('connect')
       socket.off('connect_error')
       socket.off('disconnect')
       socket.off('extra_work_requested')
       socket.off('extra_work_updated')
+      socket.off('booking_cancelled')
       socket.emit('leave_request', requestId)
       socket.disconnect()
     }
@@ -161,6 +172,34 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
 
   const isCheckInDisabled = hasCoordinates && distance != null && distance > 120
 
+  // Timer logic for waiting screen
+  const [timeLeft, setTimeLeft] = useState(300) // 5 mins in seconds
+
+  useEffect(() => {
+    if ((isPlatformFeePending || isCustomerPaymentPending) && job?.platformFeePendingAt) {
+      const pendingAt = new Date(job.platformFeePendingAt).getTime()
+      const expiryTime = pendingAt + 5 * 60 * 1000
+      
+      const interval = setInterval(() => {
+        const now = new Date().getTime()
+        const remaining = Math.max(0, Math.floor((expiryTime - now) / 1000))
+        setTimeLeft(remaining)
+        
+        if (remaining <= 0) {
+          clearInterval(interval)
+        }
+      }, 1000)
+      
+      return () => clearInterval(interval)
+    }
+  }, [isPlatformFeePending, isCustomerPaymentPending, job?.platformFeePendingAt])
+
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0')
+    const s = (seconds % 60).toString().padStart(2, '0')
+    return `${m}:${s}`
+  }
+
   if (isPlatformFeePending) {
     return (
       <article className="overflow-hidden rounded-[1.35rem] border border-slate-200 bg-white shadow-sm ring-1 ring-slate-100 p-6 flex flex-col items-center text-center">
@@ -181,6 +220,10 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
             <span className="text-xs font-bold text-slate-500">Platform Fee</span>
             <span className="text-sm font-black text-slate-900 flex items-center"><IndianRupee className="h-3 w-3 mr-0.5"/> {job.labourPlatformFee || 0}</span>
           </div>
+          <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-200">
+            <span className="text-xs font-bold text-slate-500">Time Remaining</span>
+            <span className={`text-sm font-black ${timeLeft < 60 ? 'text-red-500' : 'text-slate-900'}`}>{formatTime(timeLeft)}</span>
+          </div>
         </div>
 
         <AppPrimaryButton 
@@ -189,6 +232,35 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
         >
           Pay Now
         </AppPrimaryButton>
+      </article>
+    )
+  }
+
+  if (isCustomerPaymentPending) {
+    return (
+      <article className="overflow-hidden rounded-[1.35rem] border border-slate-200 bg-white shadow-sm ring-1 ring-slate-100 p-6 flex flex-col items-center text-center">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 shadow-inner">
+          <CheckCircle2 className="h-8 w-8" />
+        </div>
+        <h3 className="mb-2 text-lg font-black text-slate-900">Booking Accepted</h3>
+        
+        <div className="w-full rounded-xl bg-slate-50 p-4 mb-6 border border-slate-100 text-left">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-xs font-bold text-slate-500">Your Platform Fee</span>
+            <span className="text-sm font-black text-emerald-600 flex items-center">Paid ✅</span>
+          </div>
+          <div className="border-t border-slate-200 pt-3 flex flex-col gap-1">
+            <span className="text-sm font-bold text-slate-700">Waiting for Customer Payment...</span>
+            <div className="flex justify-between items-center mt-1">
+              <span className="text-xs font-bold text-slate-500">Time Remaining</span>
+              <span className={`text-sm font-black ${timeLeft < 60 ? 'text-red-500' : 'text-slate-900'}`}>{formatTime(timeLeft)}</span>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-xs font-medium text-slate-500 leading-relaxed px-2">
+          The booking will automatically cancel and your fee will be refunded to your wallet if the customer payment is not completed within 5 minutes.
+        </p>
       </article>
     )
   }

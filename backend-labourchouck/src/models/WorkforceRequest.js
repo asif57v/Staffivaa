@@ -134,6 +134,13 @@ const workforceRequestSchema = new mongoose.Schema(
     labourPhone: { type: String, trim: true },
     acceptedAt: Date,
     expiresAt: Date,
+    platformFeePendingAt: Date,
+    cancelReason: { type: String, trim: true },
+    platformFeePaymentLifecycle: { 
+      type: String, 
+      enum: ['none', 'partial', 'completed', 'expired'], 
+      default: 'none' 
+    },
     acceptedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     declinedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     

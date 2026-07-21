@@ -27,13 +27,6 @@ isSupported().then((supported) => {
     onMessage(messaging, (payload) => {
       console.log("Foreground message received:", payload);
       
-      // Directly show toast here to guarantee it works regardless of which shell is active
-      import('react-hot-toast').then(({ default: toast }) => {
-        if (payload?.notification?.title) {
-          toast.success(`FCM: ${payload.notification.title}`, { duration: 5000, position: 'top-center' });
-        }
-      });
-
       window.dispatchEvent(new CustomEvent('fcm-foreground-message', { detail: payload }));
     });
   } else {

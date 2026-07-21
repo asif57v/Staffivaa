@@ -248,6 +248,7 @@ export const createRequest = asyncHandler(async (req, res) => {
     notes,
     billingMode,
     bookingType,
+    labourCharge: Math.round(estimatedTotalLabourCost),
     userPlatformFee: Math.round(userPlatformFee),
     labourPlatformFee: Math.round(labourPlatformFeeValue),
     userGstRate,

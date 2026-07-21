@@ -216,6 +216,11 @@ export function AdminLayout() {
 
     const handleFcmMessage = (event) => {
       const payload = event.detail
+      const targetUserId = payload?.data?.targetUserId;
+      if (targetUserId && user?._id && targetUserId !== user._id) {
+        // This push notification was meant for a different account
+        return;
+      }
       if (payload?.notification && Notification.permission === 'granted') {
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.ready.then((registration) => {

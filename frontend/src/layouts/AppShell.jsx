@@ -116,6 +116,13 @@ export function AppShell() {
 
     const handleFcmMessage = (event) => {
       const payload = event.detail;
+      const targetUserId = payload?.data?.targetUserId;
+      if (targetUserId && user?._id && targetUserId !== user._id) {
+        // This push notification was meant for a different account
+        // (likely due to multiple tabs open for different users)
+        return;
+      }
+
       if (payload?.notification && Notification.permission === 'granted') {
         // Also show a toast so the user definitely sees it inside the app
         if (typeof window !== 'undefined') {

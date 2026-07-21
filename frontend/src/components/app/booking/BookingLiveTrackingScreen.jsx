@@ -124,9 +124,13 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
 
   useEffect(() => {
     if (!requestId) return
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1'
-    const socketUrl = baseUrl.replace('/api/v1', '')
-
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
+    let socketUrl = baseUrl.replace('/api/v1', '')
+    if (socketUrl.includes('5000')) {
+      socketUrl = socketUrl.replace('5000', '5001')
+    } else if (!socketUrl.includes('5001')) {
+      socketUrl = 'http://localhost:5001'
+    }
     const socket = io(socketUrl, { 
       withCredentials: true,
       transports: ['websocket', 'polling']
@@ -155,6 +159,11 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
       refetch() // Refresh booking total if accepted
     })
 
+    socket.on('booking_cancelled', (payload) => {
+      alert(`Booking Cancelled:\n${payload.message}`)
+      onBack()
+    })
+
     socket.on('disconnect', (reason) => {
       console.log('[Socket.io BookingLive] Disconnected:', reason)
       setSocketConnected(false)
@@ -166,6 +175,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
       socket.off('request_status_update')
       socket.off('bookingAccepted')
       socket.off('extra_work_updated')
+      socket.off('booking_cancelled')
       socket.off('disconnect')
       socket.emit('leave_request', requestId)
       socket.disconnect()
@@ -174,6 +184,34 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
 
   // Data Extraction
   const request = requestData?.request || {}
+  
+  const [timeLeft, setTimeLeft] = useState(300)
+
+  useEffect(() => {
+    if (request?.status === 'platform_fee_pending' && request?.platformFeePendingAt) {
+      const pendingAt = new Date(request.platformFeePendingAt).getTime()
+      const expiryTime = pendingAt + 5 * 60 * 1000
+      
+      const interval = setInterval(() => {
+        const now = new Date().getTime()
+        const remaining = Math.max(0, Math.floor((expiryTime - now) / 1000))
+        setTimeLeft(remaining)
+        
+        if (remaining <= 0) {
+          clearInterval(interval)
+        }
+      }, 1000)
+      
+      return () => clearInterval(interval)
+    }
+  }, [request?.status, request?.platformFeePendingAt])
+
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0')
+    const s = (seconds % 60).toString().padStart(2, '0')
+    return `${m}:${s}`
+  }
+
   const assignments = requestData?.assignments || []
   const paymentSummary = requestData?.paymentSummary || { serviceCost: 0, extraCost: 0, platformFee: 0, taxes: 0, totalAmount: 0 }
 
@@ -301,8 +339,12 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
                   <Clock className="h-4 w-4" />
                   Waiting for Worker
                 </div>
+                <div className="flex justify-between items-center w-full mt-2 px-2 pb-2 border-b border-blue-200/50">
+                  <span className="text-xs font-bold text-blue-800">Time Remaining</span>
+                  <span className={`text-sm font-black ${timeLeft < 60 ? 'text-red-500' : 'text-blue-900'}`}>{formatTime(timeLeft)}</span>
+                </div>
                 <p className="text-center text-[11px] font-semibold text-blue-600/90 leading-relaxed mt-1">
-                  You have successfully paid the platform fee. Waiting for the assigned worker to pay their platform fee to confirm the booking.
+                  You have successfully paid the platform fee. The booking will automatically cancel and your fee will be refunded if the worker does not pay their fee within 5 minutes.
                 </p>
               </div>
             ) : (
@@ -508,53 +550,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
           </div>
         </div>
 
-        {/* Additional Work Section */}
-        {isAcceptedOrBeyond && (
-          <div className="px-5 pb-4">
-            <h3 className="text-xs font-extrabold text-slate-900 mb-2 uppercase tracking-wider">Additional Work</h3>
-            <div className="bg-white rounded-3xl p-3 ring-1 ring-slate-200/60 shadow-sm space-y-2.5">
-              {extraWorks.map(ew => (
-                <div key={ew._id} className="border border-slate-100 rounded-2xl p-3 bg-slate-50">
-                  <div className="flex justify-between items-start mb-1">
-                    <h4 className="text-sm font-bold text-slate-900 leading-tight">{ew.workType}</h4>
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide
-                      ${ew.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' : 
-                        ew.status === 'rejected' ? 'bg-rose-100 text-rose-700' : 
-                        ew.status === 'negotiating' ? 'bg-amber-100 text-amber-700' : 
-                        'bg-slate-200 text-slate-600'}`}>{ew.status}</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mb-1.5 leading-snug">{ew.description}</p>
-                  
-                  {ew.status === 'negotiating' ? (
-                    <div className="mt-2 bg-amber-50 p-2.5 rounded-xl border border-amber-100">
-                      <p className="text-[10px] font-bold text-amber-800 mb-1.5">Worker proposed a new rate:</p>
-                      <div className="flex justify-between text-[11px] font-semibold text-amber-900 mb-2">
-                        <span>Time: {ew.revisedTime} hrs</span>
-                        <span>Amount: ₹{ew.revisedAmount}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => handleExtraWorkUserResponse(ew._id, 'accepted')} className="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-1.5 rounded-lg text-xs font-bold transition">Accept</button>
-                        <button onClick={() => handleExtraWorkUserResponse(ew._id, 'rejected')} className="flex-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 py-1.5 rounded-lg text-xs font-bold transition">Reject</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex justify-between text-[11px] font-semibold text-slate-500">
-                      <span>{ew.extraTime} hrs</span>
-                      <span>₹{ew.extraAmount}</span>
-                    </div>
-                  )}
-                </div>
-              ))}
 
-              <button 
-                onClick={() => setIsExtraWorkModalOpen(true)}
-                className="w-full flex items-center justify-center gap-1.5 text-xs font-bold text-brand bg-brand/5 hover:bg-brand/10 transition py-2.5 rounded-xl border border-brand/20 shadow-sm"
-              >
-                <PlusCircle className="w-3.5 h-3.5" /> Request Extra Work
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Payment Summary */}
         <div className="px-5 pb-8">

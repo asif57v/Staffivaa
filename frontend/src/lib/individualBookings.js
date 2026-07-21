@@ -93,8 +93,6 @@ export const DEMO_INDIVIDUAL_BOOKINGS = [
   },
 ]
 
-const RATE_PER_WORKER_DAY = 800
-
 export function loadIndividualBookings() {
   try {
     const raw = localStorage.getItem(INDIVIDUAL_BOOKING_STORAGE_KEY)
@@ -123,13 +121,20 @@ export function generateBookingRef() {
 }
 
 /**
- * @param {{ lines: { quantity: number }[], durationDays: number }} input
+ * @param {{ lines: { quantity: number, baseRate?: number }[], durationDays: number }} input
  */
 export function estimateIndividualBooking(input, pricingConfig) {
   const durationDays = Math.max(1, Number(input.durationDays) || 1)
   const workerDays = (input.lines || []).reduce((sum, ln) => sum + Math.max(1, Number(ln.quantity) || 1), 0)
   const totalWorkerDays = workerDays * durationDays
-  const estimatedTotal = totalWorkerDays * RATE_PER_WORKER_DAY
+  
+  const estimatedTotal = (input.lines || []).reduce((sum, ln) => {
+    const qty = Math.max(1, Number(ln.quantity) || 1)
+    const rate = Number(ln.baseRate) || 800
+    return sum + (qty * rate * durationDays)
+  }, 0)
+  
+  const RATE_PER_WORKER_DAY = (input.lines && input.lines.length > 0) ? (Number(input.lines[0].baseRate) || 800) : 800
   
   let platformFee = Math.round(estimatedTotal * 0.05)
   if (pricingConfig?.userBooking?.platformFee) {

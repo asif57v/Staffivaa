@@ -9,6 +9,7 @@ const labourCategorySchema = new mongoose.Schema(
     subtitle: { type: String, trim: true, default: '' },
     /** Cloudinary or other HTTPS URL for homeowner home tiles */
     imageUrl: { type: String, default: '', maxlength: 2048 },
+    baseRate: { type: Number, default: 800 },
     sortOrder: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
   },

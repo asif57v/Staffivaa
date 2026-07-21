@@ -58,6 +58,7 @@ import {
   BOOKING_FLOW_PATH,
   buildBookingFlowPath,
 } from '../../../lib/bookingFlowNavigation.js'
+import { fetchLabourCategoriesGrouped } from '../../../api/labourCategoriesApi.js'
 
 const TIME_SLOTS = ['9:00 AM – 12:00 PM', '12:00 PM – 3:00 PM', '3:00 PM – 6:00 PM', '6:00 PM – 9:00 PM']
 const GOOGLE_MAPS_LIBRARIES = ['places']
@@ -115,11 +116,26 @@ export function IndividualBookingFlowPage() {
   const [autocomplete, setAutocomplete] = useState(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [activeOffers, setActiveOffers] = useState([])
+  const [categoriesList, setCategoriesList] = useState([])
+
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const res = await fetchLabourCategoriesGrouped()
+        if (res?.data?.groups) {
+          setCategoriesList(res.data.groups.flatMap(g => g.categories || []))
+        }
+      } catch (err) {
+        console.error('Failed to load categories', err)
+      }
+    }
+    loadCategories()
+  }, [])
 
   useEffect(() => {
     const fetchOffers = async () => {
       try {
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1'
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
         const res = await fetch(`${baseUrl}/marketing/offers`)
         if (res.ok) {
           const data = await res.json()
@@ -174,7 +190,7 @@ export function IndividualBookingFlowPage() {
   useEffect(() => {
     if (step !== 'searching') return
 
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1'
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
     let cancelled = false
 
     const transitionToActive = (workerInfo) => {
@@ -299,7 +315,14 @@ export function IndividualBookingFlowPage() {
     // Socket.io for instant updates
     let socket = null
     try {
-      const socketUrl = baseUrl.replace('/api/v1', '')
+      let socketUrl = baseUrl.replace('/api/v1', '')
+      if (socketUrl.includes('5000')) {
+        socketUrl = socketUrl.replace('5000', '5001')
+      } else if (!socketUrl.includes('5001')) {
+        // fallback for local
+        socketUrl = 'http://localhost:5001'
+      }
+      
       socket = io(socketUrl, { 
         withCredentials: true,
         transports: ['websocket', 'polling']
@@ -380,9 +403,13 @@ export function IndividualBookingFlowPage() {
   }, [draft.bookingType, draft.entryPoint, goStep, location.pathname, step])
 
   const estimate = useMemo(() => {
+    const cat = categoriesList.find((c) => String(c._id) === String(draft.categoryId))
+    const baseRate = cat?.baseRate ?? 800
+
     const lines = [
       {
         quantity: Math.max(1, (draft.selectedWorkers || []).length || 1),
+        baseRate,
       },
     ]
     const days = durationKindToDays(draft.durationKind, draft.durationDays)
@@ -405,7 +432,7 @@ export function IndividualBookingFlowPage() {
     }
 
     return est
-  }, [draft.durationDays, draft.durationKind, draft.selectedWorkers, draft.categoryId, pricingData, activeOffers])
+  }, [draft.durationDays, draft.durationKind, draft.selectedWorkers, draft.categoryId, pricingData, activeOffers, categoriesList])
 
   const pickLocation = () => {
     if (!navigator.geolocation) {

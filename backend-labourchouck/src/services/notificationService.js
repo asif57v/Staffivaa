@@ -34,6 +34,7 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
       },
       data: {
         ...data,
+        targetUserId: userId.toString(),
         click_action: 'FLUTTER_NOTIFICATION_CLICK'
       },
       android: {

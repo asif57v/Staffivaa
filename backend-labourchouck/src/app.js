@@ -7,6 +7,7 @@ import { errorHandler } from './middleware/errorHandler.js'
 import { globalLimiter } from './middleware/rateLimiters.js'
 
 const app = express()
+app.set('trust proxy', 1)
 
 app.use(helmet())
 app.use(
@@ -17,6 +18,7 @@ app.use(
     credentials: true,
   }),
 )
+app.options('*', cors({ credentials: true, origin: true }))
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 app.use(express.json({ limit: '12mb' }))
 

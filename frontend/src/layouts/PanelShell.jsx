@@ -127,6 +127,12 @@ export function PanelShell({
 
     const handleFcmMessage = (event) => {
       const payload = event.detail;
+      const targetUserId = payload?.data?.targetUserId;
+      if (targetUserId && user?._id && targetUserId !== user._id) {
+        // This push notification was meant for a different account
+        return;
+      }
+      
       // Also show a toast so the user definitely sees it inside the app
       if (typeof window !== 'undefined') {
         import('react-hot-toast').then(({ default: toast }) => {
