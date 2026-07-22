@@ -567,7 +567,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
               </div>
               <div className="border-t border-slate-100 pt-3 mt-1 flex justify-between font-black text-slate-900 text-lg">
                 <span>Total Amount Paid on Staffivaa</span>
-                <span>₹{(paymentSummary?.totalAmount || 0).toFixed(2)}</span>
+                <span>₹{(paymentSummary?.userPlatformFee || 0).toFixed(2)}</span>
               </div>
             </div>
             <div className="mt-4 rounded-lg bg-amber-50 p-3 text-[10px] font-medium leading-relaxed text-amber-800 ring-1 ring-amber-200/50">
