@@ -6,7 +6,7 @@ import { TransactionCard } from './components/TransactionCard'
 import { AddMoneyModal } from './components/AddMoneyModal'
 import { WithdrawMoneyModal } from './components/WithdrawMoneyModal'
 import { PageSkeleton } from '../../../components/ui/PageSkeleton'
-import { useGetWalletBalanceQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation, useRequestWithdrawalMutation } from '../../../store/api/walletApi'
+import { useGetWalletBalanceQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation, useRequestWithdrawalMutation, useRequestRefundMutation } from '../../../store/api/walletApi'
 import { useAuth } from '../../../hooks/useAuth'
 
 const loadRazorpayScript = () => {
@@ -31,6 +31,7 @@ export function WalletPage() {
   const [createOrder] = useCreateRazorpayOrderMutation()
   const [verifyPayment] = useVerifyRazorpayPaymentMutation()
   const [requestWithdrawal] = useRequestWithdrawalMutation()
+  const [requestRefund, { isLoading: isRequestingRefund }] = useRequestRefundMutation()
   
   const [isAddMoneyOpen, setIsAddMoneyOpen] = useState(false)
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false)
@@ -51,6 +52,17 @@ export function WalletPage() {
       alert(error?.data?.message || 'Failed to request withdrawal. Please try again.')
     } finally {
       setIsProcessing(false)
+    }
+  }
+
+  const handleRequestRefund = async (bookingId) => {
+    try {
+      await requestRefund(bookingId).unwrap()
+      alert('Refund requested successfully! It is pending admin approval.')
+      refetch()
+    } catch (error) {
+      console.error('Failed to request refund:', error)
+      alert(error?.data?.message || 'Failed to request refund.')
     }
   }
 
@@ -168,7 +180,9 @@ export function WalletPage() {
                   amount: txn.amount,
                   type: txn.type.toLowerCase(),
                   status: txn.status.toLowerCase(),
-                  date: new Date(txn.createdAt).toLocaleString()
+                  date: new Date(txn.createdAt).toLocaleString(),
+                  isRefundEligible: txn.status === 'Pending' && txn.type === 'Refund' && txn.source?.includes('Refund Eligible'),
+                  onRequestRefund: () => handleRequestRefund(txn.bookingId)
                 }} />
               ))
             ) : (

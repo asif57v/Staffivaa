@@ -26,6 +26,7 @@ import {
   MonitorPlay,
   ImagePlus,
   Percent,
+  Banknote,
 } from 'lucide-react'
 
 /**
@@ -91,6 +92,7 @@ export const ADMIN_NAV_SECTIONS = [
     title: 'Finance',
     items: [
       { to: '/admin/wallet', label: 'Admin Wallet', icon: Wallet },
+      { to: '/admin/refunds', label: 'Refunds', icon: Banknote },
       { to: '/admin/commission', label: 'Commissions', icon: Percent },
       { to: '/admin/pricing', label: 'Pricing Management', icon: BadgeIndianRupee },
     ],

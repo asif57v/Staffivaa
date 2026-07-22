@@ -29,6 +29,13 @@ export const walletApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['Wallet'],
     }),
+    requestRefund: builder.mutation({
+      query: (bookingId) => ({
+        url: `/wallet/refunds/${bookingId}/request`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['Wallet'],
+    }),
   }),
 })
 
@@ -36,5 +43,6 @@ export const {
   useGetWalletBalanceQuery, 
   useCreateRazorpayOrderMutation, 
   useVerifyRazorpayPaymentMutation,
-  useRequestWithdrawalMutation
+  useRequestWithdrawalMutation,
+  useRequestRefundMutation
 } = walletApi

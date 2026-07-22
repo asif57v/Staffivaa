@@ -54,7 +54,7 @@ class LocationMatchingService {
           maxDistance: maxDistanceMeters,
           spherical: true,
           query: {
-            role: USER_ROLES.VENDOR,
+            role: USER_ROLES.CONTRACTOR,
             isActive: true,
             accountStatus: 'active'
           }

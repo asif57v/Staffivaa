@@ -499,8 +499,11 @@ export function AppAttendancePage() {
   }
 
   // History Records
-  const historyRecords = records
+  const historyRecords = !displayAssignment ? [] : records
     .filter(r => {
+      if (String(r.assignmentId) !== String(displayAssignment._id) && (!r.assignmentId || String(r.assignmentId._id) !== String(displayAssignment._id))) {
+        return false
+      }
       const d = new Date(r.shiftDate)
       d.setHours(0, 0, 0, 0)
       
@@ -787,11 +790,13 @@ export function AppAttendancePage() {
       )}
 
           {/* 4️⃣ Monthly Summary Cards */}
-          <div>
-            <h4 style={{ fontSize: 11, fontWeight: 800, color: '#64748B', margin: '0 0 10px 2px', textTransform: 'uppercase', letterSpacing: '0.8px', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <CalendarDays style={{ width: 14, height: 14 }} /> Monthly Summary
-            </h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 8 }}>
+          {displayAssignment && (
+            <>
+              <div>
+                <h4 style={{ fontSize: 11, fontWeight: 800, color: '#64748B', margin: '0 0 10px 2px', textTransform: 'uppercase', letterSpacing: '0.8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <CalendarDays style={{ width: 14, height: 14 }} /> Monthly Summary
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 8 }}>
               {[
                 { label: 'Present', value: totalPresent, color: '#10B981', bg: '#ECFDF5', border: '#D1FAE5' },
                 { label: 'Absent', value: totalAbsent, color: '#EF4444', bg: '#FEF2F2', border: '#FECACA' },
@@ -1039,6 +1044,8 @@ export function AppAttendancePage() {
               </div>
             </div>
           )}
+        </>
+      )}
 
       {createPortal(
         <AnimatePresence>

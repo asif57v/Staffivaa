@@ -124,6 +124,7 @@ export function AdminWalletDashboard() {
     availableBalance: 0,
     totalRevenue: 0,
     pendingSettlements: 0,
+    pendingRefundLiability: 0,
     totalCredits: 0,
     totalDebits: 0,
     totalRefunds: 0,
@@ -286,7 +287,7 @@ export function AdminWalletDashboard() {
       </div>
 
       {/* Main Top KPIs Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-5">
         {/* Available Balance */}
         <div className="group rounded-[16px] bg-white/80 backdrop-blur-md p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] cursor-pointer flex items-center gap-4">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
@@ -331,10 +332,19 @@ export function AdminWalletDashboard() {
             <p className="text-[30px] font-bold text-slate-900 mt-0.5 tracking-tight leading-none">
               {loadingSummary ? '...' : formatMoney(summary.pendingSettlements)}
             </p>
-            <div className="flex items-center gap-1 mt-1.5 text-[12px]">
-              <span className="font-semibold text-rose-600">↓ 3.4%</span>
-              <span className="text-slate-400">vs yesterday</span>
-            </div>
+          </div>
+        </div>
+
+        {/* Pending Refund Liability */}
+        <div className="group rounded-[16px] bg-white/80 backdrop-blur-md p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] cursor-pointer flex items-center gap-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-50 text-purple-600">
+            <Clock className="h-5 w-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-medium text-slate-500 truncate">Pending Refunds</p>
+            <p className="text-[30px] font-bold text-slate-900 mt-0.5 tracking-tight leading-none">
+              {loadingSummary ? '...' : formatMoney(summary.pendingRefundLiability)}
+            </p>
           </div>
         </div>
 

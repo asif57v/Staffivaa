@@ -15,15 +15,23 @@ export function TransactionCard({ transaction }) {
             <Clock size={12} />
             <span>{transaction.date}</span>
             <span className="mx-1">•</span>
-            <span className={`font-medium ${transaction.status === 'success' ? 'text-green-600' : 'text-orange-500'}`}>
+            <span className={`font-medium ${transaction.status === 'success' || transaction.status === 'completed' ? 'text-green-600' : 'text-orange-500'}`}>
               {transaction.status.charAt(0).toUpperCase() + transaction.status.slice(1)}
             </span>
           </div>
+          {transaction.isRefundEligible && (
+            <button
+              onClick={(e) => { e.stopPropagation(); transaction.onRequestRefund?.() }}
+              className="mt-2 text-xs font-bold bg-brand text-slate-900 px-3 py-1.5 rounded hover:bg-brand/90 transition-colors"
+            >
+              Request Refund
+            </button>
+          )}
         </div>
       </div>
-      <div className="text-right">
+      <div className="text-right flex flex-col items-end">
         <span className={`font-bold text-lg ${isCredit ? 'text-green-600' : 'text-gray-900'}`}>
-          {isCredit ? '+' : '-'}₹{transaction.amount}
+          {isCredit || transaction.type === 'refund' ? '+' : '-'}₹{transaction.amount}
         </span>
       </div>
     </div>

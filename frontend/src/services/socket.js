@@ -3,7 +3,15 @@ import { io } from 'socket.io-client'
 let socket = null
 
 export const connectSocket = (user, token) => {
-  if (socket) return socket
+  if (socket) {
+    if (socket.connected && user && user._id && user.role) {
+      socket.emit('authenticate', {
+        _id: user._id,
+        role: user.role
+      })
+    }
+    return socket
+  }
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
   

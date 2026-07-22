@@ -25,6 +25,13 @@ const walletSchema = new mongoose.Schema(
     pendingSettlements: {
       type: Number,
       default: 0,
+      min: 0,
+    },
+    // The amount eligible for refund (e.g. from cancelled bookings where one party paid) that hasn't been approved or rejected yet.
+    pendingRefundLiability: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     totalCredits: {
       type: Number,

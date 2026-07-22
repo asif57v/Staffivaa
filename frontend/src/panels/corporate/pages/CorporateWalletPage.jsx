@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Wallet as WalletIcon } from 'lucide-react'
 import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
 import { PageSkeleton } from '../../../components/ui/PageSkeleton.jsx'
-import { useGetWalletBalanceQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation, useRequestWithdrawalMutation } from '../../../store/api/walletApi.js'
+import { useGetWalletBalanceQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation, useRequestWithdrawalMutation, useRequestRefundMutation } from '../../../store/api/walletApi.js'
 import { useAuth } from '../../../hooks/useAuth.js'
 
 import { WalletBalanceCard } from '../../../pages/app/wallet/components/WalletBalanceCard.jsx'
@@ -31,6 +31,7 @@ export function CorporateWalletPage() {
   const [createOrder] = useCreateRazorpayOrderMutation()
   const [verifyPayment] = useVerifyRazorpayPaymentMutation()
   const [requestWithdrawal] = useRequestWithdrawalMutation()
+  const [requestRefund] = useRequestRefundMutation()
   
   const [isAddMoneyOpen, setIsAddMoneyOpen] = useState(false)
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false)
@@ -51,6 +52,17 @@ export function CorporateWalletPage() {
       alert(error?.data?.message || 'Failed to request withdrawal. Please try again.')
     } finally {
       setIsProcessing(false)
+    }
+  }
+
+  const handleRequestRefund = async (bookingId) => {
+    try {
+      await requestRefund(bookingId).unwrap()
+      alert('Refund requested successfully! It is pending admin approval.')
+      refetch()
+    } catch (error) {
+      console.error('Failed to request refund:', error)
+      alert(error?.data?.message || 'Failed to request refund.')
     }
   }
 
@@ -156,7 +168,9 @@ export function CorporateWalletPage() {
                   amount: txn.amount,
                   type: txn.type.toLowerCase(),
                   status: txn.status.toLowerCase(),
-                  date: new Date(txn.createdAt).toLocaleString()
+                  date: new Date(txn.createdAt).toLocaleString(),
+                  isRefundEligible: txn.status === 'Pending' && txn.type === 'Refund' && txn.source?.includes('Refund Eligible'),
+                  onRequestRefund: () => handleRequestRefund(txn.bookingId)
                 }} />
               ))
             ) : (

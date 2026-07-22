@@ -93,7 +93,7 @@ export function CorporateRequestsPage() {
           let statusTone = 'bg-orange-50 text-orange-700'
           let StatusIcon = AlertCircle
           
-          if (r.status === 'accepted' || r.status === 'allocated' || r.status === 'assigned') {
+          if (r.status === 'accepted' || r.status === 'allocated' || r.status === 'assigned' || r.status === 'vendor_platform_fee_pending') {
             statusLabel = 'Accepted'
             statusTone = 'bg-emerald-50 text-emerald-700'
             StatusIcon = CheckCircle2

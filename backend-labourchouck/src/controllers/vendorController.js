@@ -22,6 +22,7 @@ import {
   validateVendorProfileForSubmit,
 } from '../utils/vendorVerification.js'
 import { emitToCorporate, emitToRole } from '../utils/socket.js'
+import { sendNotificationToUser } from '../services/notificationService.js'
 import { payrollService } from '../services/payroll.service.js'
 
 function requireApprovedVendor(user) {
@@ -361,6 +362,15 @@ export const acceptVendorMarketplaceRequest = asyncHandler(async (req, res) => {
   // Notify corporate
   emitToCorporate(request.clientId.toString(), 'vendor_accepted_request', { requestId: request._id.toString(), vendorId: req.user._id.toString() })
   emitToRole('contractor', 'vendor_accepted_request_global', { requestId: request._id.toString() })
+
+  // Send push notification to corporate
+  const vendorName = req.user.contractorProfile?.businessName || req.user.fullName || 'A vendor'
+  sendNotificationToUser(
+    request.clientId.toString(), 
+    'Request Accepted', 
+    `${vendorName} has accepted your request.`, 
+    { url: `/corporate/requests/${request._id}` }
+  )
 
   sendSuccess(res, { data: { allocation } })
 })

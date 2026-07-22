@@ -3,6 +3,8 @@ import { Allocation } from '../models/Allocation.js'
 import { Assignment } from '../models/Assignment.js'
 import { User } from '../models/User.js'
 import { WalletTransaction } from '../models/WalletTransaction.js'
+import { Wallet } from '../models/Wallet.js'
+import { RefundRequest } from '../models/RefundRequest.js'
 import { REQUEST_STATUS } from '../constants/workforceConstants.js'
 import { getIO } from './socket.js'
 
@@ -48,99 +50,66 @@ export function startBookingExpirationJob() {
       })
 
       for (const booking of expiredPendingBookings) {
-        // Process Refunds
-        let refundedAmount = 0
-        let refundStatus = 'none'
+        // Helper function for processing refund eligibility
+        const processRefundEligibility = async (userId, userRole, amount) => {
+          if (!amount || amount <= 0) return 'none'
+
+          // 1. Create Refund Request (ELIGIBLE)
+          const refundReq = await RefundRequest.create({
+            bookingId: booking._id,
+            userId: userId,
+            userRole: userRole,
+            amount: amount,
+            paymentTransactionId: 'timeout-refund', // Can be enhanced to find actual tx id
+            status: 'ELIGIBLE',
+            cancellationReason: 'Booking cancelled because the opposite party did not complete the platform fee payment within 5 minutes.'
+          })
+
+          // 2. Create WalletTransaction (Pending)
+          const userObj = await User.findById(userId).select('fullName role')
+          await WalletTransaction.create({
+            transactionId: `RFND-REQ-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            payerId: userId,
+            payerName: userObj?.fullName || userRole,
+            payerType: userObj?.role || userRole,
+            amount: amount,
+            type: 'Refund',
+            source: 'Refund Eligible - Pending Request',
+            status: 'Pending',
+            bookingId: booking._id,
+            referenceModel: 'RefundRequest',
+            referenceId: refundReq._id
+          })
+
+          // 3. Update Admin Wallet (Shift from Revenue to Liability)
+          let adminWallet = await Wallet.findOne({ singletonId: 'ADMIN_WALLET' })
+          if (adminWallet) {
+            adminWallet.totalRevenue = Math.max(0, adminWallet.totalRevenue - amount)
+            adminWallet.pendingRefundLiability += amount
+            await adminWallet.save()
+          }
+
+          return `${userRole}_refund_eligible`
+        }
 
         if (booking.labourPaymentStatus === 'paid' && booking.labourId) {
-          const amount = booking.labourPlatformFee || 0
-          if (amount > 0) {
-            await User.findByIdAndUpdate(booking.labourId, { $inc: { walletBalance: amount } })
-            
-            const labour = await User.findById(booking.labourId).select('fullName role')
-            await WalletTransaction.create({
-              transactionId: `RFND-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-              payerId: booking.labourId,
-              payerName: labour?.fullName || 'Labour',
-              payerType: labour?.role || 'labour',
-              amount: amount,
-              type: 'Refund',
-              source: 'Platform Fee Timeout Refund',
-              status: 'Completed',
-              bookingId: booking._id
-            })
-            refundedAmount += amount
-            refundStatus = 'labour_refunded'
-          }
+          refundStatus = await processRefundEligibility(booking.labourId, 'labour', booking.labourPlatformFee)
         }
 
         if (booking.userPaymentStatus === 'paid' && booking.clientId) {
-          const amount = booking.userPlatformFee || 0
-          if (amount > 0) {
-            await User.findByIdAndUpdate(booking.clientId, { $inc: { walletBalance: amount } })
-            
-            const client = await User.findById(booking.clientId).select('fullName role')
-            await WalletTransaction.create({
-              transactionId: `RFND-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-              payerId: booking.clientId,
-              payerName: client?.fullName || 'User',
-              payerType: client?.role || 'user',
-              amount: amount,
-              type: 'Refund',
-              source: 'Platform Fee Timeout Refund',
-              status: 'Completed',
-              bookingId: booking._id
-            })
-            refundedAmount += amount
-            refundStatus = refundStatus === 'labour_refunded' ? 'both_refunded' : 'user_refunded'
-          }
+          const s = await processRefundEligibility(booking.clientId, 'user', booking.userPlatformFee)
+          refundStatus = refundStatus !== 'none' ? 'both_refund_eligible' : s
         }
 
         // --- Corporate and Vendor Flow Refunds ---
-        
         if (booking.vendorPlatformFeeStatus === 'paid' && booking.acceptedBy) {
-          const amount = booking.vendorPlatformFeeAmount || 0
-          if (amount > 0) {
-            await User.findByIdAndUpdate(booking.acceptedBy, { $inc: { walletBalance: amount } })
-            
-            const vendor = await User.findById(booking.acceptedBy).select('fullName role')
-            await WalletTransaction.create({
-              transactionId: `RFND-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-              payerId: booking.acceptedBy,
-              payerName: vendor?.fullName || 'Vendor',
-              payerType: vendor?.role || 'vendor',
-              amount: amount,
-              type: 'Refund',
-              source: 'Platform Fee Timeout Refund',
-              status: 'Completed',
-              bookingId: booking._id
-            })
-            refundedAmount += amount
-            refundStatus = refundStatus === 'none' ? 'vendor_refunded' : 'multiple_refunded'
-          }
+          const s = await processRefundEligibility(booking.acceptedBy, 'vendor', booking.vendorPlatformFeeAmount)
+          refundStatus = refundStatus !== 'none' ? 'multiple_refund_eligible' : s
         }
 
         if (booking.corporatePlatformFeeStatus === 'paid' && booking.clientId) {
-          const amount = booking.corporatePlatformFeeAmount || 0
-          if (amount > 0) {
-            // Note: clientId for corporate requests is the corporate user
-            await User.findByIdAndUpdate(booking.clientId, { $inc: { walletBalance: amount } })
-            
-            const corporate = await User.findById(booking.clientId).select('fullName role')
-            await WalletTransaction.create({
-              transactionId: `RFND-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-              payerId: booking.clientId,
-              payerName: corporate?.fullName || 'Corporate',
-              payerType: corporate?.role || 'corporate',
-              amount: amount,
-              type: 'Refund',
-              source: 'Platform Fee Timeout Refund',
-              status: 'Completed',
-              bookingId: booking._id
-            })
-            refundedAmount += amount
-            refundStatus = refundStatus === 'none' ? 'corporate_refunded' : 'multiple_refunded'
-          }
+          const s = await processRefundEligibility(booking.clientId, 'corporate', booking.corporatePlatformFeeAmount)
+          refundStatus = refundStatus !== 'none' ? 'multiple_refund_eligible' : s
         }
 
         // Cancel the booking and update lifecycle

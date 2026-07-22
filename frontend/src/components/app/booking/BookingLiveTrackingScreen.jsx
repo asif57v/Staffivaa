@@ -188,23 +188,33 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
   const [timeLeft, setTimeLeft] = useState(300)
 
   useEffect(() => {
+    let interval;
+    let pollInterval;
+
     if (request?.status === 'platform_fee_pending' && request?.platformFeePendingAt) {
       const pendingAt = new Date(request.platformFeePendingAt).getTime()
       const expiryTime = pendingAt + 5 * 60 * 1000
       
-      const interval = setInterval(() => {
+      interval = setInterval(() => {
         const now = new Date().getTime()
         const remaining = Math.max(0, Math.floor((expiryTime - now) / 1000))
         setTimeLeft(remaining)
         
         if (remaining <= 0) {
           clearInterval(interval)
+          // Start polling if timer expires and status hasn't updated via socket
+          pollInterval = setInterval(() => {
+            refetch()
+          }, 5000)
         }
       }, 1000)
-      
-      return () => clearInterval(interval)
     }
-  }, [request?.status, request?.platformFeePendingAt])
+      
+    return () => {
+      if (interval) clearInterval(interval)
+      if (pollInterval) clearInterval(pollInterval)
+    }
+  }, [request?.status, request?.platformFeePendingAt, refetch])
 
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60).toString().padStart(2, '0')
@@ -223,6 +233,13 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     // This ensures OTP is shown when worker marks 'on_site'
     currentStatus = activeAssignment.status
   }
+
+  useEffect(() => {
+    if (['cancelled', 'expired'].includes(currentStatus)) {
+      alert("This booking has been cancelled or expired.")
+      onBack()
+    }
+  }, [currentStatus, onBack])
 
   // Only fallback to demo/draft workers if the booking has actually been accepted
   const isAcceptedOrBeyond = ['accepted', 'in_progress', 'on_site', 'completed'].includes(currentStatus)
@@ -336,15 +353,22 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
             {request.userPaymentStatus === 'paid' ? (
               <div className="mt-4 flex flex-col items-center justify-center gap-2 bg-blue-50 p-4 rounded-xl border border-blue-200 shadow-sm">
                 <div className="flex items-center gap-2 text-sm font-extrabold text-blue-700 uppercase tracking-widest">
-                  <Clock className="h-4 w-4" />
-                  Waiting for Worker
+                  {timeLeft <= 0 ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Processing Cancellation</>
+                  ) : (
+                    <><Clock className="h-4 w-4" /> Waiting for Worker</>
+                  )}
                 </div>
                 <div className="flex justify-between items-center w-full mt-2 px-2 pb-2 border-b border-blue-200/50">
                   <span className="text-xs font-bold text-blue-800">Time Remaining</span>
-                  <span className={`text-sm font-black ${timeLeft < 60 ? 'text-red-500' : 'text-blue-900'}`}>{formatTime(timeLeft)}</span>
+                  <span className={`text-sm font-black ${timeLeft < 60 ? 'text-red-500' : 'text-blue-900'}`}>
+                    {timeLeft <= 0 ? '00:00' : formatTime(timeLeft)}
+                  </span>
                 </div>
                 <p className="text-center text-[11px] font-semibold text-blue-600/90 leading-relaxed mt-1">
-                  You have successfully paid the platform fee. The booking will automatically cancel and your fee will be refunded if the worker does not pay their fee within 5 minutes.
+                  {timeLeft <= 0 
+                    ? "The 5-minute window has ended. The server is processing the auto-cancellation and your refund will be initiated momentarily."
+                    : "You have successfully paid the platform fee. The booking will automatically cancel and your fee will be refunded if the worker does not pay their fee within 5 minutes."}
                 </p>
               </div>
             ) : (

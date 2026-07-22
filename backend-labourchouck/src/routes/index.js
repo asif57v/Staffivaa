@@ -23,6 +23,8 @@ import marketingRoutes from './marketingRoutes.js'
 import payrollRoutes from './payrollRouter.js'
 import adminCommissionRoutes from './adminCommissionRoutes.js'
 import webhookRoutes from './webhookRoutes.js'
+import refundRoutes from './refundRoutes.js'
+import adminRefundRoutes from './adminRefundRoutes.js'
 
 const router = Router()
 
@@ -51,5 +53,7 @@ router.use('/admin/marketing', adminMarketingRoutes)
 router.use('/marketing', marketingRoutes)
 router.use('/payroll', payrollRoutes)
 router.use('/admin/commission', adminCommissionRoutes)
+router.use('/wallet/refunds', refundRoutes)
+router.use('/admin/refunds', adminRefundRoutes)
 
 export default router

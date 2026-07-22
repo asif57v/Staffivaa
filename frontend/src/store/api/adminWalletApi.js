@@ -45,6 +45,31 @@ export const adminWalletApi = baseApi.injectEndpoints({
       query: () => '/admin/wallet/reports',
       providesTags: ['WalletReport'],
     }),
+
+    getRefundRequests: builder.query({
+      query: (params) => ({
+        url: '/admin/refunds',
+        params,
+      }),
+      providesTags: ['RefundRequest'],
+    }),
+
+    approveRefundRequest: builder.mutation({
+      query: (id) => ({
+        url: `/admin/refunds/${id}/approve`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['RefundRequest', 'Wallet', 'WalletTransaction'],
+    }),
+
+    rejectRefundRequest: builder.mutation({
+      query: ({ id, adminNote }) => ({
+        url: `/admin/refunds/${id}/reject`,
+        method: 'POST',
+        body: { adminNote },
+      }),
+      invalidatesTags: ['RefundRequest', 'Wallet', 'WalletTransaction'],
+    }),
   }),
 })
 
@@ -55,4 +80,7 @@ export const {
   useCreateWithdrawalMutation,
   useReviewWithdrawalMutation,
   useGetWalletReportsQuery,
+  useGetRefundRequestsQuery,
+  useApproveRefundRequestMutation,
+  useRejectRefundRequestMutation,
 } = adminWalletApi

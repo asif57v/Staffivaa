@@ -8,8 +8,9 @@ import {
   useGetVendorWalletSummaryQuery,
   useGetVendorWalletActivityQuery,
   useGetVendorWithdrawalsQuery,
-  useRequestVendorWithdrawalMutation
+  useRequestVendorWithdrawalMutation,
 } from '../../../store/api/workforceApi.js'
+import { useRequestRefundMutation } from '../../../store/api/walletApi.js'
 import { VendorSettlementDrawer } from '../components/VendorSettlementDrawer.jsx'
 
 function formatMoney(n) {
@@ -43,6 +44,7 @@ export function VendorEarningsPage() {
   const { data: withdrawalsData, isLoading: loadingWithdrawals, refetch: refetchWithdrawals } = useGetVendorWithdrawalsQuery()
   
   const [requestWithdrawal, { isLoading: isWithdrawing }] = useRequestVendorWithdrawalMutation()
+  const [requestRefund] = useRequestRefundMutation()
 
   const summary = summaryData || {}
   const settlements = settlementsData?.settlements || []
@@ -110,6 +112,16 @@ export function VendorEarningsPage() {
       }, 2000)
     } catch (err) {
       setErrorMsg(err?.data?.message || 'Failed to submit withdrawal request.')
+    }
+  }
+
+  const handleRequestRefund = async (bookingId) => {
+    try {
+      await requestRefund(bookingId).unwrap()
+      toast.success('Refund requested successfully! It is pending admin approval.')
+      refetchActivity()
+    } catch (error) {
+      toast.error(error?.data?.message || 'Failed to request refund.')
     }
   }
 
@@ -347,12 +359,23 @@ export function VendorEarningsPage() {
                         <p className="text-[11px] text-slate-500 font-medium">
                           {new Date(tx.createdAt).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'})}
                         </p>
+                        {tx.status === 'Pending' && tx.type === 'Refund' && tx.source?.includes('Refund Eligible') && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleRequestRefund(tx.bookingId) }}
+                            className="mt-2 text-xs font-bold bg-brand text-slate-900 px-3 py-1.5 rounded hover:bg-brand/90 transition-colors"
+                          >
+                            Request Refund
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-extrabold text-emerald-600">+ {formatMoney(tx.amount)}</p>
-                      <span className="inline-block text-[9px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded mt-0.5">
-                        Settled
+                      <p className={`text-sm font-extrabold ${tx.type === 'Refund' ? 'text-slate-900' : 'text-emerald-600'}`}>+ {formatMoney(tx.amount)}</p>
+                      <span className={`inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded mt-0.5 ${
+                        tx.status === 'Pending' ? 'bg-amber-50 text-amber-700 border border-amber-100' :
+                        tx.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-700'
+                      }`}>
+                        {tx.status}
                       </span>
                     </div>
                   </AppSurface>
