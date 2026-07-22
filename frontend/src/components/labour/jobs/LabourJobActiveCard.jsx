@@ -117,11 +117,11 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
   useEffect(() => {
     if (!requestId) return
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
-    let socketUrl = baseUrl.replace('/api/v1', '')
-    if (socketUrl.includes('5000')) {
-      socketUrl = socketUrl.replace('5000', '5001')
-    } else if (!socketUrl.includes('5001')) {
-      socketUrl = 'http://localhost:5001'
+    let socketUrl = import.meta.env.VITE_SOCKET_URL
+    if (!socketUrl) {
+      socketUrl = baseUrl.replace('/api/v1', '')
+      if (socketUrl.includes('5000')) socketUrl = socketUrl.replace('5000', '5001')
+      else if (!socketUrl.includes('5001')) socketUrl = 'http://localhost:5001'
     }
     const socket = io(socketUrl, { 
       withCredentials: true,

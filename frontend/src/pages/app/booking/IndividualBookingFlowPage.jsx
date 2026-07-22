@@ -315,12 +315,11 @@ export function IndividualBookingFlowPage() {
     // Socket.io for instant updates
     let socket = null
     try {
-      let socketUrl = baseUrl.replace('/api/v1', '')
-      if (socketUrl.includes('5000')) {
-        socketUrl = socketUrl.replace('5000', '5001')
-      } else if (!socketUrl.includes('5001')) {
-        // fallback for local
-        socketUrl = 'http://localhost:5001'
+      let socketUrl = import.meta.env.VITE_SOCKET_URL
+      if (!socketUrl) {
+        socketUrl = baseUrl.replace('/api/v1', '')
+        if (socketUrl.includes('5000')) socketUrl = socketUrl.replace('5000', '5001')
+        else if (!socketUrl.includes('5001')) socketUrl = 'http://localhost:5001'
       }
       
       socket = io(socketUrl, { 

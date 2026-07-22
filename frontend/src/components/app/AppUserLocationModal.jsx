@@ -107,25 +107,26 @@ export function AppUserLocationModal({
         setLng(ln)
         
         try {
-          if (!apiKey) {
+          if (!window.google || !window.google.maps) {
              setGeoBusy(false)
              setHint('Coordinates updated. Add an address label below if you like.')
              return
           }
-          const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${la},${ln}&key=${apiKey}`)
-          const data = await res.json()
-          if (data.results && data.results.length > 0) {
-            setAddress(data.results[0].formatted_address)
-            setAddressComponents(data.results[0].address_components || null)
-            if (inputRef.current) inputRef.current.value = data.results[0].formatted_address
-            setHint('Location successfully updated.')
-          } else {
-            setHint('Coordinates updated. Could not resolve address.')
-          }
+          const geocoder = new window.google.maps.Geocoder();
+          geocoder.geocode({ location: { lat: la, lng: ln } }, (results, status) => {
+            if (status === "OK" && results && results.length > 0) {
+              setAddress(results[0].formatted_address)
+              setAddressComponents(results[0].address_components || null)
+              if (inputRef.current) inputRef.current.value = results[0].formatted_address
+              setHint('Location successfully updated.')
+            } else {
+              setHint('Coordinates updated. Could not resolve address.')
+            }
+            setGeoBusy(false)
+          });
         } catch {
-          setHint('Coordinates updated. Could not resolve address.')
-        } finally {
           setGeoBusy(false)
+          setHint('Coordinates updated. Could not resolve address.')
         }
       },
       () => {
