@@ -404,7 +404,7 @@ export function IndividualBookingFlowPage() {
 
   const estimate = useMemo(() => {
     const cat = categoriesList.find((c) => String(c._id) === String(draft.categoryId))
-    const baseRate = cat?.baseRate ?? 800
+    const baseRate = cat?.baseRate ?? 0
 
     const lines = [
       {

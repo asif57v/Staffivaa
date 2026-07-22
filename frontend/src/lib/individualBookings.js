@@ -130,11 +130,11 @@ export function estimateIndividualBooking(input, pricingConfig) {
   
   const estimatedTotal = (input.lines || []).reduce((sum, ln) => {
     const qty = Math.max(1, Number(ln.quantity) || 1)
-    const rate = Number(ln.baseRate) || 800
+    const rate = ln.baseRate !== undefined && ln.baseRate !== null && !isNaN(Number(ln.baseRate)) ? Number(ln.baseRate) : 0
     return sum + (qty * rate * durationDays)
   }, 0)
   
-  const RATE_PER_WORKER_DAY = (input.lines && input.lines.length > 0) ? (Number(input.lines[0].baseRate) || 800) : 800
+  const RATE_PER_WORKER_DAY = (input.lines && input.lines.length > 0 && input.lines[0].baseRate !== undefined) ? Number(input.lines[0].baseRate) : 0
   
   let platformFee = Math.round(estimatedTotal * 0.05)
   if (pricingConfig?.userBooking?.platformFee) {
