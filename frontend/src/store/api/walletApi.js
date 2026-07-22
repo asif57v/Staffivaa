@@ -21,11 +21,20 @@ export const walletApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['Wallet'],
     }),
+    requestWithdrawal: builder.mutation({
+      query: (data) => ({
+        url: '/wallet/withdraw',
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['Wallet'],
+    }),
   }),
 })
 
 export const { 
   useGetWalletBalanceQuery, 
   useCreateRazorpayOrderMutation, 
-  useVerifyRazorpayPaymentMutation 
+  useVerifyRazorpayPaymentMutation,
+  useRequestWithdrawalMutation
 } = walletApi

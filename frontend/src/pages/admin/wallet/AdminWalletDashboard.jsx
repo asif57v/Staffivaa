@@ -111,6 +111,12 @@ export function AdminWalletDashboard() {
     if (activeTab === 'labour') {
       return role === 'labour'
     }
+    if (activeTab === 'user') {
+      return role === 'user'
+    }
+    if (activeTab === 'corporate') {
+      return role === 'corporate'
+    }
     return false
   })
 

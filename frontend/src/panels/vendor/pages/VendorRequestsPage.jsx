@@ -5,7 +5,7 @@ import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
 import { useGetVendorMarketplaceRequestsQuery, useAcceptMarketplaceRequestMutation, useDeclineMarketplaceRequestMutation } from '../../../store/api/workforceApi.js'
 import { markVendorRequestsViewed } from '../../../hooks/useVendorNotificationCount.js'
 import { useEffect } from 'react'
-import { getSocket } from '../../../services/socket.js'
+import { useSocket } from '../../../hooks/useSocket.js'
 
 function formatDate(d) {
   if (!d) return '—'
@@ -20,8 +20,9 @@ export function VendorRequestsPage() {
   const [acceptRequest, { isLoading: isAccepting }] = useAcceptMarketplaceRequestMutation()
   const [declineRequest, { isLoading: isDeclining }] = useDeclineMarketplaceRequestMutation()
 
+  const socket = useSocket()
+
   useEffect(() => {
-    const socket = getSocket()
     if (socket) {
       const handleUpdate = () => refetch()
       socket.on('corporate_request_created', handleUpdate)
@@ -34,7 +35,7 @@ export function VendorRequestsPage() {
         socket.off('request_status_update', handleUpdate)
       }
     }
-  }, [refetch])
+  }, [socket, refetch])
   
   const requests = marketplaceData?.requests ?? []
 

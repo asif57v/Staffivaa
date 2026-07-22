@@ -321,7 +321,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
             <div className="text-left space-y-3 mb-6 bg-slate-50 rounded-2xl p-4 border border-slate-100">
               <div className="flex justify-between items-center pb-3 border-b border-slate-200">
                 <span className="font-semibold text-slate-700">Platform Fee</span>
-                <span className="font-bold text-slate-900">₹{request.userPlatformFee || 49}</span>
+                <span className="font-bold text-slate-900">₹{request.userPlatformFee ?? 0}</span>
               </div>
               <div className="mt-3 flex justify-between items-center pb-2">
                 <span className="text-xs font-semibold text-slate-500">Visiting Charge</span>
@@ -361,7 +361,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
                   </>
                 ) : (
                   <>
-                    <CreditCard className="h-5 w-5" /> Pay Platform Fee (₹{request.userPlatformFee || 49})
+                    <CreditCard className="h-5 w-5" /> Pay Platform Fee (₹{request.userPlatformFee ?? 0})
                   </>
                 )}
               </button>

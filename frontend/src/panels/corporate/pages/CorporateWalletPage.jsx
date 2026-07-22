@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { Wallet as WalletIcon } from 'lucide-react'
 import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
 import { PageSkeleton } from '../../../components/ui/PageSkeleton.jsx'
-import { useGetWalletBalanceQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation } from '../../../store/api/walletApi.js'
+import { useGetWalletBalanceQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation, useRequestWithdrawalMutation } from '../../../store/api/walletApi.js'
 import { useAuth } from '../../../hooks/useAuth.js'
 
 import { WalletBalanceCard } from '../../../pages/app/wallet/components/WalletBalanceCard.jsx'
 import { TransactionCard } from '../../../pages/app/wallet/components/TransactionCard.jsx'
 import { AddMoneyModal } from '../../../pages/app/wallet/components/AddMoneyModal.jsx'
+import { WithdrawMoneyModal } from '../../../pages/app/wallet/components/WithdrawMoneyModal.jsx'
 
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
@@ -29,12 +30,29 @@ export function CorporateWalletPage() {
   const { data: walletData, isLoading, refetch } = useGetWalletBalanceQuery()
   const [createOrder] = useCreateRazorpayOrderMutation()
   const [verifyPayment] = useVerifyRazorpayPaymentMutation()
+  const [requestWithdrawal] = useRequestWithdrawalMutation()
   
   const [isAddMoneyOpen, setIsAddMoneyOpen] = useState(false)
+  const [isWithdrawOpen, setIsWithdrawOpen] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
 
   const balance = walletData?.data?.balance || 0
   const transactions = walletData?.data?.transactions || []
+
+  const handleWithdraw = async (details) => {
+    setIsProcessing(true)
+    try {
+      await requestWithdrawal(details).unwrap()
+      alert('Withdrawal request submitted successfully! It is now pending admin approval.')
+      setIsWithdrawOpen(false)
+      refetch()
+    } catch (error) {
+      console.error('Failed to request withdrawal:', error)
+      alert(error?.data?.message || 'Failed to request withdrawal. Please try again.')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
 
   const handleAddMoney = async (amount) => {
     setIsProcessing(true)
@@ -121,7 +139,7 @@ export function CorporateWalletPage() {
         <WalletBalanceCard 
           balance={balance} 
           onAddMoney={() => setIsAddMoneyOpen(true)}
-          onHistory={() => {}}
+          onWithdraw={() => setIsWithdrawOpen(true)}
         />
 
         <div>
@@ -158,6 +176,14 @@ export function CorporateWalletPage() {
         isOpen={isAddMoneyOpen} 
         onClose={() => setIsAddMoneyOpen(false)} 
         onProceed={handleAddMoney} 
+      />
+      
+      <WithdrawMoneyModal
+        isOpen={isWithdrawOpen}
+        onClose={() => setIsWithdrawOpen(false)}
+        onProceed={handleWithdraw}
+        balance={balance}
+        isProcessing={isProcessing}
       />
     </div>
   )

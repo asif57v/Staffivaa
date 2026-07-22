@@ -209,14 +209,14 @@ export function CorporatePaymentPage() {
             </div>
             <div className="flex justify-between items-center text-[14px] text-yellow-400 font-bold">
               <span>Platform Fee</span>
-              <span>₹{request.corporatePlatformFeeAmount || 99}</span>
+              <span>₹{request.corporatePlatformFeeAmount ?? 0}</span>
             </div>
           </div>
           
           <div className="pt-4 border-t border-slate-700/50 flex justify-between items-center">
             <span className="text-[16px] font-bold text-slate-200">Amount to Pay</span>
             <span className="text-[24px] font-black text-[#FFC107]">
-              ₹{request.corporatePlatformFeeAmount || 99}
+              ₹{request.corporatePlatformFeeAmount ?? 0}
             </span>
           </div>
         </AppSurface>
@@ -230,7 +230,7 @@ export function CorporatePaymentPage() {
           disabled={isCreatingOrder || isVerifying || request.corporatePlatformFeeStatus === 'paid'}
           className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#FFC107] py-4 text-[16px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm disabled:opacity-50"
         >
-          {isCreatingOrder || isVerifying ? 'Processing...' : `Pay ₹${request.corporatePlatformFeeAmount || 99} Securely`}
+          {isCreatingOrder || isVerifying ? 'Processing...' : `Pay ₹${request.corporatePlatformFeeAmount ?? 0} Securely`}
         </button>
       </div>
 

@@ -136,7 +136,7 @@ export const createRequest = asyncHandler(async (req, res) => {
       if (pfConfig.minFee !== undefined && userPlatformFee < pfConfig.minFee) {
         userPlatformFee = pfConfig.minFee
       }
-      if (pfConfig.maxFee !== undefined && userPlatformFee > pfConfig.maxFee) {
+      if (pfConfig.maxFee !== undefined && pfConfig.maxFee > 0 && userPlatformFee > pfConfig.maxFee) {
         userPlatformFee = pfConfig.maxFee
       }
     }
@@ -346,11 +346,11 @@ export const createRequest = asyncHandler(async (req, res) => {
       for (const vId of eligibleVendorIds) {
         emitToVendor(vId, 'corporate_request_created', { requestId: request._id.toString() })
       }
-    } else {
-      console.log(`[Socket] Emitting corporate_request_created to contractor and vendor roles (radius matching disabled)`)
-      emitToRole('contractor', 'corporate_request_created', { requestId: request._id.toString() })
-      emitToRole('vendor', 'corporate_request_created', { requestId: request._id.toString() })
     }
+    // Always emit globally so that the Vendor Marketplace (which lists all requests) can refresh in real-time
+    console.log(`[Socket] Emitting corporate_request_created to contractor and vendor roles globally`)
+    emitToRole('contractor', 'corporate_request_created', { requestId: request._id.toString() })
+    emitToRole('vendor', 'corporate_request_created', { requestId: request._id.toString() })
   }
 
   sendSuccess(res, { data: { request } }, HTTP_STATUS.CREATED)
@@ -441,6 +441,14 @@ export const getRequest = asyncHandler(async (req, res) => {
   
   const { SystemPricing } = await import('../models/SystemPricing.js')
   const pricingDoc = await SystemPricing.findOne().lean()
+  
+  if (request.vendorPlatformFeeStatus !== 'paid') {
+    request.vendorPlatformFeeAmount = pricingDoc?.vendor?.platformCommission?.value ?? 0;
+  }
+  if (request.corporatePlatformFeeStatus !== 'paid') {
+    request.corporatePlatformFeeAmount = pricingDoc?.corporate?.platformFee?.value ?? 0;
+  }
+
   const advancePercentage = pricingDoc?.corporate?.advancePercentage || 30
   const advanceAmount = Math.round((grandTotal * advancePercentage) / 100)
   const remainingAmount = grandTotal - advanceAmount
@@ -853,17 +861,27 @@ export const payPlatformFee = asyncHandler(async (req, res) => {
   let feeAmount = 0
   let isCorporate = false
 
+  const { SystemPricing } = await import('../models/SystemPricing.js')
+  const pricingDoc = await SystemPricing.findOne().lean()
+  
+  if (request.vendorPlatformFeeStatus !== 'paid') {
+    request.vendorPlatformFeeAmount = pricingDoc?.vendor?.platformCommission?.value ?? 0;
+  }
+  if (request.corporatePlatformFeeStatus !== 'paid') {
+    request.corporatePlatformFeeAmount = pricingDoc?.corporate?.platformFee?.value ?? 0;
+  }
+
   if (req.user.role === USER_ROLES.CONTRACTOR) {
     if (request.vendorPlatformFeeStatus === 'paid') {
       return sendError(res, { message: 'Vendor platform fee already paid', statusCode: HTTP_STATUS.BAD_REQUEST })
     }
-    feeAmount = request.vendorPlatformFeeAmount || 111
+    feeAmount = request.vendorPlatformFeeAmount ?? 0
   } else if (req.user.role === USER_ROLES.CORPORATE) {
     isCorporate = true
     if (request.corporatePlatformFeeStatus === 'paid') {
       return sendError(res, { message: 'Corporate platform fee already paid', statusCode: HTTP_STATUS.BAD_REQUEST })
     }
-    feeAmount = request.corporatePlatformFeeAmount || 99
+    feeAmount = request.corporatePlatformFeeAmount ?? 0
   } else {
     return sendError(res, { message: 'Forbidden', statusCode: HTTP_STATUS.FORBIDDEN })
   }

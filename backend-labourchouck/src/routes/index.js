@@ -22,8 +22,11 @@ import adminMarketingRoutes from './adminMarketingRoutes.js'
 import marketingRoutes from './marketingRoutes.js'
 import payrollRoutes from './payrollRouter.js'
 import adminCommissionRoutes from './adminCommissionRoutes.js'
+import webhookRoutes from './webhookRoutes.js'
 
 const router = Router()
+
+router.use('/webhooks', webhookRoutes)
 
 router.use('/auth', authRoutes)
 router.use('/users', userRoutes)

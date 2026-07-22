@@ -39,12 +39,18 @@ export const verifyAddMoneyPayment = asyncHandler(async (req, res) => {
 
   const body = razorpay_order_id + '|' + razorpay_payment_id
 
-  const expectedSignature = crypto
-    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-    .update(body.toString())
-    .digest('hex')
+  const expectedSignature = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET).update(body.toString()).digest('hex')
 
-  const isAuthentic = expectedSignature === razorpay_signature
+  let isAuthentic = false;
+  try {
+    const generatedBuffer = Buffer.from(expectedSignature, 'hex');
+    const providedBuffer = Buffer.from(razorpay_signature, 'hex');
+    if (generatedBuffer.length === providedBuffer.length) {
+      isAuthentic = crypto.timingSafeEqual(generatedBuffer, providedBuffer);
+    }
+  } catch (err) {
+    isAuthentic = false;
+  }
 
   if (!isAuthentic) {
     return res.status(400).json({ status: 'fail', message: 'Invalid payment signature' })
@@ -101,5 +107,54 @@ export const getWalletBalance = asyncHandler(async (req, res) => {
       balance: user.walletBalance || 0,
       transactions,
     },
+  })
+})
+
+export const requestWithdrawal = asyncHandler(async (req, res) => {
+  const { amount, bankDetails } = req.body
+
+  if (!amount || amount <= 0) {
+    return res.status(400).json({ status: 'fail', message: 'Invalid withdrawal amount' })
+  }
+
+  if (!bankDetails || !bankDetails.accountNumber || !bankDetails.ifscCode || !bankDetails.accountHolderName) {
+    return res.status(400).json({ status: 'fail', message: 'Incomplete bank details provided' })
+  }
+
+  const user = await User.findById(req.user._id)
+  if (!user || (user.walletBalance || 0) < amount) {
+    return res.status(400).json({ status: 'fail', message: 'Insufficient wallet balance' })
+  }
+
+  // Deduct from wallet balance
+  user.walletBalance -= amount
+  await user.save()
+
+  // Create withdrawal record
+  const { Withdrawal } = await import('../models/Withdrawal.js')
+  const withdrawal = await Withdrawal.create({
+    amount,
+    bankDetails,
+    requestedBy: req.user._id,
+    status: 'Pending'
+  })
+
+  // Create WalletTransaction
+  const transactionId = `WD-${user.role.substring(0, 3).toUpperCase()}-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+  await WalletTransaction.create({
+    transactionId,
+    payerId: req.user._id,
+    payerName: user.fullName || 'User',
+    payerType: user.role,
+    type: 'Withdrawal',
+    source: 'Wallet Withdrawal Request',
+    amount,
+    status: 'Pending'
+  })
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Withdrawal request submitted successfully',
+    data: { withdrawal, walletBalance: user.walletBalance }
   })
 })

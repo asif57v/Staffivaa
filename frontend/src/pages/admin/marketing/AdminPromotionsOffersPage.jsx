@@ -20,7 +20,34 @@ export function AdminPromotionsOffersPage() {
     maxUsageLimit: 0,
     categories: []
   })
+  const [editingOfferId, setEditingOfferId] = useState(null)
   const [categories, setCategories] = useState([])
+  const [uploadingImage, setUploadingImage] = useState(false)
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const uploadFormData = new FormData()
+    uploadFormData.append('media', file)
+
+    setUploadingImage(true)
+    try {
+      const res = await apiClient.post('/uploads/media', uploadFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      if (res.data?.success) {
+        setFormData(prev => ({ ...prev, image: res.data.data.url }))
+        toast.success('Image uploaded successfully')
+      } else {
+        toast.error('Failed to upload image')
+      }
+    } catch (error) {
+      toast.error('Error uploading image')
+    } finally {
+      setUploadingImage(false)
+    }
+  }
 
   const fetchOffersAndCategories = async () => {
     try {
@@ -31,9 +58,11 @@ export function AdminPromotionsOffersPage() {
       setOffers(res.data.data.offers)
       
       const allCats = []
-      if (catRes.data?.data) {
-        Object.values(catRes.data.data).forEach(group => {
-          allCats.push(...group)
+      if (catRes.data?.data?.groups) {
+        catRes.data.data.groups.forEach(group => {
+          if (group.categories && Array.isArray(group.categories)) {
+            allCats.push(...group.categories)
+          }
         })
       }
       setCategories(allCats)
@@ -73,18 +102,38 @@ export function AdminPromotionsOffersPage() {
     }
   }
 
+  const handleEditClick = (offer) => {
+    setFormData({
+      title: offer.title,
+      description: offer.description,
+      image: offer.image,
+      ctaText: offer.ctaText || '',
+      priority: offer.priority,
+      isActive: offer.isActive,
+      discountPercentage: offer.discountPercentage || 0,
+      maxUsageLimit: offer.maxUsageLimit || 0,
+      categories: offer.categories || []
+    })
+    setEditingOfferId(offer._id)
+    setIsModalOpen(true)
+  }
+
   const handleAddSubmit = async (e) => {
     e.preventDefault()
     try {
-      const res = await apiClient.post('/admin/marketing/offers', formData)
+      const res = editingOfferId 
+        ? await apiClient.patch(`/admin/marketing/offers/${editingOfferId}`, formData)
+        : await apiClient.post('/admin/marketing/offers', formData)
+        
       if (res.data.success) {
-        toast.success('Offer created successfully!')
+        toast.success(editingOfferId ? 'Offer updated successfully!' : 'Offer created successfully!')
         setIsModalOpen(false)
+        setEditingOfferId(null)
         setFormData({ title: '', description: '', image: '', ctaText: 'Claim Now', priority: 1, isActive: true, discountPercentage: 0, maxUsageLimit: 0, categories: [] })
         fetchOffersAndCategories()
       }
     } catch (e) {
-      toast.error('Failed to create offer')
+      toast.error(editingOfferId ? 'Failed to update offer' : 'Failed to create offer')
     }
   }
 
@@ -96,7 +145,11 @@ export function AdminPromotionsOffersPage() {
           <p className="text-sm text-slate-500">Manage promotional offers shown on the User Home Page</p>
         </div>
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setEditingOfferId(null)
+            setFormData({ title: '', description: '', image: '', ctaText: 'Claim Now', priority: 1, isActive: true, discountPercentage: 0, maxUsageLimit: 0, categories: [] })
+            setIsModalOpen(true)
+          }}
           className="bg-[#3730A3] text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 hover:bg-[#312E81] transition"
         >
           <Plus className="h-4 w-4" /> Add Offer
@@ -158,7 +211,7 @@ export function AdminPromotionsOffersPage() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button className="p-1.5 text-slate-400 hover:text-[#3730A3] bg-slate-50 rounded-md hover:bg-indigo-50 transition">
+                      <button onClick={() => handleEditClick(offer)} className="p-1.5 text-slate-400 hover:text-[#3730A3] bg-slate-50 rounded-md hover:bg-indigo-50 transition">
                         <Edit2 className="h-4 w-4" />
                       </button>
                       <button onClick={() => deleteOffer(offer._id)} className="p-1.5 text-slate-400 hover:text-red-600 bg-slate-50 rounded-md hover:bg-red-50 transition">
@@ -183,7 +236,7 @@ export function AdminPromotionsOffersPage() {
               className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden"
             >
               <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                <h3 className="font-bold text-lg text-slate-800">Add New Offer</h3>
+                <h3 className="font-bold text-lg text-slate-800">{editingOfferId ? 'Edit Offer' : 'Add New Offer'}</h3>
                 <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                   <XCircle className="w-5 h-5" />
                 </button>
@@ -198,8 +251,14 @@ export function AdminPromotionsOffersPage() {
                   <textarea required value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Short description of the offer..." rows={2} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Image URL</label>
-                  <input type="url" required value={formData.image} onChange={e => setFormData({...formData, image: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="https://..." />
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Image URL or Upload</label>
+                  <div className="flex gap-2">
+                    <input type="url" required value={formData.image} onChange={e => setFormData({...formData, image: e.target.value})} className="flex-1 border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="https://..." />
+                    <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center whitespace-nowrap">
+                      {uploadingImage ? 'Uploading...' : 'Upload File'}
+                      <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={uploadingImage} />
+                    </label>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -230,7 +289,7 @@ export function AdminPromotionsOffersPage() {
                 </div>
                 <div className="pt-4 flex justify-end gap-2">
                   <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded-lg font-medium text-slate-600 hover:bg-slate-100">Cancel</button>
-                  <button type="submit" className="bg-[#3730A3] text-white px-5 py-2 rounded-lg font-medium hover:bg-[#312E81] shadow-sm">Save Offer</button>
+                  <button type="submit" className="bg-[#3730A3] text-white px-5 py-2 rounded-lg font-medium hover:bg-[#312E81] shadow-sm">{editingOfferId ? 'Update Offer' : 'Save Offer'}</button>
                 </div>
               </form>
             </motion.div>

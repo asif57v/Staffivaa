@@ -56,14 +56,18 @@ export function startBookingExpirationJob() {
           const amount = booking.labourPlatformFee || 0
           if (amount > 0) {
             await User.findByIdAndUpdate(booking.labourId, { $inc: { walletBalance: amount } })
+            
+            const labour = await User.findById(booking.labourId).select('fullName role')
             await WalletTransaction.create({
-              userId: booking.labourId,
+              transactionId: `RFND-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+              payerId: booking.labourId,
+              payerName: labour?.fullName || 'Labour',
+              payerType: labour?.role || 'labour',
               amount: amount,
-              type: 'refund',
-              status: 'completed',
-              reference: booking._id.toString(),
-              description: 'Booking cancelled due to incomplete platform fee payment',
-              category: 'platform_fee'
+              type: 'Refund',
+              source: 'Platform Fee Timeout Refund',
+              status: 'Completed',
+              bookingId: booking._id
             })
             refundedAmount += amount
             refundStatus = 'labour_refunded'
@@ -74,17 +78,68 @@ export function startBookingExpirationJob() {
           const amount = booking.userPlatformFee || 0
           if (amount > 0) {
             await User.findByIdAndUpdate(booking.clientId, { $inc: { walletBalance: amount } })
+            
+            const client = await User.findById(booking.clientId).select('fullName role')
             await WalletTransaction.create({
-              userId: booking.clientId,
+              transactionId: `RFND-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+              payerId: booking.clientId,
+              payerName: client?.fullName || 'User',
+              payerType: client?.role || 'user',
               amount: amount,
-              type: 'refund',
-              status: 'completed',
-              reference: booking._id.toString(),
-              description: 'Booking cancelled due to incomplete platform fee payment',
-              category: 'platform_fee'
+              type: 'Refund',
+              source: 'Platform Fee Timeout Refund',
+              status: 'Completed',
+              bookingId: booking._id
             })
             refundedAmount += amount
             refundStatus = refundStatus === 'labour_refunded' ? 'both_refunded' : 'user_refunded'
+          }
+        }
+
+        // --- Corporate and Vendor Flow Refunds ---
+        
+        if (booking.vendorPlatformFeeStatus === 'paid' && booking.acceptedBy) {
+          const amount = booking.vendorPlatformFeeAmount || 0
+          if (amount > 0) {
+            await User.findByIdAndUpdate(booking.acceptedBy, { $inc: { walletBalance: amount } })
+            
+            const vendor = await User.findById(booking.acceptedBy).select('fullName role')
+            await WalletTransaction.create({
+              transactionId: `RFND-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+              payerId: booking.acceptedBy,
+              payerName: vendor?.fullName || 'Vendor',
+              payerType: vendor?.role || 'vendor',
+              amount: amount,
+              type: 'Refund',
+              source: 'Platform Fee Timeout Refund',
+              status: 'Completed',
+              bookingId: booking._id
+            })
+            refundedAmount += amount
+            refundStatus = refundStatus === 'none' ? 'vendor_refunded' : 'multiple_refunded'
+          }
+        }
+
+        if (booking.corporatePlatformFeeStatus === 'paid' && booking.clientId) {
+          const amount = booking.corporatePlatformFeeAmount || 0
+          if (amount > 0) {
+            // Note: clientId for corporate requests is the corporate user
+            await User.findByIdAndUpdate(booking.clientId, { $inc: { walletBalance: amount } })
+            
+            const corporate = await User.findById(booking.clientId).select('fullName role')
+            await WalletTransaction.create({
+              transactionId: `RFND-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+              payerId: booking.clientId,
+              payerName: corporate?.fullName || 'Corporate',
+              payerType: corporate?.role || 'corporate',
+              amount: amount,
+              type: 'Refund',
+              source: 'Platform Fee Timeout Refund',
+              status: 'Completed',
+              bookingId: booking._id
+            })
+            refundedAmount += amount
+            refundStatus = refundStatus === 'none' ? 'corporate_refunded' : 'multiple_refunded'
           }
         }
 

@@ -45,10 +45,20 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
   let isVendorFee = false;
   let isCorporateFee = false;
 
+  const { SystemPricing } = await import('../models/SystemPricing.js')
+  const pricingDoc = await SystemPricing.findOne().lean()
+  
+  if (request.vendorPlatformFeeStatus !== 'paid') {
+    request.vendorPlatformFeeAmount = pricingDoc?.vendor?.platformCommission?.value ?? 0;
+  }
+  if (request.corporatePlatformFeeStatus !== 'paid') {
+    request.corporatePlatformFeeAmount = pricingDoc?.corporate?.platformFee?.value ?? 0;
+  }
+
   if (isLabour) {
     if (request.status === 'vendor_platform_fee_pending') {
       if (request.vendorPlatformFeeStatus === 'paid') return sendError(res, { message: 'Already paid vendor fee', statusCode: HTTP_STATUS.BAD_REQUEST });
-      totalAmount = request.vendorPlatformFeeAmount || 111;
+      totalAmount = request.vendorPlatformFeeAmount ?? 0;
       isVendorFee = true;
     } else {
       if (request.labourPaymentStatus === 'paid') return sendError(res, { message: 'Already paid by labour', statusCode: HTTP_STATUS.BAD_REQUEST });
@@ -72,7 +82,7 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
     if (request.sourceType === 'corporate') {
       if (request.status === 'corporate_platform_fee_pending') {
         if (request.corporatePlatformFeeStatus === 'paid') return sendError(res, { message: 'Already paid corporate fee', statusCode: HTTP_STATUS.BAD_REQUEST });
-        totalAmount = request.corporatePlatformFeeAmount || 99;
+        totalAmount = request.corporatePlatformFeeAmount ?? 0;
         isCorporateFee = true;
       } else {
         const userPlatformFee = request.userPlatformFee !== undefined ? request.userPlatformFee : 0
@@ -92,7 +102,7 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
     } else {
       if (request.userPaymentStatus === 'paid') return sendError(res, { message: 'Already paid by user', statusCode: HTTP_STATUS.BAD_REQUEST });
       
-      let platformFee = request.userPlatformFee || 49;
+      let platformFee = request.userPlatformFee ?? 0;
       totalAmount = platformFee;
     }
   }
@@ -136,7 +146,18 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
   const isLabourOrder = request.labourRazorpayOrderId === razorpay_order_id;
   const isUserOrder = request.userRazorpayOrderId === razorpay_order_id;
 
-  if (generatedSignature !== razorpay_signature) {
+  let isAuthentic = false;
+  try {
+    const generatedBuffer = Buffer.from(generatedSignature, 'hex');
+    const providedBuffer = Buffer.from(razorpay_signature, 'hex');
+    if (generatedBuffer.length === providedBuffer.length) {
+      isAuthentic = crypto.timingSafeEqual(generatedBuffer, providedBuffer);
+    }
+  } catch (err) {
+    isAuthentic = false;
+  }
+
+  if (!isAuthentic) {
     if (isLabourOrder) {
       if (request.status === 'vendor_platform_fee_pending') {
         request.vendorPlatformFeeStatus = 'failed';
@@ -184,8 +205,8 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
             if (allocation && allocation.vendorId) {
               emitToVendor(allocation.vendorId.toString(), 'quotation_unlocked', { requestId: request._id.toString() });
             }
-          });
-        });
+          }).catch(err => console.error(err));
+        }).catch(err => console.error(err));
       }
     } else {
       request.userPaymentStatus = 'paid';

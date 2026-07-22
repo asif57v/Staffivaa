@@ -649,18 +649,41 @@ export function IndividualHomeScreen({ user }) {
               </h3>
             </div>
             <div className="flex overflow-x-auto gap-3 pb-2 -mx-3 px-3 scrollbar-none snap-x snap-mandatory">
-              {marketingOffers.map(offer => (
-                <div key={offer._id} className="w-full snap-center shrink-0 rounded-[20px] overflow-hidden border border-slate-200 shadow-sm relative bg-white">
+              {marketingOffers.map(offer => {
+                const targetCategoryId = offer.categories?.[0]
+                
+                const handleOfferClick = () => {
+                  if (targetCategoryId) {
+                    const allCats = tradeGroups.flatMap(g => g.categories || [])
+                    const targetCat = allCats.find(c => String(c._id) === String(targetCategoryId))
+                    if (targetCat) {
+                      handleQuickBookCategory(targetCat)
+                      return
+                    }
+                  }
+                  setCategorySheetOpen(true)
+                }
+
+                return (
+                <div 
+                  key={offer._id} 
+                  className="w-full snap-center shrink-0 rounded-[20px] overflow-hidden border border-slate-200 shadow-sm relative bg-white"
+                >
                   <img src={offer.image} alt={offer.title} className="w-full h-32 object-cover" />
                   <div className="p-3">
                     <h4 className="font-bold text-slate-900 text-sm truncate">{offer.title}</h4>
                     <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{offer.description}</p>
                     {offer.ctaText && (
-                      <button className="mt-2 text-[11px] font-bold bg-slate-900 text-white px-3 py-1.5 rounded-full">{offer.ctaText}</button>
+                      <button 
+                        onClick={handleOfferClick}
+                        className="mt-2 text-[11px] font-bold bg-slate-900 text-white px-3 py-1.5 rounded-full hover:bg-slate-800 active:scale-95 transition"
+                      >
+                        {offer.ctaText}
+                      </button>
                     )}
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           </motion.section>
         )}

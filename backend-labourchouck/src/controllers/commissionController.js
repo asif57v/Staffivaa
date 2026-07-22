@@ -52,7 +52,18 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
   const body = razorpay_order_id + '|' + razorpay_payment_id
   const expectedSignature = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET).update(body.toString()).digest('hex')
 
-  if (expectedSignature === razorpay_signature) {
+  let isAuthentic = false;
+  try {
+    const generatedBuffer = Buffer.from(expectedSignature, 'hex');
+    const providedBuffer = Buffer.from(razorpay_signature, 'hex');
+    if (generatedBuffer.length === providedBuffer.length) {
+      isAuthentic = crypto.timingSafeEqual(generatedBuffer, providedBuffer);
+    }
+  } catch (err) {
+    isAuthentic = false;
+  }
+
+  if (isAuthentic) {
     const updated = await CommissionService.processPayment(
       commission._id,
       commission.commissionAmount,

@@ -235,7 +235,7 @@ export const listVendorJobs = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .populate({
       path: 'requestId',
-      select: 'reference status locationText startDate endDate lines scheduleType shiftStart shiftEnd clientId projectId advancePaymentStatus finalPaymentStatus createdAt labourPlatformFee labourPaymentStatus',
+      select: 'reference status locationText startDate endDate lines scheduleType shiftStart shiftEnd clientId projectId advancePaymentStatus finalPaymentStatus createdAt labourPlatformFee labourPaymentStatus vendorPlatformFeeAmount vendorPlatformFeeStatus',
       populate: [
         {
           path: 'lines.categoryId',
@@ -259,7 +259,14 @@ export const listVendorJobs = asyncHandler(async (req, res) => {
     .populate('categoryId', 'name')
     .lean()
 
+  const { SystemPricing } = await import('../models/SystemPricing.js')
+  const pricingDoc = await SystemPricing.findOne().lean()
+  const liveVendorFee = pricingDoc?.vendor?.platformCommission?.value ?? 0
+
   const allocationsWithAssignments = allocations.map((a) => {
+    if (a.requestId && a.requestId.vendorPlatformFeeStatus !== 'paid') {
+      a.requestId.vendorPlatformFeeAmount = liveVendorFee
+    }
     return {
       ...a,
       assignments: allAssignments.filter((assign) => String(assign.allocationId) === String(a._id)),
@@ -341,8 +348,8 @@ export const acceptVendorMarketplaceRequest = asyncHandler(async (req, res) => {
   const { SystemPricing } = await import('../models/SystemPricing.js')
   const pricing = await SystemPricing.findOne().lean()
   
-  const vendorFee = pricing?.vendor?.platformCommission?.value || 111
-  const corporateFee = pricing?.corporate?.platformFee?.value || 99
+  const vendorFee = pricing?.vendor?.platformCommission?.value ?? 0
+  const corporateFee = pricing?.corporate?.platformFee?.value ?? 0
 
   request.vendorPlatformFeeAmount = vendorFee
   request.corporatePlatformFeeAmount = corporateFee

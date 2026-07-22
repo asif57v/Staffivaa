@@ -169,14 +169,14 @@ export function VendorPaymentPage() {
           <div className="space-y-3 mb-4">
             <div className="flex justify-between items-center text-[14px] text-yellow-400 font-bold">
               <span>Vendor Platform Fee</span>
-              <span>₹{request.vendorPlatformFeeAmount || 111}</span>
+              <span>₹{request.vendorPlatformFeeAmount ?? 0}</span>
             </div>
           </div>
           
           <div className="pt-4 border-t border-slate-700/50 flex justify-between items-center">
             <span className="text-[16px] font-bold text-slate-200">Amount to Pay</span>
             <span className="text-[24px] font-black text-[#FFC107]">
-              ₹{request.vendorPlatformFeeAmount || 111}
+              ₹{request.vendorPlatformFeeAmount ?? 0}
             </span>
           </div>
         </AppSurface>
@@ -198,7 +198,7 @@ export function VendorPaymentPage() {
             </>
           ) : (
             <>
-              Pay ₹{request.vendorPlatformFeeAmount || 111} Securely
+              Pay ₹{request.vendorPlatformFeeAmount ?? 0} Securely
             </>
           )}
         </button>

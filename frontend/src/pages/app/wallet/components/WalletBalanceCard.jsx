@@ -1,7 +1,7 @@
-import { Wallet, Plus, History } from 'lucide-react'
+import { Wallet, Plus, History, Landmark } from 'lucide-react'
 import { motion } from 'framer-motion'
 
-export function WalletBalanceCard({ balance, onAddMoney }) {
+export function WalletBalanceCard({ balance, onAddMoney, onWithdraw }) {
   return (
     <div className="w-full">
       <motion.div 
@@ -38,10 +38,11 @@ export function WalletBalanceCard({ balance, onAddMoney }) {
             </button>
             
             <button 
+              onClick={onWithdraw}
               className="flex-1 bg-white/10 text-white font-semibold py-3.5 px-4 rounded-xl backdrop-blur-md flex items-center justify-center space-x-2 active:scale-95 transition-all border border-white/10 hover:bg-white/20"
             >
-              <History size={18} />
-              <span>History</span>
+              <Landmark size={18} />
+              <span>Withdraw</span>
             </button>
           </div>
         </div>
