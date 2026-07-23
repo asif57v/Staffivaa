@@ -186,7 +186,7 @@ export function AuthEntryPage() {
       setStep('otp')
       setBanner({
         variant: 'success',
-        message: 'OTP sent. Check SMS — in development it may appear in the server terminal.',
+        message: 'OTP sent. Check SMS.',
       })
     } catch (e) {
       setBanner({
@@ -607,13 +607,6 @@ export function AuthEntryPage() {
                       6-digit code sent to{' '}
                       <span style={{ fontWeight: 700, color: '#0f172a', fontFamily: 'monospace' }}>+91 {phone}</span>
                     </p>
-                    <button
-                      type="button"
-                      onClick={resetFlowToForm}
-                      style={{ marginTop: 4, fontSize: 12, fontWeight: 700, color: '#FFD100', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-                    >
-                      Edit number
-                    </button>
                   </div>
 
                   {/* OTP boxes */}

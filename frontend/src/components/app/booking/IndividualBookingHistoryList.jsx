@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
 import { Calendar, MapPin, RefreshCw, Eye, MoreVertical, CalendarClock } from 'lucide-react'
@@ -80,9 +81,10 @@ function getStatusBadge(status) {
   }
 }
 
-export function IndividualBookingHistoryList({ items, isDemo, onTrack, onRebook }) {
+export function IndividualBookingHistoryList({ items, isDemo, onTrack, onRebook, onViewDetail }) {
   const reduce = useReducedMotion()
   const navigate = useNavigate()
+  const [openDropdownId, setOpenDropdownId] = useState(null)
 
   if (items.length === 0) {
     return (
@@ -121,7 +123,7 @@ export function IndividualBookingHistoryList({ items, isDemo, onTrack, onRebook 
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: Math.min(idx * 0.05, 0.2) }}
           >
-            <div className={`bg-white rounded-[20px] shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-100 overflow-hidden ${badge.border} flex flex-col p-4 gap-3 relative`}>
+            <div className={`bg-white rounded-[20px] shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-100 ${badge.border} flex flex-col p-4 gap-3 relative`}>
               
               <div className="flex gap-3 items-start w-full">
                 
@@ -144,12 +146,42 @@ export function IndividualBookingHistoryList({ items, isDemo, onTrack, onRebook 
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          setOpenDropdownId(openDropdownId === (h.id || h.ref) ? null : (h.id || h.ref))
                         }}
-                        className="text-slate-400 hover:text-slate-700 p-1 -mr-1"
+                        className={`p-1 -mr-1 rounded-full transition-colors ${openDropdownId === (h.id || h.ref) ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'}`}
                         aria-label="More options"
                       >
                         <MoreVertical className="h-4 w-4" />
                       </button>
+                      
+                      {openDropdownId === (h.id || h.ref) && (
+                        <div 
+                          className="absolute right-4 top-10 w-40 bg-white rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-slate-100 py-1 z-50 overflow-hidden"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenDropdownId(null);
+                              if (onViewDetail) onViewDetail(h.ref);
+                              else onTrack(h.ref);
+                            }}
+                            className="w-full text-left px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+                          >
+                            View Details
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenDropdownId(null);
+                              navigate('/app/support');
+                            }}
+                            className="w-full text-left px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+                          >
+                            Get Support
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
 

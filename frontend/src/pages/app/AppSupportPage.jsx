@@ -31,6 +31,7 @@ import { ROLE_LABELS, USER_ROLES } from '../../constants/userRoles.js'
 import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
 import { AppSectionHeader } from '../../components/app-ui/layout/AppSectionHeader.jsx'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
+import { createSupportTicket } from '../../api/supportApi.js'
 
 const TOPICS_BY_ROLE = {
   [USER_ROLES.INDIVIDUAL]: [
@@ -258,13 +259,22 @@ export function AppSupportPage() {
   const [subject, setSubject] = useState('')
   const [details, setDetails] = useState('')
   const [sent, setSent] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const topicMeta = useMemo(() => topics.find((t) => t.id === topicId) ?? topics[0], [topics, topicId])
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!subject.trim() || !details.trim()) return
-    setSent(true)
+    try {
+      setIsSubmitting(true)
+      await createSupportTicket(subject, details)
+      setSent(true)
+    } catch (err) {
+      alert(err.message || 'Failed to submit ticket')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const RoleIcon =
@@ -382,10 +392,9 @@ export function AppSupportPage() {
                       <CheckCircle2 className="h-6 w-6" aria-hidden />
                     </span>
                     <div>
-                      <p className="text-sm font-black text-slate-900">Ticket preview saved (demo)</p>
+                      <p className="text-sm font-black text-slate-900">Ticket submitted successfully</p>
                       <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                        Nothing is sent yet. When the API is live, you&apos;ll get a ticket ID and status updates in this
-                        tab.
+                        Our support team has received your ticket and will get back to you soon. You can track your tickets in the admin dashboard.
                       </p>
                       <button
                         type="button"
@@ -441,9 +450,9 @@ export function AppSupportPage() {
                       </span>
                     </p>
                   </div>
-                  <AppPrimaryButton type="submit" className="w-full py-3.5 text-[15px]">
-                    Submit to support queue
-                    <ArrowRight className="h-4 w-4" aria-hidden />
+                  <AppPrimaryButton type="submit" className="w-full py-3.5 text-[15px]" disabled={isSubmitting}>
+                    {isSubmitting ? 'Submitting...' : 'Submit to support queue'}
+                    {!isSubmitting && <ArrowRight className="h-4 w-4" aria-hidden />}
                   </AppPrimaryButton>
                 </motion.form>
               )}
@@ -461,11 +470,8 @@ export function AppSupportPage() {
             </div>
             <p className="mt-3 text-sm font-extrabold text-slate-900">Phone helpline</p>
             <p className="mt-1 text-xs leading-relaxed text-slate-500">
-              Regional numbers and hours will be listed here.
+              <a href="tel:+919354837455" className="text-sky-600 hover:underline font-semibold">+91 93548 37455</a>
             </p>
-            <span className="mt-3 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">
-              Coming soon
-            </span>
           </GlassPanel>
           <GlassPanel className="border-slate-200/90 p-4 ring-1 ring-slate-100/90">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-700 ring-1 ring-violet-100">
@@ -473,11 +479,8 @@ export function AppSupportPage() {
             </div>
             <p className="mt-3 text-sm font-extrabold text-slate-900">Email support</p>
             <p className="mt-1 text-xs leading-relaxed text-slate-500">
-              Corporates: use your registered domain where possible.
+              <a href="mailto:rajbalagroup868@gmail.com" className="text-violet-600 hover:underline font-semibold break-all">rajbalagroup868@gmail.com</a>
             </p>
-            <span className="mt-3 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">
-              Coming soon
-            </span>
           </GlassPanel>
         </div>
       </section>

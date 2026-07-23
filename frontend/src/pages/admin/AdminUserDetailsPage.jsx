@@ -91,6 +91,18 @@ export function AdminUserDetailsPage() {
     }
   }
 
+  const handleKycReview = async (decision, reason) => {
+    try {
+      const updatedUser = await reviewLabourKycAdmin(id, { decision, note: reason })
+      setUser(updatedUser)
+      const logs = await getUserTimelineAdmin(id)
+      setTimeline(logs)
+      closeDialog()
+    } catch (e) {
+      alert(e.message)
+    }
+  }
+
   const handleAddNote = async (e) => {
     e.preventDefault()
     const form = e.target
@@ -390,6 +402,35 @@ export function AdminUserDetailsPage() {
                           <p className="mt-1 font-mono text-lg font-medium text-slate-900">{user.labourProfile.panNumber || user.labourProfile.panMasked || '—'}</p>
                         </div>
                       </div>
+                      
+                      {user.labourProfile.kycStatus === 'pending' && (
+                        <div className="flex gap-3 pt-4 border-t border-slate-100">
+                          <button
+                            onClick={() => openDialog({
+                              title: 'Approve KYC',
+                              description: 'Are you sure you want to approve this labour account? They will be able to start accepting jobs immediately.',
+                              confirmText: 'Approve',
+                              onConfirm: () => handleKycReview('approved', '')
+                            })}
+                            className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
+                          >
+                            Approve KYC
+                          </button>
+                          <button
+                            onClick={() => openDialog({
+                              title: 'Reject KYC',
+                              description: 'Are you sure you want to reject this KYC? Please provide a reason.',
+                              confirmText: 'Reject',
+                              isDestructive: true,
+                              requireReason: true,
+                              onConfirm: ({ reason }) => handleKycReview('rejected', reason)
+                            })}
+                            className="flex-1 rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-bold text-rose-700 shadow-sm transition hover:bg-rose-100"
+                          >
+                            Reject KYC
+                          </button>
+                        </div>
+                      )}
                       {/* KYC Video Logic would go here if provided in API */}
                     </GlassPanel>
                   )}

@@ -205,6 +205,15 @@ export function IndividualHomeownerBookings() {
     [displayHistory, navigate, searchParams, setSearchParams],
   )
 
+  const handleViewDetail = useCallback(
+    (ref) => {
+      const next = new URLSearchParams(searchParams)
+      next.set('ref', ref)
+      setSearchParams(next)
+    },
+    [searchParams, setSearchParams]
+  )
+
   const handleRebook = useCallback(
     (booking) => {
       const legacy = rebookDraftFromRecord(booking)
@@ -338,6 +347,7 @@ export function IndividualHomeownerBookings() {
           isDemo={isDemoHistory}
           onTrack={handleTrack}
           onRebook={handleRebook}
+          onViewDetail={handleViewDetail}
         />
       </motion.div>
     </div>

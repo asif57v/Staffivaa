@@ -122,6 +122,8 @@ export function AppJobsPage() {
 
     socket.on('booking_cancelled', (data) => {
       console.log('[LabourJobs] Booking cancelled:', data)
+      setToast(`Booking Cancelled: ${data?.message || 'Timeout'}`)
+      window.setTimeout(() => setToast(''), 3500)
       refetch()
     })
 

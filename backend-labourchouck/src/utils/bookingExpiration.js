@@ -78,7 +78,7 @@ export function startBookingExpirationJob() {
             transactionId: `RFND-REQ-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
             payerId: userId,
             payerName: userObj?.fullName || userRole,
-            payerType: userObj?.role || userRole,
+            payerType: (userObj?.role === 'individual' ? 'user' : userObj?.role) || userRole,
             amount: amount,
             type: 'Refund',
             source: 'Refund Eligible - Pending Request',
