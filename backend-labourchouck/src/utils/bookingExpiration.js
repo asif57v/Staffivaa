@@ -45,14 +45,21 @@ export function startBookingExpirationJob() {
 
       // 2. Find bookings stuck in platform_fee_pending for > 5 minutes
       const expiredPendingBookings = await WorkforceRequest.find({
-        status: REQUEST_STATUS.PLATFORM_FEE_PENDING,
+        status: { 
+          $in: [
+            REQUEST_STATUS.PLATFORM_FEE_PENDING,
+            REQUEST_STATUS.VENDOR_PLATFORM_FEE_PENDING,
+            REQUEST_STATUS.CORPORATE_PLATFORM_FEE_PENDING
+          ]
+        },
         platformFeePendingAt: { $lt: fiveMinutesAgo }
       })
 
       for (const booking of expiredPendingBookings) {
-        // Helper function for processing refund eligibility
-        const processRefundEligibility = async (userId, userRole, amount) => {
-          if (!amount || amount <= 0) return 'none'
+        try {
+          // Helper function for processing refund eligibility
+          const processRefundEligibility = async (userId, userRole, amount) => {
+            if (!amount || amount <= 0) return 'none'
 
           // 1. Create Refund Request (ELIGIBLE)
           const refundReq = await RefundRequest.create({
@@ -92,6 +99,8 @@ export function startBookingExpirationJob() {
           return `${userRole}_refund_eligible`
         }
 
+        let refundStatus = 'none'
+
         if (booking.labourPaymentStatus === 'paid' && booking.labourId) {
           refundStatus = await processRefundEligibility(booking.labourId, 'labour', booking.labourPlatformFee)
         }
@@ -128,7 +137,6 @@ export function startBookingExpirationJob() {
             bookingId: booking._id,
             cancelReason: booking.cancelReason,
             refundStatus,
-            refundedAmount,
             message: 'Booking cancelled due to incomplete platform fee payment'
           }
           io.to(`request_${booking._id.toString()}`).emit('booking_cancelled', payload)
@@ -144,6 +152,9 @@ export function startBookingExpirationJob() {
         }
 
         console.log(`Cancelled platform_fee_pending booking: ${booking.reference || booking._id} due to timeout`)
+        } catch (innerErr) {
+          console.error(`Failed to cancel booking ${booking._id}:`, innerErr)
+        }
       }
 
     } catch (error) {

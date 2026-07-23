@@ -16,7 +16,7 @@ const refundRequestSchema = new mongoose.Schema(
     },
     userRole: {
       type: String,
-      enum: ['user', 'labour', 'corporate', 'contractor'],
+      enum: ['user', 'labour', 'corporate', 'contractor', 'vendor'],
       required: true,
     },
     amount: {

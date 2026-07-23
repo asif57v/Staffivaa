@@ -120,6 +120,11 @@ export function AppJobsPage() {
       refetch()
     })
 
+    socket.on('booking_cancelled', (data) => {
+      console.log('[LabourJobs] Booking cancelled:', data)
+      refetch()
+    })
+
     return () => {
       socket.off('connect')
       socket.off('connect_error')
@@ -128,6 +133,7 @@ export function AppJobsPage() {
       socket.off('platformFeeConfigurationUpdated')
       socket.off('payment_status_update')
       socket.off('request_status_update')
+      socket.off('booking_cancelled')
       socket.disconnect()
     }
   }, [refetch])
