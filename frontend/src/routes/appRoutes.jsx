@@ -41,7 +41,7 @@ export const appShellChildRoutes = (
     <Route
       path="buildmart"
       element={
-        <RoleRoute allow={BUILDMART_ROLES}>
+        <RoleRoute allow={[]}>
           <BuildMartHomePage />
         </RoleRoute>
       }
@@ -49,7 +49,7 @@ export const appShellChildRoutes = (
     <Route
       path="buildmart/product/:productId"
       element={
-        <RoleRoute allow={BUILDMART_ROLES}>
+        <RoleRoute allow={[]}>
           <BuildMartProductPage />
         </RoleRoute>
       }
@@ -107,7 +107,7 @@ export const appShellChildRoutes = (
     <Route
       path="notifications"
       element={
-        <RoleRoute allow={[USER_ROLES.LABOUR]}>
+        <RoleRoute allow={[USER_ROLES.LABOUR, USER_ROLES.INDIVIDUAL]}>
           <LabourNotificationsPage />
         </RoleRoute>
       }

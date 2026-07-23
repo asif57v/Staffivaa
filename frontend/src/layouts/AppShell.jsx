@@ -190,7 +190,7 @@ export function AppShell() {
 
   const isIndividualAppHome = user?.role === USER_ROLES.INDIVIDUAL && pathname === '/app'
   const isLabourAppHome = user?.role === USER_ROLES.LABOUR && pathname === '/app'
-  const isLabourNotifications = user?.role === USER_ROLES.LABOUR && pathname === '/app/notifications'
+  const isNotificationsPage = pathname === '/app/notifications'
   const isLabourJobs = user?.role === USER_ROLES.LABOUR && pathname === '/app/jobs'
   const isLabourEarnings = user?.role === USER_ROLES.LABOUR && pathname === '/app/earnings'
   const isLabourAttendance = user?.role === USER_ROLES.LABOUR && pathname === '/app/attendance'
@@ -205,7 +205,7 @@ export function AppShell() {
     isLabourEarnings ||
     isLabourAttendance ||
     isLabourKyc ||
-    isLabourNotifications ||
+    isNotificationsPage ||
     hideBuildMartShellHeader(pathname)
   const onBuildMart = isBuildMartRoute(pathname)
   const title = getAppShellTitle(pathname)
@@ -490,7 +490,7 @@ export function AppShell() {
       )}
 
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-lg flex-col">
-        {isIndividualAppHome || isLabourAppHome || isLabourNotifications ? (
+        {isIndividualAppHome || isLabourAppHome || isNotificationsPage ? (
           <div
             className="pointer-events-none absolute left-1/2 top-0 z-0 h-[min(52vh,26rem)] w-full max-w-lg -translate-x-1/2 rounded-b-[2rem] bg-white"
             aria-hidden
@@ -543,20 +543,20 @@ export function AppShell() {
               {/* Right action icons — fixed, never shrink */}
               <div className="flex shrink-0 items-center gap-2">
                 <Link
-                  to="/app/buildmart"
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
-                  aria-label="BuildMart Cart"
+                  to="/app/notifications"
+                  className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
+                  aria-label="Notifications"
                 >
-                  <ShoppingCart className="h-[18px] w-[18px]" />
+                  <Bell className="h-[18px] w-[18px]" />
+                  <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-red-500 ring-2 ring-white" />
                 </Link>
                 <button
                   type="button"
                   onClick={() => setDrawerOpen(true)}
                   className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
-                  aria-label="Notifications & Menu"
+                  aria-label="Open menu"
                 >
-                  <Bell className="h-[18px] w-[18px]" />
-                  <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-red-500 ring-2 ring-white" />
+                  <Menu className="h-[20px] w-[20px]" />
                 </button>
               </div>
             </div>
@@ -592,7 +592,7 @@ export function AppShell() {
         <main
           className={`relative z-10 flex-1 px-4 pb-36 ${
             hideShellHeader
-              ? isLabourAppHome
+              ? isLabourAppHome || isNotificationsPage
                 ? 'pt-0'
                 : 'pt-[max(0.5rem,env(safe-area-inset-top,0px))]'
               : isIndividualAppHome

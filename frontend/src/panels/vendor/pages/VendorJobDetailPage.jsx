@@ -160,10 +160,10 @@ export function VendorJobDetailPage() {
         <h1 className="text-base font-extrabold text-slate-900">Job Details</h1>
       </header>
 
-      <div className="p-4 space-y-4 max-w-md mx-auto">
+      <div className="px-2 py-4 space-y-3 max-w-md mx-auto">
         
         {/* Top Hero Card */}
-        <div className="rounded-[20px] bg-white p-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
+        <div className="rounded-2xl bg-white p-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
           <div className="flex gap-4">
             <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-[14px] bg-slate-200 border border-slate-100 shadow-sm">
               <img src="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=300&q=80" alt="Site" className="h-full w-full object-cover" />
@@ -212,7 +212,7 @@ export function VendorJobDetailPage() {
 
         {/* Vendor Quotation Status Panel */}
         {quotation ? (
-          <div className="rounded-[20px] bg-white p-5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100 space-y-4">
+          <div className="rounded-2xl bg-white p-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100 space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div>
                 <h4 className="text-[14px] font-black text-slate-900">Quotation Status</h4>
@@ -295,7 +295,7 @@ export function VendorJobDetailPage() {
         )}
 
         {/* Request Overview */}
-        <div className="rounded-[20px] bg-white p-5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
+        <div className="rounded-2xl bg-white p-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
           <h3 className="text-[15px] font-extrabold text-slate-900 mb-4">Job Overview</h3>
           <div className="space-y-3.5">
             <div className="flex justify-between items-start gap-4">

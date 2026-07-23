@@ -30,12 +30,7 @@ import {
   useDeleteNotificationMutation,
 } from '../../../store/api/workforceApi.js'
 
-const TABS = [
-  { id: 'all', label: 'All' },
-  { id: 'jobs', label: 'Job requests' },
-  { id: 'updates', label: 'Updates' },
-]
-
+// TABS defined dynamically inside component
 const TYPE_MAPPING = {
   'NEW_USER': { icon: Bell, kind: 'system', priority: 'normal', category: 'updates' },
   'NEW_LABOUR': { icon: Bell, kind: 'system', priority: 'normal', category: 'updates' },
@@ -67,12 +62,27 @@ const KIND_TONE = {
   system: 'from-slate-500/15 to-slate-50 text-slate-700 ring-slate-200/80',
 }
 
+import { ErrorBoundary } from '../../../components/ErrorBoundary.jsx'
+
 export function LabourNotificationsPage() {
+  return (
+    <ErrorBoundary>
+      <LabourNotificationsPageContent />
+    </ErrorBoundary>
+  )
+}
+
+function LabourNotificationsPageContent() {
   const reduce = useReducedMotion()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const isLabour = user?.role === 'LABOUR'
   const [tab, setTab] = useState('all')
   const [toast, setToast] = useState('')
+
+  const TABS = [{ id: 'all', label: 'All' }]
+  if (isLabour) TABS.push({ id: 'jobs', label: 'Job requests' })
+  TABS.push({ id: 'updates', label: 'Updates' })
 
   const { data: notificationsData, refetch } = useGetNotificationsQuery(undefined)
   const [markRead] = useMarkNotificationReadMutation()
@@ -163,7 +173,9 @@ export function LabourNotificationsPage() {
               <BellRing className="h-5 w-5 text-brand-bright" aria-hidden />
               <h1 className="text-xl font-extrabold tracking-tight">Notifications</h1>
             </div>
-            <p className="mt-1 text-sm text-white/75">Job requests, KYC, pay & attendance alerts</p>
+            <p className="mt-1 text-sm text-white/75">
+              {isLabour ? 'Job requests, KYC, pay & attendance alerts' : 'Stay updated with your bookings and alerts'}
+            </p>
           </div>
           {unreadCount > 0 ? (
             <span className="flex h-8 min-w-8 items-center justify-center rounded-full bg-amber-400 px-2 text-xs font-black text-amber-950">
@@ -172,15 +184,15 @@ export function LabourNotificationsPage() {
           ) : null}
         </div>
 
-        <div className="relative mt-4 grid grid-cols-3 gap-2">
+        <div className="relative mt-4 flex gap-2 w-full">
           {[
             { label: 'Unread', value: String(unreadCount) },
-            { label: 'Job requests', value: String(jobCount) },
+            ...(isLabour ? [{ label: 'Job requests', value: String(jobCount) }] : []),
             { label: 'Total', value: String(feedItems.length) },
           ].map((s) => (
             <div
               key={s.label}
-              className="rounded-xl border border-white/15 bg-white/10 px-2 py-2.5 text-center backdrop-blur-sm"
+              className="flex-1 rounded-xl border border-white/15 bg-white/10 px-2 py-2.5 text-center backdrop-blur-sm"
             >
               <p className="text-lg font-black tabular-nums">{s.value}</p>
               <p className="text-[10px] font-bold uppercase tracking-wide text-white/70">{s.label}</p>
@@ -215,7 +227,9 @@ export function LabourNotificationsPage() {
             subtitle={
               tab === 'jobs'
                 ? 'New assignment requests will appear when admin or clients post jobs near you.'
-                : 'KYC, attendance, and pay updates show up in this tab.'
+                : isLabour
+                  ? 'KYC, attendance, and pay updates show up in this tab.'
+                  : 'Updates on your bookings and account will show up here.'
             }
           />
         ) : (
