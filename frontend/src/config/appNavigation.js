@@ -11,8 +11,9 @@ import {
   LifeBuoy,
   Package,
   ShieldCheck,
-  UserRound,
+  Wallet,
   Wrench,
+  UserRound,
 } from 'lucide-react'
 import { USER_ROLES } from '../constants/userRoles.js'
 
@@ -45,6 +46,7 @@ const byRole = {
       { id: 'home', to: '/app', label: 'Home', icon: Home, end: true },
       { id: 'jobs', to: '/app/jobs', label: 'Assignments', icon: HardHat },
       { id: 'attendance', to: '/app/attendance', label: 'Attendance', icon: Clock },
+      { id: 'wallet', to: '/app/wallet', label: 'My Wallet', icon: Wallet },
       { id: 'earnings', to: '/app/earnings', label: 'Earnings & payouts', icon: IndianRupee },
       { id: 'kyc', to: '/app/kyc', label: 'Aadhaar KYC', icon: ShieldCheck },
       { id: 'workTypes', to: '/app/work-categories', label: 'Work types', icon: Wrench },

@@ -75,7 +75,7 @@ export const appShellChildRoutes = (
     <Route
       path="wallet"
       element={
-        <RoleRoute allow={[USER_ROLES.INDIVIDUAL]}>
+        <RoleRoute allow={[USER_ROLES.INDIVIDUAL, USER_ROLES.LABOUR]}>
           <WalletPage />
         </RoleRoute>
       }

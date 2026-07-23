@@ -160,7 +160,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     })
 
     socket.on('booking_cancelled', (payload) => {
-      alert(`Booking Cancelled:\n${payload.message}`)
+      alert(`Booking Cancelled:\n${payload.message}\n\nNote: If you paid the platform fee, the refund process has been initiated. You can check your Wallet for updates.`)
       onBack()
     })
 
@@ -451,6 +451,15 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
                 <h2 className="truncate text-base font-black text-slate-900 leading-tight">
                   {workerName}
                 </h2>
+                {timeLeft <= 0 ? (
+                  <p className="mt-1 text-xs text-rose-500 font-semibold animate-pulse">
+                    Cancelling Booking...
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-rose-500 font-semibold animate-pulse">
+                    Auto-cancels in {formatTime(timeLeft)}
+                  </p>
+                )}
                 <p className="truncate text-[10px] font-bold text-brand mb-1">
                   ID: {workerId}
                 </p>

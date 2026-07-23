@@ -138,7 +138,7 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
     socket.on('extra_work_updated', () => refetchEw())
     
     socket.on('booking_cancelled', (payload) => {
-      alert(`Booking Cancelled:\n${payload.message}`)
+      alert(`Booking Cancelled:\n${payload.message}\n\nNote: If you paid the platform fee, the refund process has been initiated. You can check your Wallet for updates.`)
       navigate('/app/jobs', { replace: true })
     })
     
@@ -250,10 +250,14 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
             <span className="text-sm font-black text-emerald-600 flex items-center">Paid ✅</span>
           </div>
           <div className="border-t border-slate-200 pt-3 flex flex-col gap-1">
-            <span className="text-sm font-bold text-slate-700">Waiting for Customer Payment...</span>
+            <span className="text-sm font-bold text-slate-700">
+              {timeLeft <= 0 ? 'Cancelling Booking...' : 'Waiting for Customer Payment...'}
+            </span>
             <div className="flex justify-between items-center mt-1">
               <span className="text-xs font-bold text-slate-500">Time Remaining</span>
-              <span className={`text-sm font-black ${timeLeft < 60 ? 'text-red-500' : 'text-slate-900'}`}>{formatTime(timeLeft)}</span>
+              <span className={`text-sm font-black ${timeLeft < 60 ? 'text-red-500' : 'text-slate-900'}`}>
+                {timeLeft <= 0 ? '00:00' : formatTime(timeLeft)}
+              </span>
             </div>
           </div>
         </div>
