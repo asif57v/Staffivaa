@@ -9,6 +9,7 @@ import { toast } from 'react-hot-toast'
 import { AdminConfirmActionDialog } from '../../../components/admin/AdminConfirmActionDialog.jsx'
 
 export function AdminRefundsPage() {
+  console.log("AdminRefundsPage mounted!")
   const [statusFilter, setStatusFilter] = useState('')
   const [page, setPage] = useState(1)
   const [confirmDialog, setConfirmDialog] = useState(null)

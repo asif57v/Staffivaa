@@ -173,12 +173,12 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
   const isCheckInDisabled = hasCoordinates && distance != null && distance > 120
 
   // Timer logic for waiting screen
-  const [timeLeft, setTimeLeft] = useState(300) // 5 mins in seconds
+  const [timeLeft, setTimeLeft] = useState(150) // 2.5 mins in seconds
 
   useEffect(() => {
     if ((isPlatformFeePending || isCustomerPaymentPending) && job?.platformFeePendingAt) {
       const pendingAt = new Date(job.platformFeePendingAt).getTime()
-      const expiryTime = pendingAt + 5 * 60 * 1000
+      const expiryTime = pendingAt + 2.5 * 60 * 1000
       
       const interval = setInterval(() => {
         const now = new Date().getTime()
@@ -263,7 +263,7 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
         </div>
 
         <p className="text-xs font-medium text-slate-500 leading-relaxed px-2">
-          The booking will automatically cancel and your fee will be refunded to your wallet if the customer payment is not completed within 5 minutes.
+          The booking will automatically cancel and your fee will be refunded to your wallet if the customer payment is not completed within 2.5 minutes.
         </p>
       </article>
     )
@@ -414,7 +414,9 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
                           value={digit}
                           onChange={(e) => handleOtpChange(i, e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Backspace' && !digit && i > 0) {
+                            if (e.key === 'Enter') {
+                              handleVerifyOtp()
+                            } else if (e.key === 'Backspace' && !digit && i > 0) {
                               document.getElementById(`otp-input-${job.id}-${i - 1}`)?.focus()
                             }
                           }}

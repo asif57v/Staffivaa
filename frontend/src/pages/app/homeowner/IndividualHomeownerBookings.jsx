@@ -23,8 +23,7 @@ function openAppDrawer() {
 
 function BookingsScreenHeader({ title, subtitle, onBack, rightIcon: RightIcon = Menu, onRightClick = openAppDrawer }) {
   return (
-    <motion.div
-      layout
+    <div
       className="sticky top-0 z-20 -mx-4 bg-white/95 backdrop-blur-md px-4 py-3 border-b border-slate-100/60 flex items-center justify-between shadow-xs"
     >
       {onBack ? (
@@ -65,7 +64,7 @@ function BookingsScreenHeader({ title, subtitle, onBack, rightIcon: RightIcon = 
       >
         <RightIcon className="h-5 w-5" aria-hidden />
       </button>
-    </motion.div>
+    </div>
   )
 }
 
@@ -254,7 +253,7 @@ export function IndividualHomeownerBookings() {
 
   if (detailRef) {
     return (
-      <div className="space-y-4">
+      <div key="detail-view" className="space-y-4">
         <BookingsScreenHeader
           title="Track booking"
           subtitle={detailBooking?.ref ? `Ref ${detailBooking.ref}` : 'Booking details'}
@@ -280,7 +279,7 @@ export function IndividualHomeownerBookings() {
   }
 
   return (
-    <div className="space-y-4 pb-4">
+    <div key="list-view" className="space-y-4 pb-4">
       <BookingsScreenHeader
         title="My bookings"
         subtitle="Track requests or book again from home."

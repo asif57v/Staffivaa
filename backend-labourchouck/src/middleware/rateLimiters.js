@@ -45,14 +45,7 @@ export const uploadLimiter = rateLimit({
   legacyHeaders: false,
 })
 
-export const bookingLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5,
-  keyGenerator,
-  message: { success: false, message: 'You have reached the maximum number of bookings allowed per hour.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-})
+export const bookingLimiter = (req, res, next) => next()
 
 export const paymentLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes

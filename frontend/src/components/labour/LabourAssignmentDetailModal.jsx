@@ -131,7 +131,21 @@ export function LabourAssignmentDetailModal({ open, onClose, job, rawJob, assign
 
           <motion.div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
             <GlassPanel className="grid grid-cols-2 gap-3 border-slate-200/90 p-4 sm:grid-cols-4">
-              {[
+              {(rawJob?.sourceType === 'individual' || !detail.job.contractor || detail.job.contractor === 'Assigned contractor') ? [
+                { label: 'Role', value: detail.job.role, icon: HardHat },
+                { label: 'Type', value: rawJob?.bookingType === 'scheduled' ? 'Scheduled' : 'Instant', icon: Clock },
+                { label: 'Time', value: rawJob?.bookingType === 'scheduled' && (rawJob?.startDate || detail.job.projectStartDate) ? new Date(rawJob.startDate || detail.job.projectStartDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'ASAP', icon: Timer },
+                { label: 'Status', value: rawJob?.status === 'on_site' ? 'On Site' : rawJob?.status === 'in_progress' ? 'Working' : rawJob?.status === 'completed' ? 'Done' : 'Active', icon: CheckCircle2 },
+              ].map((cell) => {
+                const Icon = cell.icon
+                return (
+                  <div key={cell.label} className="min-w-0">
+                    <Icon className="h-4 w-4 text-brand/70" aria-hidden />
+                    <p className="mt-1 text-[10px] font-bold uppercase text-slate-500">{cell.label}</p>
+                    <p className="mt-0.5 text-xs font-black text-slate-900 truncate">{cell.value}</p>
+                  </div>
+                )
+              }) : [
                 { label: 'Role', value: detail.job.role, icon: HardHat },
                 { label: 'Rate', value: detail.job.rateLabel || '—', icon: CheckCircle2 },
                 { label: 'Shift', value: detail.job.shiftLabel, icon: Clock },
@@ -150,13 +164,20 @@ export function LabourAssignmentDetailModal({ open, onClose, job, rawJob, assign
 
             <section>
               <h2 className="mb-2 px-0.5 text-xs font-bold uppercase tracking-wider text-slate-400">
-                Site & contractor
+                Location Details
               </h2>
               <GlassPanel className="space-y-3 border-slate-200/90 p-4">
-                <p className="flex items-start gap-2 text-sm font-bold text-slate-900">
-                  <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden />
-                  {detail.job.contractor}
-                </p>
+                {(rawJob?.sourceType === 'individual' || !detail.job.contractor || detail.job.contractor === 'Assigned contractor') ? (
+                  <p className="flex items-start gap-2 text-sm font-bold text-slate-900">
+                    <User className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden />
+                    {detail.job.contractor && detail.job.contractor !== 'Assigned contractor' ? detail.job.contractor : 'Customer Booking'}
+                  </p>
+                ) : (
+                  <p className="flex items-start gap-2 text-sm font-bold text-slate-900">
+                    <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden />
+                    {detail.job.contractor}
+                  </p>
+                )}
                 <p className="flex items-start gap-2 text-sm text-slate-700">
                   <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
                   {detail.job.location}
@@ -189,27 +210,29 @@ export function LabourAssignmentDetailModal({ open, onClose, job, rawJob, assign
               </GlassPanel>
             </section>
 
-            <section>
-              <h2 className="mb-2 px-0.5 text-xs font-bold uppercase tracking-wider text-slate-400">Supervisor</h2>
-              <GlassPanel className="flex items-center gap-3 border-slate-200/90 p-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
-                  <User className="h-6 w-6" aria-hidden />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-extrabold text-slate-900">{detail.job.supervisor || '—'}</p>
-                  <p className="text-xs text-slate-500">On-site contact for safety & directions</p>
-                  {detail.job.supervisorPhone ? (
-                    <a
-                      href={`tel:${detail.job.supervisorPhone}`}
-                      className="mt-1 inline-flex items-center gap-1 text-sm font-bold text-brand"
-                    >
-                      <Phone className="h-3.5 w-3.5" aria-hidden />
-                      {detail.job.supervisorPhone}
-                    </a>
-                  ) : null}
-                </div>
-              </GlassPanel>
-            </section>
+            {detail.job.supervisor && detail.job.supervisor !== '—' ? (
+              <section>
+                <h2 className="mb-2 px-0.5 text-xs font-bold uppercase tracking-wider text-slate-400">Supervisor</h2>
+                <GlassPanel className="flex items-center gap-3 border-slate-200/90 p-4">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+                    <User className="h-6 w-6" aria-hidden />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-extrabold text-slate-900">{detail.job.supervisor}</p>
+                    <p className="text-xs text-slate-500">On-site contact for safety & directions</p>
+                    {detail.job.supervisorPhone ? (
+                      <a
+                        href={`tel:${detail.job.supervisorPhone}`}
+                        className="mt-1 inline-flex items-center gap-1 text-sm font-bold text-brand"
+                      >
+                        <Phone className="h-3.5 w-3.5" aria-hidden />
+                        {detail.job.supervisorPhone}
+                      </a>
+                    ) : null}
+                  </div>
+                </GlassPanel>
+              </section>
+            ) : null}
 
             {detail.rawNotes ? (
               <section>
@@ -220,83 +243,87 @@ export function LabourAssignmentDetailModal({ open, onClose, job, rawJob, assign
               </section>
             ) : null}
 
-            <section>
-              <div className="mb-2 flex items-center justify-between px-0.5">
-                <h2 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-400">
-                  <CalendarRange className="h-3.5 w-3.5" aria-hidden />
-                  {detail.isMultiDay ? 'Project attendance' : 'Shift attendance'}
-                </h2>
-                <a href="/app/attendance" className="text-[10px] font-bold text-brand uppercase tracking-wider hover:underline">
-                  View Dashboard
-                </a>
-              </div>
-              <ul className="space-y-2">
-                {detail.attendanceLog.map((row) => (
-                  <li key={row.day}>
-                    <GlassPanel
-                      className={`border-slate-200/90 p-3 ${
-                        row.isToday ? 'ring-2 ring-brand/25' : row.isFuture ? 'opacity-60' : ''
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[row.status.tone] || STATUS_DOT.slate}`}
-                              aria-hidden
-                            />
-                            <p className="text-sm font-bold text-slate-900">{row.dayLabel}</p>
-                            {row.isToday ? <AppBadge variant="brand">Today</AppBadge> : null}
+            {(detail.isMultiDay || detail.attendanceLog.some((r) => r.punches.length > 0)) ? (
+              <section>
+                <div className="mb-2 flex items-center justify-between px-0.5">
+                  <h2 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-400">
+                    <CalendarRange className="h-3.5 w-3.5" aria-hidden />
+                    {detail.isMultiDay ? 'Project attendance' : 'Shift attendance'}
+                  </h2>
+                  <a href="/app/attendance" className="text-[10px] font-bold text-brand uppercase tracking-wider hover:underline">
+                    View Dashboard
+                  </a>
+                </div>
+                <ul className="space-y-2">
+                  {detail.attendanceLog.map((row) => (
+                    <li key={row.day}>
+                      <GlassPanel
+                        className={`border-slate-200/90 p-3 ${
+                          row.isToday ? 'ring-2 ring-brand/25' : row.isFuture ? 'opacity-60' : ''
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[row.status.tone] || STATUS_DOT.slate}`}
+                                aria-hidden
+                              />
+                              <p className="text-sm font-bold text-slate-900">{row.dayLabel}</p>
+                              {row.isToday ? <AppBadge variant="brand">Today</AppBadge> : null}
+                            </div>
+                            <p className="mt-0.5 text-xs text-slate-600">
+                              {row.workTime} · {row.status.label}
+                            </p>
                           </div>
-                          <p className="mt-0.5 text-xs text-slate-600">
-                            {row.workTime} · {row.status.label}
-                          </p>
                         </div>
-                      </div>
-                      {row.punches.length > 0 ? (
-                        <ul className="mt-2 flex flex-wrap gap-1.5">
-                          {row.punches.map((p, i) => (
-                            <li
-                              key={`${p.at}-${i}`}
-                              className={`rounded-lg px-2 py-1 text-[10px] font-bold ${
-                                p.type === 'in'
-                                  ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80'
-                                  : 'bg-slate-100 text-slate-700 ring-1 ring-slate-200/80'
-                              }`}
-                            >
-                              {p.type === 'in' ? 'In' : 'Out'} {p.time}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : row.isFuture ? (
-                        <p className="mt-2 text-[11px] italic text-slate-400">Scheduled — not started</p>
-                      ) : (
-                        <p className="mt-2 text-[11px] text-slate-400">No punches recorded</p>
-                      )}
-                    </GlassPanel>
-                  </li>
-                ))}
-              </ul>
-            </section>
+                        {row.punches.length > 0 ? (
+                          <ul className="mt-2 flex flex-wrap gap-1.5">
+                            {row.punches.map((p, i) => (
+                              <li
+                                key={`${p.at}-${i}`}
+                                className={`rounded-lg px-2 py-1 text-[10px] font-bold ${
+                                  p.type === 'in'
+                                    ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80'
+                                    : 'bg-slate-100 text-slate-700 ring-1 ring-slate-200/80'
+                                }`}
+                              >
+                                {p.type === 'in' ? 'In' : 'Out'} {p.time}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : row.isFuture ? (
+                          <p className="mt-2 text-[11px] italic text-slate-400">Scheduled — not started</p>
+                        ) : (
+                          <p className="mt-2 text-[11px] text-slate-400">No punches recorded</p>
+                        )}
+                      </GlassPanel>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
 
-            <section>
-              <h2 className="mb-2 flex items-center gap-1.5 px-0.5 text-xs font-bold uppercase tracking-wider text-slate-400">
-                <History className="h-3.5 w-3.5" aria-hidden />
-                Assignment history
-              </h2>
-              <ol className="relative border-l-2 border-slate-200/90 pl-4 ml-1">
-                {detail.timeline.map((ev, i) => (
-                  <li key={`${ev.at}-${i}`} className="relative pb-4 last:pb-0">
-                    <span
-                      className="absolute -left-[1.3rem] top-1 h-2.5 w-2.5 rounded-full bg-brand ring-4 ring-slate-50"
-                      aria-hidden
-                    />
-                    <p className="text-sm font-extrabold text-slate-900">{ev.title}</p>
-                    <p className="mt-0.5 text-xs text-slate-600">{ev.body}</p>
-                  </li>
-                ))}
-              </ol>
-            </section>
+            {detail.timeline.length > 0 && (detail.isMultiDay || detail.timeline.length > 1) ? (
+              <section>
+                <h2 className="mb-2 flex items-center gap-1.5 px-0.5 text-xs font-bold uppercase tracking-wider text-slate-400">
+                  <History className="h-3.5 w-3.5" aria-hidden />
+                  Assignment history
+                </h2>
+                <ol className="relative border-l-2 border-slate-200/90 pl-4 ml-1">
+                  {detail.timeline.map((ev, i) => (
+                    <li key={`${ev.at}-${i}`} className="relative pb-4 last:pb-0">
+                      <span
+                        className="absolute -left-[1.3rem] top-1 h-2.5 w-2.5 rounded-full bg-brand ring-4 ring-slate-50"
+                        aria-hidden
+                      />
+                      <p className="text-sm font-extrabold text-slate-900">{ev.title}</p>
+                      <p className="mt-0.5 text-xs text-slate-600">{ev.body}</p>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            ) : null}
           </motion.div>
         </motion.div>
       ) : null}

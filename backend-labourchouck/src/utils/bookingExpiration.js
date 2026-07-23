@@ -12,12 +12,12 @@ export function startBookingExpirationJob() {
   // Check every 1 minute
   setInterval(async () => {
     try {
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+      const timeoutThreshold = new Date(Date.now() - 2.5 * 60 * 1000)
       
-      // 1. Find bookings in searching status older than 5 minutes
+      // 1. Find bookings in searching status older than 2.5 minutes
       const expiredBookings = await WorkforceRequest.find({
         status: REQUEST_STATUS.SEARCHING,
-        createdAt: { $lt: fiveMinutesAgo }
+        createdAt: { $lt: timeoutThreshold }
       })
 
       for (const booking of expiredBookings) {
@@ -43,7 +43,7 @@ export function startBookingExpirationJob() {
         console.log(`Expired and deleted searching booking: ${booking.reference || booking._id}`)
       }
 
-      // 2. Find bookings stuck in platform_fee_pending for > 5 minutes
+      // 2. Find bookings stuck in platform_fee_pending for > 2.5 minutes
       const expiredPendingBookings = await WorkforceRequest.find({
         status: { 
           $in: [
@@ -52,7 +52,7 @@ export function startBookingExpirationJob() {
             REQUEST_STATUS.CORPORATE_PLATFORM_FEE_PENDING
           ]
         },
-        platformFeePendingAt: { $lt: fiveMinutesAgo }
+        platformFeePendingAt: { $lt: timeoutThreshold }
       })
 
       for (const booking of expiredPendingBookings) {

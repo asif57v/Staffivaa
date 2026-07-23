@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'lc-labour-jobs-demo-v1'
+const STORAGE_KEY = 'lc-labour-jobs-demo-v2'
 const EVENT = 'lc-labour-jobs-demo'
 const LEGACY_SEED_DISABLED_KEY = 'lc-labour-jobs-seed-off'
 
@@ -21,18 +21,7 @@ function isoDateDaysFromToday(offset) {
 export function getDefaultJobDemoState() {
   return {
     version: 1,
-    offers: [
-      {
-        id: 'demo-offer-1',
-        title: 'Bathroom Plumbing Fix',
-        site: 'Villa 34, Palm Springs',
-        shiftWindow: `${shiftDateLabel(1)} · 10:00–12:00`,
-        rateLabel: '₹400 / task',
-        trade: 'Plumber',
-        sourceType: 'individual',
-        requestRef: 'DEMO-SEED-IND',
-      },
-    ],
+    offers: [],
     active: [],
     history: [],
   }

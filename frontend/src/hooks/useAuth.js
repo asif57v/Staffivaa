@@ -12,6 +12,21 @@ export function useAuth() {
     isAuthenticated: Boolean(token && user),
     applySession: (accessToken, nextUser) =>
       dispatch(setCredentials({ accessToken, user: nextUser })),
-    logout: () => dispatch(clearSession()),
+    logout: async () => {
+      try {
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+          const { requestForToken } = await import('../lib/firebase.js')
+          const fcmToken = await requestForToken()
+          if (fcmToken) {
+            const { apiClient } = await import('../api/http.js')
+            await apiClient.post('/users/me/fcm-token/remove', { token: fcmToken })
+          }
+        }
+      } catch (err) {
+        console.error('Failed to remove FCM token on logout', err)
+      } finally {
+        dispatch(clearSession())
+      }
+    },
   }
 }

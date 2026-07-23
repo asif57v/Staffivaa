@@ -170,6 +170,10 @@ export function AppProfilePage() {
   const [locationSaving, setLocationSaving] = useState(false)
   const [selectedRadius, setSelectedRadius] = useState(user?.labourProfile?.workRadius || 15)
 
+  const [isEditingProfile, setIsEditingProfile] = useState(false)
+  const [editForm, setEditForm] = useState({ fullName: '', email: '' })
+  const [profileSaving, setProfileSaving] = useState(false)
+
   const labourCategories = user?.labourProfile?.categoryIds
   const labourKyc = user?.labourProfile?.kycStatus
   const statusPill = roleStatusPill(user)
@@ -291,6 +295,34 @@ export function AppProfilePage() {
     }, { enableHighAccuracy: true })
   }
 
+  const handleSaveProfile = async () => {
+    setProfileSaving(true)
+    try {
+      const res = await patchCurrentUser({
+        fullName: editForm.fullName,
+        email: editForm.email
+      })
+      dispatch(setUser(res.data.user))
+      setIsEditingProfile(false)
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : 'Failed to update profile')
+    } finally {
+      setProfileSaving(false)
+    }
+  }
+
+  const toggleEditProfile = () => {
+    if (isEditingProfile) {
+      setIsEditingProfile(false)
+    } else {
+      setEditForm({
+        fullName: user?.fullName || '',
+        email: user?.email || ''
+      })
+      setIsEditingProfile(true)
+    }
+  }
+
   const quickLinks = []
   quickLinks.push({ to: '/app', icon: Home, label: 'Home' })
   if (user?.role === USER_ROLES.LABOUR) {
@@ -310,8 +342,8 @@ export function AppProfilePage() {
   if (user?.role === USER_ROLES.CONTRACTOR) {
     quickLinks.push({ to: '/app/workforce', icon: ClipboardList, label: 'Workforce' })
   }
-  if (user?.role === USER_ROLES.INDIVIDUAL) {
-    quickLinks.push({ to: '/app/wallet', icon: Wallet, label: 'Wallet' })
+  if (user?.role === USER_ROLES.INDIVIDUAL || user?.role === USER_ROLES.LABOUR) {
+    quickLinks.push({ to: '/app/wallet', icon: Wallet, label: user?.role === USER_ROLES.LABOUR ? 'Platform Wallet (Refunds)' : 'Wallet' })
   }
   quickLinks.push({ to: '/app/support', icon: LifeBuoy, label: 'Support' })
 
@@ -447,16 +479,57 @@ export function AppProfilePage() {
       ) : null}
 
       <GlassPanel className="border-slate-200/90 p-4 ring-1 ring-slate-100/90">
-        <AppSectionHeader title="Account details" className="mb-1" />
-        <DetailRow icon={Sparkles} label="Full name" value={user?.fullName || '—'} />
-        <DetailRow
-          icon={Phone}
-          label="Mobile"
-          value={user?.phone ? `+91 ${user.phone}` : '—'}
-          sub="Used for OTP sign-in"
+        <AppSectionHeader 
+          title="Account details" 
+          className="mb-1"
+          actionLabel={isEditingProfile ? "Cancel" : "Edit"}
+          onActionClick={toggleEditProfile}
         />
-        <DetailRow icon={Mail} label="Email" value={user?.email?.trim() || '—'} sub="Optional on your account" />
-        <DetailRow icon={ShieldCheck} label="Last session" value={lastActive || '—'} />
+        {isEditingProfile ? (
+          <div className="space-y-3 mt-4">
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Full name</label>
+              <input
+                type="text"
+                value={editForm.fullName}
+                onChange={(e) => setEditForm(prev => ({ ...prev, fullName: e.target.value }))}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand/40 focus:ring-2 focus:ring-brand/20"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Email</label>
+              <input
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
+                className="mt-1 block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-brand/40 focus:ring-2 focus:ring-brand/20"
+              />
+            </div>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleSaveProfile}
+                disabled={profileSaving}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-brand-bright active:scale-[0.99] disabled:opacity-70"
+              >
+                {profileSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Save Changes
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <DetailRow icon={Sparkles} label="Full name" value={user?.fullName || '—'} />
+            <DetailRow
+              icon={Phone}
+              label="Mobile"
+              value={user?.phone ? `+91 ${user.phone}` : '—'}
+              sub="Used for OTP sign-in"
+            />
+            <DetailRow icon={Mail} label="Email" value={user?.email?.trim() || '—'} sub="Optional on your account" />
+            <DetailRow icon={ShieldCheck} label="Last session" value={lastActive || '—'} />
+          </>
+        )}
       </GlassPanel>
 
       {user?.role === USER_ROLES.CORPORATE && user?.corporateProfile ? (

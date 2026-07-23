@@ -22,6 +22,7 @@ import { adminInitials } from '../lib/formatAdminLastLogin.js'
 import { readAppUserLocation, parseAppUserLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { APP_HOME_LOCATION, APP_HOME_PATH, hasBookingFlowQuery } from '../lib/bookingFlowNavigation.js'
+import { ErrorBoundary } from '../components/ErrorBoundary.jsx'
 import { useGetLabourAssignmentsQuery, workforceApi } from '../store/api/workforceApi.js'
 import { loadJobDemoState, subscribeJobDemo } from '../lib/labourJobDemoStorage.js'
 import { connectSocket } from '../services/socket.js'
@@ -188,27 +189,28 @@ export function AppShell() {
     })
   }, [bottomNav, isLabour, pendingJobsCount])
 
-  const isIndividualAppHome = user?.role === USER_ROLES.INDIVIDUAL && pathname === '/app'
-  const isLabourAppHome = user?.role === USER_ROLES.LABOUR && pathname === '/app'
-  const isNotificationsPage = pathname === '/app/notifications'
-  const isLabourJobs = user?.role === USER_ROLES.LABOUR && pathname === '/app/jobs'
-  const isLabourEarnings = user?.role === USER_ROLES.LABOUR && pathname === '/app/earnings'
-  const isLabourAttendance = user?.role === USER_ROLES.LABOUR && pathname === '/app/attendance'
-  const isLabourKyc = user?.role === USER_ROLES.LABOUR && pathname === '/app/kyc'
+  const normalizedPath = pathname.endsWith('/') && pathname !== '/' ? pathname.slice(0, -1) : pathname
+  const isIndividualAppHome = user?.role === USER_ROLES.INDIVIDUAL && normalizedPath === '/app'
+  const isLabourAppHome = user?.role === USER_ROLES.LABOUR && normalizedPath === '/app'
+  const isNotificationsPage = normalizedPath === '/app/notifications'
+  const isLabourJobs = user?.role === USER_ROLES.LABOUR && normalizedPath === '/app/jobs'
+  const isLabourEarnings = user?.role === USER_ROLES.LABOUR && normalizedPath === '/app/earnings'
+  const isLabourAttendance = user?.role === USER_ROLES.LABOUR && normalizedPath === '/app/attendance'
+  const isLabourKyc = user?.role === USER_ROLES.LABOUR && normalizedPath === '/app/kyc'
   const hideShellHeader =
-    pathname.startsWith('/app/booking/flow') ||
-    pathname === '/app/bookings' ||
-    pathname === '/app/support' ||
-    pathname === '/app/profile' ||
+    normalizedPath.startsWith('/app/booking/flow') ||
+    normalizedPath === '/app/bookings' ||
+    normalizedPath === '/app/support' ||
+    normalizedPath === '/app/profile' ||
     isLabourAppHome ||
     isLabourJobs ||
     isLabourEarnings ||
     isLabourAttendance ||
     isLabourKyc ||
     isNotificationsPage ||
-    hideBuildMartShellHeader(pathname)
-  const onBuildMart = isBuildMartRoute(pathname)
-  const title = getAppShellTitle(pathname)
+    hideBuildMartShellHeader(normalizedPath)
+  const onBuildMart = isBuildMartRoute(normalizedPath)
+  const title = getAppShellTitle(normalizedPath)
   const drawerInitials = adminInitials(user)
   const profileImageUrl = user?.profileImageUrl?.trim()
 
@@ -600,7 +602,9 @@ export function AppShell() {
                 : 'pt-4'
           }`}
         >
-          <AppPageTransition />
+          <ErrorBoundary>
+            <AppPageTransition />
+          </ErrorBoundary>
         </main>
       </div>
 

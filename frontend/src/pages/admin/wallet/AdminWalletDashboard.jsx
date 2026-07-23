@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Wallet, IndianRupee, ArrowDownRight, ArrowUpRight, 
@@ -59,6 +60,7 @@ const SEGMENT_METADATA = {
 }
 
 export function AdminWalletDashboard() {
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('platform') // platform, user, corporate, vendor, labour
   const [page, setPage] = useState(1)
   
@@ -336,7 +338,10 @@ export function AdminWalletDashboard() {
         </div>
 
         {/* Pending Refund Liability */}
-        <div className="group rounded-[16px] bg-white/80 backdrop-blur-md p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] cursor-pointer flex items-center gap-4">
+        <div 
+          onClick={() => navigate('/admin/refunds')}
+          className="group rounded-[16px] bg-white/80 backdrop-blur-md p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] cursor-pointer flex items-center gap-4"
+        >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-50 text-purple-600">
             <Clock className="h-5 w-5" />
           </div>

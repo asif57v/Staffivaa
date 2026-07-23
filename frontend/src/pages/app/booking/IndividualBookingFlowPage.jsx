@@ -426,7 +426,7 @@ export function IndividualBookingFlowPage() {
       est.originalPlatformFee = est.platformFee
       const discount = (est.platformFee * applicableOffer.discountPercentage) / 100
       est.platformFee = Math.max(0, est.platformFee - discount)
-      est.grandTotal = est.estimatedSubtotal + est.platformFee + est.gst + est.convenienceFee
+      est.grandTotal = est.estimatedSubtotal + est.platformFee + est.gst + (est.convenienceFee || 0)
       est.appliedOffer = applicableOffer
     }
 
@@ -959,11 +959,16 @@ export function IndividualBookingFlowPage() {
               {draft.address}
             </p>
             <div className="border-t border-slate-100 pt-3">
-              <div className="flex justify-between text-slate-600">
-                <span>Visiting charge</span>
+              <div className="flex justify-between text-slate-600 items-start">
+                <div className="flex flex-col">
+                  <span>Visiting charge</span>
+                  <span className="text-[10px] text-slate-400 font-medium leading-tight mt-0.5">
+                    (Paid directly to worker)
+                  </span>
+                </div>
                 <span>{formatInr(estimate.estimatedSubtotal)}</span>
               </div>
-              <div className="flex justify-between text-slate-500">
+              <div className="flex justify-between text-slate-500 mt-2">
                 <span>Platform fee {estimate.appliedOffer && <span className="ml-1 text-[10px] font-bold text-emerald-600 px-1.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-100">{estimate.appliedOffer.discountPercentage}% OFF</span>}</span>
                 <span>
                   {estimate.originalPlatformFee !== undefined ? (
@@ -974,7 +979,7 @@ export function IndividualBookingFlowPage() {
               </div>
               <div className="mt-2 flex justify-between text-base font-black text-brand">
                 <span>Total</span>
-                <span>{formatInr(estimate.grandTotal)}</span>
+                <span>{formatInr(estimate.platformFee)}</span>
               </div>
             </div>
           </GlassPanel>

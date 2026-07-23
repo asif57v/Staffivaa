@@ -12,10 +12,12 @@ router.use(protect)
 
 router.get('/me', user.getProfile)
 router.post('/me/fcm-token', user.saveFcmToken)
+router.post('/me/fcm-token/remove', user.removeFcmToken)
 router.patch(
   '/me',
   [
     body('fullName').optional().trim().isLength({ min: 2, max: 120 }),
+    body('email').optional({ checkFalsy: true }).trim().isEmail().withMessage('Enter a valid email address'),
     body('labourProfile.skills').optional().isArray(),
     body('labourProfile.skills.*').optional().trim().isLength({ min: 1, max: 64 }),
   ],

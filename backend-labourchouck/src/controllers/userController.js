@@ -60,10 +60,11 @@ function sanitizeKycVideoMeta(meta) {
 
 /** PATCH /users/me — update basic profile fields (mobile-first parity with future app) */
 export const updateMe = asyncHandler(async (req, res) => {
-  const { fullName, profileImageUrl } = req.body
+  const { fullName, email, profileImageUrl } = req.body
   const user = req.user
 
   if (fullName != null) user.fullName = String(fullName).trim()
+  if (email !== undefined) user.email = email ? String(email).trim().toLowerCase() : ''
 
   if (profileImageUrl !== undefined) {
     const raw = profileImageUrl == null ? '' : String(profileImageUrl).trim()
@@ -726,6 +727,34 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
       role: req.user.role,
       platform: isMobileField ? 'app' : 'web'
     }
+  })
+})
+
+/** POST /users/me/fcm-token/remove — remove FCM token on logout */
+export const removeFcmToken = asyncHandler(async (req, res) => {
+  const { token } = req.body
+  
+  if (!token || typeof token !== 'string') {
+    return sendError(res, {
+      message: 'FCM token is required',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+      code: 'INVALID_TOKEN'
+    })
+  }
+
+  // Remove the token from both arrays
+  await User.updateOne(
+    { _id: req.user._id },
+    { 
+      $pull: { 
+        fcmTokensWeb: token, 
+        fcmTokensMobile: token 
+      } 
+    }
+  )
+
+  return sendSuccess(res, { 
+    message: 'FCM Token removed successfully'
   })
 })
 

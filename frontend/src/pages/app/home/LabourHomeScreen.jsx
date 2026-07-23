@@ -546,7 +546,7 @@ export function LabourHomeScreen({ user }) {
                       setOnline(next);
                       showToast(next ? 'You are now online and ready for jobs.' : 'You are offline. No new job requests.');
                     }}
-                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/75 ${
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/75 ${
                       online ? 'bg-emerald-500' : 'bg-white/80 ring-1 ring-black/5'
                     }`}
                     aria-checked={online}
@@ -556,12 +556,12 @@ export function LabourHomeScreen({ user }) {
                     <span className="sr-only">Toggle online status</span>
                     <span
                       aria-hidden="true"
-                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                        online ? 'translate-x-4' : 'translate-x-0.5'
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                        online ? 'translate-x-[22px]' : 'translate-x-0.5'
                       }`}
                     />
                   </button>
-                  <span className={`text-[8px] font-bold tracking-wide mt-0.5 ${online ? 'text-emerald-700' : 'text-slate-600'}`}>
+                  <span className={`text-[9px] font-bold tracking-wide mt-1 ${online ? 'text-emerald-700' : 'text-slate-600'}`}>
                     {online ? 'ONLINE' : 'OFFLINE'}
                   </span>
                 </div>

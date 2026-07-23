@@ -185,7 +185,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
   // Data Extraction
   const request = requestData?.request || {}
   
-  const [timeLeft, setTimeLeft] = useState(300)
+  const [timeLeft, setTimeLeft] = useState(150)
 
   useEffect(() => {
     let interval;
@@ -193,7 +193,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
 
     if (request?.status === 'platform_fee_pending' && request?.platformFeePendingAt) {
       const pendingAt = new Date(request.platformFeePendingAt).getTime()
-      const expiryTime = pendingAt + 5 * 60 * 1000
+      const expiryTime = pendingAt + 2.5 * 60 * 1000
       
       interval = setInterval(() => {
         const now = new Date().getTime()
@@ -332,7 +332,9 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
             </div>
             <h2 className="text-xl font-black text-slate-900 mb-2">Worker Accepted!</h2>
             <p className="text-sm font-semibold text-slate-500 mb-6">
-              Please pay the Staffivaa platform fee to confirm the booking and dispatch your worker.
+              {request.userPaymentStatus === 'paid' 
+                ? "Platform fee paid successfully. Waiting for the worker to confirm their payment to dispatch."
+                : "Please pay the Staffivaa platform fee to confirm the booking and dispatch your worker."}
             </p>
             
             <div className="text-left space-y-3 mb-6 bg-slate-50 rounded-2xl p-4 border border-slate-100">
@@ -367,8 +369,8 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
                 </div>
                 <p className="text-center text-[11px] font-semibold text-blue-600/90 leading-relaxed mt-1">
                   {timeLeft <= 0 
-                    ? "The 5-minute window has ended. The server is processing the auto-cancellation and your refund will be initiated momentarily."
-                    : "You have successfully paid the platform fee. The booking will automatically cancel and your fee will be refunded if the worker does not pay their fee within 5 minutes."}
+                    ? "The 2.5-minute window has ended. The server is processing the auto-cancellation and your refund will be initiated momentarily."
+                    : "You have successfully paid the platform fee. The booking will automatically cancel and your fee will be refunded if the worker does not pay their fee within 2.5 minutes."}
                 </p>
               </div>
             ) : (
@@ -451,16 +453,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
                 <h2 className="truncate text-base font-black text-slate-900 leading-tight">
                   {workerName}
                 </h2>
-                {timeLeft <= 0 ? (
-                  <p className="mt-1 text-xs text-rose-500 font-semibold animate-pulse">
-                    Cancelling Booking...
-                  </p>
-                ) : (
-                  <p className="mt-1 text-xs text-rose-500 font-semibold animate-pulse">
-                    Auto-cancels in {formatTime(timeLeft)}
-                  </p>
-                )}
-                <p className="truncate text-[10px] font-bold text-brand mb-1">
+                <p className="mt-1 truncate text-[10px] font-bold text-brand mb-1">
                   ID: {workerId}
                 </p>
                 <p className="truncate text-[10px] font-semibold text-slate-500 leading-tight">

@@ -25,6 +25,7 @@ import {
   releasePendingCredit,
   setRatePaisePerMin,
 } from '../../lib/labourWalletStorage.js'
+import { useGetWalletBalanceQuery, useRequestRefundMutation } from '../../store/api/walletApi.js'
 
 function rupeesPerHourFromRate(ratePaisePerMin) {
   return (ratePaisePerMin * 60) / 100
@@ -40,6 +41,10 @@ export function AppEarningsPage() {
   const [rateRupeesPerHr, setRateRupeesPerHr] = useState(() =>
     String(Math.round(rupeesPerHourFromRate(readWalletState().ratePaisePerMin || DEFAULT_RATE_PAISE_PER_MIN))),
   )
+
+  const { data: walletData, refetch: refetchWallet } = useGetWalletBalanceQuery()
+  const [requestRefund] = useRequestRefundMutation()
+  const backendTransactions = walletData?.data?.transactions || []
 
   useEffect(() => {
     const offA = subscribeAttendance(() => setEntries(readAttendanceEntries()))
@@ -165,8 +170,20 @@ export function AppEarningsPage() {
         subtitle: `${s.projectLabel} · ${s.workLabel} · ${s.minutes} min`,
         signedPaise: s.minutes * rate,
       }))
-    return [...outs, ...credits, ...seg].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 24)
-  }, [summary.ratePaisePerMin, wallet, attendanceOnly.segments])
+    
+    const backend = backendTransactions.map((txn) => ({
+      key: txn._id,
+      kind: 'wallet',
+      at: txn.createdAt,
+      title: txn.source || txn.type,
+      subtitle: txn.status === 'Pending' && txn.type === 'Refund' && txn.source?.includes('Refund Eligible') ? 'Pending Request' : txn.status,
+      signedPaise: (txn.type === 'Refund' || txn.type === 'Credit') ? txn.amount * 100 : -txn.amount * 100,
+      isRefundEligible: txn.status === 'Pending' && txn.type === 'Refund' && txn.source?.includes('Refund Eligible'),
+      bookingId: txn.bookingId
+    }))
+
+    return [...outs, ...credits, ...seg, ...backend].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 24)
+  }, [summary.ratePaisePerMin, wallet, attendanceOnly.segments, backendTransactions])
 
   const hasStory = activity.length > 0
 
@@ -360,6 +377,22 @@ export function AppEarningsPage() {
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-slate-900">{row.title}</p>
                     <p className="truncate text-xs text-slate-500">{row.subtitle}</p>
+                    {row.isRefundEligible && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          requestRefund(row.bookingId).unwrap().then(() => {
+                            showToast('Refund requested successfully!')
+                            refetchWallet()
+                          }).catch(err => {
+                            showToast(err?.data?.message || 'Failed to request refund.', false)
+                          })
+                        }}
+                        className="mt-1.5 rounded-md bg-brand px-2.5 py-1 text-[10px] font-bold text-slate-900 shadow-sm transition hover:bg-brand/90"
+                      >
+                        Request Refund
+                      </button>
+                    )}
                   </div>
                   <span
                     className={`shrink-0 font-mono text-sm font-black ${row.signedPaise < 0 ? 'text-rose-700' : 'text-emerald-700'}`}
