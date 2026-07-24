@@ -22,7 +22,7 @@ export const globalLimiter = rateLimit({
 
 export const otpRequestLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 3,
+  max: 10,
   message: { success: false, message: 'Too many OTP requests. Please wait 15 minutes before trying again.' },
   standardHeaders: true,
   legacyHeaders: false,

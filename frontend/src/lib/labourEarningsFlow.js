@@ -12,12 +12,10 @@ import { getServiceFeeConfig, readWalletState, subscribeWallet } from './labourW
 export { computeWithdrawalBreakdown, maxNetFromAvailableGross, MIN_NET_WITHDRAW_PAISE }
 
 export const EARNINGS_WORKFLOW = [
-  { id: 'attendance', label: 'Mark attendance', short: 'On site' },
-  { id: 'accrued', label: 'Earnings accrued', short: 'Earned' },
-  { id: 'settlement', label: 'Payroll clearance', short: 'Pending' },
-  { id: 'available', label: 'Balance available', short: 'Ready' },
-  { id: 'fees', label: 'Service fee deducted', short: 'Fees' },
-  { id: 'withdraw', label: 'Payout to you', short: 'Withdrawn' },
+  { id: 'accept', label: 'Accept', short: 'Accepted' },
+  { id: 'approval', label: 'Client approval', short: 'Approved' },
+  { id: 'otp', label: 'OTP verification', short: 'OTP' },
+  { id: 'done', label: 'Done', short: 'Done' },
 ]
 
 export const CREDIT_STATUS = {
@@ -155,12 +153,10 @@ export function earningsWorkflowStepIndex(summary, attendanceEntries) {
   const hasAvailable = summary.availableGrossPaise > 0
   const hasWithdrawal = (summary.withdrawals || []).length > 0
 
-  if (hasWithdrawal) return 5
-  if (hasAvailable && summary.availableNetPaise >= MIN_NET_WITHDRAW_PAISE) return 4
-  if (hasAvailable) return 3
-  if (hasPending) return 2
-  if (hasPaired) return 1
-  if (hasAttendance) return 0
+  if (hasWithdrawal) return 3
+  if (hasAvailable) return 2
+  if (hasPending) return 1
+  if (hasPaired || hasAttendance) return 0
   return 0
 }
 

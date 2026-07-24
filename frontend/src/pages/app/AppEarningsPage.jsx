@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { ArrowRight, Briefcase, Clock, FastForward, History, Sparkles } from 'lucide-react'
+import { ArrowRight, Briefcase, Clock, History, Sparkles } from 'lucide-react'
 import { AppEmptyState } from '../../components/app/AppEmptyState.jsx'
-import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import { LabourEarningsHero } from '../../components/labour/earnings/LabourEarningsHero.jsx'
 import { LabourEarningsWorkflowTimeline } from '../../components/labour/earnings/LabourEarningsWorkflowTimeline.jsx'
-import { LabourEarningsDemoCard } from '../../components/labour/earnings/LabourEarningsDemoCard.jsx'
 import { LabourWithdrawPanel } from '../../components/labour/earnings/LabourWithdrawPanel.jsx'
-import { seedSampleEarningsDemo } from '../../lib/labourEarningsDemoSeed.js'
 import {
   buildLabourEarningsSummary,
   earningsWorkflowStepIndex,
@@ -19,17 +16,10 @@ import {
 import { readAttendanceEntries, subscribeAttendance } from '../../lib/labourAttendanceStorage.js'
 import { buildWalletEarningsSnapshot } from '../../lib/labourWalletFromAttendance.js'
 import {
-  DEFAULT_RATE_PAISE_PER_MIN,
   readWalletState,
-  releaseAllPendingCredits,
   releasePendingCredit,
-  setRatePaisePerMin,
 } from '../../lib/labourWalletStorage.js'
 import { useGetWalletBalanceQuery, useRequestRefundMutation } from '../../store/api/walletApi.js'
-
-function rupeesPerHourFromRate(ratePaisePerMin) {
-  return (ratePaisePerMin * 60) / 100
-}
 
 export function AppEarningsPage() {
   const reduce = useReducedMotion()
@@ -38,9 +28,6 @@ export function AppEarningsPage() {
   const [tab, setTab] = useState('flow')
   const [formError, setFormError] = useState('')
   const [formOk, setFormOk] = useState('')
-  const [rateRupeesPerHr, setRateRupeesPerHr] = useState(() =>
-    String(Math.round(rupeesPerHourFromRate(readWalletState().ratePaisePerMin || DEFAULT_RATE_PAISE_PER_MIN))),
-  )
 
   const { data: walletData, refetch: refetchWallet } = useGetWalletBalanceQuery()
   const [requestRefund] = useRequestRefundMutation()
@@ -81,39 +68,6 @@ export function AppEarningsPage() {
       setFormError('')
     }, 3200)
   }, [])
-
-  const handleSaveRate = () => {
-    const hr = Number(rateRupeesPerHr)
-    if (!Number.isFinite(hr) || hr < 20 || hr > 2000) {
-      showToast('Use an hourly rate between ₹20 and ₹2000 (demo).', false)
-      return
-    }
-    setRatePaisePerMin(Math.round((hr * 100) / 60))
-    setWallet(readWalletState())
-    showToast('Attendance rate updated for estimates.')
-  }
-
-  const handleLoadSample = () => {
-    const res = seedSampleEarningsDemo({ force: true })
-    if (!res.ok) {
-      showToast(res.error || 'Could not load sample.', false)
-      return
-    }
-    setEntries(readAttendanceEntries())
-    setWallet(readWalletState())
-    showToast(
-      `Sample loaded: ${formatInrFromPaise(res.availableGrossPaise)} gross · ${formatInrFromPaise(res.availableNetPaise)} max net. Open Withdraw tab.`,
-    )
-  }
-
-  const handleReleaseAllPending = () => {
-    if (!releaseAllPendingCredits()) {
-      showToast('No pending payroll lines to release.', false)
-      return
-    }
-    setWallet(readWalletState())
-    showToast('Pending pay released to available balance.')
-  }
 
   const activity = useMemo(() => {
     const rate = summary.ratePaisePerMin
@@ -213,12 +167,6 @@ export function AppEarningsPage() {
         ) : null}
       </AnimatePresence>
 
-      <LabourEarningsDemoCard
-        summary={summary}
-        onLoadSample={handleLoadSample}
-        onOpenWithdraw={() => setTab('withdraw')}
-      />
-
       <LabourEarningsHero
         availableNetPaise={summary.availableNetPaise}
         availableGrossPaise={summary.availableGrossPaise}
@@ -257,37 +205,14 @@ export function AppEarningsPage() {
               <LabourEarningsWorkflowTimeline activeIndex={workflowStep} />
             </div>
             <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600 ring-1 ring-slate-100">
-              <strong className="text-slate-800">1. Attendance</strong> → time pay.{' '}
-              <strong className="text-slate-800">2. Complete shift</strong> → payroll (pending).{' '}
-              <strong className="text-slate-800">3. Release pay</strong> → gross balance.{' '}
-              <strong className="text-slate-800">4. Withdraw</strong> → platform fee + GST deducted → net to UPI/bank.
+              <strong className="text-slate-800">1. Accept</strong> → job confirmed.{' '}
+              <strong className="text-slate-800">2. Client approval</strong> → work verified.{' '}
+              <strong className="text-slate-800">3. OTP verification</strong> → securely validated.{' '}
+              <strong className="text-slate-800">4. Done</strong> → process complete.
             </p>
           </GlassPanel>
 
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Link
-              to="/app/attendance"
-              className="flex items-center gap-3 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm ring-1 ring-slate-100 transition hover:border-brand/30"
-            >
-              <Clock className="h-8 w-8 text-brand" aria-hidden />
-              <span>
-                <p className="text-sm font-extrabold text-slate-900">1. Mark attendance</p>
-                <p className="text-xs text-slate-500">Tap in / out on site</p>
-              </span>
-              <ArrowRight className="ml-auto h-4 w-4 text-slate-300" aria-hidden />
-            </Link>
-            <Link
-              to="/app/jobs"
-              className="flex items-center gap-3 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm ring-1 ring-slate-100 transition hover:border-brand/30"
-            >
-              <Briefcase className="h-8 w-8 text-brand" aria-hidden />
-              <span>
-                <p className="text-sm font-extrabold text-slate-900">2. Complete shift</p>
-                <p className="text-xs text-slate-500">Triggers payroll line</p>
-              </span>
-              <ArrowRight className="ml-auto h-4 w-4 text-slate-300" aria-hidden />
-            </Link>
-          </div>
+
 
           {pendingCredits.length > 0 ? (
             <GlassPanel className="border-amber-200/80 bg-amber-50/50 p-4">
@@ -321,37 +246,8 @@ export function AppEarningsPage() {
                   </li>
                 ))}
               </ul>
-              <AppPrimaryButton type="button" className="mt-3 w-full py-2.5 text-xs" onClick={handleReleaseAllPending}>
-                <FastForward className="h-3.5 w-3.5" aria-hidden />
-                Demo: release all pending pay
-              </AppPrimaryButton>
             </GlassPanel>
           ) : null}
-
-          <GlassPanel className="border-slate-200/90 p-4">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Attendance rate (demo)</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="text-xs text-slate-500">₹/hr</span>
-              <input
-                type="number"
-                min={20}
-                max={2000}
-                value={rateRupeesPerHr}
-                onChange={(e) => setRateRupeesPerHr(e.target.value)}
-                className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
-              />
-              <button
-                type="button"
-                onClick={handleSaveRate}
-                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold"
-              >
-                Apply
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              {summary.totalMinutes} min paired · attendance {formatInrFromPaise(summary.attendancePaise)}
-            </p>
-          </GlassPanel>
         </motion.div>
       ) : null}
 

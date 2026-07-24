@@ -1115,11 +1115,6 @@ export function LabourHomeScreen({ user }) {
           </AnimatePresence>
         </section>
         </FadeInSection>
-
-        <p className="flex items-center justify-center gap-1.5 pb-2 text-center text-[10px] font-medium text-slate-400">
-          <Sparkles className="h-3 w-3" aria-hidden />
-          Demo jobs & earnings on this device — syncs when backend is live
-        </p>
       </div>
 
       <AppUserLocationModal
