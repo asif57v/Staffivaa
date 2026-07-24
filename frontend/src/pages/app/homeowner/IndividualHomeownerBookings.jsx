@@ -110,31 +110,34 @@ export function IndividualHomeownerBookings() {
 
   useEffect(() => {
     if (!serverRequestsData?.requests) return
-    let updated = false
-    const newHistory = history.map(b => {
-      if (!b.requestId) return b
-      const serverReq = serverRequestsData.requests.find(r => r._id === b.requestId)
-      if (!serverReq) return b
+    
+    setHistory(prevHistory => {
+      let updated = false
+      const newHistory = prevHistory.map(b => {
+        if (!b.requestId) return b
+        const serverReq = serverRequestsData.requests.find(r => r._id === b.requestId)
+        if (!serverReq) return b
 
-      let newStatus = b.status
-      if (serverReq.status) {
-        if (serverReq.status === 'pending') newStatus = 'searching'
-        else newStatus = serverReq.status
-      }
+        let newStatus = b.status
+        if (serverReq.status) {
+          if (serverReq.status === 'pending') newStatus = 'searching'
+          else newStatus = serverReq.status
+        }
 
-      if (newStatus !== b.status) {
-        updated = true
-        return { ...b, status: newStatus }
+        if (newStatus !== b.status) {
+          updated = true
+          return { ...b, status: newStatus }
+        }
+        return b
+      })
+
+      if (updated) {
+        saveIndividualBookings(newHistory)
+        return newHistory
       }
-      return b
+      return prevHistory
     })
-
-    if (updated) {
-      saveIndividualBookings(newHistory)
-      // defer state update to avoid cascading render warnings
-      setTimeout(() => setHistory(newHistory), 0)
-    }
-  }, [serverRequestsData, history])
+  }, [serverRequestsData])
 
   useEffect(() => {
     const rebook = searchParams.get('rebookFrom')?.trim()

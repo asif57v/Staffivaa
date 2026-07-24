@@ -29,6 +29,7 @@ export const REQUEST_STATUS = {
   BILLING: 'billing',
   COMPLETED: 'completed',
   CANCELLED: 'cancelled',
+  REJECTED: 'rejected',
   PAYMENT_PENDING: 'payment_pending',
   ADVANCE_PAID: 'advance_paid',
   PROJECT_ACTIVE: 'project_active',

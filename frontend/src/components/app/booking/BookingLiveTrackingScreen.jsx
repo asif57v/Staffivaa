@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import {
@@ -160,8 +160,11 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     })
 
     socket.on('booking_cancelled', (payload) => {
-      alert(`Booking Cancelled:\n${payload.message}\n\nNote: If you paid the platform fee, the refund process has been initiated. You can check your Wallet for updates.`)
-      onBack()
+      if (!hasCancelledRef.current) {
+        hasCancelledRef.current = true
+        alert(`Booking Cancelled:\n${payload.message}\n\nNote: If you paid the platform fee, the refund process has been initiated. You can check your Wallet for updates.`)
+        onBack()
+      }
     })
 
     socket.on('disconnect', (reason) => {
@@ -234,10 +237,15 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     currentStatus = activeAssignment.status
   }
 
+  const hasCancelledRef = useRef(false)
+
   useEffect(() => {
     if (['cancelled', 'expired'].includes(currentStatus)) {
-      alert("This booking has been cancelled or expired.")
-      onBack()
+      if (!hasCancelledRef.current) {
+        hasCancelledRef.current = true
+        alert("This booking has been cancelled or expired.")
+        onBack()
+      }
     }
   }, [currentStatus, onBack])
 

@@ -4,12 +4,34 @@ import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
 import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
 import { useGetVendorMarketplaceRequestsQuery, useAcceptMarketplaceRequestMutation, useDeclineMarketplaceRequestMutation } from '../../../store/api/workforceApi.js'
 import { markVendorRequestsViewed } from '../../../hooks/useVendorNotificationCount.js'
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useSocket } from '../../../hooks/useSocket.js'
 
 function formatDate(d) {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function timeAgo(date) {
+  if (!date) return ''
+  const seconds = Math.floor((new Date() - new Date(date)) / 1000)
+  
+  let interval = Math.floor(seconds / 31536000)
+  if (interval >= 1) return interval + ' yr ago'
+  
+  interval = Math.floor(seconds / 2592000)
+  if (interval >= 1) return interval + ' mo ago'
+  
+  interval = Math.floor(seconds / 86400)
+  if (interval >= 1) return interval + (interval === 1 ? ' day ago' : ' days ago')
+  
+  interval = Math.floor(seconds / 3600)
+  if (interval >= 1) return interval + (interval === 1 ? ' hr ago' : ' hrs ago')
+  
+  interval = Math.floor(seconds / 60)
+  if (interval >= 1) return interval + ' min ago'
+  
+  return 'Just now'
 }
 
 export function VendorRequestsPage() {
@@ -36,6 +58,13 @@ export function VendorRequestsPage() {
       }
     }
   }, [socket, refetch])
+  
+  // Force a re-render every minute to keep timeAgo real-time
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const timer = setInterval(() => setTick(t => t + 1), 60000)
+    return () => clearInterval(timer)
+  }, [])
   
   const requests = marketplaceData?.requests ?? []
 
@@ -70,11 +99,16 @@ export function VendorRequestsPage() {
             <li key={req._id}>
               <AppSurface className="space-y-3 border-brand/20 shadow-sm transition hover:border-brand/40 hover:shadow-md">
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-extrabold text-slate-900">{req.clientId?.corporateProfile?.companyName || req.clientId?.fullName || 'Corporate Client'}</p>
-                      <span className="rounded-md bg-brand/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-brand">
-                        {req.status.replace('_', ' ')}
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-extrabold text-slate-900">{req.clientId?.corporateProfile?.companyName || req.clientId?.fullName || 'Corporate Client'}</p>
+                        <span className="rounded-md bg-brand/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-brand">
+                          {req.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 shrink-0">
+                        {timeAgo(req.createdAt)}
                       </span>
                     </div>
                     <p className="mt-1 text-xs font-semibold text-slate-700">

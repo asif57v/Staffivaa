@@ -250,8 +250,12 @@ export function CorporateRequestDetailPage() {
 
   useEffect(() => {
     if (socket && id) {
+      socket.emit('join_request', id)
+
       const handleUpdate = () => refetch()
       socket.on('vendor_accepted_job', handleUpdate)
+      socket.on('vendor_accepted_request', handleUpdate)
+      socket.on('corporate_fee_pending', handleUpdate)
       socket.on('vendor_assigned_workforce', handleUpdate)
       socket.on('work_progress_update', handleUpdate)
       socket.on('work_completed', handleUpdate)
@@ -260,7 +264,10 @@ export function CorporateRequestDetailPage() {
       socket.on('corporate_responded_quotation', handleUpdate)
       
       return () => {
+        socket.emit('leave_request', id)
         socket.off('vendor_accepted_job', handleUpdate)
+        socket.off('vendor_accepted_request', handleUpdate)
+        socket.off('corporate_fee_pending', handleUpdate)
         socket.off('vendor_assigned_workforce', handleUpdate)
         socket.off('work_progress_update', handleUpdate)
         socket.off('work_completed', handleUpdate)
