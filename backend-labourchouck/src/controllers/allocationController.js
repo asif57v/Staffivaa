@@ -353,6 +353,38 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       assignmentStatus: assignment.status,
       updatedAt: new Date()
     })
+  } else if (action === 'cancel') {
+    if (![ASSIGNMENT_STATUS.ACCEPTED, ASSIGNMENT_STATUS.ON_SITE].includes(assignment.status)) {
+      return sendError(res, { message: 'Can only cancel active assignments.', statusCode: HTTP_STATUS.BAD_REQUEST })
+    }
+    assignment.status = ASSIGNMENT_STATUS.CANCELLED
+    assignment.cancelledAt = new Date()
+
+    const request = await WorkforceRequest.findById(assignment.requestId)
+    if (request) {
+      request.status = REQUEST_STATUS.SEARCHING
+      request.labourId = null
+      request.labourName = null
+      request.labourPhone = null
+      request.acceptedAt = null
+      request.acceptedBy = null
+      request.platformFeePendingAt = null
+      request.platformFeePaymentLifecycle = 'none'
+      await request.save()
+
+      try {
+        const io = getIO()
+        io.to(`request_${request._id.toString()}`).emit('bookingCancelledByLabour', { message: 'The assigned worker had to cancel. We are finding a new worker for you immediately.' })
+        emitToUser('individual', request.clientId?.toString(), 'request_updated', { requestId: request._id.toString() })
+        emitRequestStatusUpdate(request._id.toString(), {
+          event: 'status_changed',
+          assignmentStatus: assignment.status,
+          updatedAt: new Date()
+        })
+      } catch (err) {
+        console.error('Socket emit error:', err)
+      }
+    }
   } else {
     return sendError(res, { message: 'Invalid action', statusCode: HTTP_STATUS.BAD_REQUEST })
   }

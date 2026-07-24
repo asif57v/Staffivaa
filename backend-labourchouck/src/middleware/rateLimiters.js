@@ -20,22 +20,9 @@ export const globalLimiter = rateLimit({
   legacyHeaders: false,
 })
 
-export const otpRequestLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,
-  message: { success: false, message: 'Too many OTP requests. Please wait 15 minutes before trying again.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-})
+export const otpRequestLimiter = (req, res, next) => next()
 
-export const authVerifyLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5,
-  skipSuccessfulRequests: true,
-  message: { success: false, message: 'Too many failed attempts. Please try again after 15 minutes.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-})
+export const authVerifyLimiter = (req, res, next) => next()
 
 export const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour

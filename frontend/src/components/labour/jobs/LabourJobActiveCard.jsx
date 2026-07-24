@@ -37,7 +37,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   return R * c
 }
 
-export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDetail, onComplete, onPayFee }) {
+export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDetail, onComplete, onCancelBooking, onPayFee }) {
   const status = job?.status || 'accepted'
   const requestStatus = job?.requestStatus || 'searching'
   const isPlatformFeePending = requestStatus === 'platform_fee_pending' && job?.labourPaymentStatus !== 'paid'
@@ -443,10 +443,24 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
           </p>
         )}
         <div className="flex gap-2">
-          <AppButton type="button" variant="secondary" className="w-full py-2.5 text-xs bg-slate-900 text-white border-0" onClick={() => onOpenDetail(job)}>
+          <AppButton type="button" variant="secondary" className="flex-1 py-2.5 text-xs bg-slate-900 text-white border-0" onClick={() => onOpenDetail(job)}>
             <FileText className="h-3.5 w-3.5" aria-hidden />
             Job Description
           </AppButton>
+          {status !== 'completed' && (
+            <AppButton 
+              type="button" 
+              variant="danger" 
+              className="flex-[0.5] py-2.5 text-xs hover:bg-rose-100 transition" 
+              onClick={() => {
+                if(window.confirm('Are you sure you want to cancel this booking? This might affect your rating.')){
+                  onCancelBooking(job.id)
+                }
+              }}
+            >
+              Cancel
+            </AppButton>
+          )}
         </div>
         {status !== 'completed' && (
           <AppPrimaryButton

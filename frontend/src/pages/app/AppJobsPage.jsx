@@ -354,6 +354,28 @@ export function AppJobsPage() {
     setTab('history')
   }
 
+  const handleCancelActive = async (id) => {
+    const job = demo.active.find((a) => a.id === id)
+    if (!job) return
+    if (isApiAssignment(job)) {
+      try {
+        await respondAssignment({ id, action: 'cancel' }).unwrap()
+        refetch()
+        showToast('Booking cancelled successfully.')
+      } catch (e) {
+        console.error('Cancel error:', e)
+        showToast(e?.data?.message || 'Failed to cancel booking')
+        return
+      }
+    } else {
+      persist({
+        ...localDemo,
+        active: localDemo.active.filter((a) => a.id !== id),
+      })
+      showToast('Booking cancelled.')
+    }
+  }
+
   const openDetail = (job, kind = tab) => {
     setDetailJob(job)
     setDetailKind(kind)
@@ -464,6 +486,7 @@ export function AppJobsPage() {
                   onMarkOnSite={handleMarkOnSite}
                   onStartWork={handleStartWork}
                   onComplete={handleCompleteActive}
+                  onCancelBooking={handleCancelActive}
                   onOpenDetail={(j) => openDetail(j, 'active')}
                   onPayFee={handlePayment}
                 />
