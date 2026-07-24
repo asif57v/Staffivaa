@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
 import {
@@ -88,6 +88,21 @@ function LabourNotificationsPageContent() {
   const [markRead] = useMarkNotificationReadMutation()
   const [markAllRead] = useMarkAllNotificationsReadMutation()
   const [deleteNotif] = useDeleteNotificationMutation()
+
+  useEffect(() => {
+    const handleRealtimeUpdate = () => {
+      refetch()
+    }
+    window.addEventListener('fcm-foreground-message', handleRealtimeUpdate)
+    
+    // Auto-refresh every 15 seconds as a fallback
+    const interval = setInterval(handleRealtimeUpdate, 15000)
+    
+    return () => {
+      window.removeEventListener('fcm-foreground-message', handleRealtimeUpdate)
+      clearInterval(interval)
+    }
+  }, [refetch])
 
   const feedItems = notificationsData?.data?.notifications || []
   const unreadCount = notificationsData?.data?.unreadCount || 0

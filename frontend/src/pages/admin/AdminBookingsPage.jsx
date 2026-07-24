@@ -115,7 +115,6 @@ export function AdminBookingsPage() {
                   ))}
                 </div>
               </div>
-              <PipelineTimeline status={r.status} title="Request pipeline" />
               {r.status === 'payment_pending' && (
                 <div className="mt-3 p-3 bg-amber-50/50 rounded-xl border border-amber-200/60 flex items-center justify-between gap-4">
                   <div>
