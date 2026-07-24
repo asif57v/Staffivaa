@@ -215,11 +215,11 @@ export function AdminRefundsPage() {
         title={confirmDialog?.type === 'approve' ? 'Approve Refund' : 'Reject Refund'}
         description={
           confirmDialog?.type === 'approve' 
-            ? `Are you sure you want to approve this refund of ₹${confirmDialog?.refund?.amount}? This will credit the user's wallet immediately.`
+            ? `Are you sure you want to approve this refund of ₹${confirmDialog?.refund?.amount}? This will initiate a payout via Razorpay.`
             : 'Please provide a reason for rejecting this refund request. The money will be forfeited to the platform.'
         }
         type={confirmDialog?.type === 'approve' ? 'danger' : 'warning'}
-        confirmText={confirmDialog?.type === 'approve' ? 'Yes, Approve & Credit' : 'Reject Refund'}
+        confirmText={confirmDialog?.type === 'approve' ? 'Pay via Razorpay' : 'Reject Refund'}
         requireReason={confirmDialog?.type === 'reject'}
         onConfirm={async (reason) => {
           if (confirmDialog.type === 'approve') {

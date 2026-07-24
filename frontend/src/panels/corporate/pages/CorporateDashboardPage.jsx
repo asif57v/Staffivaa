@@ -232,11 +232,11 @@ export function CorporateDashboardPage() {
           ].map((act, index) => {
             const Icon = act.icon
             return (
-              <Link key={index} to={act.to} className="flex flex-col items-center shrink-0 w-20 text-center transition active:scale-[0.96]">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-2xs ${act.bg}`}>
-                  <Icon className="h-5 w-5" />
+              <Link key={index} to={act.to} className="flex flex-col items-center shrink-0 w-24 text-center transition active:scale-[0.96]">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-2xs ${act.bg}`}>
+                  <Icon className="h-6 w-6" />
                 </div>
-                <span className="mt-1.5 text-[10px] font-black text-slate-600 leading-tight block w-full truncate-2-lines h-7">
+                <span className="mt-2 text-[12px] font-black text-slate-700 leading-tight block w-full h-8 px-1">
                   {act.label}
                 </span>
               </Link>

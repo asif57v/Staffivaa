@@ -39,12 +39,7 @@ export const patchCorporateMe = asyncHandler(async (req, res) => {
   if (req.user.role !== USER_ROLES.CORPORATE) {
     return sendError(res, { message: 'Forbidden', statusCode: HTTP_STATUS.FORBIDDEN })
   }
-  if (req.user.corporateProfile?.status === CORPORATE_STATUS.APPROVED) {
-    return sendError(res, {
-      message: 'Account approved — contact support to update company details',
-      statusCode: HTTP_STATUS.FORBIDDEN,
-    })
-  }
+
   const patch = normalizeCorporateProfilePatch(req.body)
   if (!req.user.corporateProfile) req.user.corporateProfile = {}
   Object.assign(req.user.corporateProfile, patch)
@@ -67,12 +62,7 @@ export const addCorporateDocument = asyncHandler(async (req, res) => {
   if (req.user.role !== USER_ROLES.CORPORATE) {
     return sendError(res, { message: 'Forbidden', statusCode: HTTP_STATUS.FORBIDDEN })
   }
-  if (req.user.corporateProfile?.status === CORPORATE_STATUS.APPROVED) {
-    return sendError(res, {
-      message: 'Account already approved — contact support to update documents',
-      statusCode: HTTP_STATUS.FORBIDDEN,
-    })
-  }
+
   const { label, url, documentType } = req.body
   const docUrl = normalizeStoredMediaUrl(String(url ?? '').trim())
   if (!docUrl) {
@@ -147,12 +137,6 @@ export const submitCorporateVerification = asyncHandler(async (req, res) => {
 export const removeCorporateDocument = asyncHandler(async (req, res) => {
   if (req.user.role !== USER_ROLES.CORPORATE) {
     return sendError(res, { message: 'Forbidden', statusCode: HTTP_STATUS.FORBIDDEN })
-  }
-  if (req.user.corporateProfile?.documentsSubmittedAt) {
-    return sendError(res, {
-      message: 'Cannot remove documents while verification is in review',
-      statusCode: HTTP_STATUS.FORBIDDEN,
-    })
   }
   const docId = req.params.docId
   if (!req.user.corporateProfile?.documents?.length) {

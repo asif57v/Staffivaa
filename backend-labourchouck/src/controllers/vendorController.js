@@ -52,12 +52,7 @@ export const patchVendorMe = asyncHandler(async (req, res) => {
   if (req.user.role !== USER_ROLES.CONTRACTOR) {
     return sendError(res, { message: 'Forbidden', statusCode: HTTP_STATUS.FORBIDDEN })
   }
-  if (req.user.contractorProfile?.verificationStatus === 'approved') {
-    return sendError(res, {
-      message: 'Account verified — contact support to update business details',
-      statusCode: HTTP_STATUS.FORBIDDEN,
-    })
-  }
+
   const patch = normalizeVendorProfilePatch(req.body)
   if (!req.user.contractorProfile) req.user.contractorProfile = {}
   Object.assign(req.user.contractorProfile, patch)
@@ -80,12 +75,7 @@ export const addVendorDocument = asyncHandler(async (req, res) => {
   if (req.user.role !== USER_ROLES.CONTRACTOR) {
     return sendError(res, { message: 'Forbidden', statusCode: HTTP_STATUS.FORBIDDEN })
   }
-  if (req.user.contractorProfile?.verificationStatus === 'approved') {
-    return sendError(res, {
-      message: 'Account already verified — contact support to update documents',
-      statusCode: HTTP_STATUS.FORBIDDEN,
-    })
-  }
+
   const { label, url, documentType } = req.body
   const docUrl = normalizeStoredMediaUrl(String(url ?? '').trim())
   if (!docUrl) {

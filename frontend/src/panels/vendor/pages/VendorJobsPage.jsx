@@ -59,21 +59,24 @@ export function VendorJobsPage() {
       if (!pending) status = 'accepted'
       if (a.status === 'completed') status = 'completed'
       if (a.status === 'cancelled') status = 'cancelled'
-      // assigned / in progress mock logic based on actual data if available
 
       if (activeTab === 'Accepted' && status !== 'accepted') return false
       if (activeTab === 'Completed' && status !== 'completed') return false
       if (activeTab === 'Cancelled' && status !== 'cancelled') return false
-      // If we don't have accurate 'Assigned' state, we just show accepted jobs for now
       if (activeTab === 'Assigned' && status !== 'accepted') return false 
 
       if (search) {
         const req = a.requestId || {}
         const query = search.toLowerCase()
-        const ref = req.reference?.toLowerCase() || ''
-        const comp = req.clientId?.corporateProfile?.companyName?.toLowerCase() || ''
-        const loc = req.locationText?.toLowerCase() || ''
-        if (!ref.includes(query) && !comp.includes(query) && !loc.includes(query)) return false
+        
+        const reference = (req.reference || 'CR-MQ8OUOON').toLowerCase()
+        const company = (req.clientId?.corporateProfile?.companyName || req.clientId?.fullName || 'Urban Company').toLowerCase()
+        const loc = (req.locationText || 'Khand, Indore').toLowerCase()
+        const project = (req.projectId?.name || req.projectName || 'Appzeto Tower Construction').toLowerCase()
+
+        if (!reference.includes(query) && !company.includes(query) && !loc.includes(query) && !project.includes(query)) {
+          return false
+        }
       }
       return true
     })
@@ -87,7 +90,7 @@ export function VendorJobsPage() {
         <h2 className="text-2xl font-black text-slate-900 mt-0.5">Jobs</h2>
       </div>
 
-      {/* Search and Filter */}
+      {/* Search */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
@@ -96,17 +99,11 @@ export function VendorJobsPage() {
           <input
             type="text"
             className="block w-full rounded-2xl border-0 py-3.5 pl-10 pr-4 text-sm text-slate-900 shadow-sm ring-1 ring-inset ring-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-brand bg-white"
-            placeholder="Search by Project ID, Company, or Location"
+            placeholder="Search by company name"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <button
-          type="button"
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-100 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 active:scale-95"
-        >
-          <Filter className="h-5 w-5" />
-        </button>
       </div>
 
       {/* Tabs */}

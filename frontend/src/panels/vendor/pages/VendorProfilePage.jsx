@@ -87,7 +87,9 @@ export function VendorProfilePage() {
   const reviewNote = profile?.reviewNote
   const isApproved = status === 'approved'
   const inReview = Boolean(submittedAt) && !isApproved && status !== 'rejected'
-  const canEdit = !isApproved && !inReview
+
+  const [isEditing, setIsEditing] = useState(false)
+  const canEdit = (!isApproved && !inReview) || isEditing
 
   const [form, setForm] = useState(() => profileToForm(profile, user))
   const [docType, setDocType] = useState(VENDOR_DOCUMENT_TYPES.SHOP_ESTABLISHMENT)
@@ -370,9 +372,20 @@ export function VendorProfilePage() {
       </GlassPanel>
 
       <GlassPanel className="border-amber-200/40 bg-linear-to-br from-amber-50/80 to-white p-4 sm:p-5">
-        <div className="flex items-center gap-2">
-          <HardHat className="h-5 w-5 text-amber-700" aria-hidden />
-          <p className="text-sm font-extrabold text-slate-900">Business details</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <HardHat className="h-5 w-5 text-amber-700" aria-hidden />
+            <p className="text-sm font-extrabold text-slate-900">Business details</p>
+          </div>
+          {!canEdit && (
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              className="rounded-lg px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-100/50 hover:bg-amber-100 transition active:scale-95"
+            >
+              Edit details
+            </button>
+          )}
         </div>
         <p className="mt-1 text-xs text-slate-600">
           Tell us your vendor category and registered business information for contracts and settlements.
@@ -568,15 +581,26 @@ export function VendorProfilePage() {
         </div>
 
         {canEdit ? (
-          <AppPrimaryButton type="button" className="mt-4 w-full py-3 text-sm" disabled={busy} onClick={saveDetails}>
+          <AppPrimaryButton type="button" className="mt-4 w-full py-3 text-sm" disabled={busy} onClick={() => { setIsEditing(false); saveDetails(); }}>
             Save business details
           </AppPrimaryButton>
         ) : null}
       </GlassPanel>
 
       <GlassPanel className="border-slate-200/90 p-4 sm:p-5">
-        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Verification documents</p>
-        <p className="mt-1 text-xs leading-relaxed text-slate-600">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Verification documents</p>
+          {!canEdit && (
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              className="rounded-lg px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-slate-100 hover:bg-slate-200 transition active:scale-95"
+            >
+              Edit documents
+            </button>
+          )}
+        </div>
+        <p className="text-xs leading-relaxed text-slate-600">
           Select document type, then upload PDF or image. Only <strong>one document is required</strong> for verification.
         </p>
         {suggestedLabels.length > 0 && form.vendorType ? (

@@ -164,6 +164,16 @@ export function CorporateRequestNewPage() {
   const handleSubmit = async (e) => {
     if (e) e.preventDefault()
     setError('')
+
+    if (!projectId) {
+      setError('Please assign to a project or select No Project')
+      return
+    }
+    if (projectId !== 'none' && !siteId) {
+      setError('Please select a site for the project')
+      return
+    }
+
     const validLines = lines.filter((l) => l.categoryId)
     if (!validLines.length) {
       setError('Add at least one skill')
@@ -173,6 +183,15 @@ export function CorporateRequestNewPage() {
       setError('Start date is required')
       return
     }
+    if (!shiftStart || !shiftEnd) {
+      setError('Shift start and end times are required')
+      return
+    }
+    if (!locationText || !locationText.trim()) {
+      setError('Location is required')
+      return
+    }
+
     try {
       await createRequest({
         projectId: projectId && projectId !== 'none' ? projectId : undefined,
@@ -201,7 +220,7 @@ export function CorporateRequestNewPage() {
   const totalWorkers = lines.reduce((acc, l) => acc + (Number(l.quantity) || 0), 0)
 
   return (
-    <div className="min-h-[100dvh] bg-[#F8F9FC] pb-24 flex flex-col mx-auto w-full max-w-[360px]">
+    <div className="min-h-[100dvh] bg-[#F8F9FC] pb-24 flex flex-col mx-auto w-full max-w-md">
       
         {/* Sticky Header */}
         <div className="sticky top-0 z-50 h-[56px] shrink-0 bg-[#F8F9FC]/90 backdrop-blur-xl flex items-center justify-between px-2">
@@ -338,16 +357,16 @@ export function CorporateRequestNewPage() {
                   
                   <div className="flex items-center gap-1.5">
                     <div className="flex-1 relative">
-                       <select className="w-full bg-white border border-slate-200 shadow-sm rounded-[12px] h-[36px] px-2 pr-6 text-[11px] font-semibold text-slate-700 outline-none appearance-none" value={line.experienceLevel || ''} onChange={(e) => updateLine(idx, { experienceLevel: e.target.value })}>
-                          <option value="">Any Experience</option>
+                       <select className="w-full bg-white border border-slate-200 shadow-sm rounded-[12px] h-[36px] px-2 pr-6 text-[11px] font-semibold text-slate-700 outline-none appearance-none text-ellipsis" value={line.experienceLevel || ''} onChange={(e) => updateLine(idx, { experienceLevel: e.target.value })}>
+                          <option value="">Experience (Optional)</option>
                           <option value="entry">0-2 yrs</option>
                           <option value="mid">2-5 yrs</option>
                           <option value="senior">5+ yrs</option>
                        </select>
-                       <ChevronDown className="h-3 w-3 text-slate-400 pointer-events-none absolute right-2 top-1/2 -translate-y-1/2" />
+                       <ChevronDown className="h-3 w-3 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
                     </div>
                     
-                    <div className="flex items-center justify-between bg-white border border-slate-200 shadow-sm rounded-[12px] h-[36px] w-[80px] px-1">
+                    <div className="flex items-center justify-between bg-white border border-slate-200 shadow-sm rounded-[12px] h-[36px] w-[76px] px-1">
                       <button type="button" onClick={() => updateLine(idx, { quantity: Math.max(1, Number(line.quantity) - 1) })} className="h-7 w-7 flex items-center justify-center text-slate-500 active:bg-slate-50 rounded-md">
                         <Minus className="h-3 w-3" strokeWidth={3} />
                       </button>

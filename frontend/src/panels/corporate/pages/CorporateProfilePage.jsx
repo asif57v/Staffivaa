@@ -87,7 +87,9 @@ export function CorporateProfilePage() {
   const reviewNote = profile?.reviewNote
   const isApproved = status === CORPORATE_STATUS.APPROVED
   const inReview = Boolean(submittedAt) && !isApproved && status !== CORPORATE_STATUS.REJECTED
-  const canEdit = !isApproved && !inReview
+
+  const [isEditing, setIsEditing] = useState(false)
+  const canEdit = (!isApproved && !inReview) || isEditing
 
   const [form, setForm] = useState(() => profileToForm(profile, user))
   const [docType, setDocType] = useState(CORPORATE_DOCUMENT_TYPES.COMPANY_REGISTRATION)
@@ -96,6 +98,15 @@ export function CorporateProfilePage() {
   const [banner, setBanner] = useState(null)
   const [autocomplete, setAutocomplete] = useState(null)
   const [isFetchingLocation, setIsFetchingLocation] = useState(false)
+
+  useEffect(() => {
+    if (banner) {
+      const timer = setTimeout(() => {
+        setBanner(null)
+      }, 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [banner])
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
@@ -249,6 +260,7 @@ export function CorporateProfilePage() {
       }).unwrap()
       refreshUser(res)
       setBanner({ variant: 'success', message: 'Company details saved' })
+      setIsEditing(false)
     } catch (err) {
       setBanner({ variant: 'error', message: err?.data?.message || err?.message || 'Could not save details' })
     } finally {
@@ -412,9 +424,19 @@ export function CorporateProfilePage() {
       </GlassPanel>
 
       <GlassPanel className="border-brand/20 bg-linear-to-br from-brand/5 to-white p-4 sm:p-5">
-        <div className="flex items-center gap-2">
-          <Building2 className="h-5 w-5 text-brand" aria-hidden />
-          <p className="text-sm font-extrabold text-slate-900">Company details</p>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-brand" aria-hidden />
+            <p className="text-sm font-extrabold text-slate-900">Company details</p>
+          </div>
+          {!canEdit && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="text-xs font-bold text-brand hover:underline transition active:scale-95"
+            >
+              Edit details
+            </button>
+          )}
         </div>
         <p className="mt-1 text-xs text-slate-600">Legal entity information for contracts, GST invoices, and site agreements.</p>
 
@@ -614,7 +636,17 @@ export function CorporateProfilePage() {
       </GlassPanel>
 
       <GlassPanel className="border-slate-200/90 p-4 sm:p-5">
-        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Verification documents</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Verification documents</p>
+          {!canEdit && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="text-xs font-bold text-brand hover:underline transition active:scale-95"
+            >
+              Edit documents
+            </button>
+          )}
+        </div>
         <p className="mt-1 text-xs leading-relaxed text-slate-600">
           Select document type, then upload PDF or image. Only <strong>one document is required</strong> for
           verification; you may add more if you like.

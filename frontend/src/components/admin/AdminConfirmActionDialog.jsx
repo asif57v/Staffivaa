@@ -12,6 +12,7 @@ export function AdminConfirmActionDialog({
   cancelText = 'Cancel',
   isDestructive = false,
   requireReason = false,
+  isLoading = false,
 }) {
   const [reason, setReason] = useState('')
 
@@ -73,19 +74,20 @@ export function AdminConfirmActionDialog({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-slate-900"
+              disabled={isLoading}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50"
             >
               {cancelText}
             </button>
             <button
               type="button"
               onClick={handleConfirm}
-              disabled={requireReason && !reason.trim()}
+              disabled={(requireReason && !reason.trim()) || isLoading}
               className={`rounded-xl px-4 py-2 text-sm font-bold text-white shadow-sm transition disabled:opacity-50 ${
                 isDestructive ? 'bg-rose-600 hover:bg-rose-700' : 'bg-brand hover:bg-brand/90'
               }`}
             >
-              {confirmText}
+              {isLoading ? 'Processing...' : confirmText}
             </button>
           </div>
         </motion.div>
