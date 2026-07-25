@@ -687,7 +687,9 @@ export function AdminWalletDashboard() {
                       </td>
                       <td className="px-5 py-3.5 whitespace-nowrap">
                         <div className="text-slate-900 font-semibold">{tx.payerName || tx.clientId?.fullName || '—'}</div>
-                        <div className="text-xs text-slate-400 font-mono mt-0.5">{tx.bookingId?.reference || '—'}</div>
+                        {tx.bookingId?.reference && (
+                          <div className="text-xs text-slate-400 font-mono mt-0.5">{tx.bookingId.reference}</div>
+                        )}
                       </td>
                       <td className="px-5 py-3.5 whitespace-nowrap text-right">
                         <span className={`font-black text-sm ${['Credit'].includes(tx.type) ? 'text-emerald-600' : 'text-slate-900'}`}>

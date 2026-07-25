@@ -467,7 +467,7 @@ export const listUsers = asyncHandler(async (req, res) => {
 
   const [items, total] = await Promise.all([
     User.find(q)
-      .select('-passwordHash')
+      .select('-passwordHash +labourProfile.aadhaarNumber +labourProfile.panNumber')
       .populate({ path: 'labourProfile.categoryIds', select: 'name slug isActive' })
       .sort({ lastLoginAt: -1, createdAt: -1 })
       .skip(skip)

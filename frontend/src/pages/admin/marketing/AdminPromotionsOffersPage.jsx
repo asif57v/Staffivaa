@@ -29,15 +29,15 @@ export function AdminPromotionsOffersPage() {
     if (!file) return
 
     const uploadFormData = new FormData()
-    uploadFormData.append('media', file)
+    uploadFormData.append('file', file)
 
     setUploadingImage(true)
     try {
-      const res = await apiClient.post('/uploads/media', uploadFormData, {
+      const res = await apiClient.post('/uploads/media?folder=general-media', uploadFormData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       if (res.data?.success) {
-        setFormData(prev => ({ ...prev, image: res.data.data.url }))
+        setFormData(prev => ({ ...prev, image: res.data.data.asset.url }))
         toast.success('Image uploaded successfully')
       } else {
         toast.error('Failed to upload image')
@@ -120,6 +120,10 @@ export function AdminPromotionsOffersPage() {
 
   const handleAddSubmit = async (e) => {
     e.preventDefault()
+    if (!formData.image) {
+      toast.error('Please upload an image or provide a valid image URL.')
+      return
+    }
     try {
       const res = editingOfferId 
         ? await apiClient.patch(`/admin/marketing/offers/${editingOfferId}`, formData)
@@ -237,59 +241,90 @@ export function AdminPromotionsOffersPage() {
             >
               <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                 <h3 className="font-bold text-lg text-slate-800">{editingOfferId ? 'Edit Offer' : 'Add New Offer'}</h3>
-                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                  <XCircle className="w-5 h-5" />
-                </button>
               </div>
-              <form onSubmit={handleAddSubmit} className="p-5 space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Offer Title</label>
-                  <input type="text" required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. 50% Off Plumbers" />
+              <form onSubmit={handleAddSubmit} className="flex flex-col">
+                <div className="p-5 space-y-4 max-h-[65vh] overflow-y-auto scrollbar-thin">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Offer Title</label>
+                    <input type="text" required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. 50% Off Plumbers" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Description</label>
+                    <textarea required value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Short description of the offer..." rows={2} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-2">Offer Image</label>
+                    {formData.image ? (
+                      <div className="relative rounded-xl border border-slate-200 overflow-hidden bg-white group h-40 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-slate-100/50 pattern-grid-lg text-slate-200/50" />
+                        <img src={formData.image} alt="Offer Preview" className="max-w-full max-h-full object-contain relative z-10 p-2" />
+                        <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 backdrop-blur-sm z-20">
+                          <button type="button" onClick={() => setFormData({ ...formData, image: '' })} className="bg-white text-rose-600 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm hover:bg-rose-50 transition">Remove Image</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center bg-slate-50 hover:bg-slate-100/50 transition relative">
+                        {uploadingImage ? (
+                          <div className="py-4 flex flex-col items-center">
+                            <div className="h-6 w-6 border-2 border-[#3730A3] border-t-transparent rounded-full animate-spin mb-2"></div>
+                            <p className="text-xs text-slate-500 font-medium">Uploading image...</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="flex justify-center">
+                              <div className="h-10 w-10 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="cursor-pointer font-semibold text-[#3730A3] hover:text-[#312E81] text-sm">
+                                Upload a file
+                                <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                              </label>
+                              <p className="text-xs text-slate-500 mt-1">PNG, JPG, WEBP up to 8MB</p>
+                            </div>
+                            <div className="flex items-center gap-2 px-4 py-2">
+                              <div className="h-px bg-slate-200 flex-1"></div>
+                              <span className="text-[10px] uppercase font-bold text-slate-400">OR PASTE URL</span>
+                              <div className="h-px bg-slate-200 flex-1"></div>
+                            </div>
+                            <input type="url" required value={formData.image} onChange={e => setFormData({...formData, image: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-center" placeholder="https://example.com/image.png" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Target Category</label>
+                      <select value={formData.categories[0] || ''} onChange={e => setFormData({...formData, categories: e.target.value ? [e.target.value] : []})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                        <option value="">All Categories</option>
+                        {categories.map(cat => (
+                          <option key={cat._id} value={cat._id}>{cat.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Platform Fee Discount (%)</label>
+                      <input type="number" min="0" max="100" value={formData.discountPercentage} onChange={e => setFormData({...formData, discountPercentage: Number(e.target.value)})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. 50" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Max Usage Limit (0 = Unlimited)</label>
+                      <input type="number" min="0" value={formData.maxUsageLimit} onChange={e => setFormData({...formData, maxUsageLimit: Number(e.target.value)})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. 100" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">CTA Text</label>
+                      <input type="text" value={formData.ctaText} onChange={e => setFormData({...formData, ctaText: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. Claim Now" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Priority (1 = Highest)</label>
+                      <input type="number" min="1" value={formData.priority} onChange={e => setFormData({...formData, priority: Number(e.target.value)})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Description</label>
-                  <textarea required value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Short description of the offer..." rows={2} />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Image URL or Upload</label>
-                  <div className="flex gap-2">
-                    <input type="url" required value={formData.image} onChange={e => setFormData({...formData, image: e.target.value})} className="flex-1 border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="https://..." />
-                    <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center whitespace-nowrap">
-                      {uploadingImage ? 'Uploading...' : 'Upload File'}
-                      <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={uploadingImage} />
-                    </label>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Target Category (Optional)</label>
-                    <select value={formData.categories[0] || ''} onChange={e => setFormData({...formData, categories: e.target.value ? [e.target.value] : []})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
-                      <option value="">All Categories</option>
-                      {categories.map(cat => (
-                        <option key={cat._id} value={cat._id}>{cat.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Platform Fee Discount (%)</label>
-                    <input type="number" min="0" max="100" value={formData.discountPercentage} onChange={e => setFormData({...formData, discountPercentage: Number(e.target.value)})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. 50" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Max Usage Limit (0 = Unlimited)</label>
-                    <input type="number" min="0" value={formData.maxUsageLimit} onChange={e => setFormData({...formData, maxUsageLimit: Number(e.target.value)})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. 100" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">CTA Text</label>
-                    <input type="text" value={formData.ctaText} onChange={e => setFormData({...formData, ctaText: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. Claim Now" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Priority (1 = Highest)</label>
-                    <input type="number" min="1" value={formData.priority} onChange={e => setFormData({...formData, priority: Number(e.target.value)})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-                  </div>
-                </div>
-                <div className="pt-4 flex justify-end gap-2">
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded-lg font-medium text-slate-600 hover:bg-slate-100">Cancel</button>
-                  <button type="submit" className="bg-[#3730A3] text-white px-5 py-2 rounded-lg font-medium hover:bg-[#312E81] shadow-sm">{editingOfferId ? 'Update Offer' : 'Save Offer'}</button>
+                <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50/80 rounded-b-2xl">
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded-lg font-medium text-slate-600 hover:bg-slate-100 transition">Cancel</button>
+                  <button type="submit" className="bg-[#3730A3] text-white px-5 py-2 rounded-lg font-medium hover:bg-[#312E81] shadow-sm transition">{editingOfferId ? 'Update Offer' : 'Save Offer'}</button>
                 </div>
               </form>
             </motion.div>

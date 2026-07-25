@@ -13,6 +13,8 @@ import {
 } from 'lucide-react'
 import {
   fetchAdminLabourCategoryTree,
+  createAdminLabourCategoryGroup,
+  patchAdminLabourCategoryGroup,
   createAdminLabourCategory,
   patchAdminLabourCategory,
   deleteAdminLabourCategory,
@@ -20,33 +22,62 @@ import {
 import { ApiError } from '../../api/http.js'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
-import { AdminSubcategoryImageEditor } from '../../components/admin/AdminSubcategoryImageEditor.jsx'
 import { getCategoryImageUrl } from '../../lib/labourCategoryDisplay.js'
+import { Camera, Loader2, ImageIcon } from 'lucide-react'
+import { assetUrlFromUpload, uploadMedia } from '../../api/uploadApi.js'
+import { UPLOAD_FOLDERS } from '../../constants/uploadFolders.js'
 
-function CategoryModal({ groupLabel, initialName = '', initialBaseRate = 800, isEdit = false, onClose, onSubmit, busy, error, reduceMotion }) {
+function CategoryModal({ groupLabel, initialName = '', initialBaseRate = 800, initialImageUrl = '', isEdit = false, onClose, onSubmit, busy, error, reduceMotion }) {
   const inputRef = useRef(null)
 
   const [name, setName] = useState(initialName)
   const [baseRate, setBaseRate] = useState(initialBaseRate)
+  const [imageUrl, setImageUrl] = useState(initialImageUrl)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
 
   useEffect(() => {
     setName(initialName)
     setBaseRate(initialBaseRate)
+    setImageUrl(initialImageUrl)
     const t = window.setTimeout(() => inputRef.current?.focus(), 50)
     return () => window.clearTimeout(t)
   }, [initialName, initialBaseRate])
 
+  const handleFile = async (file) => {
+    if (!file?.type?.startsWith('image/')) {
+      setUploadError('Choose a JPG or PNG image.')
+      return
+    }
+    setUploadError('')
+    setUploading(true)
+    try {
+      const uploaded = await uploadMedia(file, UPLOAD_FOLDERS.LABOUR_CATEGORIES)
+      const url = assetUrlFromUpload(uploaded)
+      if (url) {
+        setImageUrl(url)
+      } else {
+        setUploadError('Upload succeeded but no URL returned.')
+      }
+    } catch (e) {
+      setUploadError(e instanceof ApiError ? e.message : 'Could not upload image.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   function handleSubmit(e) {
     e.preventDefault()
-    onSubmit({ name: name.trim(), baseRate })
+    onSubmit({ name: name.trim(), baseRate, imageUrl: imageUrl.trim() })
   }
 
   return (
     <motion.div
-        initial={reduceMotion ? false : { opacity: 0 }}
+      initial={reduceMotion ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={reduceMotion ? undefined : { opacity: 0 }}
       transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
     >
       <button
         type="button"
@@ -61,7 +92,7 @@ function CategoryModal({ groupLabel, initialName = '', initialBaseRate = 800, is
         transition={{ type: 'spring', stiffness: 380, damping: 34 }}
         className="relative z-10 w-full max-w-md"
       >
-        <GlassPanel className="overflow-hidden p-0 shadow-2xl ring-1 ring-slate-200/80">
+        <GlassPanel className="overflow-hidden p-0 shadow-2xl ring-1 ring-slate-200/80 bg-white">
           <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-linear-to-br from-emerald-50/90 to-white px-5 py-4">
             <div className="min-w-0">
               <p id="add-cat-title" className="text-lg font-extrabold text-slate-900">
@@ -72,14 +103,6 @@ function CategoryModal({ groupLabel, initialName = '', initialBaseRate = 800, is
                 <span className="truncate">Under: {groupLabel}</span>
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => !busy && onClose()}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-600 transition hover:bg-slate-50"
-              aria-label="Close"
-            >
-              <X className="h-5 w-5" />
-            </button>
           </div>
           <form onSubmit={handleSubmit} className="px-5 py-5">
             {error ? (
@@ -107,9 +130,58 @@ function CategoryModal({ groupLabel, initialName = '', initialBaseRate = 800, is
               value={baseRate}
               onChange={(e) => setBaseRate(Number(e.target.value))}
               placeholder="e.g. 800"
-              className="w-full rounded-xl border border-slate-200/90 bg-white px-4 py-3 text-sm outline-none ring-slate-200/80 focus:ring-2 focus:ring-brand/35"
+              className="w-full rounded-xl border border-slate-200/90 bg-white px-4 py-3 text-sm outline-none ring-slate-200/80 focus:ring-2 focus:ring-brand/35 mb-4"
             />
             
+            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              Image (URL or Upload)
+            </label>
+            <div className="flex flex-col gap-2">
+              {imageUrl ? (
+                <div className="relative h-32 w-full overflow-hidden rounded-xl border border-slate-200/90 bg-slate-100">
+                  <img src={imageUrl} alt="Preview" className="h-full w-full object-cover" />
+                  <div className="absolute top-2 right-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setImageUrl('')}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/90 text-rose-600 shadow-sm backdrop-blur transition hover:bg-white"
+                      title="Remove Image"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    placeholder="https://... or upload from gallery ->"
+                    className="w-full rounded-xl border border-slate-200/90 bg-white px-4 py-3 text-sm outline-none ring-slate-200/80 focus:ring-2 focus:ring-brand/35"
+                  />
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    id="modal-cat-upload"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) void handleFile(f)
+                      e.target.value = ''
+                    }}
+                  />
+                  <label
+                    htmlFor="modal-cat-upload"
+                    className="flex h-[46px] cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200/90 bg-slate-50 px-4 text-sm font-bold text-slate-600 transition hover:bg-slate-100"
+                  >
+                    {uploading ? <Loader2 className="h-4 w-4 animate-spin text-brand" /> : <Camera className="h-4 w-4" />}
+                  </label>
+                </div>
+              )}
+              {uploadError ? <p className="text-[11px] font-medium text-rose-700">{uploadError}</p> : null}
+            </div>
+
             <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
               Workers pick this under the main category you selected. You can hide it anytime from the list.
             </p>
@@ -132,6 +204,97 @@ function CategoryModal({ groupLabel, initialName = '', initialBaseRate = 800, is
   )
 }
 
+function GroupModal({ initialGroup = null, onClose, onSubmit, busy, error, reduceMotion }) {
+  const inputRef = useRef(null)
+  const isEdit = !!initialGroup
+  const [name, setName] = useState(initialGroup?.name || '')
+  const [kind, setKind] = useState(initialGroup?.kind || 'trade')
+  const [description, setDescription] = useState(initialGroup?.description || '')
+
+  useEffect(() => {
+    const t = window.setTimeout(() => inputRef.current?.focus(), 50)
+    return () => window.clearTimeout(t)
+  }, [])
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    onSubmit({ name: name.trim(), kind, description: description.trim() })
+  }
+
+  return (
+    <motion.div
+      initial={reduceMotion ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={reduceMotion ? undefined : { opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+    >
+      <button
+        type="button"
+        className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm"
+        onClick={() => !busy && onClose()}
+      />
+      <motion.div
+        initial={reduceMotion ? false : { opacity: 0, y: 20, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={reduceMotion ? undefined : { opacity: 0, y: 16, scale: 0.98 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+        className="relative z-10 w-full max-w-md"
+      >
+        <GlassPanel className="overflow-hidden p-0 shadow-2xl ring-1 ring-slate-200/80 bg-white">
+          <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-linear-to-br from-brand-muted/20 to-white px-5 py-4">
+            <div className="min-w-0">
+              <p className="text-lg font-extrabold text-slate-900">{isEdit ? 'Edit Main Category' : 'Add Main Category'}</p>
+            </div>
+          </div>
+          <form onSubmit={handleSubmit} className="px-5 py-5">
+            {error && <p className="mb-4 rounded-xl border border-amber-200/80 bg-amber-50 px-3 py-2 text-sm text-amber-950">{error}</p>}
+            <label className="mb-1.5 block text-[11px] font-bold uppercase text-slate-500">Category Name</label>
+            <input
+              ref={inputRef}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Healthcare roles"
+              className="w-full rounded-xl border border-slate-200/90 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand/35 mb-4"
+            />
+            
+            <label className="mb-1.5 block text-[11px] font-bold uppercase text-slate-500">Kind</label>
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value)}
+              className="w-full rounded-xl border border-slate-200/90 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand/35 mb-4"
+            >
+              <option value="trade">Trade (Construction, Technical)</option>
+              <option value="profile">Profile (Corporate, IT, Office)</option>
+            </select>
+
+            <label className="mb-1.5 block text-[11px] font-bold uppercase text-slate-500">Description (Optional)</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="A short description..."
+              className="w-full rounded-xl border border-slate-200/90 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-brand/35 resize-none h-20"
+            />
+            
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => !busy && onClose()}
+                className="rounded-xl border border-slate-200/90 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <AppPrimaryButton type="submit" disabled={busy || !name.trim()} className="!w-auto min-w-[140px]">
+                {busy ? 'Saving…' : (isEdit ? 'Save Changes' : 'Create Main Category')}
+              </AppPrimaryButton>
+            </div>
+          </form>
+        </GlassPanel>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 export function AdminLabourCategoriesPage() {
   const reduceMotion = useReducedMotion()
   const [groups, setGroups] = useState([])
@@ -142,6 +305,11 @@ export function AdminLabourCategoriesPage() {
   const [modalBusy, setModalBusy] = useState(false)
   const [modalError, setModalError] = useState('')
   const [editingCategory, setEditingCategory] = useState(null)
+  
+  const [groupModalOpen, setGroupModalOpen] = useState(false)
+  const [groupModalBusy, setGroupModalBusy] = useState(false)
+  const [groupModalError, setGroupModalError] = useState('')
+  const [editingGroup, setEditingGroup] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -204,7 +372,7 @@ export function AdminLabourCategoriesPage() {
     }
   }
 
-  async function handleModalSubmit({ name, baseRate }) {
+  async function handleModalSubmit({ name, baseRate, imageUrl }) {
     if (!name) {
       setModalError('Enter a name')
       return
@@ -213,7 +381,7 @@ export function AdminLabourCategoriesPage() {
     setModalBusy(true)
     try {
       if (editingCategory) {
-        await patchAdminLabourCategory(editingCategory._id, { name, baseRate })
+        await patchAdminLabourCategory(editingCategory._id, { name, baseRate, imageUrl })
       } else {
         if (!selectedGroupId) {
           setModalError('No group selected')
@@ -224,6 +392,7 @@ export function AdminLabourCategoriesPage() {
           groupId: selectedGroupId,
           name,
           baseRate,
+          imageUrl,
           sortOrder: 999,
         })
       }
@@ -235,6 +404,35 @@ export function AdminLabourCategoriesPage() {
     } finally {
       setModalBusy(false)
     }
+  }
+
+  async function handleGroupModalSubmit({ name, kind, description }) {
+    if (!name) {
+      setGroupModalError('Enter a name')
+      return
+    }
+    setGroupModalError('')
+    setGroupModalBusy(true)
+    try {
+      if (editingGroup) {
+        await patchAdminLabourCategoryGroup(editingGroup._id, { name, kind, description })
+      } else {
+        await createAdminLabourCategoryGroup({ name, kind, description })
+      }
+      setGroupModalOpen(false)
+      setEditingGroup(null)
+      await load()
+    } catch (err) {
+      setGroupModalError(err instanceof ApiError ? err.message : 'Could not save')
+    } finally {
+      setGroupModalBusy(false)
+    }
+  }
+
+  function openGroupModal(group = null) {
+    setGroupModalError('')
+    setEditingGroup(group)
+    setGroupModalOpen(true)
   }
 
   function openModal(category = null) {
@@ -281,11 +479,18 @@ export function AdminLabourCategoriesPage() {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(260px,300px)_1fr] lg:items-stretch">
         <GlassPanel className="flex max-h-[min(70dvh,520px)] flex-col overflow-hidden p-0 lg:max-h-[calc(100dvh-12rem)] lg:sticky lg:top-0">
-          <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3">
+          <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3 flex justify-between items-center">
             <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
               <FolderTree className="h-4 w-4 text-brand" aria-hidden />
               Main categories
             </p>
+            <button
+              type="button"
+              onClick={() => openGroupModal()}
+              className="flex items-center gap-1.5 rounded-lg text-[11px] font-bold text-brand hover:text-brand-bright transition"
+            >
+              <Plus className="h-3 w-3" /> Add
+            </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             {loading ? (
@@ -327,7 +532,20 @@ export function AdminLabourCategoriesPage() {
                             <span className="tabular-nums">{count} sub</span>
                           </span>
                         </span>
-                        <ChevronRight className={`h-4 w-4 shrink-0 ${active ? 'text-brand' : 'text-slate-300'}`} aria-hidden />
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openGroupModal(g)
+                            }}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-200/80 hover:text-brand"
+                            title="Edit Main Category"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <ChevronRight className={`h-4 w-4 shrink-0 ${active ? 'text-brand' : 'text-slate-300'}`} aria-hidden />
+                        </div>
                       </button>
                     </li>
                   )
@@ -393,11 +611,9 @@ export function AdminLabourCategoriesPage() {
                       <li key={c._id} className="space-y-3 px-4 py-4 sm:px-5">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="flex min-w-0 items-center gap-3">
-                            <img
-                              src={getCategoryImageUrl(c)}
-                              alt=""
-                              className="h-14 w-14 shrink-0 rounded-xl object-cover ring-2 ring-slate-200/90"
-                            />
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 ring-1 ring-slate-200/80">
+                              <img src={getCategoryImageUrl(c)} alt="" className="h-full w-full object-cover" />
+                            </div>
                             <div>
                               <p className="font-semibold text-slate-900">{c.name}</p>
                               <p className="mt-0.5 font-mono text-[11px] text-slate-400">{c.slug}</p>
@@ -433,7 +649,6 @@ export function AdminLabourCategoriesPage() {
                             </button>
                           </div>
                         </div>
-                        <AdminSubcategoryImageEditor category={c} onUpdated={load} />
                       </li>
                     ))}
                   </ul>
@@ -444,10 +659,6 @@ export function AdminLabourCategoriesPage() {
             <div className="flex flex-1 items-center justify-center p-8 text-sm text-slate-500">Select a main category.</div>
           )}
 
-          <p className="border-t border-slate-100 bg-slate-50/60 px-4 py-2.5 text-center text-[11px] text-slate-500 sm:px-5">
-            Reset:{' '}
-            <code className="rounded bg-slate-200/80 px-1 py-0.5 font-mono text-[10px]">npm run seed:categories</code> in API
-          </p>
         </GlassPanel>
       </div>
 
@@ -458,6 +669,7 @@ export function AdminLabourCategoriesPage() {
             groupLabel={groupLabel}
             initialName={editingCategory ? editingCategory.name : ''}
             initialBaseRate={editingCategory?.baseRate ?? 800}
+            initialImageUrl={editingCategory?.imageUrl ?? ''}
             isEdit={!!editingCategory}
             onClose={() => {
               if (!modalBusy) {
@@ -468,6 +680,23 @@ export function AdminLabourCategoriesPage() {
             onSubmit={handleModalSubmit}
             busy={modalBusy}
             error={modalError}
+            reduceMotion={reduceMotion}
+          />
+        ) : null}
+
+        {groupModalOpen ? (
+          <GroupModal
+            key="group-modal"
+            initialGroup={editingGroup}
+            onClose={() => {
+              if (!groupModalBusy) {
+                setGroupModalOpen(false)
+                setEditingGroup(null)
+              }
+            }}
+            onSubmit={handleGroupModalSubmit}
+            busy={groupModalBusy}
+            error={groupModalError}
             reduceMotion={reduceMotion}
           />
         ) : null}

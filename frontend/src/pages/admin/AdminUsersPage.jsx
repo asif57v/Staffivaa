@@ -100,8 +100,7 @@ export function AdminUsersPage({ fixedRole, customTitle }) {
         <div>
           <h2 className="text-lg font-extrabold text-slate-900 md:text-xl">{customTitle || 'All users'}</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Search by name, email, or mobile. Filter by {fixedRole ? 'status.' : 'role and status.'} Data loads from{' '}
-            <code className="rounded bg-slate-200/70 px-1 font-mono text-xs">GET /users</code> (admin).
+            Search by name, email, or mobile. Filter by {fixedRole ? 'status.' : 'role and status.'}
           </p>
         </div>
         <button
@@ -204,7 +203,9 @@ export function AdminUsersPage({ fixedRole, customTitle }) {
                       <td className="px-4 py-3 font-mono text-xs tabular-nums text-slate-700">
                         {u.phone ? `+91 ${u.phone}` : '—'}
                       </td>
-                      <td className="max-w-[200px] truncate px-4 py-3 text-slate-600">{u.email || '—'}</td>
+                      <td className="max-w-[200px] truncate px-4 py-3 text-slate-600">
+                        {u.email ? u.email : <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400/80">MAIL NOT PROVIDED</span>}
+                      </td>
                       <td className="px-4 py-3">
                         <RolePill role={u.role} />
                       </td>
@@ -252,7 +253,9 @@ export function AdminUsersPage({ fixedRole, customTitle }) {
                   <div className="min-w-0">
                     <p className="font-bold text-slate-900">{u.fullName || '—'}</p>
                     <p className="mt-0.5 font-mono text-xs text-slate-600">+91 {u.phone || '—'}</p>
-                    <p className="mt-1 truncate text-xs text-slate-500">{u.email || '—'}</p>
+                    <p className="mt-1 truncate text-xs text-slate-500">
+                      {u.email ? u.email : <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400/80">MAIL NOT PROVIDED</span>}
+                    </p>
                   </div>
                   <StatusPill status={u.accountStatus} active={u.isActive !== false} />
                 </div>

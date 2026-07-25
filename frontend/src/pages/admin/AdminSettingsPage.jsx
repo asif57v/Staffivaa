@@ -122,8 +122,16 @@ export function AdminSettingsPage() {
         </p>
       </div>
 
-      <GlassPanel className="p-8 max-w-2xl border border-slate-200/60 shadow-sm">
-        <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="w-full">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+          {/* Left Column */}
+          <div className="space-y-8">
+            <GlassPanel className="p-6 md:p-8 border border-slate-200/60 shadow-sm space-y-6 bg-white/85">
+          <div className="border-b border-slate-100 pb-4 mb-4">
+            <h3 className="text-lg font-bold text-slate-900">Core Platform Configuration</h3>
+            <p className="text-xs text-slate-500">Essential settings for platform operations</p>
+          </div>
+          
           <div className="space-y-2">
             <label className="block text-sm font-bold text-slate-700">SMS OTP Provider</label>
             <p className="text-xs text-slate-500">Choose the gateway to transmit validation messages & roster OTP codes.</p>
@@ -164,7 +172,6 @@ export function AdminSettingsPage() {
             />
           </div>
 
-          {/* Toggle Flags */}
           <div className="pt-4 border-t border-slate-100 space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -202,163 +209,168 @@ export function AdminSettingsPage() {
               </button>
             </div>
           </div>
+        </GlassPanel>
+          </div>
 
-          <div className="pt-4 border-t border-slate-100 space-y-4">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Revenue & Commission Config</h3>
-              <p className="text-xs text-slate-500 mb-4">Settings applied to newly created workforce requests.</p>
-              
-              <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-bold text-slate-700 block">Enable Vendor Commission</label>
-                    <span className="text-xs text-slate-500">Master toggle to turn off success commission completely.</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setCommissionEnabled(!commissionEnabled)}
-                    className="text-slate-600 focus:outline-none"
-                  >
-                    {commissionEnabled ? (
-                      <ToggleRight className="h-10 w-10 text-brand" />
-                    ) : (
-                      <ToggleLeft className="h-10 w-10 text-slate-300" />
-                    )}
-                  </button>
-                </div>
-
-                {commissionEnabled && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-200">
-                    <div className="space-y-2">
-                      <label className="block text-sm font-bold text-slate-700">Commission Type</label>
-                      <select
-                        value={commissionType}
-                        onChange={(e) => setCommissionType(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
-                      >
-                        <option value="percentage">Percentage (%)</option>
-                        <option value="fixed">Fixed Amount (₹)</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-bold text-slate-700">Commission Value</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step={commissionType === 'percentage' ? "0.1" : "1"}
-                        value={commissionValue}
-                        onChange={(e) => setCommissionValue(Number(e.target.value))}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
-                      />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="block text-sm font-bold text-slate-700">Commission Trigger</label>
-                      <select
-                        value={commissionTrigger}
-                        onChange={(e) => setCommissionTrigger(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
-                      >
-                        <option value="after_quotation_accepted">After Quotation Accepted (Advance)</option>
-                        <option value="after_project_completed">After Project Completed (Settlement)</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="block text-sm font-bold text-slate-700">Due Days</label>
-                      <p className="text-[10px] text-slate-500">Days allowed for vendor to pay before it becomes overdue.</p>
-                      <input
-                        type="number"
-                        min="0"
-                        value={commissionDueDays}
-                        onChange={(e) => setCommissionDueDays(Number(e.target.value))}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
-                      />
-                    </div>
-                  </div>
+          {/* Right Column */}
+          <div className="space-y-8">
+            <GlassPanel className="p-6 md:p-8 border border-slate-200/60 shadow-sm space-y-6 bg-white/85">
+              <div className="border-b border-slate-100 pb-4 mb-4">
+                <h3 className="text-lg font-bold text-slate-900">Revenue & Commission Config</h3>
+            <p className="text-xs text-slate-500">Settings applied to newly created workforce requests.</p>
+          </div>
+          
+          <div className="space-y-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm font-bold text-slate-700 block">Enable Vendor Commission</label>
+                <span className="text-xs text-slate-500">Master toggle to turn off success commission completely.</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCommissionEnabled(!commissionEnabled)}
+                className="text-slate-600 focus:outline-none"
+              >
+                {commissionEnabled ? (
+                  <ToggleRight className="h-10 w-10 text-brand" />
+                ) : (
+                  <ToggleLeft className="h-10 w-10 text-slate-300" />
                 )}
-              </div>
+              </button>
             </div>
-          </div>
 
-          <div className="pt-4 border-t border-slate-100 space-y-4">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Geographic Radius Config</h3>
-              <p className="text-xs text-slate-500 mb-4">Settings for vendor dispatching based on location distance.</p>
-              
-              <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-bold text-slate-700 block">Enable Radius Matching</label>
-                    <span className="text-xs text-slate-500">If disabled, requests are sent to all vendors regardless of distance.</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setEnableRadiusMatching(!enableRadiusMatching)}
-                    className="text-slate-600 focus:outline-none"
+            {commissionEnabled && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-200">
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-slate-700">Commission Type</label>
+                  <select
+                    value={commissionType}
+                    onChange={(e) => setCommissionType(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
                   >
-                    {enableRadiusMatching ? (
-                      <ToggleRight className="h-10 w-10 text-brand" />
-                    ) : (
-                      <ToggleLeft className="h-10 w-10 text-slate-300" />
-                    )}
-                  </button>
+                    <option value="percentage">Percentage (%)</option>
+                    <option value="fixed">Fixed Amount (₹)</option>
+                  </select>
                 </div>
-
-                <div className="flex items-center justify-between mt-4">
-                  <div>
-                    <label className="text-sm font-bold text-slate-700 block">Allow Unlimited Radius</label>
-                    <span className="text-xs text-slate-500">Allow vendors to select 'Unlimited' for their service area.</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setAllowUnlimitedRadius(!allowUnlimitedRadius)}
-                    className="text-slate-600 focus:outline-none"
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-slate-700">Commission Value</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step={commissionType === 'percentage' ? "0.1" : "1"}
+                    value={commissionValue}
+                    onChange={(e) => setCommissionValue(Number(e.target.value))}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="block text-sm font-bold text-slate-700">Commission Trigger</label>
+                  <select
+                    value={commissionTrigger}
+                    onChange={(e) => setCommissionTrigger(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
                   >
-                    {allowUnlimitedRadius ? (
-                      <ToggleRight className="h-10 w-10 text-brand" />
-                    ) : (
-                      <ToggleLeft className="h-10 w-10 text-slate-300" />
-                    )}
-                  </button>
+                    <option value="after_quotation_accepted">After Quotation Accepted (Advance)</option>
+                    <option value="after_project_completed">After Project Completed (Settlement)</option>
+                  </select>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-200">
-                  <div className="space-y-2">
-                    <label className="block text-sm font-bold text-slate-700">Default Corporate Search Radius (KM)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={defaultCorporateSearchRadius}
-                      onChange={(e) => setDefaultCorporateSearchRadius(Number(e.target.value))}
-                      className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="block text-sm font-bold text-slate-700">Default Vendor Service Radius (KM)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={defaultVendorRadius}
-                      onChange={(e) => setDefaultVendorRadius(Number(e.target.value))}
-                      className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
-                    />
-                  </div>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="block text-sm font-bold text-slate-700">Due Days</label>
+                  <p className="text-[10px] text-slate-500">Days allowed for vendor to pay before it becomes overdue.</p>
+                  <input
+                    type="number"
+                    min="0"
+                    value={commissionDueDays}
+                    onChange={(e) => setCommissionDueDays(Number(e.target.value))}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
+                  />
                 </div>
               </div>
-            </div>
+            )}
           </div>
+        </GlassPanel>
 
-          <div className="pt-6 border-t border-slate-100">
-            <button
-              type="submit"
-              disabled={isUpdating}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-brand py-3 text-sm font-bold text-white shadow-md hover:bg-brand-dark transition disabled:opacity-50"
-            >
-              <Save className="h-4 w-4" />
-              {isUpdating ? 'Saving System configurations...' : 'Save Configuration settings'}
-            </button>
+        <GlassPanel className="p-6 md:p-8 border border-slate-200/60 shadow-sm space-y-6 bg-white/85">
+          <div className="border-b border-slate-100 pb-4 mb-4">
+            <h3 className="text-lg font-bold text-slate-900">Geographic Radius Config</h3>
+            <p className="text-xs text-slate-500">Settings for vendor dispatching based on location distance.</p>
           </div>
-        </form>
-      </GlassPanel>
+          
+          <div className="space-y-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm font-bold text-slate-700 block">Enable Radius Matching</label>
+                <span className="text-xs text-slate-500">If disabled, requests are sent to all vendors regardless of distance.</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEnableRadiusMatching(!enableRadiusMatching)}
+                className="text-slate-600 focus:outline-none"
+              >
+                {enableRadiusMatching ? (
+                  <ToggleRight className="h-10 w-10 text-brand" />
+                ) : (
+                  <ToggleLeft className="h-10 w-10 text-slate-300" />
+                )}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between mt-4">
+              <div>
+                <label className="text-sm font-bold text-slate-700 block">Allow Unlimited Radius</label>
+                <span className="text-xs text-slate-500">Allow vendors to select 'Unlimited' for their service area.</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAllowUnlimitedRadius(!allowUnlimitedRadius)}
+                className="text-slate-600 focus:outline-none"
+              >
+                {allowUnlimitedRadius ? (
+                  <ToggleRight className="h-10 w-10 text-brand" />
+                ) : (
+                  <ToggleLeft className="h-10 w-10 text-slate-300" />
+                )}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-200">
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-slate-700">Default Corporate Search Radius (KM)</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={defaultCorporateSearchRadius}
+                  onChange={(e) => setDefaultCorporateSearchRadius(Number(e.target.value))}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-slate-700">Default Vendor Service Radius (KM)</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={defaultVendorRadius}
+                  onChange={(e) => setDefaultVendorRadius(Number(e.target.value))}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
+                />
+              </div>
+            </div>
+            </div>
+          </GlassPanel>
+        </div>
+      </div>
+
+      <div className="pt-8 pb-10">
+          <button
+            type="submit"
+            disabled={isUpdating}
+            className="w-full xl:w-auto xl:px-12 xl:mx-auto flex items-center justify-center gap-2 rounded-xl bg-brand py-3.5 text-sm font-bold text-white shadow-md hover:bg-brand-dark transition disabled:opacity-50"
+          >
+            <Save className="h-5 w-5" />
+            {isUpdating ? 'Saving System configurations...' : 'Save Configuration Settings'}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }

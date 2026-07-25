@@ -1,6 +1,7 @@
 import { SupportTicket } from '../models/SupportTicket.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { sendSuccess, sendError, HTTP_STATUS } from '../utils/apiResponse.js'
+import { triggerNotification } from '../utils/notificationTrigger.js'
 
 export const getTickets = asyncHandler(async (req, res) => {
   const { page = 1, limit = 10, status, priority, category, search } = req.query
@@ -89,6 +90,16 @@ export const replyTicket = asyncHandler(async (req, res) => {
   // Auto reopen or keep open on admin/user reply
   if (req.user.role === 'admin') {
     ticket.status = 'resolved' // Mark as resolved when admin replies
+    
+    // Trigger real-time notification to the user
+    await triggerNotification({
+      userId: ticket.userId,
+      title: 'Support Ticket Update',
+      body: `An admin has replied to your support ticket (${ticket.ticketId}).`,
+      type: 'GENERAL',
+      relatedId: ticket._id,
+      relatedModel: 'SupportTicket',
+    })
   } else {
     ticket.status = 'open'
   }

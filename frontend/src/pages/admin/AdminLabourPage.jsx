@@ -69,13 +69,31 @@ function StatusPill({ active }) {
   )
 }
 
-function formatSkillLine(user) {
+function SkillLine({ user }) {
+  const [expanded, setExpanded] = useState(false)
   const cats = user?.labourProfile?.categoryIds
   if (!Array.isArray(cats) || cats.length === 0) return '—'
   const names = cats.map((c) => (c && typeof c === 'object' && c.name ? c.name : null)).filter(Boolean)
   if (!names.length) return `${cats.length} selected`
   const s = names.join(', ')
-  return s.length > 48 ? `${s.slice(0, 45)}…` : s
+  
+  if (s.length <= 48) return <span>{s}</span>
+  
+  if (expanded) {
+    return (
+      <span>
+        {s}{' '}
+        <button type="button" onClick={() => setExpanded(false)} className="text-brand font-bold text-[10px] uppercase hover:underline ml-1 cursor-pointer">Less</button>
+      </span>
+    )
+  }
+  
+  return (
+    <span>
+      {s.slice(0, 45)}…{' '}
+      <button type="button" onClick={() => setExpanded(true)} className="text-brand font-bold text-[10px] uppercase hover:underline ml-1 cursor-pointer">Read more</button>
+    </span>
+  )
 }
 
 export function AdminLabourPage() {
@@ -412,13 +430,17 @@ export function AdminLabourPage() {
                         <KycPill status={u.labourProfile?.kycStatus} submittedAt={u.labourProfile?.kycSubmittedAt} />
                       </td>
                       <td className="max-w-[280px] px-4 py-3 text-xs text-slate-600">
-                        {u.labourProfile?.aadhaarMasked ? (
+                        {u.labourProfile?.aadhaarNumber ? (
+                          <span className="block font-mono text-slate-700">Aadhaar {u.labourProfile.aadhaarNumber}</span>
+                        ) : u.labourProfile?.aadhaarMasked ? (
                           <span className="block font-mono text-slate-700">Aadhaar {u.labourProfile.aadhaarMasked}</span>
                         ) : null}
-                        {u.labourProfile?.panMasked ? (
+                        {u.labourProfile?.panNumber ? (
+                          <span className="block font-mono text-slate-700">PAN {u.labourProfile.panNumber}</span>
+                        ) : u.labourProfile?.panMasked ? (
                           <span className="block font-mono text-slate-700">PAN {u.labourProfile.panMasked}</span>
                         ) : null}
-                        <span className="block text-slate-500">{formatSkillLine(u)}</span>
+                        <span className="block text-slate-500"><SkillLine user={u} /></span>
                       </td>
                       <td className="px-4 py-3">
                         {u.labourProfile?.kycSubmittedAt && u.labourProfile?.kycStatus !== KYC_STATUS.VERIFIED ? (
@@ -497,13 +519,17 @@ export function AdminLabourPage() {
                     Review video KYC
                   </button>
                 ) : null}
-                {u.labourProfile?.aadhaarMasked ? (
+                {u.labourProfile?.aadhaarNumber ? (
+                  <p className="mt-2 font-mono text-xs text-slate-600">Aadhaar {u.labourProfile.aadhaarNumber}</p>
+                ) : u.labourProfile?.aadhaarMasked ? (
                   <p className="mt-2 font-mono text-xs text-slate-600">Aadhaar {u.labourProfile.aadhaarMasked}</p>
                 ) : null}
-                {u.labourProfile?.panMasked ? (
+                {u.labourProfile?.panNumber ? (
+                  <p className="font-mono text-xs text-slate-600">PAN {u.labourProfile.panNumber}</p>
+                ) : u.labourProfile?.panMasked ? (
                   <p className="font-mono text-xs text-slate-600">PAN {u.labourProfile.panMasked}</p>
                 ) : null}
-                <p className="mt-1 text-xs text-slate-500">{formatSkillLine(u)}</p>
+                <p className="mt-1 text-xs text-slate-500"><SkillLine user={u} /></p>
               </GlassPanel>
             ))}
         {!loading && items.length === 0 ? (
@@ -582,10 +608,14 @@ export function AdminLabourPage() {
                     <p className="text-xs font-bold uppercase text-slate-400">Worker</p>
                     <p className="text-base font-extrabold text-slate-900">{detailUser.fullName || '—'}</p>
                     <p className="font-mono text-xs text-slate-600">+91 {detailUser.phone}</p>
-                    {detailUser.labourProfile?.aadhaarMasked ? (
+                    {detailUser.labourProfile?.aadhaarNumber ? (
+                      <p className="mt-1 font-mono text-sm text-slate-800">Aadhaar: {detailUser.labourProfile.aadhaarNumber}</p>
+                    ) : detailUser.labourProfile?.aadhaarMasked ? (
                       <p className="mt-1 font-mono text-sm text-slate-800">Aadhaar: {detailUser.labourProfile.aadhaarMasked}</p>
                     ) : null}
-                    {detailUser.labourProfile?.panMasked ? (
+                    {detailUser.labourProfile?.panNumber ? (
+                      <p className="mt-1 font-mono text-sm text-slate-800">PAN: {detailUser.labourProfile.panNumber}</p>
+                    ) : detailUser.labourProfile?.panMasked ? (
                       <p className="mt-1 font-mono text-sm text-slate-800">PAN: {detailUser.labourProfile.panMasked}</p>
                     ) : null}
                     {detailUser.labourProfile?.kycSubmittedAt ? (

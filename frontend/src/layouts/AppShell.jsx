@@ -70,6 +70,14 @@ export function AppShell() {
     socket.on('request_updated', invalidateCache);
     socket.on('request_cancelled', invalidateCache);
 
+    socket.on('notification:new', (notification) => {
+      import('react-hot-toast').then(({ default: toast }) => {
+        toast.success(notification.title || 'New Notification');
+      });
+      // Invalidate the Notifications tag so the unread count fetches instantly
+      dispatch(workforceApi.util.invalidateTags(['Notifications']));
+    });
+
     return () => {
       socket.off('assignment_created', invalidateCache);
       socket.off('assignment_assigned', invalidateCache);
@@ -81,6 +89,7 @@ export function AppShell() {
       socket.off('request_created', invalidateCache);
       socket.off('request_updated', invalidateCache);
       socket.off('request_cancelled', invalidateCache);
+      socket.off('notification:new');
     };
   }, [user, token, dispatch]);
   // ------------------------------------------

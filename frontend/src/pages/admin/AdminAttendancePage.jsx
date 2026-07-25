@@ -215,14 +215,9 @@ export function AdminAttendancePage() {
                                     </div>
                                     <div>
                                       {!r.verifiedAt ? (
-                                        <button 
-                                          type="button" 
-                                          onClick={() => handleVerify(r._id)}
-                                          disabled={verifying}
-                                          className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-800"
-                                        >
-                                          Verify
-                                        </button>
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500">
+                                          Pending
+                                        </span>
                                       ) : (
                                         <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 flex items-center gap-1">
                                           <CheckCircle className="h-3 w-3" /> Verified

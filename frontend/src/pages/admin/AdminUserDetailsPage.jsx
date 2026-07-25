@@ -285,13 +285,6 @@ export function AdminUserDetailsPage() {
                 <Wallet className="h-4 w-4" /> Adjust Wallet
               </button>
 
-              <button
-                onClick={() => setActiveTab('notes')}
-                className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                <FileText className="h-4 w-4" /> Add Internal Note
-              </button>
-
               {currentStatus !== ACCOUNT_STATUSES.DELETED && (
                 <>
                   <hr className="my-2 border-slate-100" />
@@ -322,8 +315,7 @@ export function AdminUserDetailsPage() {
               { id: 'overview', label: 'Overview', icon: UserIcon },
               { id: 'role', label: 'Role Specifics', icon: ShieldCheck },
               { id: 'wallet', label: 'Wallet & Finance', icon: Wallet },
-              { id: 'timeline', label: 'Activity Timeline', icon: History },
-              { id: 'notes', label: 'Internal Notes', icon: FileText },
+              { id: 'timeline', label: 'Activity Timeline', icon: History }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -582,50 +574,7 @@ export function AdminUserDetailsPage() {
                 </GlassPanel>
               )}
 
-              {activeTab === 'notes' && (
-                <div className="space-y-6">
-                  <GlassPanel className="p-6 bg-amber-50/30 border-amber-100">
-                    <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-amber-800">Add Internal Note</h2>
-                    <p className="mb-4 text-xs text-amber-700/70">These notes are strictly internal and visible only to administrators.</p>
-                    <form onSubmit={handleAddNote} className="space-y-3">
-                      <textarea
-                        name="note"
-                        rows="3"
-                        required
-                        placeholder="Write your observation or warning here..."
-                        className="w-full rounded-xl border border-amber-200 bg-white p-3 text-sm text-slate-900 shadow-sm focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                      />
-                      <button type="submit" className="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-amber-600">
-                        Save Note
-                      </button>
-                    </form>
-                  </GlassPanel>
 
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-bold text-slate-900">Previous Notes</h3>
-                    {user.adminNotes?.length === 0 ? (
-                      <p className="text-sm text-slate-500">No internal notes yet.</p>
-                    ) : (
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        {[...user.adminNotes].reverse().map(note => (
-                          <div key={note._id} className="rounded-2xl border border-amber-100 bg-white p-4 shadow-sm">
-                            <p className="whitespace-pre-wrap text-sm text-slate-800">{note.text}</p>
-                            <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-                              <div className="flex items-center gap-2">
-                                <div className="h-5 w-5 rounded-full bg-slate-100 flex items-center justify-center text-[9px] font-bold text-slate-500">
-                                  {note.addedBy?.fullName?.[0] || '?'}
-                                </div>
-                                <span className="text-[11px] font-medium text-slate-500">{note.addedBy?.fullName || 'Unknown'}</span>
-                              </div>
-                              <span className="text-[10px] text-slate-400">{new Date(note.addedAt).toLocaleString()}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
             </motion.div>
           </AnimatePresence>
         </div>

@@ -400,7 +400,7 @@ export function AdminReportsPage() {
                         <td className="px-6 py-4 text-slate-800">{l.action}</td>
                         <td className="px-6 py-4 text-slate-500">{l.module}</td>
                         <td className="px-6 py-4 font-mono text-xs text-slate-500">{l.ipAddress || '—'}</td>
-                        <td className="px-6 py-4 text-xs text-slate-400 max-w-xs truncate" title={l.browser}>{l.browser || '—'}</td>
+                        <td className="px-6 py-4 text-[10px] text-slate-400 max-w-xs whitespace-normal break-words leading-relaxed">{l.browser || '—'}</td>
                         <td className="px-6 py-4 text-slate-500">{new Date(l.createdAt).toLocaleString()}</td>
                       </tr>
                     ))

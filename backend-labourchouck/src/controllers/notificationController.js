@@ -93,11 +93,9 @@ export const markRead = asyncHandler(async (req, res) => {
 });
 
 export const markAllRead = asyncHandler(async (req, res) => {
-  const query = { userId: req.user._id };
-  
-  const updateQuery = { userId: req.user._id };
+  let updateQuery = { userId: req.user._id };
   if (req.user.role === 'admin') {
-    updateQuery.$or = [{ userId: req.user._id }, { userId: null }, { userId: { $exists: false } }];
+    updateQuery = { $or: [{ userId: req.user._id }, { userId: null }, { userId: { $exists: false } }] };
   }
 
   await Notification.updateMany({ ...updateQuery, isRead: false }, { $set: { isRead: true } });

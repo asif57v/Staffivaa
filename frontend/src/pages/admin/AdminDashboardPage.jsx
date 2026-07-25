@@ -88,10 +88,10 @@ export function AdminDashboardPage() {
   }
 
   const cards = [
-    { label: 'Monthly Revenue', value: `₹${stats.monthlyRevenue.toLocaleString()}`, hint: 'Wallet Credits', icon: BadgeIndianRupee, tone: 'from-brand/20 to-emerald-50' },
-    { label: 'Active Workforce', value: stats.activeWorkforce, hint: 'Workers on-site', icon: HardHat, tone: 'from-sky-500/15 to-slate-50' },
-    { label: 'Pending KYC Review', value: stats.pendingKyc, hint: 'KYC Action required', icon: Shield, tone: 'from-violet-500/15 to-slate-50' },
-    { label: 'Daily Revenue', value: `₹${stats.dailyRevenue.toLocaleString()}`, hint: "Today's payments", icon: Activity, tone: 'from-amber-500/15 to-amber-50/50' },
+    { label: 'Monthly Revenue', value: `₹${stats.monthlyRevenue.toLocaleString()}`, hint: 'Wallet Credits', icon: BadgeIndianRupee, tone: 'from-brand/20 to-emerald-50', to: '/admin/wallet' },
+    { label: 'Active Workforce', value: stats.activeWorkforce, hint: 'Workers on-site', icon: HardHat, tone: 'from-sky-500/15 to-slate-50', to: '/admin/allocations' },
+    { label: 'Pending KYC Review', value: stats.pendingKyc, hint: 'KYC Action required', icon: Shield, tone: 'from-violet-500/15 to-slate-50', to: '/admin/labour' },
+    { label: 'Daily Revenue', value: `₹${stats.dailyRevenue.toLocaleString()}`, hint: "Today's payments", icon: Activity, tone: 'from-amber-500/15 to-amber-50/50', to: '/admin/wallet' },
   ]
 
   const growthData = analytics?.userGrowth || []
@@ -119,18 +119,20 @@ export function AdminDashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: 0.05 * i }}
           >
-            <GlassPanel className={`relative h-full overflow-hidden p-5 bg-linear-to-br ${s.tone}`}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{s.label}</p>
-                  <p className="mt-2 text-2xl font-black tabular-nums text-slate-900">{s.value}</p>
-                  <p className="mt-1 text-xs font-medium text-slate-500">{s.hint}</p>
+            <Link to={s.to} className="block h-full outline-none focus:ring-2 focus:ring-brand/50 rounded-2xl group">
+              <GlassPanel className={`relative h-full overflow-hidden p-5 bg-linear-to-br ${s.tone} group-hover:shadow-md transition-shadow`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{s.label}</p>
+                    <p className="mt-2 text-2xl font-black tabular-nums text-slate-900">{s.value}</p>
+                    <p className="mt-1 text-xs font-medium text-slate-500">{s.hint}</p>
+                  </div>
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/80 text-slate-700 shadow-sm ring-1 ring-slate-200/80 group-hover:scale-110 transition-transform">
+                    <s.icon className="h-5 w-5" aria-hidden />
+                  </span>
                 </div>
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/80 text-slate-700 shadow-sm ring-1 ring-slate-200/80">
-                  <s.icon className="h-5 w-5" aria-hidden />
-                </span>
-              </div>
-            </GlassPanel>
+              </GlassPanel>
+            </Link>
           </motion.div>
         ))}
       </div>

@@ -135,11 +135,11 @@ export function AdminRefundsPage() {
                           Phone: {refund.userId?.phone}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4">
                         <div className="text-sm font-bold text-slate-900">
                           ₹{refund.amount}
                         </div>
-                        <div className="text-xs text-slate-500 mt-0.5 truncate max-w-[150px]" title={refund.cancellationReason}>
+                        <div className="text-xs text-slate-500 mt-0.5" title={refund.cancellationReason}>
                           {refund.cancellationReason}
                         </div>
                       </td>

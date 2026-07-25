@@ -4,6 +4,14 @@ export function fetchAdminLabourCategoryTree() {
   return apiRequest('/admin/labour-category-groups')
 }
 
+export function createAdminLabourCategoryGroup(payload) {
+  return apiRequest('/admin/labour-category-groups', { method: 'POST', body: payload })
+}
+
+export function patchAdminLabourCategoryGroup(id, payload) {
+  return apiRequest(`/admin/labour-category-groups/${id}`, { method: 'PATCH', body: payload })
+}
+
 export function createAdminLabourCategory(payload) {
   return apiRequest('/admin/labour-categories', { method: 'POST', body: payload })
 }
