@@ -248,6 +248,19 @@ export function CorporateProfilePage() {
 
   const saveDetails = async () => {
     if (!canEdit) return
+    if (!form.city?.trim() || /\d/.test(form.city)) {
+      setBanner({ variant: 'error', message: 'City is required and must not contain any numbers.' })
+      return
+    }
+    if (!/^\d{6}$/.test(String(form.pincode || '').trim())) {
+      setBanner({ variant: 'error', message: 'PIN code must be exactly 6 digits.' })
+      return
+    }
+    const cleanedGst = normalizeGst(form.gstNumber)
+    if (cleanedGst && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i.test(cleanedGst)) {
+      setBanner({ variant: 'error', message: 'Invalid GSTIN format (e.g. 22AAAAA0000A1Z5).' })
+      return
+    }
     setBanner(null)
     setBusy(true)
     try {
@@ -563,7 +576,13 @@ export function CorporateProfilePage() {
             <label className={labelClass} htmlFor="city">
               City *
             </label>
-            <input id="city" className={inputClass} value={form.city} onChange={setField('city')} disabled={!canEdit} />
+            <input
+              id="city"
+              className={inputClass}
+              value={form.city}
+              onChange={(e) => setForm((f) => ({ ...f, city: e.target.value.replace(/[0-9]/g, '') }))}
+              disabled={!canEdit}
+            />
           </div>
           <div>
             <label className={labelClass} htmlFor="state">

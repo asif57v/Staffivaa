@@ -132,33 +132,6 @@ export function AdminSettingsPage() {
             <p className="text-xs text-slate-500">Essential settings for platform operations</p>
           </div>
           
-          <div className="space-y-2">
-            <label className="block text-sm font-bold text-slate-700">SMS OTP Provider</label>
-            <p className="text-xs text-slate-500">Choose the gateway to transmit validation messages & roster OTP codes.</p>
-            <select
-              value={otpProvider}
-              onChange={(e) => setOtpProvider(e.target.value)}
-              className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-slate-50/50"
-            >
-              <option value="twilio">Twilio SMS Gateway</option>
-              <option value="msg91">MSG91 India Provider</option>
-              <option value="mock">Sandbox Simulator (Mock)</option>
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-bold text-slate-700">Payment Gateway Integration</label>
-            <p className="text-xs text-slate-500">Active processor to capture advance settlements and invoice completions.</p>
-            <select
-              value={paymentGateway}
-              onChange={(e) => setPaymentGateway(e.target.value)}
-              className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 bg-slate-50/50"
-            >
-              <option value="razorpay">Razorpay Checkout & Payouts</option>
-              <option value="stripe">Stripe Payments Int.</option>
-              <option value="mock">Mock Offline Payments</option>
-            </select>
-          </div>
 
           <div className="space-y-2">
             <label className="block text-sm font-bold text-slate-700">Platform Support Email</label>
@@ -172,43 +145,6 @@ export function AdminSettingsPage() {
             />
           </div>
 
-          <div className="pt-4 border-t border-slate-100 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="text-sm font-bold text-slate-700 block">Automated Vendor Job Assignment</label>
-                <span className="text-xs text-slate-500">Auto assign jobs matching skill categories directly.</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEnableVendorAutoAssignment(!enableVendorAutoAssignment)}
-                className="text-slate-600 focus:outline-none"
-              >
-                {enableVendorAutoAssignment ? (
-                  <ToggleRight className="h-10 w-10 text-brand" />
-                ) : (
-                  <ToggleLeft className="h-10 w-10 text-slate-300" />
-                )}
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="text-sm font-bold text-slate-700 block">System Maintenance Mode</label>
-                <span className="text-xs text-slate-500">Restrict access to client panels while executing server migrations.</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setMaintenanceMode(!maintenanceMode)}
-                className="text-slate-600 focus:outline-none"
-              >
-                {maintenanceMode ? (
-                  <ToggleRight className="h-10 w-10 text-rose-500" />
-                ) : (
-                  <ToggleLeft className="h-10 w-10 text-slate-300" />
-                )}
-              </button>
-            </div>
-          </div>
         </GlassPanel>
           </div>
 

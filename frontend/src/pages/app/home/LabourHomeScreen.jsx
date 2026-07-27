@@ -626,7 +626,6 @@ export function LabourHomeScreen({ user }) {
                 <h1 className="truncate text-lg font-extrabold tracking-tight text-slate-900 sm:text-xl">
                   {user?.fullName?.trim() || firstName || 'Worker'}
                 </h1>
-                <p className="truncate text-xs font-medium text-slate-600">{primaryTrade}</p>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   {kycOk ? (
                     <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-700">

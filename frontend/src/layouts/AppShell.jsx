@@ -24,8 +24,9 @@ import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx
 import { APP_HOME_LOCATION, APP_HOME_PATH, hasBookingFlowQuery } from '../lib/bookingFlowNavigation.js'
 import { ErrorBoundary } from '../components/ErrorBoundary.jsx'
 import { useGetLabourAssignmentsQuery, workforceApi } from '../store/api/workforceApi.js'
-import { loadJobDemoState, subscribeJobDemo } from '../lib/labourJobDemoStorage.js'
 import { connectSocket } from '../services/socket.js'
+import { fetchMe } from '../api/authApi.js'
+import { setUser } from '../store/slices/authSlice.js'
 
 export function AppShell() {
   const { pathname, search } = useLocation()
@@ -70,13 +71,28 @@ export function AppShell() {
     socket.on('request_updated', invalidateCache);
     socket.on('request_cancelled', invalidateCache);
 
-    socket.on('notification:new', (notification) => {
+    const refreshAppUser = () => {
+      fetchMe().then((res) => {
+        if (res?.data?.user) dispatch(setUser(res.data.user));
+      }).catch(() => {});
+    };
+
+    const handleNewNotif = (notification) => {
       import('react-hot-toast').then(({ default: toast }) => {
         toast.success(notification.title || 'New Notification');
       });
-      // Invalidate the Notifications tag so the unread count fetches instantly
+      refreshAppUser();
       dispatch(workforceApi.util.invalidateTags(['Notifications']));
-    });
+    };
+
+    const handleKycUpdate = () => {
+      refreshAppUser();
+      invalidateCache();
+    };
+
+    socket.on('notification:new', handleNewNotif);
+    socket.on('kyc:updated', handleKycUpdate);
+    socket.on('dashboard:updated', invalidateCache);
 
     return () => {
       socket.off('assignment_created', invalidateCache);
@@ -89,7 +105,9 @@ export function AppShell() {
       socket.off('request_created', invalidateCache);
       socket.off('request_updated', invalidateCache);
       socket.off('request_cancelled', invalidateCache);
-      socket.off('notification:new');
+      socket.off('notification:new', handleNewNotif);
+      socket.off('kyc:updated', handleKycUpdate);
+      socket.off('dashboard:updated', invalidateCache);
     };
   }, [user, token, dispatch]);
   // ------------------------------------------
@@ -211,6 +229,8 @@ export function AppShell() {
     normalizedPath === '/app/bookings' ||
     normalizedPath === '/app/support' ||
     normalizedPath === '/app/profile' ||
+    normalizedPath === '/app/wallet' ||
+    normalizedPath.startsWith('/app/navigation') ||
     isLabourAppHome ||
     isLabourJobs ||
     isLabourEarnings ||
@@ -475,19 +495,13 @@ export function AppShell() {
                   })}
                 </nav>
                 <div className="border-t border-slate-200/70 bg-linear-to-t from-slate-50/50 to-white px-3 pt-3 pb-10">
-                  <Link
-                    to="/"
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200/90 bg-white py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[#0f172a]/25 hover:text-[#0f172a]"
-                  >
-                    Visit website
-                  </Link>
                   <button
                     type="button"
                     onClick={() => {
                       logout()
                       navigate('/auth', { replace: true })
                     }}
-                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200/90 bg-rose-50 py-3 text-sm font-semibold text-rose-800 shadow-sm transition hover:bg-rose-50/90"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200/90 bg-rose-50 py-3 text-sm font-semibold text-rose-800 shadow-sm transition hover:bg-rose-50/90"
                   >
                     <LogOut className="h-4 w-4" aria-hidden />
                     Sign out

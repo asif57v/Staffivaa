@@ -35,6 +35,7 @@ export function WalletPage() {
   
   const [isAddMoneyOpen, setIsAddMoneyOpen] = useState(false)
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
 
   const balance = walletData?.data?.balance || 0
@@ -143,20 +144,22 @@ export function WalletPage() {
       <PageSkeleton visible={isProcessing || isLoading} />
       
       {/* Sticky Header */}
-      <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-gray-100 px-4 py-4 pt-8">
-        <div className="flex items-center space-x-3 mb-2">
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100 px-4 py-3 -mx-4 -mt-2">
+        <div className="flex items-center space-x-2.5">
           <button 
             onClick={() => navigate(-1)}
-            className="p-2 -ml-2 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-colors"
+            className="p-1.5 -ml-1.5 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-colors"
           >
-            <ArrowLeft size={24} className="text-gray-900" />
+            <ArrowLeft className="h-5 w-5 text-gray-800" />
           </button>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">My Wallet</h1>
+          <div>
+            <h1 className="text-lg font-bold text-gray-900 tracking-tight">My Wallet</h1>
+            <p className="text-gray-500 text-xs mt-0.5">Manage your balance and transactions</p>
+          </div>
         </div>
-        <p className="text-gray-500 text-sm pl-11 -mt-2">Manage your balance and transactions</p>
       </div>
 
-      <div className="px-4 pt-6 pb-8 max-w-lg mx-auto space-y-8">
+      <div className="px-4 pt-2.5 pb-8 max-w-lg mx-auto space-y-6">
         <WalletBalanceCard 
           balance={balance} 
           onAddMoney={() => setIsAddMoneyOpen(true)}
@@ -166,14 +169,19 @@ export function WalletPage() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-gray-900">Recent Transactions</h3>
-            {transactions.length > 0 && (
-              <button className="text-brand font-semibold text-sm hover:underline">View All</button>
+            {transactions.length > 3 && (
+              <button 
+                onClick={() => setShowAll(!showAll)}
+                className="text-brand font-bold text-sm hover:underline cursor-pointer active:opacity-80 transition"
+              >
+                {showAll ? 'Show Less' : `View All (${transactions.length})`}
+              </button>
             )}
           </div>
 
           <div className="space-y-1">
             {transactions.length > 0 ? (
-              transactions.map(txn => (
+              (showAll ? transactions : transactions.slice(0, 3)).map(txn => (
                 <TransactionCard key={txn._id || txn.transactionId} transaction={{
                   id: txn._id || txn.transactionId,
                   title: txn.source || 'Wallet Transaction',

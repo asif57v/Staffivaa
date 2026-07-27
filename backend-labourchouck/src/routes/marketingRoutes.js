@@ -6,5 +6,6 @@ const router = Router()
 router.get('/offers', marketingController.getActiveOffers)
 router.get('/ads', marketingController.getActiveAds)
 router.get('/banners', marketingController.getActiveBanners)
+router.post('/track', marketingController.trackCampaign)
 
 export default router

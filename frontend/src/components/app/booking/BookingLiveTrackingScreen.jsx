@@ -259,6 +259,12 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
   // activeAssignment?.labourId is populated from the backend, so it's an object containing _id, fullName, phone, etc.
   const workerName = assignedLabour?.fullName || assignedLabour?.displayName || assignedLabour?.name || 'Verified Worker'
   const workerId = assignedLabour?._id || assignedLabour?.id || 'N/A'
+  const shortWorkerId =
+    workerId && workerId !== 'N/A' && workerId !== 'smart-match'
+      ? String(workerId).length > 8
+        ? `#${String(workerId).slice(-6).toUpperCase()}`
+        : `#${String(workerId).replace(/^demo-/, '').toUpperCase()}`
+      : workerId
 
   // If the backend returned a real phone number, use it. Otherwise, if it's a demo/dummy worker without a phone, generate a placeholder.
   let defaultPhone = '+91 98765 43210'
@@ -458,13 +464,15 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
                 </span>
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="truncate text-base font-black text-slate-900 leading-tight">
-                  {workerName}
-                </h2>
-                <p className="mt-1 truncate text-[10px] font-bold text-brand mb-1">
-                  ID: {workerId}
-                </p>
-                <p className="truncate text-[10px] font-semibold text-slate-500 leading-tight">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="truncate text-base font-black text-slate-900 leading-tight">
+                    {workerName}
+                  </h2>
+                  <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-400">
+                    ID: {shortWorkerId}
+                  </span>
+                </div>
+                <p className="mt-0.5 truncate text-[11px] font-bold text-slate-700 leading-tight mb-1">
                   {request.lines?.[0]?.categoryId?.name || draft?.categoryName || 'General Category'}
                 </p>
                 <div className="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-slate-500">
@@ -641,19 +649,32 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
 
       {/* Sticky Bottom Actions */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 pb-[max(1rem,env(safe-area-inset-bottom,1rem))] z-30 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-        <div className="flex items-center gap-3">
-          {assignedLabour && (
-            <button className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-brand text-sm font-bold text-white transition active:scale-95 shadow-md shadow-brand/20">
-              <Phone className="h-4 w-4" /> Call Worker
+        {currentStatus === 'completed' ? (
+          <div className="flex items-center gap-3">
+            {assignedLabour && (
+              <button onClick={() => window.location.href = `tel:${workerPhone}`} className="flex h-12 shrink-0 items-center justify-center gap-2 px-4 rounded-2xl bg-slate-100 text-sm font-bold text-slate-800 transition active:scale-95">
+                <Phone className="h-4 w-4" /> Call Worker
+              </button>
+            )}
+            <button onClick={onBack} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-[#FFD100] text-sm font-extrabold text-slate-900 transition active:scale-95 shadow-md shadow-amber-300/30">
+              Back to History
             </button>
-          )}
-          <button onClick={onCancel} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-slate-100 text-sm font-bold text-slate-900 transition active:scale-95">
-            Reschedule
-          </button>
-          <button onClick={onCancel} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600 transition active:scale-95">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            {assignedLabour && (
+              <button onClick={() => window.location.href = `tel:${workerPhone}`} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-brand text-sm font-bold text-slate-900 transition active:scale-95 shadow-md shadow-brand/20">
+                <Phone className="h-4 w-4" /> Call Worker
+              </button>
+            )}
+            <button onClick={onCancel} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-slate-100 text-sm font-bold text-slate-900 transition active:scale-95">
+              Reschedule
+            </button>
+            <button onClick={onCancel} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600 transition active:scale-95" aria-label="Cancel booking">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        )}
       </div>
 
       <ExtraWorkModal 

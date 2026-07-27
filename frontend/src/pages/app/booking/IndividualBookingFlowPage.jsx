@@ -63,6 +63,17 @@ import { fetchLabourCategoriesGrouped } from '../../../api/labourCategoriesApi.j
 const TIME_SLOTS = ['9:00 AM – 12:00 PM', '12:00 PM – 3:00 PM', '3:00 PM – 6:00 PM', '6:00 PM – 9:00 PM']
 const GOOGLE_MAPS_LIBRARIES = ['places']
 
+function isSlotExpired(slot, selectedDate) {
+  if (!selectedDate || selectedDate !== todayISODate()) return false
+  const currentHour = new Date().getHours()
+  let slotStartHour = 0
+  if (slot.startsWith('9:00 AM')) slotStartHour = 9
+  else if (slot.startsWith('12:00 PM')) slotStartHour = 12
+  else if (slot.startsWith('3:00 PM')) slotStartHour = 15
+  else if (slot.startsWith('6:00 PM')) slotStartHour = 18
+  return currentHour >= slotStartHour
+}
+
 function FlowHeader({ title, subtitle, onBack }) {
   return (
     <motion.div layout className="-mx-4 px-4 pb-2">
@@ -511,6 +522,10 @@ export function IndividualBookingFlowPage() {
         setFormError('Pick a time slot.')
         return false
       }
+      if (isSlotExpired(draft.timeSlot, draft.serviceDate)) {
+        setFormError('The selected time slot has already passed for today. Please select an available slot or a future date.')
+        return false
+      }
     }
     if (draft.matchMode === 'manual' && !(draft.selectedWorkers || []).length) {
       setFormError('Select at least one worker from the list first.')
@@ -857,8 +872,12 @@ export function IndividualBookingFlowPage() {
                 type="number"
                 min={2}
                 max={30}
-                value={draft.durationDays || 2}
-                onChange={(e) => syncDraft({ durationDays: Number(e.target.value) || 2 })}
+                value={draft.durationDays ?? 2}
+                onChange={(e) => syncDraft({ durationDays: e.target.value === '' ? '' : Number(e.target.value) })}
+                onBlur={(e) => {
+                  const val = Number(e.target.value)
+                  if (!val || val < 2) syncDraft({ durationDays: 2 })
+                }}
                 className="mt-2 w-full rounded-2xl border border-slate-200/90 px-4 py-2.5 text-sm font-bold"
               />
             ) : null}
@@ -880,26 +899,40 @@ export function IndividualBookingFlowPage() {
                   type="date"
                   min={todayISODate()}
                   value={draft.serviceDate || ''}
-                  onChange={(e) => syncDraft({ serviceDate: e.target.value })}
+                  onChange={(e) => {
+                    const newDate = e.target.value
+                    const updates = { serviceDate: newDate }
+                    if (draft.timeSlot && isSlotExpired(draft.timeSlot, newDate)) {
+                      updates.timeSlot = null
+                    }
+                    syncDraft(updates)
+                  }}
                   className="w-full rounded-2xl border border-slate-200/90 px-4 py-3 text-sm font-semibold"
                 />
               </div>
               <div>
                 <FieldLabel>Time slot</FieldLabel>
                 <div className="grid grid-cols-2 gap-2">
-                  {TIME_SLOTS.map((slot) => (
-                    <button
-                      key={slot}
-                      type="button"
-                      onClick={() => syncDraft({ timeSlot: slot })}
-                      className={`rounded-xl border px-2 py-2.5 text-[11px] font-bold ${draft.timeSlot === slot
-                        ? 'border-brand/40 bg-brand/8 ring-2 ring-brand/20'
-                        : 'border-slate-200/90'
+                  {TIME_SLOTS.map((slot) => {
+                    const disabled = isSlotExpired(slot, draft.serviceDate)
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => !disabled && syncDraft({ timeSlot: slot })}
+                        className={`rounded-xl border px-2 py-2.5 text-[11px] font-bold transition ${
+                          disabled
+                            ? 'border-slate-100 bg-slate-100/80 text-slate-300 cursor-not-allowed line-through'
+                            : draft.timeSlot === slot
+                            ? 'border-brand/40 bg-brand/8 ring-2 ring-brand/20 text-slate-900'
+                            : 'border-slate-200/90 text-slate-700 hover:bg-slate-50'
                         }`}
-                    >
-                      {slot}
-                    </button>
-                  ))}
+                      >
+                        {slot}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             </div>
@@ -946,14 +979,14 @@ export function IndividualBookingFlowPage() {
               <span className="text-slate-500">Duration</span>
               <span className="font-bold">{durationKindLabel(draft.durationKind)}</span>
             </div>
-            <div className="flex justify-between gap-2">
-              <span className="shrink-0 text-slate-500">Workers</span>
-              <span className="text-right font-bold">
-                {draft.matchMode === 'smart'
-                  ? 'Smart match'
-                  : (draft.selectedWorkers || []).map((w) => w.displayName).join(', ') || '—'}
-              </span>
-            </div>
+            {draft.matchMode !== 'smart' && (draft.selectedWorkers || []).length > 0 ? (
+              <div className="flex justify-between gap-2">
+                <span className="shrink-0 text-slate-500">Workers</span>
+                <span className="text-right font-bold">
+                  {draft.selectedWorkers.map((w) => w.displayName).join(', ')}
+                </span>
+              </div>
+            ) : null}
             <p className="flex items-start gap-2 text-slate-800">
               <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden />
               {draft.address}

@@ -27,7 +27,31 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
       if (userId) {
         const user = await User.findById(userId).select('role');
         if (user) {
-          io.to(`${user.role}_${userId}`).emit('notification:new', notification);
+          const uId = String(userId);
+          const uRole = user.role;
+          io.to(`${uRole}_${uId}`)
+            .to(`vendor_${uId}`)
+            .to(`vendor-${uId}`)
+            .to(`contractor_${uId}`)
+            .to(`contractor-${uId}`)
+            .to(`corporate_${uId}`)
+            .to(`corporate-${uId}`)
+            .to(`user_${uId}`)
+            .to(uId)
+            .emit('notification:new', notification);
+
+          if (type === 'KYC_APPROVED' || type === 'KYC_REJECTED') {
+            io.to(`${uRole}_${uId}`)
+              .to(`vendor_${uId}`)
+              .to(`vendor-${uId}`)
+              .to(`contractor_${uId}`)
+              .to(`contractor-${uId}`)
+              .to(`corporate_${uId}`)
+              .to(`corporate-${uId}`)
+              .to(`user_${uId}`)
+              .to(uId)
+              .emit('kyc:updated', { status: type === 'KYC_APPROVED' ? 'approved' : 'rejected', notification });
+          }
         }
       } else {
         // Send to all admins

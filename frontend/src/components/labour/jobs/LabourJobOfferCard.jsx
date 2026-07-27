@@ -60,10 +60,12 @@ export function LabourJobOfferCard({
             <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
             <span className="font-medium leading-snug">{offer.site}</span>
           </li>
-          <li className="flex items-center gap-2 text-slate-600">
-            <Clock className="h-4 w-4 shrink-0 text-brand" aria-hidden />
-            <span className="text-xs font-semibold">{offer.shiftWindow}</span>
-          </li>
+          {offer.shiftWindow && offer.shiftWindow !== '09:00 AM - 06:00 PM' ? (
+            <li className="flex items-center gap-2 text-slate-600">
+              <Clock className="h-4 w-4 shrink-0 text-brand" aria-hidden />
+              <span className="text-xs font-semibold">{offer.shiftWindow}</span>
+            </li>
+          ) : null}
         </ul>
 
         <p className="mt-2 pl-1 text-[11px] font-medium text-slate-500">

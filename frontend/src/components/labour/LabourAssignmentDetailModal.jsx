@@ -14,7 +14,6 @@ import {
   Phone,
   Timer,
   User,
-  X,
 } from 'lucide-react'
 import { AppBadge } from '../app-ui/data-display/AppBadge.jsx'
 import { AppSecondaryButton } from '../app/AppSecondaryButton.jsx'
@@ -78,14 +77,6 @@ export function LabourAssignmentDetailModal({ open, onClose, job, rawJob, assign
                     {detail.job.siteName || detail.job.title}
                   </h1>
                 </div>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex h-11 w-11 items-center justify-center rounded-xl text-white/80 hover:bg-white/10"
-                  aria-label="Dismiss"
-                >
-                  <X className="h-5 w-5" />
-                </button>
               </motion.div>
 
               <div className="mt-4 flex flex-wrap gap-2">

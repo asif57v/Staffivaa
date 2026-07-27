@@ -58,7 +58,9 @@ export function AdminCampaignAnalyticsPage() {
         <GlassPanel className="p-5 bg-white border border-slate-100 flex flex-col justify-center">
           <div className="text-slate-500 text-sm font-semibold mb-1">Total Clicks (CTR)</div>
           <div className="text-3xl font-black text-slate-900">{stats.totalClicks}</div>
-          <div className="text-xs text-slate-400 mt-1">0.0% average CTR</div>
+          <div className="text-xs text-slate-400 mt-1">
+            {stats.totalViews > 0 ? ((stats.totalClicks / stats.totalViews) * 100).toFixed(1) : '0.0'}% average CTR
+          </div>
         </GlassPanel>
       </div>
 

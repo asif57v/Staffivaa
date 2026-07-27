@@ -17,6 +17,8 @@ import { readAppUserLocation, parseAppUserLocation } from '../lib/appUserLocatio
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { useVendorNotificationCount } from '../hooks/useVendorNotificationCount.js'
 import { connectSocket } from '../services/socket.js'
+import { fetchMe } from '../api/authApi.js'
+import { setUser } from '../store/slices/authSlice.js'
 
 export function PanelShell({
   panelId,
@@ -66,8 +68,34 @@ export function PanelShell({
       dispatch(workforceApi.util.invalidateTags([
         'VendorDashboard', 'VendorJobs', 'Requests', 
         'CorporateDashboard', 'Projects', 'Attendance', 'Invoices',
-        'VendorWallet', 'Wallet'
+        'VendorWallet', 'Wallet', 'Notifications'
       ]));
+    };
+
+    const refreshUser = () => {
+      fetchMe().then((res) => {
+        if (res?.data?.user) dispatch(setUser(res.data.user));
+      }).catch(() => {});
+    };
+
+    const handleNotification = (notification) => {
+      import('react-hot-toast').then(({ default: toast }) => {
+        toast.success(notification?.title || 'New Notification Received', { duration: 5000 });
+      });
+      refreshUser();
+      invalidateCache();
+    };
+
+    const handleKycUpdate = (data) => {
+      import('react-hot-toast').then(({ default: toast }) => {
+        if (data?.status === 'approved') {
+          toast.success('🎉 Congratulations! Your account verification has been APPROVED by admin!', { duration: 7000 });
+        } else {
+          toast.error('⚠️ Account verification status updated: ' + (data?.status || 'Reviewed'), { duration: 6000 });
+        }
+      });
+      refreshUser();
+      invalidateCache();
     };
 
     socket.on('corporate_request_created', invalidateCache);
@@ -80,6 +108,9 @@ export function PanelShell({
     socket.on('work_completed', invalidateCache);
     socket.on('payment_status_update', invalidateCache);
     socket.on('request_status_update', invalidateCache);
+    socket.on('notification:new', handleNotification);
+    socket.on('kyc:updated', handleKycUpdate);
+    socket.on('dashboard:updated', invalidateCache);
 
     return () => {
       socket.off('corporate_request_created', invalidateCache);
@@ -92,8 +123,43 @@ export function PanelShell({
       socket.off('work_completed', invalidateCache);
       socket.off('payment_status_update', invalidateCache);
       socket.off('request_status_update', invalidateCache);
+      socket.off('notification:new', handleNotification);
+      socket.off('kyc:updated', handleKycUpdate);
+      socket.off('dashboard:updated', invalidateCache);
     };
   }, [user, token, dispatch]);
+
+  // Automatic background polling when verification is pending or in review so pages refresh instantly on admin approval
+  useEffect(() => {
+    if (!user || !token) return;
+    const isVendorPending = (user.role === 'contractor' || user.role === 'vendor') && user?.contractorProfile?.verificationStatus !== 'approved';
+    const isCorporatePending = user.role === 'corporate' && user?.corporateProfile?.status !== 'approved';
+
+    // Fetch fresh user profile on initial mount
+    fetchMe().then((res) => {
+      if (res?.data?.user) dispatch(setUser(res.data.user));
+    }).catch(() => {});
+
+    if (isVendorPending || isCorporatePending) {
+      const interval = setInterval(() => {
+        fetchMe().then((res) => {
+          if (res?.data?.user) {
+            const newUser = res.data.user;
+            const nowApproved = (newUser.role === 'contractor' || newUser.role === 'vendor')
+              ? newUser?.contractorProfile?.verificationStatus === 'approved'
+              : newUser?.corporateProfile?.status === 'approved';
+            if (nowApproved) {
+              import('react-hot-toast').then(({ default: toast }) => {
+                toast.success('🎉 Congratulations! Your account verification has just been APPROVED by admin!', { duration: 7000 });
+              });
+            }
+            dispatch(setUser(newUser));
+          }
+        }).catch(() => {});
+      }, 4000);
+      return () => clearInterval(interval);
+    }
+  }, [user?.role, token, dispatch]);
 
   // --- FCM Token Auto-sync & Foreground Listener ---
   useEffect(() => {
@@ -186,6 +252,7 @@ export function PanelShell({
     pathname.includes('/notifications') ||
     pathname.includes('/profile') ||
     pathname.includes('/support') ||
+    pathname.includes('/wallet') ||
     pathname.endsWith('/new') ||
     /\/projects\/[^/]+$/.test(pathname) ||
     /\/requests\/[^/]+$/.test(pathname) ||
@@ -313,19 +380,13 @@ export function PanelShell({
                   })}
                 </nav>
                 <div className="border-t border-slate-200/70 px-3 pt-3 pb-10">
-                  <Link
-                    to="/"
-                    className="flex w-full items-center justify-center rounded-xl border border-slate-200/90 bg-white py-3 text-sm font-semibold text-slate-700"
-                  >
-                    Visit website
-                  </Link>
                   <button
                     type="button"
                     onClick={() => {
                       logout()
                       navigate('/auth', { replace: true })
                     }}
-                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200/90 bg-rose-50 py-3 text-sm font-semibold text-rose-800"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200/90 bg-rose-50 py-3 text-sm font-semibold text-rose-800"
                   >
                     <LogOut className="h-4 w-4" />
                     Sign out

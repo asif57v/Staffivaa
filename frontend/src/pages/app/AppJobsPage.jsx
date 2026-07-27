@@ -417,7 +417,7 @@ export function AppJobsPage() {
             initial={reduce ? false : { opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={reduce ? undefined : { opacity: 0, y: -8 }}
-            className="fixed left-4 right-4 top-[max(4.5rem,env(safe-area-inset-top))] z-[120] mx-auto max-w-md rounded-2xl border border-brand/30 bg-slate-900/95 px-4 py-3 text-center text-sm font-semibold text-white shadow-xl backdrop-blur-md"
+            className="fixed left-4 right-4 top-3 z-[200] mx-auto max-w-md rounded-2xl border border-brand/30 bg-slate-900/95 px-4 py-3.5 text-center text-sm font-semibold text-white shadow-xl backdrop-blur-md"
             role="status"
           >
             {toast}

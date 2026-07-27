@@ -48,3 +48,23 @@ export const getActiveBanners = asyncHandler(async (req, res) => {
 
   return sendSuccess(res, { data: { banners } })
 })
+
+export const trackCampaign = asyncHandler(async (req, res) => {
+  const { type, id, action } = req.body // type: 'BANNER', 'OFFER', 'AD' | action: 'VIEW', 'CLICK'
+  
+  if (!type || !id || !action) {
+    return sendSuccess(res, { message: 'Missing parameters' })
+  }
+
+  const inc = action === 'CLICK' ? { clicks: 1 } : (type === 'AD' ? { impressions: 1 } : { views: 1 })
+
+  if (type === 'BANNER') {
+    await Banner.findByIdAndUpdate(id, { $inc: inc })
+  } else if (type === 'OFFER') {
+    await Offer.findByIdAndUpdate(id, { $inc: inc })
+  } else if (type === 'AD') {
+    await SponsoredAd.findByIdAndUpdate(id, { $inc: inc })
+  }
+
+  return sendSuccess(res, { message: 'Tracked successfully' })
+})

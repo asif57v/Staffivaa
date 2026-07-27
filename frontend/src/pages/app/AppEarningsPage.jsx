@@ -149,7 +149,7 @@ export function AppEarningsPage() {
             initial={reduce ? false : { opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={reduce ? undefined : { opacity: 0 }}
-            className="fixed left-4 right-4 top-[max(4.5rem,env(safe-area-inset-top))] z-[120] mx-auto max-w-md rounded-2xl border border-emerald-300/40 bg-emerald-900/95 px-4 py-3 text-center text-sm font-semibold text-white shadow-xl"
+            className="fixed left-4 right-4 top-3 z-[200] mx-auto max-w-md rounded-2xl border border-emerald-300/40 bg-emerald-900/95 px-4 py-3 text-center text-sm font-semibold text-white shadow-xl backdrop-blur-md"
             role="status"
           >
             {formOk}
@@ -159,7 +159,7 @@ export function AppEarningsPage() {
           <motion.p
             initial={reduce ? false : { opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="fixed left-4 right-4 top-[max(4.5rem,env(safe-area-inset-top))] z-[120] mx-auto max-w-md rounded-2xl border border-rose-300/40 bg-rose-900/95 px-4 py-3 text-center text-sm font-semibold text-white shadow-xl"
+            className="fixed left-4 right-4 top-3 z-[200] mx-auto max-w-md rounded-2xl border border-rose-300/40 bg-rose-900/95 px-4 py-3 text-center text-sm font-semibold text-white shadow-xl backdrop-blur-md"
             role="alert"
           >
             {formError}

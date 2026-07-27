@@ -278,7 +278,7 @@ export function durationKindLabel(kind) {
  */
 export function createIndividualBookingRecord(payload, pricingConfig) {
   const durationDays = Math.max(
-    1,
+    payload.durationKind === 'multi_day' ? 2 : 1,
     Number(payload.durationDays) || durationKindToDays(payload.durationKind, 1),
   )
   const estimate = estimateIndividualBooking({

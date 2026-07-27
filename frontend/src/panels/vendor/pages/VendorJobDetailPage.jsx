@@ -161,52 +161,60 @@ export function VendorJobDetailPage() {
       </header>
 
       <div className="px-2 py-4 space-y-3 max-w-md mx-auto">
-        
-        {/* Top Hero Card */}
-        <div className="rounded-2xl bg-white p-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
-          <div className="flex gap-4">
-            <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-[14px] bg-slate-200 border border-slate-100 shadow-sm">
-              <img src="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=300&q=80" alt="Site" className="h-full w-full object-cover" />
+        <div className="rounded-[24px] bg-white p-5 shadow-[0_2px_14px_-4px_rgba(0,0,0,0.08)] border border-slate-100/90">
+          <div className="flex flex-wrap justify-between items-start gap-2 border-b border-slate-100 pb-3.5">
+            <div className="flex-1 min-w-0 pr-2">
+              <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 leading-snug tracking-tight">{projectName}</h2>
+              <div className="flex items-center gap-2 mt-1 text-slate-600 font-semibold text-sm">
+                <Building2 className="h-4 w-4 shrink-0 text-brand" />
+                <span className="leading-normal">{companyName}</span>
+              </div>
             </div>
+            <span className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${statusTone}`}>
+              <StatusIcon className="h-3.5 w-3.5" strokeWidth={3} /> {statusLabel}
+            </span>
+          </div>
+
+          {/* Complete Location Row */}
+          <div className="mt-3.5 flex items-start gap-2.5 rounded-xl bg-slate-50/80 p-3.5 border border-slate-100 text-slate-700">
+            <MapPin className="h-4 w-4 shrink-0 text-brand mt-0.5" />
             <div className="flex-1 min-w-0">
-              <div className="flex justify-between items-start">
-                <h2 className="text-[18px] font-bold text-slate-900 truncate pr-2">{projectName}</h2>
-                <span className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${statusTone}`}>
-                  <StatusIcon className="h-2.5 w-2.5" strokeWidth={3} /> {statusLabel}
-                </span>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Location</p>
+              <p className="text-sm font-bold text-slate-800 leading-relaxed">
+                {req.locationText || 'Location TBD'}
+              </p>
+            </div>
+          </div>
+          
+          <div className="mt-3.5 grid grid-cols-2 gap-2 text-slate-700">
+            <div className="flex items-center gap-2 rounded-xl bg-slate-50/60 p-2.5 border border-slate-100/80">
+              <Calendar className="h-4 w-4 shrink-0 text-slate-500" />
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Duration</p>
+                <p className="text-xs sm:text-sm font-bold text-slate-800">{durationStr}</p>
               </div>
-              <div className="flex items-center gap-1.5 mt-0.5 text-slate-500">
-                <Building2 className="h-3.5 w-3.5 shrink-0" />
-                <p className="text-[14px] font-medium truncate">{companyName}</p>
-              </div>
-              
-              <div className="mt-2.5 flex items-center gap-1.5 text-slate-500">
-                <MapPin className="h-3 w-3 shrink-0" />
-                <p className="text-[12px] font-medium truncate">{req.locationText || 'Location TBD'}</p>
-              </div>
-              
-              <div className="mt-1 text-slate-500 text-[12px] font-medium flex items-center gap-1.5 flex-wrap">
-                <Calendar className="h-3 w-3 shrink-0" /> {durationStr}
-              </div>
-              <div className="mt-1 text-slate-500 text-[12px] font-medium flex items-center gap-1.5">
-                <Users className="h-3 w-3 shrink-0" /> {totalRequired} Workers
+            </div>
+            <div className="flex items-center gap-2 rounded-xl bg-slate-50/60 p-2.5 border border-slate-100/80">
+              <Users className="h-4 w-4 shrink-0 text-slate-500" />
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Workforce</p>
+                <p className="text-xs sm:text-sm font-bold text-slate-800">{totalRequired} Workers Required</p>
               </div>
             </div>
           </div>
           
-          <div className="mt-4 flex items-center gap-2 flex-wrap">
-            <span className="flex items-center gap-1.5 rounded-full bg-blue-50/50 px-3 py-1.5 text-[11px] font-bold text-blue-700 border border-blue-100">
-              <UserCircle className="h-3.5 w-3.5" strokeWidth={2.5} /> {tradeName}
-            </span>
-            <span className="flex items-center gap-1.5 rounded-full bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-600 border border-slate-200">
-              <Clock className="h-3.5 w-3.5" /> {shiftStr}
-            </span>
-          </div>
-          
-          <div className="mt-4 border-t border-slate-100 pt-3">
-            <p className="text-[11px] font-bold text-slate-400 tracking-wide uppercase flex items-center gap-1">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t border-slate-100/80">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 border border-blue-200/60">
+                <UserCircle className="h-3.5 w-3.5" strokeWidth={2.5} /> {tradeName}
+              </span>
+              <span className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700 border border-slate-200/60">
+                <Clock className="h-3.5 w-3.5" /> {shiftStr}
+              </span>
+            </div>
+            <span className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
               ID: {req.reference}
-            </p>
+            </span>
           </div>
         </div>
 

@@ -62,6 +62,17 @@ body {
   user-select: none;
 }
 
+/* Ensure mobile screens never expose dark background when soft keyboards open or close */
+@media (max-width: 768px) {
+  html, body {
+    background-color: var(--color-page) !important;
+    min-height: 100%;
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+    overscroll-behavior-y: none;
+  }
+}
+
 body.admin-mode {
   max-width: none;
   box-shadow: none;

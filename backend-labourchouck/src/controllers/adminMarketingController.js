@@ -80,14 +80,20 @@ export const getCampaignAnalytics = asyncHandler(async (req, res) => {
   const totalAds = await SponsoredAd.countDocuments()
   const activeAds = await SponsoredAd.countDocuments({ isActive: true })
   
-  // Example dummy aggregation for future usage
+  const bannersAgg = await Banner.aggregate([{ $group: { _id: null, views: { $sum: "$views" }, clicks: { $sum: "$clicks" } } }])
+  const offersAgg = await Offer.aggregate([{ $group: { _id: null, views: { $sum: "$views" }, clicks: { $sum: "$clicks" } } }])
+  const adsAgg = await SponsoredAd.aggregate([{ $group: { _id: null, views: { $sum: "$impressions" }, clicks: { $sum: "$clicks" } } }])
+
+  const totalViews = (bannersAgg[0]?.views || 0) + (offersAgg[0]?.views || 0) + (adsAgg[0]?.views || 0)
+  const totalClicks = (bannersAgg[0]?.clicks || 0) + (offersAgg[0]?.clicks || 0) + (adsAgg[0]?.clicks || 0)
+
   const analytics = {
     totalOffers,
     activeOffers,
     totalAds,
     activeAds,
-    totalViews: 0,
-    totalClicks: 0
+    totalViews,
+    totalClicks
   }
 
   return sendSuccess(res, { data: { analytics } })

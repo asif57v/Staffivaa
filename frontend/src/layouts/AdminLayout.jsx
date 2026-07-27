@@ -402,20 +402,7 @@ export function AdminLayout() {
         ))}
       </nav>
 
-      <div
-        className={`relative shrink-0 border-t border-slate-200/80 bg-linear-to-t from-slate-50/40 to-white p-2 ${collapsed ? 'md:px-1.5' : ''}`}
-      >
-        <a
-          href="/"
-          className={`flex items-center gap-3 rounded-xl py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-white hover:text-slate-900 hover:shadow-sm ${collapsed ? 'md:justify-center' : 'px-3'}`}
-          title="Public site"
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm ring-1 ring-slate-200/90 transition group-hover:text-brand">
-            <ExternalLink className="h-4 w-4" aria-hidden />
-          </span>
-          <span className={`${collapsed ? 'md:sr-only' : ''}`}>Public site</span>
-        </a>
-      </div>
+
     </>
   )
 

@@ -532,70 +532,6 @@ export function AdminPricingPage() {
                   </div>
                 </div>
               )}
-
-              {/* Convenience fee & cancellations */}
-              {matchesSearch('convenience fee cancellation charge user cancellation labour cancellation convenience amount enabled', 'Convenience & Cancellations', 'Transactional event policies') && (
-                <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
-                  <div className="border-b border-slate-100 pb-4">
-                    <h3 className="text-base font-extrabold text-slate-950">Event Fee Policies</h3>
-                    <p className="text-xs text-slate-400 uppercase mt-0.5">User Booking</p>
-                  </div>
-
-                  <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="text-xs font-bold text-slate-600 block mb-1.5">Convenience Fee Payout (₹)</label>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => updateField('userBooking.convenienceFee.enabled', !config.userBooking?.convenienceFee?.enabled)}
-                          className={`rounded-xl border px-3 py-2 text-xs font-bold uppercase transition ${
-                            config.userBooking?.convenienceFee?.enabled ? 'bg-yellow-400 border-yellow-400 text-slate-950' : 'border-slate-200 text-slate-600'
-                          }`}
-                        >
-                          {config.userBooking?.convenienceFee?.enabled ? 'ON' : 'OFF'}
-                        </button>
-                        <input
-                          type="number"
-                          disabled={!config.userBooking?.convenienceFee?.enabled}
-                          value={config.userBooking?.convenienceFee?.amount ?? ''}
-                          onChange={(e) => updateField('userBooking.convenienceFee.amount', e.target.value)}
-                          className="flex-1 rounded-xl border border-slate-200 py-2.5 px-4 text-sm font-medium outline-none disabled:bg-slate-50"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-slate-600 block mb-1.5">GST Rate (%)</label>
-                      <input
-                        type="number"
-                        value={config.userBooking?.gst?.rate ?? ''}
-                        onChange={(e) => updateField('userBooking.gst.rate', e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 py-2.5 px-4 text-sm font-medium outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-slate-600 block mb-1.5">User Cancellation Payout (₹)</label>
-                      <input
-                        type="number"
-                        value={config.userBooking?.cancellation?.user ?? ''}
-                        onChange={(e) => updateField('userBooking.cancellation.user', e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 py-2.5 px-4 text-sm font-medium outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-slate-600 block mb-1.5">Labour Cancellation Penalty (₹)</label>
-                      <input
-                        type="number"
-                        value={config.userBooking?.cancellation?.labour ?? ''}
-                        onChange={(e) => updateField('userBooking.cancellation.labour', e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 py-2.5 px-4 text-sm font-medium outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -1200,8 +1136,8 @@ export function AdminPricingPage() {
 
                       <div className="space-y-2 grow">
                         <div className="flex justify-between items-center text-[10px] font-bold text-slate-400">
-                          <span>{new Date(h.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                          <span>{new Date(h.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>{h.createdAt ? new Date(h.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</span>
+                          <span>{h.createdAt ? new Date(h.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'N/A'}</span>
                         </div>
 
                         <p className="text-slate-900 font-extrabold text-sm">“{h.reason}”</p>
@@ -1210,11 +1146,11 @@ export function AdminPricingPage() {
                           <div className="grid gap-1.5 sm:grid-cols-2 bg-white p-2.5 rounded-lg border border-slate-100 font-mono text-[10px]">
                             {h.changes.map((ch, idx) => (
                               <div key={idx} className="flex items-center justify-between text-slate-600 font-bold border-b border-slate-50 pb-1 last:border-0 last:pb-0">
-                                <span className="truncate max-w-[150px]">{ch.path}</span>
-                                <div className="flex items-center gap-1">
-                                  <span className="line-through text-red-500">{ch.oldValue ?? '0'}</span>
-                                  <ArrowRight className="h-3 w-3 text-slate-400" />
-                                  <span className="text-emerald-600 font-bold">{ch.newValue ?? '0'}</span>
+                                <span className="break-all pr-2">{ch.path}</span>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <span className="line-through text-red-500 max-w-[150px] break-all">{typeof ch.oldValue === 'object' ? JSON.stringify(ch.oldValue) : String(ch.oldValue ?? '0')}</span>
+                                  <ArrowRight className="h-3 w-3 text-slate-400 shrink-0 mx-1" />
+                                  <span className="text-emerald-600 font-bold max-w-[150px] break-all">{typeof ch.newValue === 'object' ? JSON.stringify(ch.newValue) : String(ch.newValue ?? '0')}</span>
                                 </div>
                               </div>
                             ))}

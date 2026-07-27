@@ -182,74 +182,71 @@ export function VendorJobsPage() {
              StatusIcon = XCircle
           }
 
-          // Generate mock thumbnails
-          const imgUrls = [
-            'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=300&q=80',
-            'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=300&q=80',
-            'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=300&q=80',
-            'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=300&q=80'
-          ]
-          const imgSrc = imgUrls[i % imgUrls.length]
-
           return (
             <li key={a._id}>
               <Link to={`/vendor/jobs/${a._id}`} className="block transition active:scale-[0.98]">
-                <div className="flex flex-row rounded-[20px] bg-white p-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100 hover:shadow-lg transition-shadow">
-                  {/* Thumbnail */}
-                  <div className="relative h-32 w-28 shrink-0 overflow-hidden rounded-[14px] bg-slate-200 mr-4 shadow-sm border border-slate-100/50">
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900/20 to-transparent z-10" />
-                    <img src={imgSrc} alt="Site" className="h-full w-full object-cover" />
-                  </div>
-                  
-                  {/* Content */}
-                  <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
-                    <div>
-                      <div className="flex justify-between items-start">
-                        <h3 className="text-[18px] font-bold text-slate-900 leading-tight truncate pr-2 tracking-tight">
-                          {projectName}
-                        </h3>
-                        <ChevronRight className="h-5 w-5 text-slate-300 shrink-0 mt-0.5" />
-                      </div>
-                      
-                      <div className="flex items-center gap-1.5 mt-1 text-slate-500">
-                        <Building2 className="h-3.5 w-3.5 shrink-0" />
-                        <p className="text-[15px] font-medium truncate">{company}</p>
-                      </div>
-                      
-                      <div className="mt-2.5 flex items-center gap-1.5 text-slate-500">
-                        <MapPin className="h-3.5 w-3.5 shrink-0" />
-                        <p className="text-[13px] font-medium truncate">{req.locationText || 'Khand, Indore'}</p>
-                      </div>
-                      
-                      <div className="mt-1 flex items-center gap-4 text-slate-500">
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="h-3.5 w-3.5 shrink-0" />
-                          <p className="text-[13px] font-medium">{formatDate(req.startDate)}</p>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Users className="h-3.5 w-3.5 shrink-0" />
-                          <p className="text-[13px] font-medium">{workersCount} Workers</p>
-                        </div>
+                <div className="rounded-[24px] bg-white p-5 shadow-[0_2px_14px_-4px_rgba(0,0,0,0.08)] border border-slate-100/90 hover:shadow-lg transition-shadow">
+                  {/* Header Row: Title & Status */}
+                  <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-3.5">
+                    <div className="flex-1 min-w-0 pr-2">
+                      <h3 className="text-lg sm:text-xl font-extrabold text-slate-900 leading-snug tracking-tight">
+                        {projectName}
+                      </h3>
+                      <div className="flex items-center gap-2 mt-1 text-slate-600 font-semibold text-sm">
+                        <Building2 className="h-4 w-4 shrink-0 text-brand" />
+                        <span className="leading-normal">{company}</span>
                       </div>
                     </div>
-                    
-                    {/* Badges & ID */}
-                    <div className="mt-4">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${statusTone}`}>
-                          <StatusIcon className="h-3 w-3" strokeWidth={3} /> {statusLabel}
-                        </span>
-                        <span className="flex items-center gap-1 rounded-full bg-transparent px-2.5 py-1 text-[11px] font-bold text-blue-700 border border-blue-200">
-                          <UserCircle className="h-3 w-3" strokeWidth={2.5} /> {tradeName}
-                        </span>
-                        <span className="flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-600 border border-slate-200">
-                          <Clock className="h-3 w-3" /> {shiftStr}
-                        </span>
-                      </div>
-                      <p className="text-[11px] font-medium text-slate-400 mt-3 tracking-wide uppercase">
-                        Project ID: {reference}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold shadow-xs ${statusTone}`}>
+                        <StatusIcon className="h-3.5 w-3.5" strokeWidth={2.5} /> {statusLabel}
+                      </span>
+                      <ChevronRight className="h-5 w-5 text-slate-300 shrink-0" />
+                    </div>
+                  </div>
+
+                  {/* Complete Location Address Row */}
+                  <div className="mt-3.5 flex items-start gap-2.5 rounded-xl bg-slate-50/80 p-3.5 border border-slate-100 text-slate-700">
+                    <MapPin className="h-4 w-4 shrink-0 text-brand mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Location</p>
+                      <p className="text-sm font-bold text-slate-800 leading-relaxed">
+                        {req.locationText || 'Khand, Indore'}
                       </p>
                     </div>
+                  </div>
+
+                  {/* Schedule & Workers Info Row */}
+                  <div className="mt-3.5 grid grid-cols-2 gap-2 text-slate-700">
+                    <div className="flex items-center gap-2 rounded-xl bg-slate-50/60 p-2.5 border border-slate-100/80">
+                      <Calendar className="h-4 w-4 shrink-0 text-slate-500" />
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Start Date</p>
+                        <p className="text-xs sm:text-sm font-bold text-slate-800">{formatDate(req.startDate)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-xl bg-slate-50/60 p-2.5 border border-slate-100/80">
+                      <Users className="h-4 w-4 shrink-0 text-slate-500" />
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Workforce</p>
+                        <p className="text-xs sm:text-sm font-bold text-slate-800">{workersCount} Workers Required</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Badges & Project ID Footer */}
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t border-slate-100/80">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 border border-blue-200/60">
+                        <UserCircle className="h-3.5 w-3.5" strokeWidth={2.5} /> {tradeName}
+                      </span>
+                      <span className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700 border border-slate-200/60">
+                        <Clock className="h-3.5 w-3.5" /> {shiftStr}
+                      </span>
+                    </div>
+                    <span className="text-xs font-black text-slate-400 uppercase tracking-wider">
+                      ID: {reference}
+                    </span>
                   </div>
                 </div>
               </Link>

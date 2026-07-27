@@ -10,10 +10,16 @@ const bannerSchema = new mongoose.Schema(
       index: true
     },
     priority: { type: Number, default: 0, index: true },
+    title: { type: String, trim: true },
+    subtitle: { type: String, trim: true },
+    price: { type: String, trim: true },
     startDate: { type: Date },
     endDate: { type: Date },
     redirectScreen: { type: String, trim: true },
+    linkedGroup: { type: mongoose.Schema.Types.ObjectId, ref: 'LabourCategoryGroup' },
     isActive: { type: Boolean, default: true, index: true },
+    views: { type: Number, default: 0 },
+    clicks: { type: Number, default: 0 },
   },
   { timestamps: true }
 )

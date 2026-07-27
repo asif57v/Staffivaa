@@ -24,6 +24,8 @@ import { useAuth } from '../../hooks/useAuth.js'
 import { ApiError } from '../../api/http.js'
 import authBg from '../../assets/auth-bg.png'
 
+const GST_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i
+
 const ROLE_OPTIONS = [
   {
     role: USER_ROLES.INDIVIDUAL,
@@ -49,6 +51,12 @@ const ROLE_OPTIONS = [
 
 function isValidIndianMobile(digits) {
   return digits.length === 10 && /^[6-9]\d{9}$/.test(digits)
+}
+
+function formatProfessionalName(val) {
+  let cleaned = String(val || '').replace(/[^a-zA-Z\s\-'.]/g, '')
+  cleaned = cleaned.replace(/^\s+/, '').replace(/\s{2,}/g, ' ')
+  return cleaned
 }
 
 function FeedbackBanner({ variant, children }) {
@@ -78,6 +86,15 @@ function AuthField({ label, hint, children }) {
 
 const inputClass =
   'w-full rounded-2xl border border-slate-200/90 bg-white px-4 py-3.5 text-base font-medium text-slate-900 shadow-sm outline-none transition focus:border-brand/40 focus:ring-2 focus:ring-brand/25'
+
+function handleInputFocus(e) {
+  const container = e.target.closest('div[id^="field-"]') || e.target.parentElement || e.target
+  setTimeout(() => {
+    try {
+      container.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    } catch (err) {}
+  }, 300)
+}
 
 export function AuthEntryPage() {
   const navigate = useNavigate()
@@ -165,6 +182,11 @@ export function AuthEntryPage() {
         const res = await requestLoginOtp({ phone: p })
         setChallengeId(res.data?.challengeId ?? null)
       } else {
+        if (!fullName.trim() || fullName.trim().length < 2 || !/[a-zA-Z]{2,}/.test(fullName)) {
+          setBanner({ variant: 'error', message: 'Please enter your full legal name (minimum 2 letters, alphabets only).' })
+          setBusy(false)
+          return
+        }
         if (role === USER_ROLES.CORPORATE && !companyName.trim()) {
           setBanner({ variant: 'error', message: 'Company name is required.' })
           setBusy(false)
@@ -172,6 +194,11 @@ export function AuthEntryPage() {
         }
         if (role === USER_ROLES.CONTRACTOR && !businessName.trim()) {
           setBanner({ variant: 'error', message: 'Business name is required.' })
+          setBusy(false)
+          return
+        }
+        if (role === USER_ROLES.CORPORATE && gstNumber.trim() && !GST_RE.test(gstNumber.trim())) {
+          setBanner({ variant: 'error', message: 'Invalid GST format (e.g. 22AAAAA0000A1Z5). Enter a valid 15-character GSTIN or leave blank.' })
           setBusy(false)
           return
         }
@@ -221,8 +248,8 @@ export function AuthEntryPage() {
         applySession(token, user)
         signedInUser = user
       } else {
-        if (!fullName.trim()) {
-          setBanner({ variant: 'error', message: 'Full name is required to complete registration.' })
+        if (!fullName.trim() || fullName.trim().length < 2 || !/[a-zA-Z]{2,}/.test(fullName)) {
+          setBanner({ variant: 'error', message: 'Please enter your full legal name (minimum 2 letters, alphabets only).' })
           setBusy(false)
           return
         }
@@ -235,7 +262,14 @@ export function AuthEntryPage() {
         }
         if (role === USER_ROLES.CORPORATE) {
           body.companyName = companyName.trim()
-          if (gstNumber.trim()) body.gstNumber = gstNumber.trim().toUpperCase()
+          if (gstNumber.trim()) {
+            if (!GST_RE.test(gstNumber.trim())) {
+              setBanner({ variant: 'error', message: 'Invalid GST format (e.g. 22AAAAA0000A1Z5). Enter a valid 15-character GSTIN or leave blank.' })
+              setBusy(false)
+              return
+            }
+            body.gstNumber = gstNumber.trim().toUpperCase()
+          }
         }
         if (role === USER_ROLES.CONTRACTOR) {
           body.businessName = businessName.trim()
@@ -265,7 +299,7 @@ export function AuthEntryPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-slate-950 flex flex-col" style={{ maxWidth: 430, margin: '0 auto' }}>
+    <div className="min-h-dvh bg-white flex flex-col" style={{ maxWidth: 430, margin: '0 auto' }}>
 
       {/* ── Hero Header ── */}
       <div
@@ -398,7 +432,7 @@ export function AuthEntryPage() {
               background: '#ffffff',
               borderRadius: '24px 24px 0 0',
               marginTop: -16,
-              padding: '28px 20px 32px',
+              padding: '28px 20px 220px',
               position: 'relative',
               zIndex: 2,
               boxShadow: '0 -4px 40px rgba(0,0,0,0.25)',
@@ -489,7 +523,7 @@ export function AuthEntryPage() {
                   ) : null}
 
                   {/* Phone input */}
-                  <div>
+                  <div id="field-phone">
                     <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
                       Mobile Number
                     </label>
@@ -511,6 +545,7 @@ export function AuthEntryPage() {
                         autoComplete="tel-national"
                         maxLength={10}
                         placeholder="9876543210"
+                        onFocus={handleInputFocus}
                         style={{ flex: 1, border: 'none', outline: 'none', padding: '14px 16px', fontSize: 18, fontWeight: 600, letterSpacing: '0.05em', color: '#0f172a', background: 'transparent', minWidth: 0 }}
                         value={phone}
                         onChange={(e) => setPhoneDigits(e.target.value)}
@@ -539,33 +574,46 @@ export function AuthEntryPage() {
                   {/* Register extra fields */}
                   {mode === 'register' ? (
                     <>
-                      <div>
+                      <div id="field-fullname">
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Full Name</label>
                         <input
                           type="text"
+                          onFocus={handleInputFocus}
                           style={{ width: '100%', borderRadius: 14, border: '2px solid #e2e8f0', padding: '14px 16px', fontSize: 15, fontWeight: 500, color: '#0f172a', outline: 'none', boxSizing: 'border-box', background: '#fff', transition: 'border-color 0.15s' }}
                           value={fullName}
-                          onChange={(e) => setFullName(e.target.value)}
-                          placeholder="As on your ID"
+                          onChange={(e) => setFullName(formatProfessionalName(e.target.value))}
+                          placeholder="e.g. Rajesh Kumar"
                           autoComplete="name"
+                          autoCapitalize="words"
+                          autoCorrect="off"
+                          spellCheck="false"
+                          maxLength={50}
                         />
                       </div>
                       {role === USER_ROLES.CORPORATE ? (
                         <>
-                          <div>
+                          <div id="field-company">
                             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Company Name</label>
-                            <input type="text" style={{ width: '100%', borderRadius: 14, border: '2px solid #e2e8f0', padding: '14px 16px', fontSize: 15, fontWeight: 500, color: '#0f172a', outline: 'none', boxSizing: 'border-box', background: '#fff' }} value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
+                            <input type="text" onFocus={handleInputFocus} style={{ width: '100%', borderRadius: 14, border: '2px solid #e2e8f0', padding: '14px 16px', fontSize: 15, fontWeight: 500, color: '#0f172a', outline: 'none', boxSizing: 'border-box', background: '#fff' }} value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
                           </div>
-                          <div>
+                          <div id="field-gst">
                             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>GST (optional)</label>
-                            <input type="text" maxLength={15} style={{ width: '100%', borderRadius: 14, border: '2px solid #e2e8f0', padding: '14px 16px', fontSize: 15, fontWeight: 500, color: '#0f172a', outline: 'none', boxSizing: 'border-box', background: '#fff' }} value={gstNumber} onChange={(e) => setGstNumber(e.target.value)} />
+                            <input
+                              type="text"
+                              onFocus={handleInputFocus}
+                              maxLength={15}
+                              placeholder="e.g. 22AAAAA0000A1Z5"
+                              style={{ width: '100%', borderRadius: 14, border: '2px solid #e2e8f0', padding: '14px 16px', fontSize: 15, fontWeight: 500, color: '#0f172a', outline: 'none', boxSizing: 'border-box', background: '#fff' }}
+                              value={gstNumber}
+                              onChange={(e) => setGstNumber(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                            />
                           </div>
                         </>
                       ) : null}
                       {role === USER_ROLES.CONTRACTOR ? (
-                        <div>
+                        <div id="field-business">
                           <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Business Name</label>
-                          <input type="text" style={{ width: '100%', borderRadius: 14, border: '2px solid #e2e8f0', padding: '14px 16px', fontSize: 15, fontWeight: 500, color: '#0f172a', outline: 'none', boxSizing: 'border-box', background: '#fff' }} value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
+                          <input type="text" onFocus={handleInputFocus} style={{ width: '100%', borderRadius: 14, border: '2px solid #e2e8f0', padding: '14px 16px', fontSize: 15, fontWeight: 500, color: '#0f172a', outline: 'none', boxSizing: 'border-box', background: '#fff' }} value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
                         </div>
                       ) : null}
                     </>
@@ -610,12 +658,13 @@ export function AuthEntryPage() {
                   </div>
 
                   {/* OTP boxes */}
-                  <div>
+                  <div id="field-otp">
                     <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>Enter OTP</p>
                     <div style={{ display: 'flex', gap: 8 }} onPaste={handleOtpPaste}>
                       {otpCells.map((digit, i) => (
                         <input
                           key={i}
+                          onFocus={handleInputFocus}
                           ref={(el) => { otpInputRefs.current[i] = el }}
                           type="text"
                           inputMode="numeric"

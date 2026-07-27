@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 
 export function AdminReportsPage() {
-  const [activeTab, setActiveTab] = useState('attendance') // attendance, transactions, audit, tickets
+  const [activeTab, setActiveTab] = useState('audit') // audit, tickets
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -245,8 +245,6 @@ export function AdminReportsPage() {
       {/* Tabs */}
       <div className="flex border-b border-slate-200">
         {[
-          { id: 'attendance', label: 'Attendance Roster' },
-          { id: 'transactions', label: 'Financial Transactions' },
           { id: 'audit', label: 'Admin Audit Log' },
           { id: 'tickets', label: 'Support Tickets' },
         ].map(t => (

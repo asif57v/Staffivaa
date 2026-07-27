@@ -139,9 +139,18 @@ export function IndividualHomeScreen({ user }) {
           apiClient.get('/marketing/ads').then(r => r.data),
         ])
         if (mounted) {
-          if (bRes.success) setMarketingBanners(bRes.data.banners)
-          if (oRes.success) setMarketingOffers(oRes.data.offers)
-          if (aRes.success) setMarketingAds(aRes.data.ads)
+          if (bRes.success) {
+            setMarketingBanners(bRes.data.banners)
+            bRes.data.banners.forEach(b => apiClient.post('/marketing/track', { type: 'BANNER', id: b._id, action: 'VIEW' }).catch(()=>{}))
+          }
+          if (oRes.success) {
+            setMarketingOffers(oRes.data.offers)
+            oRes.data.offers.forEach(o => apiClient.post('/marketing/track', { type: 'OFFER', id: o._id, action: 'VIEW' }).catch(()=>{}))
+          }
+          if (aRes.success) {
+            setMarketingAds(aRes.data.ads)
+            aRes.data.ads.forEach(a => apiClient.post('/marketing/track', { type: 'AD', id: a._id, action: 'VIEW' }).catch(()=>{}))
+          }
         }
       } catch (e) {
         console.error('Marketing data fetch failed', e)
@@ -200,6 +209,9 @@ export function IndividualHomeScreen({ user }) {
     const banners = marketingBanners.filter(b => b.position === 'CAROUSEL' || b.position === 'TOP')
     return banners.length > 0 ? banners : HERO_SLIDES
   }, [marketingBanners, HERO_SLIDES])
+
+  const middleBanners = useMemo(() => marketingBanners.filter(b => b.position === 'MIDDLE'), [marketingBanners])
+  const bottomBanners = useMemo(() => marketingBanners.filter(b => b.position === 'BOTTOM'), [marketingBanners])
 
   const [heroSlideIndex, setHeroSlideIndex] = useState(0)
   const heroScrollRef = useRef(null)
@@ -355,6 +367,21 @@ export function IndividualHomeScreen({ user }) {
   )
 
   const handleHeroSlideClick = useCallback((slide) => {
+    if (slide._id) {
+      apiClient.post('/marketing/track', { type: 'BANNER', id: slide._id, action: 'CLICK' }).catch(() => {})
+    }
+
+    if (slide.linkedGroup) {
+      setSelectedGroupId(String(slide.linkedGroup))
+      setCategorySheetOpen(true)
+      return
+    }
+    
+    if (slide.redirectScreen) {
+      navigate(slide.redirectScreen)
+      return
+    }
+
     if (slide.actionType === 'search') {
       setCategorySheetOpen(true)
       return
@@ -373,7 +400,7 @@ export function IndividualHomeScreen({ user }) {
     } else {
       setCategorySheetOpen(true)
     }
-  }, [tradeSubcategories, handleQuickBookCategory])
+  }, [tradeSubcategories, handleQuickBookCategory, navigate])
 
   useEffect(() => {
     let cancelled = false
@@ -381,9 +408,7 @@ export function IndividualHomeScreen({ user }) {
       .then((res) => {
         if (cancelled) return
         const groups = res.data?.groups ?? []
-        const meta = res.data?.meta ?? {}
-        const tradeKind = meta.tradeKind ?? 'trade'
-        setTradeGroups(groups.filter((g) => g.kind === tradeKind && (g.categories?.length ?? 0) > 0))
+        setTradeGroups(groups.filter((g) => (g.categories?.length ?? 0) > 0))
       })
       .catch(() => {
         if (!cancelled) setTradeGroups([])
@@ -527,6 +552,12 @@ export function IndividualHomeScreen({ user }) {
                         src={slide.image}
                         alt={slide.title}
                         className="absolute inset-0 w-full h-full object-cover object-[center_20%]"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          if (e.target.parentElement) {
+                            e.target.parentElement.classList.add('bg-slate-200');
+                          }
+                        }}
                       />
                       <div className="absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-slate-100 to-transparent z-10" />
                     </div>
@@ -536,6 +567,12 @@ export function IndividualHomeScreen({ user }) {
                     src={slide.image}
                     alt="Banner"
                     className="absolute inset-0 w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      if (e.target.parentElement) {
+                        e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-slate-200 text-slate-400 text-xs font-semibold">Image Not Found</div>';
+                      }
+                    }}
                   />
                 )}
               </div>
@@ -637,6 +674,39 @@ export function IndividualHomeScreen({ user }) {
 
         <PopularServicesSection onBook={() => setCategorySheetOpen(true)} />
 
+        {middleBanners.length > 0 && (
+          <motion.section
+            initial={reduce ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-6 -mx-3 px-3"
+          >
+            <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-none snap-x snap-mandatory">
+              {middleBanners.map(banner => (
+                <div key={banner._id} className="w-full snap-center shrink-0 rounded-[20px] overflow-hidden shadow-sm relative group">
+                  <a 
+                    href={banner.redirectUrl || '#'} 
+                    onClick={(e) => { e.preventDefault(); handleHeroSlideClick(banner); }}
+                    className="block w-full h-full relative"
+                  >
+                    <img src={banner.image} alt={banner.title || "Promotion"} className="w-full h-auto object-cover rounded-[20px]" />
+                    {(banner.title || banner.subtitle || banner.price) && (
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-transparent flex flex-col justify-end p-5">
+                        {banner.title && <h4 className="text-white font-extrabold text-[18px] leading-tight mb-1">{banner.title}</h4>}
+                        {banner.subtitle && <p className="text-slate-200 text-xs font-medium leading-snug line-clamp-2">{banner.subtitle}</p>}
+                        {banner.price && (
+                          <div className="mt-2.5 inline-block bg-[#FFD100] text-slate-900 text-[11px] font-black px-3 py-1 rounded-full shadow-sm w-max">
+                            {banner.price}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </a>
+                </div>
+              ))}
+            </div>
+          </motion.section>
+        )}
+
         {marketingOffers.length > 0 && (
           <motion.section
             initial={reduce ? false : { opacity: 0, y: 10 }}
@@ -653,6 +723,7 @@ export function IndividualHomeScreen({ user }) {
                 const targetCategoryId = offer.categories?.[0]
                 
                 const handleOfferClick = () => {
+                  apiClient.post('/marketing/track', { type: 'OFFER', id: offer._id, action: 'CLICK' }).catch(() => {})
                   if (targetCategoryId) {
                     const allCats = tradeGroups.flatMap(g => g.categories || [])
                     const targetCat = allCats.find(c => String(c._id) === String(targetCategoryId))
@@ -699,7 +770,14 @@ export function IndividualHomeScreen({ user }) {
             </div>
             <div className="flex flex-col gap-3 px-0">
               {marketingAds.map(ad => (
-                <a href={ad.redirectUrl || '#'} key={ad._id} className="flex gap-3 bg-white border border-slate-200 rounded-[16px] p-3 shadow-sm items-center active:scale-[0.98] transition">
+                <a 
+                  href={ad.redirectUrl || '#'} 
+                  key={ad._id} 
+                  onClick={(e) => {
+                    apiClient.post('/marketing/track', { type: 'AD', id: ad._id, action: 'CLICK' }).catch(() => {})
+                  }}
+                  className="flex gap-3 bg-white border border-slate-200 rounded-[16px] p-3 shadow-sm items-center active:scale-[0.98] transition"
+                >
                   <img src={ad.banner} alt={ad.companyName} className="w-16 h-16 rounded-[12px] object-cover bg-slate-100" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">
@@ -896,7 +974,38 @@ export function IndividualHomeScreen({ user }) {
           </motion.div>
         </motion.section>
 
-
+        {bottomBanners.length > 0 && (
+          <motion.section
+            initial={reduce ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-8 -mx-3 px-3"
+          >
+            <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-none snap-x snap-mandatory">
+              {bottomBanners.map(banner => (
+                <div key={banner._id} className="w-full snap-center shrink-0 rounded-[20px] overflow-hidden shadow-sm relative group">
+                  <a 
+                    href={banner.redirectUrl || '#'} 
+                    onClick={(e) => { e.preventDefault(); handleHeroSlideClick(banner); }}
+                    className="block w-full h-full relative"
+                  >
+                    <img src={banner.image} alt={banner.title || "Promotion"} className="w-full h-auto object-cover rounded-[20px]" />
+                    {(banner.title || banner.subtitle || banner.price) && (
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-transparent flex flex-col justify-end p-5">
+                        {banner.title && <h4 className="text-white font-extrabold text-[18px] leading-tight mb-1">{banner.title}</h4>}
+                        {banner.subtitle && <p className="text-slate-200 text-xs font-medium leading-snug line-clamp-2">{banner.subtitle}</p>}
+                        {banner.price && (
+                          <div className="mt-2.5 inline-block bg-[#FFD100] text-slate-900 text-[11px] font-black px-3 py-1 rounded-full shadow-sm w-max">
+                            {banner.price}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </a>
+                </div>
+              ))}
+            </div>
+          </motion.section>
+        )}
 
         {/* How it works & Trust */}
         <section className="mt-10 mb-8">

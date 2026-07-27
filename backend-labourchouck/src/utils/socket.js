@@ -29,15 +29,20 @@ export const initSocket = () => {
 
       socket.join(personalRoom);
       socket.join(roleRoom);
-      
-      // Explicit vendor and corporate rooms as requested
+      socket.join(String(_id));
+      socket.join(`user_${_id}`);
+
       if (role === 'vendor' || role === 'contractor') {
         socket.join(`vendor-${_id}`);
+        socket.join(`contractor-${_id}`);
+        socket.join(`vendor_${_id}`);
+        socket.join(`contractor_${_id}`);
       } else if (role === 'corporate') {
         socket.join(`corporate-${_id}`);
+        socket.join(`corporate_${_id}`);
       }
-      
-      console.log(`[Socket.io] Socket ${socket.id} joined rooms: ${personalRoom}, ${roleRoom}`);
+
+      console.log(`[Socket.io] Socket ${socket.id} joined rooms for user ${_id} (${role})`);
     })
 
     // Client can join a room based on the requestId to receive updates for that specific request

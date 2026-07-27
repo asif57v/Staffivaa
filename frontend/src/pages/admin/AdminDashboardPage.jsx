@@ -106,9 +106,6 @@ export function AdminDashboardPage() {
         transition={{ duration: 0.35 }}
       >
         <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 md:text-3xl">Control centre</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 md:text-base">
-          Super panel for Staffivaa — live MongoDB-driven insights, time records, settlements, and live activities updates.
-        </p>
       </motion.div>
 
       <div className="grid gap-6 grid-cols-4 w-full">

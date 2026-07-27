@@ -12,6 +12,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Wrench,
+  X,
 } from 'lucide-react'
 import { submitLabourKycDocuments } from '../../api/userKycApi.js'
 import { ApiError } from '../../api/http.js'
@@ -74,6 +75,12 @@ export function AppKycPage() {
   const [videoPreviewUrl, setVideoPreviewUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const [banner, setBanner] = useState(null)
+
+  useEffect(() => {
+    if (!banner) return
+    const timer = setTimeout(() => setBanner(null), 5000)
+    return () => clearTimeout(timer)
+  }, [banner])
 
   const profile = user?.labourProfile
   const kyc = profile?.kycStatus || KYC_STATUS.PENDING
@@ -209,17 +216,29 @@ export function AppKycPage() {
     <div className="space-y-4 pb-8">
       <AnimatePresence>
         {banner ? (
-          <motion.p
-            initial={reduce ? false : { opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={reduce ? undefined : { opacity: 0 }}
-            className={`fixed left-4 right-4 top-[max(4.5rem,env(safe-area-inset-top))] z-120 mx-auto max-w-md rounded-2xl px-4 py-3 text-center text-sm font-semibold text-white shadow-xl ${
-              banner.variant === 'success' ? 'bg-emerald-900/95 border border-emerald-300/40' : 'bg-rose-900/95 border border-rose-300/40'
+          <motion.div
+            initial={reduce ? false : { opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reduce ? undefined : { opacity: 0, y: -20, scale: 0.95 }}
+            className={`fixed left-4 right-4 top-3 z-[200] mx-auto max-w-md rounded-2xl p-3.5 shadow-2xl flex items-center justify-between gap-3 ${
+              banner.variant === 'success'
+                ? 'bg-emerald-900/95 text-white border border-emerald-400/50 backdrop-blur-md'
+                : 'bg-rose-900/95 text-white border border-rose-400/50 backdrop-blur-md'
             }`}
             role="status"
           >
-            {banner.message}
-          </motion.p>
+            <div className="flex-1 min-w-0">
+              <span className="text-xs sm:text-sm font-bold leading-snug block">{banner.message}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setBanner(null)}
+              className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/15 transition shrink-0"
+              aria-label="Close message"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
         ) : null}
       </AnimatePresence>
 

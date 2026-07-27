@@ -17,6 +17,8 @@ const offerSchema = new mongoose.Schema(
     discountPercentage: { type: Number, min: 0, max: 100, default: 0 },
     maxUsageLimit: { type: Number, default: 0 },
     currentUsageCount: { type: Number, default: 0 },
+    views: { type: Number, default: 0 },
+    clicks: { type: Number, default: 0 },
   },
   { timestamps: true }
 )

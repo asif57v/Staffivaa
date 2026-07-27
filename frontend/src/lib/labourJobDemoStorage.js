@@ -106,7 +106,7 @@ export function assignmentToJobCard(assignment) {
     title: loc || 'Site assignment',
     site: loc || 'See job details',
     location: loc || '',
-    shiftWindow: '09:00 AM - 06:00 PM',
+    shiftWindow: typeof req === 'object' && (req?.shift || req?.timeSlot) ? (req?.shift || req?.timeSlot) : '',
     rateLabel: 'Per shift',
     trade: catName || 'Labour',
     role: catName || 'Worker',

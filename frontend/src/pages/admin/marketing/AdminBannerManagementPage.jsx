@@ -7,15 +7,22 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 export function AdminBannerManagementPage() {
   const [banners, setBanners] = useState([])
+  const [groups, setGroups] = useState([])
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [formData, setFormData] = useState({
+  const [editingBannerId, setEditingBannerId] = useState(null)
+  const defaultFormData = {
     image: '',
+    title: '',
+    subtitle: '',
+    price: '',
     position: 'CAROUSEL',
     redirectScreen: '',
+    linkedGroup: '',
     priority: 1,
     isActive: true,
-  })
+  }
+  const [formData, setFormData] = useState(defaultFormData)
 
   const fetchBanners = async () => {
     try {
@@ -28,8 +35,20 @@ export function AdminBannerManagementPage() {
     }
   }
 
+  const fetchGroups = async () => {
+    try {
+      const res = await apiClient.get('/labour-categories/grouped')
+      if (res.data.success) {
+        setGroups(res.data.data.groups)
+      }
+    } catch (e) {
+      console.error('Failed to load category groups')
+    }
+  }
+
   useEffect(() => {
     fetchBanners()
+    fetchGroups()
   }, [])
 
   const toggleStatus = async (id, currentStatus) => {
@@ -60,16 +79,33 @@ export function AdminBannerManagementPage() {
   const handleAddSubmit = async (e) => {
     e.preventDefault()
     try {
-      const res = await apiClient.post('/admin/marketing/banners', formData)
-      if (res.data.success) {
-        toast.success('Banner uploaded successfully!')
-        setIsModalOpen(false)
-        setFormData({ image: '', position: 'CAROUSEL', redirectScreen: '', priority: 1, isActive: true })
-        fetchBanners()
+      if (editingBannerId) {
+        const res = await apiClient.patch(`/admin/marketing/banners/${editingBannerId}`, formData)
+        if (res.data.success) {
+          toast.success('Banner updated successfully!')
+          setIsModalOpen(false)
+          setEditingBannerId(null)
+          setFormData(defaultFormData)
+          fetchBanners()
+        }
+      } else {
+        const res = await apiClient.post('/admin/marketing/banners', formData)
+        if (res.data.success) {
+          toast.success('Banner uploaded successfully!')
+          setIsModalOpen(false)
+          setFormData(defaultFormData)
+          fetchBanners()
+        }
       }
     } catch (e) {
-      toast.error('Failed to upload banner')
+      toast.error(editingBannerId ? 'Failed to update banner' : 'Failed to upload banner')
     }
+  }
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setEditingBannerId(null)
+    setFormData(defaultFormData)
   }
 
   return (
@@ -80,7 +116,11 @@ export function AdminBannerManagementPage() {
           <p className="text-sm text-slate-500">Control homepage banners (Top, Middle, Bottom, Carousel)</p>
         </div>
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setEditingBannerId(null)
+            setFormData(defaultFormData)
+            setIsModalOpen(true)
+          }}
           className="bg-[#3730A3] text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 hover:bg-[#312E81] transition"
         >
           <Plus className="h-4 w-4" /> Upload Banner
@@ -123,7 +163,24 @@ export function AdminBannerManagementPage() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button className="p-1.5 text-slate-400 hover:text-[#3730A3] bg-slate-50 rounded-md hover:bg-indigo-50 transition">
+                      <button 
+                        onClick={() => {
+                          setEditingBannerId(banner._id)
+                          setFormData({
+                            image: banner.image || '',
+                            title: banner.title || '',
+                            subtitle: banner.subtitle || '',
+                            price: banner.price || '',
+                            position: banner.position,
+                            redirectScreen: banner.redirectScreen || '',
+                            linkedGroup: banner.linkedGroup || '',
+                            priority: banner.priority,
+                            isActive: banner.isActive
+                          })
+                          setIsModalOpen(true)
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-[#3730A3] bg-slate-50 rounded-md hover:bg-indigo-50 transition"
+                      >
                         <Edit2 className="h-4 w-4" />
                       </button>
                       <button onClick={() => deleteBanner(banner._id)} className="p-1.5 text-slate-400 hover:text-red-600 bg-slate-50 rounded-md hover:bg-red-50 transition">
@@ -148,19 +205,41 @@ export function AdminBannerManagementPage() {
               className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden"
             >
               <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                <h3 className="font-bold text-lg text-slate-800">Upload Banner</h3>
-                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                  <XCircle className="w-5 h-5" />
-                </button>
+                <h3 className="font-bold text-lg text-slate-800">{editingBannerId ? 'Edit Banner' : 'Upload Banner'}</h3>
               </div>
               <form onSubmit={handleAddSubmit} className="p-5 space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">Image URL</label>
                   <input type="url" required value={formData.image} onChange={e => setFormData({...formData, image: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="https://..." />
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Redirect Screen (Optional)</label>
+                    <input type="text" value={formData.redirectScreen} onChange={e => setFormData({...formData, redirectScreen: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. /app/work-categories" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Link to Category (Optional)</label>
+                    <select value={formData.linkedGroup} onChange={e => setFormData({...formData, linkedGroup: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                      <option value="">None</option>
+                      {groups.map(g => (
+                        <option key={g._id} value={g._id}>{g.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Title (Optional)</label>
+                    <input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Banner title" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Subtitle (Optional)</label>
+                    <input type="text" value={formData.subtitle} onChange={e => setFormData({...formData, subtitle: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Banner subtitle" />
+                  </div>
+                </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Redirect Screen (Optional)</label>
-                  <input type="text" value={formData.redirectScreen} onChange={e => setFormData({...formData, redirectScreen: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. /app/work-categories" />
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Price Text (Optional)</label>
+                  <input type="text" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. ₹99/hr" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -178,8 +257,8 @@ export function AdminBannerManagementPage() {
                   </div>
                 </div>
                 <div className="pt-4 flex justify-end gap-2">
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded-lg font-medium text-slate-600 hover:bg-slate-100">Cancel</button>
-                  <button type="submit" className="bg-[#3730A3] text-white px-5 py-2 rounded-lg font-medium hover:bg-[#312E81] shadow-sm">Save Banner</button>
+                  <button type="button" onClick={handleCloseModal} className="px-4 py-2 rounded-lg font-medium text-slate-600 hover:bg-slate-100">Cancel</button>
+                  <button type="submit" className="bg-[#3730A3] text-white px-5 py-2 rounded-lg font-medium hover:bg-[#312E81] shadow-sm">{editingBannerId ? 'Update Banner' : 'Save Banner'}</button>
                 </div>
               </form>
             </motion.div>

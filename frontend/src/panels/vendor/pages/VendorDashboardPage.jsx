@@ -290,28 +290,26 @@ export function VendorDashboardPage() {
                 return (
                   <li key={a._id}>
                     <Link to={`/vendor/jobs/${a._id}`} className="block transition active:scale-[0.98]">
-                      <div className="flex flex-row items-center rounded-[20px] bg-white p-3 shadow-[0_2px_12px_rgb(0,0,0,0.03)] border border-slate-100/50 hover:shadow-md transition-shadow">
-                        {/* Thumbnail */}
-                        <div className="relative h-16 w-[90px] shrink-0 overflow-hidden rounded-[14px] bg-slate-200 mr-4">
-                          <img src="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=300&q=80" alt="Site" className="h-full w-full object-cover" />
-                        </div>
-                        
-                        {/* Content */}
-                        <div className="flex-1 min-w-0 flex flex-col justify-center">
-                            <div className="flex items-center gap-1.5 truncate pr-2">
-                              <h3 className="text-[15px] font-bold text-slate-900 truncate">{projectName}</h3>
-                              <span className="text-slate-300 text-sm">|</span>
-                              <span className="text-[14px] font-medium text-slate-500 truncate">{companyName}</span>
-                            </div>
-                          
-                          <div className="mt-1.5 flex items-center gap-1.5">
+                      <div className="rounded-[22px] bg-white p-4 shadow-[0_2px_12px_rgb(0,0,0,0.04)] border border-slate-100 hover:shadow-md transition-shadow">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0 pr-1">
+                            <h3 className="text-base sm:text-lg font-extrabold text-slate-900 leading-snug">{projectName}</h3>
+                            <p className="text-sm font-semibold text-slate-600 mt-0.5">{companyName}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
                             <div className={`h-2 w-2 rounded-full ${pending ? 'bg-orange-500' : 'bg-[#FF9800]'}`} />
-                            <span className={`text-[12px] font-semibold ${pending ? 'text-orange-700' : 'text-[#1976D2]'}`}>
+                            <span className={`text-[12px] font-bold ${pending ? 'text-orange-700' : 'text-[#1976D2]'}`}>
                               {statusLabel}
                             </span>
+                            <ChevronRight className="h-4 w-4 text-slate-300 ml-1" />
                           </div>
                         </div>
-                        <ChevronRight className="h-4 w-4 text-slate-300 shrink-0 mr-1" />
+                        {req?.locationText && (
+                          <div className="mt-2.5 flex items-center gap-1.5 rounded-xl bg-slate-50 p-2 border border-slate-100/80 text-xs font-bold text-slate-700">
+                            <span className="text-slate-400">📍</span>
+                            <span className="leading-relaxed">{req.locationText}</span>
+                          </div>
+                        )}
                       </div>
                     </Link>
                   </li>
