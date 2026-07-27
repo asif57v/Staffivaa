@@ -6,6 +6,7 @@ import {
   Bell,
   BellRing,
   Building2,
+  Check,
   CheckCircle2,
   ChevronRight,
   Clock,
@@ -55,6 +56,11 @@ const TYPE_MAPPING = {
   'WALLET_CREDIT': { icon: Wallet, kind: 'earnings', priority: 'high', category: 'updates' },
   'WALLET_DEBIT': { icon: Wallet, kind: 'earnings', priority: 'normal', category: 'updates' },
   'WITHDRAWAL_COMPLETED': { icon: Wallet, kind: 'earnings', priority: 'high', category: 'updates' },
+  'ACCOUNT_ON_HOLD': { icon: Bell, kind: 'system', priority: 'high', category: 'updates' },
+  'ACCOUNT_SUSPENDED': { icon: Bell, kind: 'system', priority: 'high', category: 'updates' },
+  'ACCOUNT_BLOCKED': { icon: Bell, kind: 'system', priority: 'high', category: 'updates' },
+  'ACCOUNT_REACTIVATED': { icon: CheckCircle2, kind: 'kyc', priority: 'high', category: 'updates' },
+  'ACCOUNT_STATUS_UPDATE': { icon: Bell, kind: 'system', priority: 'normal', category: 'updates' },
 }
 
 const KIND_TONE = {
@@ -151,7 +157,14 @@ export function VendorNotificationsPage() {
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900">Notifications</h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-black tracking-tight text-slate-900">Real-time Notifications</h1>
+            {unreadCount > 0 && (
+              <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-bold text-red-600">
+                {unreadCount} new
+              </span>
+            )}
+          </div>
         </div>
         {unreadCount > 0 && (
           <button
@@ -175,11 +188,11 @@ export function VendorNotificationsPage() {
         {filtered.length === 0 ? (
           <AppEmptyState
             icon={Bell}
-            title="No notifications here"
+            title="No notifications right now"
             subtitle={
               tab === 'jobs'
                 ? 'New assignment requests will appear when admin or clients post jobs near you.'
-                : 'KYC, attendance, and pay updates show up in this tab.'
+                : 'Account updates, KYC, and system alerts show up in this tab.'
             }
           />
         ) : (
@@ -195,49 +208,60 @@ export function VendorNotificationsPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04 }}
                 >
-                  <GlassPanel
-                    className={`relative overflow-hidden border-2 p-4 transition cursor-pointer ${
-                      !n.isRead ? 'border-brand/30 bg-white shadow-md shadow-brand/5' : 'border-slate-200/90'
-                    } ${n.priority === 'high' ? 'ring-1 ring-amber-200/60' : ''}`}
+                  <div
+                    className={`relative flex items-center justify-between gap-4 rounded-2xl border p-4 transition cursor-pointer ${
+                      !n.isRead
+                        ? 'border-slate-200 bg-white shadow-md shadow-slate-200/50 ring-1 ring-blue-100'
+                        : 'border-slate-200/80 bg-white/90 hover:bg-white shadow-2xs'
+                    }`}
                     onClick={() => handleOpen(n)}
                   >
-                    {!n.isRead ? (
-                      <span className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-brand shadow-[0_0_0_3px_rgba(255,179,71,0.25)]" />
-                    ) : null}
-
-                    <button
-                      type="button"
-                      onClick={(e) => handleDismiss(n._id, e)}
-                      className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                      aria-label="Dismiss"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-
-                    <div className="flex gap-3 pr-8">
-                      <span
-                        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br ring-1 ${tone}`}
-                      >
-                        <Icon className="h-5 w-5" aria-hidden />
-                      </span>
-                      <div className="min-w-0 flex-1 text-left">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {n.priority === 'high' ? <AppBadge variant="amber">Important</AppBadge> : null}
-                          {n.kind === 'job_request' ? <AppBadge variant="brand">Job</AppBadge> : null}
-                          {n.isRead ? (
-                            <span className="text-[10px] font-bold uppercase text-slate-400">Read</span>
-                          ) : null}
-                        </div>
-                        <p className="mt-1 text-sm font-extrabold text-slate-900">{n.title}</p>
-                        <p className="mt-1 text-xs leading-relaxed text-slate-600">{n.body}</p>
-                        
-                        <span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-brand underline-offset-4 hover:underline">
-                          View details
-                          <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                    <div className="flex-1 min-w-0 text-left">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-extrabold text-slate-900 truncate">
+                          {n.title || 'Notification Update'}
                         </span>
+                        {!n.isRead ? (
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500 shadow-[0_0_0_2px_rgba(59,130,246,0.15)]" />
+                        ) : null}
                       </div>
+                      <p className="mt-1 text-xs font-semibold text-slate-600 leading-relaxed">
+                        {n.body || n.message || ''}
+                      </p>
+                      <span className="mt-2.5 block text-[11px] font-bold text-slate-400">
+                        {n.createdAt ? new Date(n.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : 'Just now'}
+                      </span>
                     </div>
-                  </GlassPanel>
+
+                    <div className="flex shrink-0 items-center gap-2">
+                      {!n.isRead && (
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              await markRead(n._id).unwrap();
+                              refetch();
+                            } catch (err) {}
+                          }}
+                          className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 hover:scale-105 active:scale-95 border border-emerald-200/60 shadow-xs"
+                          title="Mark as read / Accept (Right)"
+                          aria-label="Mark as read"
+                        >
+                          <Check className="h-5 w-5 stroke-[2.5]" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => handleDismiss(n._id, e)}
+                        className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-50 text-rose-600 transition hover:bg-rose-100 hover:scale-105 active:scale-95 border border-rose-200/60 shadow-xs"
+                        title="Remove / Dismiss (Cross)"
+                        aria-label="Dismiss"
+                      >
+                        <X className="h-5 w-5 stroke-[2.5]" />
+                      </button>
+                    </div>
+                  </div>
                 </motion.li>
               )
             })}

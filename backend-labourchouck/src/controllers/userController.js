@@ -791,6 +791,37 @@ export const patchUserStatusAdmin = asyncHandler(async (req, res) => {
 
   await user.save()
 
+  let notifTitle = `Account Status: ${status.toUpperCase()}`
+  let notifBody = `Your account status has been changed to ${status}. Reason: ${reason}`
+  let notifType = 'ACCOUNT_STATUS_UPDATE'
+
+  if (status === 'on_hold') {
+    notifTitle = 'Account On Hold ⏸️'
+    notifBody = `Your account has been placed on hold by Admin. Reason: ${reason}`
+    notifType = 'ACCOUNT_ON_HOLD'
+  } else if (status === 'suspended') {
+    notifTitle = 'Account Suspended ⚠️'
+    notifBody = `Your account has been temporarily suspended by Admin. Reason: ${reason}`
+    notifType = 'ACCOUNT_SUSPENDED'
+  } else if (status === 'blocked') {
+    notifTitle = 'Account Blocked 🚫'
+    notifBody = `Your account has been blocked by Admin. Reason: ${reason}`
+    notifType = 'ACCOUNT_BLOCKED'
+  } else if (status === 'active' && oldStatus !== 'active') {
+    notifTitle = 'Account Reactivated / Verified ✅'
+    notifBody = `Your account has been reactivated and is now active for full operation! Note: ${reason}`
+    notifType = 'ACCOUNT_REACTIVATED'
+  }
+
+  await triggerNotification({
+    userId: user._id,
+    title: notifTitle,
+    body: notifBody,
+    type: notifType,
+    relatedId: user._id,
+    relatedModel: 'User'
+  })
+
   await logAudit({
     adminId: req.user._id,
     action: `Changed status to ${status}`,

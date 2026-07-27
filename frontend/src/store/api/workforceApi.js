@@ -492,18 +492,27 @@ export const workforceApi = baseApi.injectEndpoints({
         try {
           await cacheDataLoaded
 
-          const listener = (newNotification) => {
+          const listener = (payload) => {
+            const newNotif = payload?.notification || payload;
+            if (!newNotif || (!newNotif.title && !newNotif._id)) return;
             updateCachedData((draft) => {
               if (draft && draft.notifications) {
-                draft.notifications.unshift(newNotification)
-                draft.unreadCount = (draft.unreadCount || 0) + 1
+                const exists = draft.notifications.some(n => n._id === newNotif._id || (n.title === newNotif.title && n.body === newNotif.body));
+                if (!exists) {
+                  draft.notifications.unshift(newNotif);
+                  draft.unreadCount = (draft.unreadCount || 0) + 1;
+                }
               }
             })
           }
           socket.on('notification:new', listener)
+          socket.on('kyc:updated', listener)
+          socket.on('account:status_updated', listener)
           
           await cacheEntryRemoved
           socket.off('notification:new', listener)
+          socket.off('kyc:updated', listener)
+          socket.off('account:status_updated', listener)
         } catch {}
       }
     }),

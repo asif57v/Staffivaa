@@ -9,6 +9,9 @@ export function VendorShell() {
   const { headerTagline, bottomNav, drawerNav } = vendorNavigation
 
   const headerBadge = useMemo(() => {
+    if (user?.accountStatus === 'suspended') return { label: 'Account suspended', variant: 'rose' }
+    if (user?.accountStatus === 'blocked') return { label: 'Account blocked', variant: 'rose' }
+    if (user?.accountStatus === 'on_hold') return { label: 'Account on hold', variant: 'amber' }
     const v = user?.contractorProfile?.verificationStatus
     if (v === 'pending') return { label: 'Verification pending', variant: 'amber' }
     if (v === 'rejected') return { label: 'Not verified', variant: 'rose' }

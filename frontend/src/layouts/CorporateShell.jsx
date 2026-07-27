@@ -9,6 +9,9 @@ export function CorporateShell() {
   const { headerTagline, bottomNav, drawerNav } = corporateNavigation
 
   const headerBadge = useMemo(() => {
+    if (user?.accountStatus === 'suspended') return { label: 'Account suspended', variant: 'rose' }
+    if (user?.accountStatus === 'blocked') return { label: 'Account blocked', variant: 'rose' }
+    if (user?.accountStatus === 'on_hold') return { label: 'Account on hold', variant: 'amber' }
     const s = user?.corporateProfile?.status
     if (s === CORPORATE_STATUS.PENDING) return { label: 'Approval pending', variant: 'amber' }
     if (s === CORPORATE_STATUS.REJECTED) return { label: 'Not approved', variant: 'rose' }

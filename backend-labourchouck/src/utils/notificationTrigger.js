@@ -40,7 +40,21 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
             .to(uId)
             .emit('notification:new', notification);
 
-          if (type === 'KYC_APPROVED' || type === 'KYC_REJECTED') {
+          if (
+            type === 'KYC_APPROVED' || 
+            type === 'KYC_REJECTED' ||
+            type === 'ACCOUNT_ON_HOLD' ||
+            type === 'ACCOUNT_SUSPENDED' ||
+            type === 'ACCOUNT_BLOCKED' ||
+            type === 'ACCOUNT_REACTIVATED' ||
+            type === 'ACCOUNT_STATUS_UPDATE'
+          ) {
+            const statusStr = 
+              type === 'KYC_APPROVED' || type === 'ACCOUNT_REACTIVATED' ? 'approved' :
+              type === 'ACCOUNT_ON_HOLD' ? 'on_hold' :
+              type === 'ACCOUNT_SUSPENDED' ? 'suspended' :
+              type === 'ACCOUNT_BLOCKED' ? 'blocked' : 'updated';
+
             io.to(`${uRole}_${uId}`)
               .to(`vendor_${uId}`)
               .to(`vendor-${uId}`)
@@ -50,7 +64,18 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
               .to(`corporate-${uId}`)
               .to(`user_${uId}`)
               .to(uId)
-              .emit('kyc:updated', { status: type === 'KYC_APPROVED' ? 'approved' : 'rejected', notification });
+              .emit('kyc:updated', { status: statusStr, notification });
+
+            io.to(`${uRole}_${uId}`)
+              .to(`vendor_${uId}`)
+              .to(`vendor-${uId}`)
+              .to(`contractor_${uId}`)
+              .to(`contractor-${uId}`)
+              .to(`corporate_${uId}`)
+              .to(`corporate-${uId}`)
+              .to(`user_${uId}`)
+              .to(uId)
+              .emit('account:status_updated', { status: statusStr, notification });
           }
         }
       } else {

@@ -1,8 +1,8 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { LogOut, Menu, Sparkles, X, MapPin, ChevronDown, Bell, ShoppingCart, MoreVertical } from 'lucide-react'
+import { LogOut, Menu, Sparkles, X, MapPin, ChevronDown, Bell, ShoppingCart, MoreVertical, Check } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth.js'
 import { useDispatch } from 'react-redux'
 import { workforceApi } from '../store/api/workforceApi.js'
@@ -38,6 +38,32 @@ export function PanelShell({
   const [locationModalOpen, setLocationModalOpen] = useState(false)
   const [appLocation, setAppLocation] = useState(() => readAppUserLocation())
   const reduce = useReducedMotion()
+
+  const injectNotificationIntoFeed = useCallback((notif) => {
+    const newNotif = {
+      _id: notif._id || 'local_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      title: notif.title || 'Notification Update',
+      body: notif.body || notif.message || 'You have a new real-time notification.',
+      type: notif.type || 'ACCOUNT_STATUS_UPDATE',
+      isRead: false,
+      createdAt: notif.createdAt || new Date().toISOString()
+    };
+    dispatch(
+      workforceApi.util.updateQueryData('getNotifications', undefined, (draft) => {
+        if (draft && draft.notifications) {
+          const exists = draft.notifications.some(
+            n => n._id === newNotif._id || (n.title === newNotif.title && n.body === newNotif.body)
+          );
+          if (!exists) {
+            draft.notifications.unshift(newNotif);
+            draft.unreadCount = (draft.unreadCount || 0) + 1;
+          }
+        } else {
+          return { notifications: [newNotif], unreadCount: 1 };
+        }
+      })
+    );
+  }, [dispatch]);
 
   const [scrollData, setScrollData] = useState({ y: 0, direction: 'up' })
 
@@ -79,19 +105,37 @@ export function PanelShell({
     };
 
     const handleNotification = (notification) => {
+      injectNotificationIntoFeed(notification);
       import('react-hot-toast').then(({ default: toast }) => {
-        toast.success(notification?.title || 'New Notification Received', { duration: 5000 });
+        toast.success(notification?.title || 'New Notification Received', { duration: 6000 });
       });
       refreshUser();
       invalidateCache();
     };
 
     const handleKycUpdate = (data) => {
+      const statusStr = data?.status || 'updated';
+      const notifObj = data?.notification || {
+        title: statusStr === 'approved' ? 'Account Verified 🎉' :
+               statusStr === 'on_hold' ? 'Account On Hold ⏸️' :
+               statusStr === 'suspended' ? 'Account Suspended ⚠️' :
+               statusStr === 'blocked' ? 'Account Blocked 🚫' : 'Account Status Updated ⚠️',
+        body: statusStr === 'approved' ? 'Congratulations! Your account verification has just been APPROVED by admin!' :
+              statusStr === 'on_hold' ? 'Your account has been temporarily placed on hold by admin.' :
+              statusStr === 'suspended' ? 'Your account has been suspended by admin.' :
+              statusStr === 'blocked' ? 'Your account has been blocked by admin.' : 'Your account status changed to: ' + statusStr,
+        type: statusStr === 'approved' ? 'KYC_APPROVED' :
+              statusStr === 'on_hold' ? 'ACCOUNT_ON_HOLD' :
+              statusStr === 'suspended' ? 'ACCOUNT_SUSPENDED' :
+              statusStr === 'blocked' ? 'ACCOUNT_BLOCKED' : 'ACCOUNT_STATUS_UPDATE',
+        createdAt: new Date().toISOString()
+      };
+      injectNotificationIntoFeed(notifObj);
       import('react-hot-toast').then(({ default: toast }) => {
-        if (data?.status === 'approved') {
-          toast.success('🎉 Congratulations! Your account verification has been APPROVED by admin!', { duration: 7000 });
+        if (statusStr === 'approved' || statusStr === 'active') {
+          toast.success(notifObj.title + ': ' + notifObj.body, { duration: 7000 });
         } else {
-          toast.error('⚠️ Account verification status updated: ' + (data?.status || 'Reviewed'), { duration: 6000 });
+          toast.error(notifObj.title + ': ' + notifObj.body, { duration: 7000 });
         }
       });
       refreshUser();
@@ -110,6 +154,7 @@ export function PanelShell({
     socket.on('request_status_update', invalidateCache);
     socket.on('notification:new', handleNotification);
     socket.on('kyc:updated', handleKycUpdate);
+    socket.on('account:status_updated', handleKycUpdate);
     socket.on('dashboard:updated', invalidateCache);
 
     return () => {
@@ -125,41 +170,76 @@ export function PanelShell({
       socket.off('request_status_update', invalidateCache);
       socket.off('notification:new', handleNotification);
       socket.off('kyc:updated', handleKycUpdate);
+      socket.off('account:status_updated', handleKycUpdate);
       socket.off('dashboard:updated', invalidateCache);
     };
   }, [user, token, dispatch]);
 
-  // Automatic background polling when verification is pending or in review so pages refresh instantly on admin approval
+  // Automatic background polling for real-time account status updates & admin approvals
   useEffect(() => {
     if (!user || !token) return;
-    const isVendorPending = (user.role === 'contractor' || user.role === 'vendor') && user?.contractorProfile?.verificationStatus !== 'approved';
-    const isCorporatePending = user.role === 'corporate' && user?.corporateProfile?.status !== 'approved';
 
     // Fetch fresh user profile on initial mount
     fetchMe().then((res) => {
       if (res?.data?.user) dispatch(setUser(res.data.user));
     }).catch(() => {});
 
-    if (isVendorPending || isCorporatePending) {
-      const interval = setInterval(() => {
-        fetchMe().then((res) => {
-          if (res?.data?.user) {
-            const newUser = res.data.user;
-            const nowApproved = (newUser.role === 'contractor' || newUser.role === 'vendor')
-              ? newUser?.contractorProfile?.verificationStatus === 'approved'
-              : newUser?.corporateProfile?.status === 'approved';
-            if (nowApproved) {
-              import('react-hot-toast').then(({ default: toast }) => {
-                toast.success('🎉 Congratulations! Your account verification has just been APPROVED by admin!', { duration: 7000 });
-              });
-            }
-            dispatch(setUser(newUser));
+    // Polling every 4 seconds guarantees instant updates for Hold, Suspend, Block, Reactivate & KYC approvals even if sockets drop
+    const interval = setInterval(() => {
+      fetchMe().then((res) => {
+        if (res?.data?.user) {
+          const newUser = res.data.user;
+          const oldStatus = user?.accountStatus || 'active';
+          const newStatus = newUser?.accountStatus || 'active';
+          
+          if (newStatus !== oldStatus) {
+            const notifTitle = newStatus === 'on_hold' ? 'Account On Hold ⏸️' :
+                               newStatus === 'suspended' ? 'Account Suspended ⚠️' :
+                               newStatus === 'blocked' ? 'Account Blocked 🚫' :
+                               newStatus === 'active' ? 'Account Reactivated ✅' : 'Account Status Updated ⚠️';
+            const notifBody = newStatus === 'on_hold' ? 'Your account has been temporarily placed on hold by admin.' :
+                              newStatus === 'suspended' ? 'Your account has been suspended by admin.' :
+                              newStatus === 'blocked' ? 'Your account has been blocked by admin.' :
+                              newStatus === 'active' ? 'Your account has been reactivated and is now active!' : 'Your account status is now ' + newStatus + '.';
+            const notifType = newStatus === 'on_hold' ? 'ACCOUNT_ON_HOLD' :
+                              newStatus === 'suspended' ? 'ACCOUNT_SUSPENDED' :
+                              newStatus === 'blocked' ? 'ACCOUNT_BLOCKED' :
+                              newStatus === 'active' ? 'ACCOUNT_REACTIVATED' : 'ACCOUNT_STATUS_UPDATE';
+            injectNotificationIntoFeed({ title: notifTitle, body: notifBody, type: notifType, createdAt: new Date().toISOString() });
+            import('react-hot-toast').then(({ default: toast }) => {
+              if (newStatus === 'active') toast.success(notifTitle + ': ' + notifBody, { duration: 7000 });
+              else toast.error(notifTitle + ': ' + notifBody, { duration: 7000 });
+            });
+            dispatch(workforceApi.util.invalidateTags(['Notifications', 'VendorDashboard', 'CorporateDashboard', 'Wallet']));
           }
-        }).catch(() => {});
-      }, 4000);
-      return () => clearInterval(interval);
-    }
-  }, [user?.role, token, dispatch]);
+
+          const oldApproved = (user.role === 'contractor' || user.role === 'vendor')
+            ? user?.contractorProfile?.verificationStatus === 'approved'
+            : user?.corporateProfile?.status === 'approved';
+          const nowApproved = (newUser.role === 'contractor' || newUser.role === 'vendor')
+            ? newUser?.contractorProfile?.verificationStatus === 'approved'
+            : newUser?.corporateProfile?.status === 'approved';
+
+          if (!oldApproved && nowApproved) {
+            injectNotificationIntoFeed({
+              title: 'Account Verified 🎉',
+              body: 'Congratulations! Your account verification has just been APPROVED by admin!',
+              type: 'KYC_APPROVED',
+              createdAt: new Date().toISOString()
+            });
+            import('react-hot-toast').then(({ default: toast }) => {
+              toast.success('🎉 Congratulations! Your account verification has just been APPROVED by admin!', { duration: 7000 });
+            });
+            dispatch(workforceApi.util.invalidateTags(['Notifications', 'VendorDashboard', 'CorporateDashboard', 'Wallet']));
+          }
+          
+          dispatch(setUser(newUser));
+        }
+      }).catch(() => {});
+    }, 4000);
+    
+    return () => clearInterval(interval);
+  }, [user?._id, user?.accountStatus, user?.role, user?.contractorProfile?.verificationStatus, user?.corporateProfile?.status, token, dispatch]);
 
   // --- FCM Token Auto-sync & Foreground Listener ---
   useEffect(() => {
@@ -246,7 +326,13 @@ export function PanelShell({
   const title = getTitle(pathname)
   const drawerInitials = adminInitials(user)
   const notifCounts = useVendorNotificationCount(panelId === 'vendor')
-  const displayCount = panelId === 'vendor' ? notifCounts.total : 3
+  const { data: realNotifsData } = workforceApi.useGetNotificationsQuery(undefined, { skip: !user })
+  const [markRead] = workforceApi.useMarkNotificationReadMutation()
+  const [deleteNotif] = workforceApi.useDeleteNotificationMutation()
+  const [notifDropdownOpen, setNotifDropdownOpen] = useState(false)
+  const realNotifs = realNotifsData?.notifications || []
+  const unreadRealCount = realNotifsData?.unreadCount ?? realNotifs.filter(n => !n.isRead && !n.read).length
+  const displayCount = (panelId === 'vendor' ? notifCounts.total : 0) + unreadRealCount
 
   const hideShellHeader =
     pathname.includes('/notifications') ||
@@ -451,17 +537,127 @@ export function PanelShell({
                   >
                     <Menu className="h-[18px] w-[18px]" />
                   </button>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/${panelId === 'app' ? 'app/labour' : panelId}/notifications`)}
-                  className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
-                  aria-label="Notifications"
-                >
-                  <Bell className="h-[18px] w-[18px]" />
-                  {displayCount > 0 && (
-                    <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-red-500 ring-2 ring-white" />
-                  )}
-                </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setNotifDropdownOpen(prev => !prev)}
+                    className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
+                    aria-label="Notifications"
+                  >
+                    <Bell className="h-[18px] w-[18px]" />
+                    {displayCount > 0 && (
+                      <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-red-500 ring-2 ring-white" />
+                    )}
+                  </button>
+
+                  <AnimatePresence>
+                    {notifDropdownOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 top-12 z-50 w-80 sm:w-96 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-2xl backdrop-blur-xl md:w-[420px]"
+                      >
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2 px-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-800">Real-time Notifications</span>
+                            {unreadRealCount > 0 && (
+                              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-600">
+                                {unreadRealCount} new
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setNotifDropdownOpen(false)}
+                            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <div className="my-2 max-h-80 overflow-y-auto pr-1 divide-y divide-slate-100">
+                          {realNotifs.length === 0 ? (
+                            <div className="py-8 text-center text-sm text-slate-400">
+                              No notifications right now
+                            </div>
+                          ) : (
+                            realNotifs.map((n) => {
+                              const isUnread = !n.read && !n.isRead;
+                              return (
+                                <div
+                                  key={n._id || Math.random()}
+                                  className={`flex items-start justify-between gap-3 p-2.5 transition rounded-xl ${
+                                    isUnread ? 'bg-amber-50/60 font-medium' : 'hover:bg-slate-50'
+                                  }`}
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-semibold text-slate-900 truncate">
+                                        {n.title || 'Update'}
+                                      </span>
+                                      {isUnread && (
+                                        <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
+                                      )}
+                                    </div>
+                                    <p className="mt-1 text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                                      {n.body || n.message || ''}
+                                    </p>
+                                    <span className="mt-1.5 block text-[10px] font-medium text-slate-400">
+                                      {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) : 'Just now'}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex shrink-0 items-center gap-1 mt-1">
+                                    {isUnread && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          markRead(n._id);
+                                        }}
+                                        title="Mark as read (Right)"
+                                        className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 hover:text-emerald-700 active:scale-95 shadow-2xs"
+                                      >
+                                        <Check className="h-4 w-4 stroke-[2.5]" />
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        deleteNotif(n._id);
+                                      }}
+                                      title="Remove notification (Cross)"
+                                      className="flex h-7 w-7 items-center justify-center rounded-full bg-rose-50 text-rose-600 transition hover:bg-rose-100 hover:text-rose-700 active:scale-95 shadow-2xs"
+                                    >
+                                      <X className="h-4 w-4 stroke-[2.5]" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        <div className="mt-1 border-t border-slate-100 pt-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNotifDropdownOpen(false);
+                              navigate(`/${panelId === 'app' ? 'app/labour' : panelId}/notifications`);
+                            }}
+                            className="w-full rounded-xl bg-slate-50 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                          >
+                            View All Notifications
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
               </div>
             </div>
           </header>

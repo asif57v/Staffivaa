@@ -1,13 +1,18 @@
 import { io } from 'socket.io-client'
 
 let socket = null
+let activeUser = null
 
 export const connectSocket = (user, token) => {
+  if (user && user._id && user.role) {
+    activeUser = user;
+  }
+
   if (socket) {
-    if (socket.connected && user && user._id && user.role) {
+    if (socket.connected && activeUser && activeUser._id && activeUser.role) {
       socket.emit('authenticate', {
-        _id: user._id,
-        role: user.role
+        _id: activeUser._id,
+        role: activeUser.role
       })
     }
     return socket
@@ -24,14 +29,19 @@ export const connectSocket = (user, token) => {
     transports: ['websocket', 'polling'], // Force WebSocket transport if polling fails
   })
 
-  socket.on('connect', () => {
-    console.log('[Socket.io] Connected to server:', socket.id)
-    if (user && user._id && user.role) {
+  const doAuth = () => {
+    if (activeUser && activeUser._id && activeUser.role) {
+      console.log('[Socket.io] Authenticating active user rooms:', activeUser._id, activeUser.role);
       socket.emit('authenticate', {
-        _id: user._id,
-        role: user.role
+        _id: activeUser._id,
+        role: activeUser.role
       })
     }
+  }
+
+  socket.on('connect', () => {
+    console.log('[Socket.io] Connected to server:', socket.id)
+    doAuth()
   })
 
   socket.on('disconnect', (reason) => {
@@ -44,6 +54,7 @@ export const connectSocket = (user, token) => {
 
   socket.on('reconnect', (attempt) => {
     console.log('[Socket.io] Reconnected on attempt:', attempt)
+    doAuth()
   })
 
   return socket

@@ -27,6 +27,7 @@ import { useGetLabourAssignmentsQuery, workforceApi } from '../store/api/workfor
 import { connectSocket } from '../services/socket.js'
 import { fetchMe } from '../api/authApi.js'
 import { setUser } from '../store/slices/authSlice.js'
+import { loadJobDemoState, subscribeJobDemo } from '../lib/labourJobDemoStorage.js'
 
 export function AppShell() {
   const { pathname, search } = useLocation()
