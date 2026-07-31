@@ -3,6 +3,7 @@ import { authReducer } from './slices/authSlice.js'
 import { baseApi } from './api/baseApi.js'
 import './api/workforceApi.js'
 import './api/commissionApi.js'
+import './api/enterpriseApi.js'
 
 export const store = configureStore({
   reducer: {

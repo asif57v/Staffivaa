@@ -1,20 +1,23 @@
-import React, { Suspense, lazy } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { Toaster } from 'react-hot-toast'
+import React, { useEffect, Suspense, lazy } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import toast, { Toaster } from 'react-hot-toast'
 import { AuthProvider } from './context/AuthProvider.jsx'
+import { GlobalScrollManager } from './components/navigation/GlobalScrollManager.jsx'
 import { ProtectedRoute } from './components/auth/ProtectedRoute.jsx'
 import { GuestRoute } from './components/auth/GuestRoute.jsx'
 import { AuthRootRoute } from './components/auth/AuthRootRoute.jsx'
 import { appShellChildRoutes } from './routes/appRoutes.jsx'
 import { corporateChildRoutes } from './routes/corporateRoutes.jsx'
 import { vendorChildRoutes } from './routes/vendorRoutes.jsx'
-import { APP_B2C_ROLES, CORPORATE_ROLES, VENDOR_ROLES } from './constants/panelRoles.js'
+import { enterpriseChildRoutes } from './routes/enterpriseRoutes.jsx'
+import { APP_B2C_ROLES, CORPORATE_ROLES, VENDOR_ROLES, ENTERPRISE_ROLES } from './constants/panelRoles.js'
 import { USER_ROLES } from './constants/userRoles.js'
 
 // Layouts
 const AppShell = lazy(() => import('./layouts/AppShell.jsx').then(m => ({ default: m.AppShell })))
 const CorporateShell = lazy(() => import('./layouts/CorporateShell.jsx').then(m => ({ default: m.CorporateShell })))
 const VendorShell = lazy(() => import('./layouts/VendorShell.jsx').then(m => ({ default: m.VendorShell })))
+const EnterpriseShell = lazy(() => import('./layouts/EnterpriseShell.jsx').then(m => ({ default: m.EnterpriseShell })))
 const AdminLayout = lazy(() => import('./layouts/AdminLayout.jsx').then(m => ({ default: m.AdminLayout })))
 
 // Pages
@@ -45,11 +48,37 @@ const AdminSponsoredAdsPage = lazy(() => import('./pages/admin/marketing/AdminSp
 const AdminBannerManagementPage = lazy(() => import('./pages/admin/marketing/AdminBannerManagementPage.jsx').then(m => ({ default: m.AdminBannerManagementPage })))
 const AdminCampaignAnalyticsPage = lazy(() => import('./pages/admin/marketing/AdminCampaignAnalyticsPage.jsx').then(m => ({ default: m.AdminCampaignAnalyticsPage })))
 const AdminCommissionPage = lazy(() => import('./panels/admin/pages/AdminCommissionPage.jsx').then(m => ({ default: m.default })))
+const AdminEnterpriseVerificationPage = lazy(() => import('./pages/admin/AdminEnterpriseVerificationPage.jsx').then(m => ({ default: m.AdminEnterpriseVerificationPage })))
+const AdminEnterpriseJobsPage = lazy(() => import('./pages/admin/AdminEnterpriseJobsPage.jsx').then(m => ({ default: m.AdminEnterpriseJobsPage })))
+const AdminEnterpriseWalletsPage = lazy(() => import('./pages/admin/AdminEnterpriseWalletsPage.jsx').then(m => ({ default: m.AdminEnterpriseWalletsPage })))
+const AdminJoiningPaymentsPage = lazy(() => import('./pages/admin/AdminJoiningPaymentsPage.jsx').then(m => ({ default: m.AdminJoiningPaymentsPage })))
+const AdminEnterprisePayrollsPage = lazy(() => import('./pages/admin/AdminEnterprisePayrollsPage.jsx').then(m => ({ default: m.AdminEnterprisePayrollsPage })))
+const AdminLegalContentPage = lazy(() => import('./pages/admin/AdminLegalContentPage.jsx').then(m => ({ default: m.AdminLegalContentPage })))
+const PublicLegalPage = lazy(() => import('./pages/PublicLegalPage.jsx').then(m => ({ default: m.PublicLegalPage })))
+
+function RouteChangeListener() {
+  const location = useLocation()
+  useEffect(() => {
+    toast.dismiss()
+  }, [location.pathname])
+  return null
+}
 
 function App() {
   return (
     <BrowserRouter>
-      <Toaster position="top-center" />
+      <GlobalScrollManager />
+      <RouteChangeListener />
+      <Toaster 
+        position="top-center"
+        containerStyle={{ top: 12, zIndex: 99999 }}
+        toastOptions={{
+          style: {
+            margin: 0,
+            zIndex: 99999,
+          }
+        }}
+      />
       <AuthProvider>
         <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-50"><div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-500"></div></div>}>
           <Routes>
@@ -108,6 +137,17 @@ function App() {
               {vendorChildRoutes}
             </Route>
 
+            <Route
+              path="/enterprise"
+              element={
+                <ProtectedRoute roles={ENTERPRISE_ROLES}>
+                  <EnterpriseShell />
+                </ProtectedRoute>
+              }
+            >
+              {enterpriseChildRoutes}
+            </Route>
+
             <Route path="/admin/login" element={<AdminLoginPage />} />
 
             <Route
@@ -122,11 +162,17 @@ function App() {
               <Route path="categories" element={<AdminLabourCategoriesPage />} />
               <Route path="users" element={<AdminUsersPage />} />
               <Route path="individuals" element={<AdminUsersPage fixedRole="individual" customTitle="Individual Users" />} />
+              <Route path="enterprises" element={<AdminUsersPage fixedRole="enterprise" customTitle="Enterprise Clients" />} />
               <Route path="corporates" element={<AdminUsersPage fixedRole="corporate" customTitle="Corporate Clients" />} />
               <Route path="contractors" element={<AdminUsersPage fixedRole="contractor" customTitle="Contractors & Vendors" />} />
               <Route path="user/:id" element={<AdminUserDetailsPage />} />
               <Route path="labour" element={<AdminLabourPage />} />
               <Route path="business-verification" element={<AdminBusinessVerificationPage />} />
+              <Route path="enterprise-verification" element={<AdminEnterpriseVerificationPage />} />
+              <Route path="enterprise-jobs" element={<AdminEnterpriseJobsPage />} />
+              <Route path="enterprise-wallets" element={<AdminEnterpriseWalletsPage />} />
+              <Route path="enterprise-payments" element={<AdminJoiningPaymentsPage />} />
+              <Route path="enterprise-payrolls" element={<AdminEnterprisePayrollsPage />} />
               <Route path="buildmart" element={<AdminBuildMartLeadsPage />} />
               <Route path="bookings" element={<AdminBookingsPage />} />
               <Route path="allocations" element={<AdminAllocationsPage />} />
@@ -142,7 +188,10 @@ function App() {
               <Route path="marketing/ads" element={<AdminSponsoredAdsPage />} />
               <Route path="marketing/banners" element={<AdminBannerManagementPage />} />
               <Route path="marketing/analytics" element={<AdminCampaignAnalyticsPage />} />
+              <Route path="legal-content" element={<AdminLegalContentPage />} />
             </Route>
+
+            <Route path="/legal/:slug" element={<PublicLegalPage />} />
 
             <Route path="*" element={<Navigate to="/auth" replace />} />
           </Routes>

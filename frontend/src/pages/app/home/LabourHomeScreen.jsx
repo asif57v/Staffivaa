@@ -38,6 +38,7 @@ import { AppSecondaryButton } from '../../../components/app/AppSecondaryButton.j
 import { AppSectionHeader } from '../../../components/app-ui/layout/AppSectionHeader.jsx'
 import { GlassPanel } from '../../../components/ui/GlassPanel.jsx'
 import { LabourProjectEarningsCard } from '../../../components/app/LabourProjectEarningsCard.jsx'
+import { EnterprisePromotionalBanner } from '../../../components/app/EnterprisePromotionalBanner.jsx'
 import { useNow } from '../../../hooks/useNow.js'
 import { formatSecondsAsClock } from '../../../lib/formatDurationClock.js'
 import {
@@ -390,9 +391,12 @@ export function LabourHomeScreen({ user }) {
   )
 
   const { data: notifRes } = useGetNotificationsQuery(undefined)
-  const notifications = useMemo(() => ({
-    unreadCount: notifRes?.data?.unreadCount || 0
-  }), [notifRes])
+  const notifItems = notifRes?.notifications || notifRes?.data?.notifications || []
+  const unreadCount = notifRes?.unreadCount ?? notifRes?.data?.unreadCount ?? 0
+  const enterpriseJobAlertsCount = useMemo(() => {
+    return notifItems.filter(n => (n.type === 'ENTERPRISE_JOB_ALERT' || n.relatedModel === 'EnterpriseJob') && !n.isRead).length
+  }, [notifItems])
+  const notifications = useMemo(() => ({ unreadCount }), [unreadCount])
 
   const hasWorkLocation = useMemo(() => hasAppUserLocation(appLocation), [appLocation])
   const locationLabel = formatAppUserLocationLabel(appLocation) || 'Set your work area'
@@ -485,7 +489,7 @@ export function LabourHomeScreen({ user }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
             transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[480px] z-[9999] rounded-xl border border-amber-300/30 bg-[#0f172a]/95 px-4 py-3 text-center text-sm font-semibold text-[#F4CC34] shadow-xl backdrop-blur-md"
+            className="fixed top-[max(0.75rem,env(safe-area-inset-top,12px))] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-[480px] z-[99999] rounded-xl border border-amber-300/30 bg-[#0f172a]/95 px-4 py-3 text-center text-sm font-semibold text-[#F4CC34] shadow-xl backdrop-blur-md"
             role="status"
           >
             {toast}
@@ -587,7 +591,9 @@ export function LabourHomeScreen({ user }) {
                 >
                   <Bell className="h-[18px] w-[18px]" />
                   {notifications.unreadCount > 0 ? (
-                    <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-red-500 ring-2 ring-white" />
+                    <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-red-600 text-[10px] font-black text-white ring-2 ring-white shadow-xs animate-in zoom-in-50">
+                      {notifications.unreadCount > 99 ? '99+' : notifications.unreadCount}
+                    </span>
                   ) : null}
                 </button>
               </div>
@@ -756,6 +762,28 @@ export function LabourHomeScreen({ user }) {
                 </div>
               </div>
             </motion.div>
+          ) : enterpriseJobAlertsCount > 0 ? (
+            <div className="overflow-hidden rounded-[1.25rem] bg-linear-to-br from-amber-500/10 via-amber-50 to-orange-50/80 shadow-[0_8px_30px_rgb(245,158,11,0.12)] p-5 text-center border border-amber-200/80 animate-in fade-in">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <span className="text-xl">🔥</span>
+                <h3 className="text-lg font-black text-amber-950 tracking-tight">
+                  {enterpriseJobAlertsCount} New Enterprise Job{enterpriseJobAlertsCount > 1 ? 's' : ''}!
+                </h3>
+              </div>
+              
+              <p className="text-xs font-semibold text-amber-900 mb-1">New jobs matching your skills are available.</p>
+              <p className="text-[11px] font-medium text-amber-700 mb-4 px-2">Tap below to view requirement details and apply immediately.</p>
+              
+              <Link 
+                to="/app/enterprise-jobs"
+                className="group relative flex w-full items-center justify-center overflow-hidden rounded-xl bg-amber-500 py-3 text-[14px] font-extrabold text-white shadow-md shadow-amber-500/20 transition-all hover:bg-amber-600 active:scale-[0.98]"
+              >
+                Browse Jobs ({enterpriseJobAlertsCount})
+                <span className="absolute right-3 flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-white transition-transform group-hover:translate-x-1">
+                  <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+                </span>
+              </Link>
+            </div>
           ) : (
             <div className="overflow-hidden rounded-[1.25rem] bg-white shadow-[0_8px_30px_rgb(0,0,0,0.06)] p-5 pb-5 text-center border border-slate-100">
               <div className="relative mx-auto h-24 w-24 mb-2 flex items-center justify-center">
@@ -790,6 +818,11 @@ export function LabourHomeScreen({ user }) {
             </div>
           )}
         </section>
+        </FadeInSection>
+
+        {/* Enterprise Promotional Banner */}
+        <FadeInSection delay={0.06}>
+          <EnterprisePromotionalBanner />
         </FadeInSection>
 
         {/* 4. Feature carousel */}

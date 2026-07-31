@@ -85,8 +85,8 @@ export function CorporateNotificationsPage() {
   const [markAllRead] = useMarkAllNotificationsReadMutation()
   const [deleteNotif] = useDeleteNotificationMutation()
 
-  const feedItems = notificationsData?.data?.notifications || []
-  const unreadCount = notificationsData?.data?.unreadCount || 0
+  const feedItems = notificationsData?.notifications || notificationsData?.data?.notifications || []
+  const unreadCount = notificationsData?.unreadCount ?? notificationsData?.data?.unreadCount ?? 0
   const jobCount = feedItems.filter(n => TYPE_MAPPING[n.type]?.category === 'jobs').length
 
   const mappedFeedItems = useMemo(() => {

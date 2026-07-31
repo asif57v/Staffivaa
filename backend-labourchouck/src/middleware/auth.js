@@ -38,6 +38,25 @@ export const protect = asyncHandler(async (req, res, next) => {
   next()
 })
 
+export const optionalAuth = asyncHandler(async (req, res, next) => {
+  const header = req.headers.authorization
+  if (!header?.startsWith('Bearer ')) {
+    return next()
+  }
+  const token = header.slice(7)
+  try {
+    const payload = verifyAccessToken(token)
+    const user = await User.findById(payload.sub)
+    if (user && user.isActive) {
+      req.user = user
+      req.tokenPayload = payload
+    }
+  } catch {
+    // Ignore invalid tokens for optional auth
+  }
+  next()
+})
+
 export function restrictTo(...roles) {
   return (req, res, next) => {
     if (!req.user) {
@@ -52,6 +71,30 @@ export function restrictTo(...roles) {
         message: 'You do not have permission for this action',
         statusCode: HTTP_STATUS.FORBIDDEN,
         code: 'FORBIDDEN',
+      })
+    }
+    next()
+  }
+}
+
+export function requireActiveAccount() {
+  return (req, res, next) => {
+    if (!req.user) {
+      return sendError(res, {
+        message: 'Authentication required',
+        statusCode: HTTP_STATUS.UNAUTHORIZED,
+        code: 'UNAUTHORIZED',
+      })
+    }
+    if (req.user.accountStatus && req.user.accountStatus !== 'active') {
+      const statusText =
+        req.user.accountStatus === 'on_hold' ? 'On Hold' :
+        req.user.accountStatus === 'suspended' ? 'Suspended' :
+        req.user.accountStatus === 'blocked' ? 'Blocked' : req.user.accountStatus
+      return sendError(res, {
+        message: `Action denied: Your account is currently put ${statusText} by Admin. You cannot create requests or accept jobs.`,
+        statusCode: HTTP_STATUS.FORBIDDEN,
+        code: 'ACCOUNT_NOT_ACTIVE',
       })
     }
     next()

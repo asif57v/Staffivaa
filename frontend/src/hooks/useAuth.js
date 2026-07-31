@@ -1,4 +1,5 @@
 import { useDispatch, useSelector } from 'react-redux'
+import toast from 'react-hot-toast'
 import { clearSession, setCredentials } from '../store/slices/authSlice.js'
 
 export function useAuth() {
@@ -14,6 +15,7 @@ export function useAuth() {
       dispatch(setCredentials({ accessToken, user: nextUser })),
     logout: async () => {
       try {
+        toast.dismiss()
         if (typeof window !== 'undefined' && 'Notification' in window) {
           const { requestForToken } = await import('../lib/firebase.js')
           const fcmToken = await requestForToken()
@@ -25,6 +27,7 @@ export function useAuth() {
       } catch (err) {
         console.error('Failed to remove FCM token on logout', err)
       } finally {
+        toast.dismiss()
         dispatch(clearSession())
       }
     },

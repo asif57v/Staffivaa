@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { Autocomplete, useLoadScript } from '@react-google-maps/api'
 import { apiRequest } from '../../../api/http.js'
+import { useAuth } from '../../../hooks/useAuth.js'
 import { 
   useCreateRequestMutation, 
   useGetCorporateProjectsQuery,
@@ -18,6 +19,7 @@ function emptyLine() {
 }
 
 export function CorporateRequestNewPage() {
+  const { user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const prefillProjectId = location.state?.prefillProjectId || ''
@@ -37,6 +39,8 @@ export function CorporateRequestNewPage() {
 
   const [isAddingSite, setIsAddingSite] = useState(false)
   const [newSiteName, setNewSiteName] = useState('')
+  const [newSiteContactName, setNewSiteContactName] = useState('')
+  const [newSiteContactPhone, setNewSiteContactPhone] = useState('')
 
   const [scheduleType, setScheduleType] = useState('daily')
   const [startDate, setStartDate] = useState('')
@@ -114,6 +118,8 @@ export function CorporateRequestNewPage() {
     setSiteId('')
     setIsAddingSite(false)
     setNewSiteName('')
+    setNewSiteContactName('')
+    setNewSiteContactPhone('')
   }, [projectId])
 
   const handleCreateSite = async () => {
@@ -123,12 +129,16 @@ export function CorporateRequestNewPage() {
       const res = await addSite({
         projectId,
         name: newSiteName.trim(),
+        contactName: newSiteContactName.trim() || undefined,
+        contactPhone: newSiteContactPhone.trim() || undefined,
       }).unwrap()
       if (res?.data?.site?._id) {
         setSiteId(res.data.site._id)
       }
       setIsAddingSite(false)
       setNewSiteName('')
+      setNewSiteContactName('')
+      setNewSiteContactPhone('')
     } catch (err) {
       setError(err?.data?.message || err?.message || 'Failed to add site')
     }
@@ -164,6 +174,18 @@ export function CorporateRequestNewPage() {
   const handleSubmit = async (e) => {
     if (e) e.preventDefault()
     setError('')
+
+    if (user?.accountStatus && user.accountStatus !== 'active') {
+      const statusText =
+        user.accountStatus === 'on_hold' ? 'On Hold' :
+        user.accountStatus === 'suspended' ? 'Suspended' :
+        user.accountStatus === 'blocked' ? 'Blocked' : user.accountStatus;
+      setError(`Action denied: Your account is currently put ${statusText} by Admin. You cannot create new workforce requests.`);
+      import('react-hot-toast').then(({ default: toast }) => {
+        toast.error(`Action Denied: Account is ${statusText}`);
+      });
+      return;
+    }
 
     if (!projectId) {
       setError('Please assign to a project or select No Project')
@@ -275,16 +297,35 @@ export function CorporateRequestNewPage() {
               </div>
               
               {isAddingSite ? (
-                <div className="flex-1 ml-2 flex items-center gap-2 pr-1.5">
+                <div className="flex-1 ml-2 flex flex-col gap-2 py-2 pr-1.5">
                   <input 
                     type="text" 
-                    placeholder="Enter new site name..." 
-                    className="flex-1 bg-transparent text-[13px] font-semibold text-slate-900 outline-none"
+                    placeholder="Site name..." 
+                    className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[13px] font-semibold text-slate-900 outline-none"
                     value={newSiteName}
                     onChange={(e) => setNewSiteName(e.target.value)}
                     autoFocus
                   />
-                  <div className="flex items-center gap-1 shrink-0">
+                  <input 
+                    type="text" 
+                    placeholder="Contact name (Optional)" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[13px] font-semibold text-slate-900 outline-none"
+                    value={newSiteContactName}
+                    onChange={(e) => setNewSiteContactName(e.target.value)}
+                  />
+                  <input 
+                    type="text" 
+                    placeholder="Contact phone (Optional)" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[13px] font-semibold text-slate-900 outline-none"
+                    value={newSiteContactPhone}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '')
+                      if (val.length <= 10) setNewSiteContactPhone(val)
+                    }}
+                    pattern="[0-9]{10}"
+                    title="Please enter a valid 10-digit phone number"
+                  />
+                  <div className="flex items-center justify-end gap-1 shrink-0 mt-1">
                     <button 
                       type="button" 
                       onClick={() => setIsAddingSite(false)} 

@@ -14,6 +14,10 @@ import { BuildMartHomePage } from '../pages/app/buildmart/BuildMartHomePage.jsx'
 import { BuildMartProductPage } from '../pages/app/buildmart/BuildMartProductPage.jsx'
 import { LabourNavigationScreen } from '../pages/app/navigation/LabourNavigationScreen.jsx'
 import { WalletPage } from '../pages/app/wallet/WalletPage.jsx'
+import { LabourEnterpriseJobsPage } from '../pages/app/LabourEnterpriseJobsPage.jsx'
+import { LabourEnterpriseJobDetailPage } from '../pages/app/enterprise/LabourEnterpriseJobDetailPage.jsx'
+import { LabourMyApplicationsPage } from '../pages/app/enterprise/LabourMyApplicationsPage.jsx'
+import { LabourInterviewDetailsPage } from '../pages/app/enterprise/LabourInterviewDetailsPage.jsx'
 import { USER_ROLES } from '../constants/userRoles.js'
 
 const BUILDMART_ROLES = [USER_ROLES.INDIVIDUAL, USER_ROLES.LABOUR]
@@ -109,6 +113,38 @@ export const appShellChildRoutes = (
       element={
         <RoleRoute allow={[USER_ROLES.LABOUR, USER_ROLES.INDIVIDUAL]}>
           <LabourNotificationsPage />
+        </RoleRoute>
+      }
+    />
+    <Route
+      path="enterprise-jobs"
+      element={
+        <RoleRoute allow={[USER_ROLES.LABOUR]}>
+          <LabourEnterpriseJobsPage />
+        </RoleRoute>
+      }
+    />
+    <Route
+      path="enterprise-jobs/:jobId"
+      element={
+        <RoleRoute allow={[USER_ROLES.LABOUR]}>
+          <LabourEnterpriseJobDetailPage />
+        </RoleRoute>
+      }
+    />
+    <Route
+      path="my-applications"
+      element={
+        <RoleRoute allow={[USER_ROLES.LABOUR]}>
+          <LabourMyApplicationsPage />
+        </RoleRoute>
+      }
+    />
+    <Route
+      path="my-applications/:id/interview"
+      element={
+        <RoleRoute allow={[USER_ROLES.LABOUR]}>
+          <LabourInterviewDetailsPage />
         </RoleRoute>
       }
     />

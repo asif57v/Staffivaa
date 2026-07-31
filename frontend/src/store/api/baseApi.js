@@ -48,6 +48,13 @@ export const baseApi = createApi({
     'PayoutBatches',
     'Earnings',
     'Commissions',
+    'EnterpriseJobs',
+    'EnterpriseApplications',
+    'EnterpriseWorkforce',
+    'LabourEmployment',
+    'EnterpriseWallet',
+    'EnterpriseWalletTransactions',
+    'LegalPages',
   ],
   endpoints: () => ({}),
 })

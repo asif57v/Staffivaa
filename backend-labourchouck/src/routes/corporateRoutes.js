@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { protect, restrictTo } from '../middleware/auth.js'
+import { protect, restrictTo, requireActiveAccount } from '../middleware/auth.js'
 import { USER_ROLES } from '../constants/roles.js'
 import {
   getCorporateMe,
@@ -31,14 +31,14 @@ router.delete('/documents/:docId', removeCorporateDocument)
 router.post('/verification/submit', submitCorporateVerification)
 router.get('/dashboard', getCorporateDashboard)
 router.get('/projects', listCorporateProjects)
-router.post('/projects', bookingLimiter, createCorporateProject)
+router.post('/projects', bookingLimiter, requireActiveAccount(), createCorporateProject)
 router.get('/projects/:id', getCorporateProject)
-router.post('/projects/:projectId/sites', addCorporateSite)
+router.post('/projects/:projectId/sites', requireActiveAccount(), addCorporateSite)
 router.get('/invoices', listCorporateInvoices)
 
 // Quotation endpoints
 router.get('/requests/:id/quotation', getQuotationForRequest)
-router.post('/requests/:id/quotation/respond', respondToQuotationCorporate)
+router.post('/requests/:id/quotation/respond', requireActiveAccount(), respondToQuotationCorporate)
 
 export default router
 

@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { protect, restrictTo } from '../middleware/auth.js'
+import { protect, restrictTo, requireActiveAccount } from '../middleware/auth.js'
 import { USER_ROLES, APP_ROLES } from '../constants/roles.js'
 import {
   createRequest,
@@ -38,7 +38,7 @@ const router = Router()
 router.use(protect)
 
 router.get('/system-pricing', restrictTo(...APP_ROLES), getSystemPricing)
-router.post('/requests', bookingLimiter, restrictTo(USER_ROLES.INDIVIDUAL, USER_ROLES.CORPORATE), createRequest)
+router.post('/requests', bookingLimiter, requireActiveAccount(), restrictTo(USER_ROLES.INDIVIDUAL, USER_ROLES.CORPORATE), createRequest)
 router.get('/requests', restrictTo(...APP_ROLES), listMyRequests)
 router.get('/requests/:id', restrictTo(...APP_ROLES, USER_ROLES.ADMIN), getRequest)
 

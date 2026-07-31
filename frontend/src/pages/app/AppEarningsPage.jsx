@@ -20,6 +20,10 @@ import {
   releasePendingCredit,
 } from '../../lib/labourWalletStorage.js'
 import { useGetWalletBalanceQuery, useRequestRefundMutation } from '../../store/api/walletApi.js'
+import { useGetMyEnterprisePayrollsQuery } from '../../store/api/enterpriseApi.js'
+import { ProfessionalSalarySlipModal } from '../../components/labour/salary/ProfessionalSalarySlipModal.jsx'
+import { FileText, CheckCircle2, ShieldCheck, Download } from 'lucide-react'
+
 
 export function AppEarningsPage() {
   const reduce = useReducedMotion()
@@ -32,6 +36,10 @@ export function AppEarningsPage() {
   const { data: walletData, refetch: refetchWallet } = useGetWalletBalanceQuery()
   const [requestRefund] = useRequestRefundMutation()
   const backendTransactions = walletData?.data?.transactions || []
+
+  const { data: payslipsData, isLoading: loadingSlips } = useGetMyEnterprisePayrollsQuery()
+  const enterprisePayrolls = payslipsData?.data || []
+  const [selectedSlip, setSelectedSlip] = useState(null)
 
   useEffect(() => {
     const offA = subscribeAttendance(() => setEntries(readAttendanceEntries()))
@@ -177,18 +185,19 @@ export function AppEarningsPage() {
       />
 
       <GlassPanel className="border-slate-200/90 p-1.5">
-        <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100/90 p-0.5">
+        <div className="grid grid-cols-4 gap-1 rounded-xl bg-slate-100/90 p-0.5">
           {[
             { id: 'flow', label: 'Pipeline' },
             { id: 'activity', label: 'Activity' },
+            { id: 'payslips', label: 'PaySlips' },
             { id: 'withdraw', label: 'Withdraw' },
           ].map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`rounded-lg py-2.5 text-xs font-bold transition ${
-                tab === t.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+              className={`rounded-lg py-2.5 text-[11px] sm:text-xs font-bold transition ${
+                tab === t.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'
               }`}
             >
               {t.label}
@@ -314,6 +323,76 @@ export function AppEarningsPage() {
           onError={(msg) => showToast(msg, false)}
         />
       ) : null}
+
+      {tab === 'payslips' ? (
+        <GlassPanel className="border-indigo-200/90 p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-indigo-600" />
+              <h3 className="text-sm font-extrabold text-slate-900">Verified Enterprise Salary Slips</h3>
+            </div>
+            <span className="text-[11px] font-extrabold px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
+              {enterprisePayrolls.length} Issued
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 font-medium">
+            Official monthly wage statements distributed from Staffivaa Escrow. Platform fees are zero-deduction on worker wages.
+          </p>
+
+          {loadingSlips ? (
+            <div className="p-8 text-center text-xs font-bold text-slate-400 animate-pulse">Loading verified salary records...</div>
+          ) : enterprisePayrolls.length === 0 ? (
+            <AppEmptyState
+              icon={FileText}
+              title="No Salary Slips Yet"
+              subtitle="Your monthly salary slips from Enterprise employers will appear here once computed and approved."
+            />
+          ) : (
+            <div className="space-y-3 pt-2">
+              {enterprisePayrolls.map((p) => {
+                const companyName = p.enterpriseId?.companyName || p.enterpriseId?.fullName || 'Enterprise Employer'
+                const jobTitle = p.jobId?.jobTitle || 'Assigned Role'
+                const isPaid = ['released', 'paid'].includes(p.status)
+
+                return (
+                  <div key={p._id} className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-between gap-3 hover:border-indigo-300 transition-all">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-slate-900 text-sm">{companyName}</span>
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>
+                          {p.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-indigo-600">{jobTitle} • Month {p.month}/{p.year}</p>
+                      <div className="flex items-center gap-3 text-[11px] text-slate-500 font-medium pt-1">
+                        <span>Present: <strong className="text-slate-700">{p.presentDays || 26} days</strong></span>
+                        <span>Net Payout: <strong className="text-emerald-700 text-xs font-black">₹{p.netSalary?.toLocaleString('en-IN')}</strong></span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setSelectedSlip(p)}
+                      className="shrink-0 flex items-center gap-1 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-sm cursor-pointer active:scale-[0.98] transition-all"
+                    >
+                      <Download className="h-3.5 w-3.5" /> View Slip
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </GlassPanel>
+      ) : null}
+
+      {/* Salary Slip Preview Modal */}
+      <AnimatePresence>
+        {selectedSlip && (
+          <ProfessionalSalarySlipModal
+            payroll={selectedSlip}
+            onClose={() => setSelectedSlip(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

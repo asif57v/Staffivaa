@@ -1,6 +1,6 @@
 import mongoose from 'mongoose'
 import bcrypt from 'bcryptjs'
-import { USER_ROLES, CORPORATE_STATUS, KYC_STATUS } from '../constants/roles.js'
+import { USER_ROLES, CORPORATE_STATUS, KYC_STATUS, ENTERPRISE_STATUS } from '../constants/roles.js'
 import { BILLING_MODE } from '../constants/workforceConstants.js'
 const documentSchema = new mongoose.Schema(
   {
@@ -10,6 +10,39 @@ const documentSchema = new mongoose.Schema(
     uploadedAt: { type: Date, default: Date.now },
   },
   { _id: true },
+)
+
+const enterpriseProfileSchema = new mongoose.Schema(
+  {
+    companyName: { type: String, trim: true },
+    gstNumber: { type: String, trim: true, uppercase: true },
+    panNumber: { type: String, trim: true, uppercase: true },
+    cinNumber: { type: String, trim: true, uppercase: true },
+    companyType: { type: String, trim: true },
+    registeredAddress: { type: String, trim: true, maxlength: 500 },
+    city: { type: String, trim: true },
+    state: { type: String, trim: true },
+    pincode: { type: String, trim: true, maxlength: 6 },
+    contactPersonName: { type: String, trim: true },
+    contactEmail: { type: String, trim: true, lowercase: true },
+    website: { type: String, trim: true, maxlength: 2048 },
+    status: {
+      type: String,
+      enum: Object.values(ENTERPRISE_STATUS),
+      default: ENTERPRISE_STATUS.PENDING,
+    },
+    billingMode: {
+      type: String,
+      enum: Object.values(BILLING_MODE),
+      default: BILLING_MODE.POSTPAID,
+    },
+    creditLimit: { type: Number, min: 0 },
+    documents: [documentSchema],
+    documentsSubmittedAt: Date,
+    reviewedAt: Date,
+    reviewNote: String,
+  },
+  { _id: false },
 )
 
 const corporateProfileSchema = new mongoose.Schema(
@@ -177,8 +210,9 @@ const userSchema = new mongoose.Schema(
     lastLoginAt: Date,
     /** When labour is onboarded under a vendor/contractor */
     vendorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
-    corporateProfile: corporateProfileSchema,
-    labourProfile: labourProfileSchema,
+    corporateProfile: { type: corporateProfileSchema },
+    enterpriseProfile: { type: enterpriseProfileSchema },
+    labourProfile: { type: labourProfileSchema },
     contractorProfile: contractorProfileSchema,
     walletBalance: { type: Number, default: 0, min: 0 },
     razorpayContactId: { type: String, trim: true },

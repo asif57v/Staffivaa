@@ -2,7 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Users, Building2, MapPin, Calendar, Clock, UserCircle, CheckCircle2, Construction, AlertCircle, XCircle, Phone, Star, Award, Shield, FileDown, MessageSquare, ChevronDown, ChevronUp, Check, ArrowRight, FileText } from 'lucide-react'
 import { useGetRequestQuery, useRespondToQuotationMutation } from '../../../store/api/workforceApi.js'
 import { useAuth } from '../../../hooks/useAuth.js'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useSocket } from '../../../hooks/useSocket.js'
 
 function formatDate(d) {
@@ -245,6 +245,7 @@ export function CorporateRequestDetailPage() {
   const [showRevisionModal, setShowRevisionModal] = useState(false)
   const [revisionFeedback, setRevisionFeedback] = useState('')
   const [showTimeline, setShowTimeline] = useState(false)
+  const rosterRef = useRef(null)
 
   const socket = useSocket()
 
@@ -384,66 +385,90 @@ export function CorporateRequestDetailPage() {
         <h1 className="text-base font-extrabold text-slate-900">Request Details</h1>
       </header>
 
-      <div className="p-4 space-y-4 max-w-md mx-auto">
+      <div className="px-1 sm:px-4 py-2 sm:py-3 space-y-2 sm:space-y-4 max-w-md mx-auto">
         
         {/* Top Hero Card */}
-        <div className="rounded-[20px] bg-white p-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
-          <div className="flex gap-4">
-            <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-[14px] bg-slate-200 border border-slate-100 shadow-sm">
-              <img src="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=300&q=80" alt="Site" className="h-full w-full object-cover" />
+        <div className="rounded-xl sm:rounded-[20px] bg-white p-2.5 sm:p-4.5 shadow-[0_2px_14px_-4px_rgba(0,0,0,0.08)] border border-slate-100/90">
+          <div className="flex items-start gap-3 border-b border-slate-100 pb-3.5">
+            {/* Site Thumbnail */}
+            <div className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl bg-slate-200 border border-slate-100/50 shadow-sm">
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/20 to-transparent z-10" />
+              <img
+                src="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=300&q=80"
+                alt="Site"
+                className="h-full w-full object-cover"
+              />
             </div>
+            {/* Title + Info */}
             <div className="flex-1 min-w-0">
-              <div className="flex justify-between items-start">
-                <h2 className="text-[18px] font-bold text-slate-900 truncate pr-2">{projectName}</h2>
-                <span className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${statusTone}`}>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <h2 className="text-[16px] sm:text-[18px] font-extrabold text-slate-900 leading-snug tracking-tight break-words flex-1 min-w-0">{projectName}</h2>
+                </div>
+                <span className={`inline-flex self-start items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold shadow-xs ${statusTone}`}>
                   <StatusIcon className="h-2.5 w-2.5" strokeWidth={3} /> {statusLabel}
                 </span>
               </div>
-              
               {request.siteId?.name && (
-                <div className="flex items-center gap-1.5 mt-0.5 text-slate-700">
-                  <MapPin className="h-3.5 w-3.5 shrink-0" />
-                  <p className="text-[14px] font-bold truncate">{request.siteId.name}</p>
+                <div className="flex items-center gap-1.5 mt-1 text-slate-700">
+                  <MapPin className="h-3 w-3 shrink-0 text-brand" />
+                  <p className="text-[13px] font-bold text-slate-800 break-words">{request.siteId.name}</p>
                 </div>
               )}
+              <div className="flex items-center gap-1.5 mt-0.5 text-slate-500 font-semibold text-xs">
+                <Building2 className="h-3 w-3 shrink-0 text-slate-400" />
+                <span className="leading-normal break-words">{companyName}</span>
+              </div>
+            </div>
+          </div>
 
-              <div className="flex items-center gap-1.5 mt-0.5 text-slate-500">
-                <Building2 className="h-3.5 w-3.5 shrink-0" />
-                <p className="text-[13px] font-medium truncate">{companyName}</p>
+          {/* Full-width Location & Details Grid */}
+          <div className="mt-3.5 space-y-2.5">
+            <div className="flex items-start gap-2.5 rounded-xl bg-slate-50/80 p-3.5 border border-slate-100 text-slate-700">
+              <MapPin className="h-4 w-4 shrink-0 text-brand mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Location & Address</p>
+                <p className="text-[13px] sm:text-sm font-bold text-slate-800 leading-relaxed break-words">
+                  {request.locationText || 'Location TBD'}
+                </p>
               </div>
-              
-              <div className="mt-2.5 flex items-center gap-1.5 text-slate-500">
-                <MapPin className="h-3 w-3 shrink-0" />
-                <p className="text-[12px] font-medium truncate">{request.locationText || 'Location TBD'}</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-700">
+              <div className="flex items-center gap-2.5 rounded-xl bg-slate-50/60 p-3 border border-slate-100/80">
+                <Calendar className="h-4 w-4 shrink-0 text-slate-500" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Duration</p>
+                  <p className="text-xs sm:text-sm font-bold text-slate-800 leading-snug break-words">{durationStr}</p>
+                </div>
               </div>
-              
-              <div className="mt-1 text-slate-500 text-[12px] font-medium flex items-center gap-1.5 flex-wrap">
-                <Calendar className="h-3 w-3 shrink-0" /> {durationStr}
-              </div>
-              <div className="mt-1 text-slate-500 text-[12px] font-medium flex items-center gap-1.5">
-                <Users className="h-3 w-3 shrink-0" /> {totalRequired} Workers
+              <div className="flex items-center gap-2.5 rounded-xl bg-slate-50/60 p-3 border border-slate-100/80">
+                <Users className="h-4 w-4 shrink-0 text-slate-500" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Workforce</p>
+                  <p className="text-xs sm:text-sm font-bold text-slate-800 leading-snug">{totalRequired} Workers Required</p>
+                </div>
               </div>
             </div>
           </div>
           
-          <div className="mt-4 flex items-center gap-2 flex-wrap">
-            <span className="flex items-center gap-1.5 rounded-full bg-blue-50/50 px-3 py-1.5 text-[11px] font-bold text-blue-700 border border-blue-100">
-              <UserCircle className="h-3.5 w-3.5" strokeWidth={2.5} /> {tradeName}
-            </span>
-            <span className="flex items-center gap-1.5 rounded-full bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-600 border border-slate-200">
-              <Clock className="h-3.5 w-3.5" /> {shiftStr}
-            </span>
-          </div>
-          
-          <div className="mt-4 border-t border-slate-100 pt-3">
-            <p className="text-[11px] font-bold text-slate-400 tracking-wide uppercase flex items-center gap-1">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50/80 px-3 py-1.5 text-xs font-bold text-blue-700 border border-blue-100 shadow-2xs">
+                <UserCircle className="h-3.5 w-3.5 text-blue-600" strokeWidth={2.5} /> {tradeName}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100/80 px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/80 shadow-2xs">
+                <Clock className="h-3.5 w-3.5 text-slate-500" /> {shiftStr}
+              </span>
+            </div>
+            <span className="text-xs font-extrabold text-slate-400 tracking-wider uppercase flex items-center gap-1">
               ID: {request.reference}
-            </p>
+            </span>
           </div>
         </div>
 
         {/* Professional Step-by-Step Timeline (Collapsible) */}
-        <div className="rounded-[20px] bg-white p-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
+        <div className="rounded-xl sm:rounded-[20px] bg-white p-2.5 sm:p-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
           <button 
             onClick={() => setShowTimeline(!showTimeline)} 
             className="w-full flex items-center justify-between text-left focus:outline-none"
@@ -503,7 +528,7 @@ export function CorporateRequestDetailPage() {
 
         {/* Enterprise Quotation Panel */}
         {quotation ? (
-          <div className="rounded-[20px] bg-white p-5 shadow-[0_4px_20px_-6px_rgba(0,0,0,0.12)] border border-slate-100 space-y-4">
+          <div className="rounded-xl sm:rounded-[20px] bg-white p-2.5 sm:p-5 shadow-[0_4px_20px_-6px_rgba(0,0,0,0.12)] border border-slate-100 space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-[16px] font-black text-slate-900 tracking-tight">Enterprise Quotation</h3>
@@ -674,7 +699,7 @@ export function CorporateRequestDetailPage() {
             </div>
           </div>
         ) : (
-          <div className="rounded-[20px] bg-white p-5 border border-slate-200 text-center space-y-3">
+          <div className="rounded-xl sm:rounded-[20px] bg-white p-2.5 sm:p-5 border border-slate-200 text-center space-y-3">
             <div className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center mx-auto text-slate-400">
               <FileText className="h-5 w-5" />
             </div>
@@ -688,7 +713,7 @@ export function CorporateRequestDetailPage() {
         )}
 
         {/* Request Overview */}
-        <div className="rounded-[20px] bg-white p-5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
+        <div className="rounded-xl sm:rounded-[20px] bg-white p-2.5 sm:p-5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
           <h3 className="text-[15px] font-extrabold text-slate-900 mb-4">Request Overview</h3>
           <div className="space-y-3.5">
             <div className="flex justify-between items-start gap-4">
@@ -752,7 +777,7 @@ export function CorporateRequestDetailPage() {
         </div>
 
         {/* Skill Lines */}
-        <div className="rounded-[20px] bg-white p-5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
+        <div className="rounded-xl sm:rounded-[20px] bg-white p-2.5 sm:p-5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
           <h3 className="text-[15px] font-extrabold text-slate-900 mb-3">Skill Lines</h3>
           <div className="space-y-2">
             {(request.lines ?? []).map((line, i) => (
@@ -766,7 +791,7 @@ export function CorporateRequestDetailPage() {
 
         {/* Vendor Partner */}
         {allocation?.vendorId && (
-          <div className="rounded-[20px] bg-[#fffdf0] p-5 shadow-sm border border-amber-100">
+          <div className="rounded-xl sm:rounded-[20px] bg-[#fffdf0] p-2.5 sm:p-5 shadow-sm border border-amber-100">
             <div className="flex items-center gap-2 mb-3">
               <Building2 className="h-4 w-4 text-amber-500" />
               <h3 className="text-[15px] font-extrabold text-slate-900">Vendor Partner</h3>
@@ -797,7 +822,7 @@ export function CorporateRequestDetailPage() {
         )}
 
         {/* Assigned Roster */}
-        <div className="rounded-[20px] bg-white p-5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
+        <div ref={rosterRef} className="rounded-xl sm:rounded-[20px] bg-white p-2.5 sm:p-5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-amber-500" />
@@ -846,7 +871,7 @@ export function CorporateRequestDetailPage() {
       {/* Bottom Actions */}
       <div className="mt-4 p-4 pb-24 max-w-md mx-auto flex flex-col gap-3">
         {request.status === 'corporate_platform_fee_pending' ? (
-          <Link to={`/corporate/requests/${id}/payment`} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
+          <Link to={`/corporate/requests/${id}/payment`} className="w-full flex items-center justify-center text-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
             Pay Platform Fee to Unlock Quotation Phase
           </Link>
         ) : request.status === 'vendor_platform_fee_pending' ? (
@@ -855,12 +880,21 @@ export function CorporateRequestDetailPage() {
           </button>
         ) : (
           <>
-            <button className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
-              <Users className="h-4 w-4" /> Manage Roster
-            </button>
-            <button className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-white border border-slate-200 py-3.5 text-[15px] font-bold text-slate-600 transition hover:bg-slate-50 active:scale-[0.98] shadow-sm">
-              <Phone className="h-4 w-4" /> Contact Vendor
-            </button>
+            {allocation?.vendorId?.phone && ['project_active', 'in_progress', 'attendance_tracking', 'completed', 'settlement_pending', 'settlement_completed'].includes(request.status) ? (
+              <a
+                href={`tel:${allocation.vendorId.phone}`}
+                className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-white border border-slate-200 py-3.5 text-[15px] font-bold text-slate-600 transition hover:bg-slate-50 active:scale-[0.98] shadow-sm"
+              >
+                <Phone className="h-4 w-4" /> Contact Vendor
+              </a>
+            ) : (
+              <button
+                onClick={() => alert('Vendor contact number will be available once the project is active and platform fee is paid.')}
+                className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-white border border-slate-200 py-3.5 text-[15px] font-bold text-slate-400 transition hover:bg-slate-50 active:scale-[0.98] shadow-sm cursor-not-allowed"
+              >
+                <Phone className="h-4 w-4" /> Contact Vendor
+              </button>
+            )}
           </>
         )}
       </div>

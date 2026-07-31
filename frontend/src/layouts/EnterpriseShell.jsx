@@ -1,0 +1,345 @@
+import { useState, useMemo, useEffect } from 'react'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { Bell, LogOut, Search, ChevronDown, Menu, X, Plus, Home, Users, Briefcase, MoreHorizontal, CheckCircle2, LayoutDashboard, Wallet, CalendarCheck, FileText } from 'lucide-react'
+import { useAuth } from '../hooks/useAuth.js'
+import { ENTERPRISE_STATUS } from '../constants/userRoles.js'
+import { AnimatePresence, motion } from 'framer-motion'
+import { getSocket } from '../services/socket.js'
+import toast from 'react-hot-toast'
+import { scrollToTop } from '../components/navigation/GlobalScrollManager.jsx'
+
+const mobileNavItems = [
+  { label: 'Home', icon: LayoutDashboard, path: '/enterprise' },
+  { label: 'Workforce', icon: Users, path: '/enterprise/workforce' },
+  { label: 'FAB', isFab: true, path: '/enterprise/jobs/new' },
+  { label: 'Jobs', icon: Briefcase, path: '/enterprise/jobs' },
+  { label: 'More', icon: MoreHorizontal, path: '#', isMenuTrigger: true },
+]
+
+const desktopNavGroups = [
+  {
+    group: 'Main Menu',
+    items: [
+      { label: 'Dashboard', icon: LayoutDashboard, path: '/enterprise' },
+      { label: 'Workforce', icon: Users, path: '/enterprise/workforce' },
+      { label: 'Jobs', icon: Briefcase, path: '/enterprise/jobs' },
+      { label: 'Applications', icon: FileText, path: '/enterprise/applications' },
+    ],
+  },
+  {
+    group: 'Finance',
+    items: [
+      { label: 'Payroll', icon: CalendarCheck, path: '/enterprise/payroll' },
+      { label: 'Wallet', icon: Wallet, path: '/enterprise/wallet' },
+    ],
+  },
+]
+
+export function EnterpriseShell() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
+
+  // Close menus on route change
+  useEffect(() => {
+    setSidebarOpen(false)
+    setMobileMenuOpen(false)
+  }, [pathname])
+
+  // Real-time socket & Notification listener
+  useEffect(() => {
+    const socket = getSocket()
+    if (!socket) return
+
+    const handleAppCreated = (data) => {
+      toast.success('💼 New worker application received!', { duration: 5000 })
+    }
+
+    const handleNewNotif = (notif) => {
+      if (notif?.title) {
+        toast(`${notif.title}\n${notif.body || ''}`, {
+          icon: '🔔',
+          duration: 5000,
+        })
+      }
+    }
+
+    socket.on('enterprise_application_created', handleAppCreated)
+    socket.on('notification:new', handleNewNotif)
+
+    return () => {
+      socket.off('enterprise_application_created', handleAppCreated)
+      socket.off('notification:new', handleNewNotif)
+    }
+  }, [])
+
+  const companyName = user?.enterpriseProfile?.companyName || user?.fullName || 'Luminary Corp'
+  const companyInitials = companyName.substring(0, 2).toUpperCase()
+  const userAvatar = user?.profilePic || `https://api.dicebear.com/7.x/notionists/svg?seed=${companyInitials}`
+
+  const statusBadge = useMemo(() => {
+    const s = user?.enterpriseProfile?.status
+    if (s === ENTERPRISE_STATUS.APPROVED) return <CheckCircle2 className="w-3.5 h-3.5 text-blue-500 fill-blue-500/20" />
+    return null
+  }, [user])
+
+  const handleLogout = () => {
+    logout()
+    navigate('/auth', { replace: true })
+  }
+
+  return (
+    <div className="flex h-screen w-full bg-[#F8FAFC] overflow-hidden text-slate-900 font-sans relative">
+      {/* -------------------- MOBILE OVERLAYS -------------------- */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setMobileMenuOpen(false)}
+            className="absolute inset-0 z-40 bg-slate-900/50 backdrop-blur-sm lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            className="absolute inset-x-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl pb-safe lg:hidden"
+          >
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-extrabold text-slate-900 text-lg">Menu</h3>
+              <button onClick={() => setMobileMenuOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-500">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[60vh] space-y-6">
+              {desktopNavGroups.map((group, i) => (
+                <div key={i}>
+                  <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3 px-2">{group.group}</h4>
+                  <div className="space-y-1">
+                    {group.items.map((item) => (
+                      <NavLink
+                        key={item.path}
+                        to={item.path}
+                        end={item.path === '/enterprise'}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={({ isActive }) => `
+                          flex items-center gap-3 px-4 py-3 rounded-2xl text-[15px] font-semibold transition-all duration-200
+                          ${isActive ? 'bg-[#FFC107]/15 text-slate-900 font-bold' : 'text-slate-600 active:bg-slate-50'}
+                        `}
+                      >
+                        <item.icon className={`w-5 h-5 ${pathname === item.path ? 'text-indigo-600' : 'text-slate-400'}`} />
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <div className="pt-4 border-t border-slate-100 px-2">
+                <button onClick={handleLogout} className="flex items-center gap-3 w-full p-3 text-[15px] font-semibold text-rose-600 rounded-2xl active:bg-rose-50">
+                  <LogOut className="w-5 h-5" />
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* -------------------- DESKTOP SIDEBAR -------------------- */}
+      <div className="hidden lg:flex lg:flex-col absolute inset-y-0 left-0 z-40 w-64 bg-white border-r border-[#E5E7EB] shrink-0">
+        {/* Branding */}
+        <div className="h-16 flex items-center gap-3 px-6 border-b border-[#E5E7EB]">
+          <div className="w-8 h-8 rounded-lg bg-[#FFC107] flex items-center justify-center">
+            <div className="grid grid-cols-2 gap-0.5 w-4 h-4">
+              <div className="bg-slate-900 rounded-[2px]" />
+              <div className="bg-slate-900 rounded-[2px]" />
+              <div className="bg-slate-900 rounded-[2px]" />
+              <div className="bg-slate-900 rounded-[2px]" />
+            </div>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[14px] font-extrabold tracking-tight text-slate-900 leading-none">
+              Workforce OS
+            </span>
+            <span className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mt-0.5 truncate max-w-[140px]">
+              {companyName}
+            </span>
+          </div>
+        </div>
+
+        {/* Sidebar Nav */}
+        <div className="flex-1 overflow-y-auto py-6 px-4 space-y-8">
+          {desktopNavGroups.map((group, i) => (
+            <div key={i}>
+              <h3 className="px-3 text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-3">
+                {group.group}
+              </h3>
+              <div className="space-y-1">
+                {group.items.map((item) => {
+                  const Icon = item.icon
+                  return (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      end={item.path === '/enterprise'}
+                      className={({ isActive }) => `
+                        flex items-center gap-3 px-3 py-2.5 rounded-[12px] text-[14px] font-semibold transition-all duration-200
+                        ${
+                          isActive
+                            ? 'bg-slate-900 text-white shadow-md'
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                        }
+                      `}
+                    >
+                      <Icon className={`w-5 h-5 ${pathname === item.path ? 'text-[#FFC107]' : 'text-slate-400'}`} />
+                      {item.label}
+                    </NavLink>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* -------------------- MAIN CONTENT AREA -------------------- */}
+      <div className="flex-1 flex flex-col min-w-0 lg:pl-64 overflow-hidden bg-[#F8FAFC]">
+        {/* Top Header (Mobile & Desktop) */}
+        <header className="h-[60px] lg:h-16 bg-[#F8FAFC] lg:bg-white lg:border-b border-[#E5E7EB] flex items-center justify-between px-4 sm:px-8 z-30 shrink-0">
+          <div className="flex items-center gap-2.5 lg:hidden">
+            <div className="w-7 h-7 rounded-lg bg-[#FFC107] flex items-center justify-center">
+              <div className="grid grid-cols-2 gap-0.5 w-3.5 h-3.5">
+                <div className="bg-slate-900 rounded-[1px]" />
+                <div className="bg-slate-900 rounded-[1px]" />
+                <div className="bg-slate-900 rounded-[1px]" />
+                <div className="bg-slate-900 rounded-[1px]" />
+              </div>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[13px] font-extrabold tracking-tight text-slate-900 leading-none">Workforce OS</span>
+              <span className="text-[9px] font-bold tracking-widest uppercase text-slate-500 mt-0.5 truncate max-w-[120px]">{companyName}</span>
+            </div>
+          </div>
+
+          <div className="hidden lg:flex items-center gap-3 bg-slate-50 border border-[#E5E7EB] px-3 py-2 rounded-full w-96 focus-within:ring-2 focus-within:ring-[#FFC107]/50 focus-within:border-[#FFC107] transition-all">
+            <Search className="w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search jobs, workers, or wallet..."
+              className="bg-transparent border-none outline-none text-[13px] font-medium w-full text-slate-900 placeholder-slate-400"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 sm:gap-4">
+            <button className="relative p-2 text-slate-500 hover:text-slate-800 transition rounded-full hover:bg-slate-100">
+              <Bell className="w-5 h-5" />
+              <span className="absolute top-2 right-2.5 w-1.5 h-1.5 bg-rose-500 rounded-full"></span>
+            </button>
+
+            <div className="relative">
+              <button
+                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-200 overflow-hidden border-2 border-white shadow-sm transition hover:scale-105 active:scale-95 focus:ring-2 focus:ring-[#FFC107]"
+              >
+                <img src={userAvatar} alt="Profile" className="w-full h-full object-cover" />
+              </button>
+
+              <AnimatePresence>
+                {profileDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setProfileDropdownOpen(false)} />
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 top-full mt-2 w-56 bg-white rounded-[16px] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)] border border-slate-100 py-2 z-50 overflow-hidden"
+                    >
+                      <div className="px-4 py-3 border-b border-slate-50">
+                        <p className="text-[14px] font-bold text-slate-900 truncate flex items-center gap-1">
+                          {companyName} {statusBadge}
+                        </p>
+                        <p className="text-[12px] text-slate-500 font-medium truncate">{user?.phone}</p>
+                      </div>
+                      <button onClick={handleLogout} className="w-full text-left px-4 py-2.5 text-[13px] font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition">
+                        <LogOut className="w-4 h-4" />
+                        Sign Out
+                      </button>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden relative">
+          <div className="w-full h-full pb-24 lg:pb-8">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+
+      {/* -------------------- MOBILE BOTTOM NAV -------------------- */}
+      <div className="lg:hidden absolute bottom-0 inset-x-0 bg-white border-t border-[#E5E7EB] pb-safe z-40 flex items-center justify-around px-2 h-[72px]">
+        {mobileNavItems.map((item) => {
+          if (item.isFab) {
+            return (
+              <div key="fab" className="relative -top-6 flex flex-col items-center justify-center">
+                <button
+                  onClick={() => navigate(item.path)}
+                  className="w-[56px] h-[56px] bg-[#111827] text-white rounded-[20px] flex items-center justify-center shadow-lg active:scale-95 transition-transform"
+                >
+                  <Plus className="w-6 h-6 text-[#FFC107]" strokeWidth={3} />
+                </button>
+              </div>
+            )
+          }
+
+          if (item.isMenuTrigger) {
+            return (
+              <button
+                key="more"
+                onClick={() => setMobileMenuOpen(true)}
+                className="flex flex-col items-center justify-center w-16 h-full gap-1 active:scale-95 transition-transform"
+              >
+                <item.icon className="w-6 h-6 text-slate-400" />
+                <span className="text-[10px] font-bold text-slate-500">{item.label}</span>
+              </button>
+            )
+          }
+
+          const isActive = pathname === item.path || (item.path !== '/enterprise' && pathname.startsWith(item.path))
+
+          return (
+            <button
+              key={item.label}
+              onClick={() => {
+                if (isActive) {
+                  scrollToTop(true)
+                } else {
+                  navigate(item.path)
+                }
+              }}
+              className="flex flex-col items-center justify-center w-16 h-full gap-1 active:scale-95 transition-transform"
+            >
+              <item.icon className={`w-6 h-6 ${isActive ? 'text-[#FFC107]' : 'text-slate-400'}`} />
+              <span className={`text-[10px] font-bold ${isActive ? 'text-[#111827]' : 'text-slate-500'}`}>{item.label}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}

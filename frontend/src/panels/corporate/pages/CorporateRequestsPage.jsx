@@ -53,12 +53,31 @@ export function CorporateRequestsPage() {
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Workforce</p>
           <h2 className="text-lg font-extrabold text-slate-900">Requests</h2>
         </div>
-        <Link to="/corporate/requests/new">
-          <AppPrimaryButton type="button">
+        {user?.accountStatus && user.accountStatus !== 'active' ? (
+          <AppPrimaryButton
+            type="button"
+            className="opacity-60 grayscale cursor-not-allowed"
+            onClick={() => {
+              const statusText =
+                user.accountStatus === 'on_hold' ? 'On Hold' :
+                user.accountStatus === 'suspended' ? 'Suspended' :
+                user.accountStatus === 'blocked' ? 'Blocked' : user.accountStatus;
+              import('react-hot-toast').then(({ default: toast }) => {
+                toast.error(`Action Denied: Your account has been put ${statusText} by Admin. You cannot create new requests.`, { duration: 6000 });
+              });
+            }}
+          >
             <Plus className="mr-1.5 h-4 w-4" />
             New
           </AppPrimaryButton>
-        </Link>
+        ) : (
+          <Link to="/corporate/requests/new">
+            <AppPrimaryButton type="button">
+              <Plus className="mr-1.5 h-4 w-4" />
+              New
+            </AppPrimaryButton>
+          </Link>
+        )}
       </div>
 
       {isLoading ? (
@@ -105,10 +124,14 @@ export function CorporateRequestsPage() {
             statusLabel = r.status.charAt(0).toUpperCase() + r.status.slice(1)
             statusTone = 'bg-rose-50 text-rose-700'
             StatusIcon = XCircle
-          } else if (i % 3 === 1) { // mock variations
-             statusLabel = 'In Progress'
-             statusTone = 'bg-blue-50 text-blue-700'
-             StatusIcon = Construction
+          } else if (['project_active', 'attendance_tracking', 'quotation_unlocked', 'assigned'].includes(r.status)) {
+            statusLabel = 'In Progress'
+            statusTone = 'bg-blue-50 text-blue-700'
+            StatusIcon = Construction
+          } else if (['payment_pending', 'advance_paid', 'platform_fee_pending', 'corporate_platform_fee_pending', 'vendor_platform_fee_pending'].includes(r.status)) {
+            statusLabel = 'Payment'
+            statusTone = 'bg-amber-50 text-amber-700'
+            StatusIcon = AlertCircle
           }
           
           // Generate mock thumbnails

@@ -65,6 +65,45 @@ export function PanelShell({
     );
   }, [dispatch]);
 
+  const dispatchAlert = useCallback((title, body, isError = false) => {
+    const rawKey = (title || '') + '_' + (body || '');
+    const dedupeKey = rawKey.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const now = Date.now();
+    window._lastAlertLog = window._lastAlertLog || {};
+    // Prevent triggering the exact same alert if fired within the last 15 seconds
+    if (window._lastAlertLog[dedupeKey] && (now - window._lastAlertLog[dedupeKey] < 15000)) {
+      return;
+    }
+    window._lastAlertLog[dedupeKey] = now;
+
+    const toastId = dedupeKey.slice(0, 45) || 'default-alert-toast';
+    const toastMsg = body ? `${title}: ${body}` : title;
+
+    import('react-hot-toast').then(({ default: toast }) => {
+      if (isError) {
+        toast.error(toastMsg, { id: toastId, duration: 6000 });
+      } else {
+        toast.success(toastMsg, { id: toastId, duration: 6000 });
+      }
+    });
+
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission === 'granted') {
+          new Notification(title || 'Staffivaa Update', { body: body || '', icon: '/vite.svg', badge: '/vite.svg', vibrate: [200, 100, 200], tag: toastId, requireInteraction: true });
+        } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission().then((perm) => {
+            if (perm === 'granted') {
+              new Notification(title || 'Staffivaa Update', { body: body || '', icon: '/vite.svg', badge: '/vite.svg', vibrate: [200, 100, 200], tag: toastId, requireInteraction: true });
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to trigger system push:', err);
+    }
+  }, []);
+
   const [scrollData, setScrollData] = useState({ y: 0, direction: 'up' })
 
   useEffect(() => {
@@ -106,9 +145,7 @@ export function PanelShell({
 
     const handleNotification = (notification) => {
       injectNotificationIntoFeed(notification);
-      import('react-hot-toast').then(({ default: toast }) => {
-        toast.success(notification?.title || 'New Notification Received', { duration: 6000 });
-      });
+      dispatchAlert(notification?.title || 'New Notification Received', notification?.body || notification?.message || 'You have a new alert', false);
       refreshUser();
       invalidateCache();
     };
@@ -131,13 +168,8 @@ export function PanelShell({
         createdAt: new Date().toISOString()
       };
       injectNotificationIntoFeed(notifObj);
-      import('react-hot-toast').then(({ default: toast }) => {
-        if (statusStr === 'approved' || statusStr === 'active') {
-          toast.success(notifObj.title + ': ' + notifObj.body, { duration: 7000 });
-        } else {
-          toast.error(notifObj.title + ': ' + notifObj.body, { duration: 7000 });
-        }
-      });
+      const isErr = (statusStr !== 'approved' && statusStr !== 'active' && statusStr !== 'updated');
+      dispatchAlert(notifObj.title, notifObj.body, isErr);
       refreshUser();
       invalidateCache();
     };
@@ -206,10 +238,7 @@ export function PanelShell({
                               newStatus === 'blocked' ? 'ACCOUNT_BLOCKED' :
                               newStatus === 'active' ? 'ACCOUNT_REACTIVATED' : 'ACCOUNT_STATUS_UPDATE';
             injectNotificationIntoFeed({ title: notifTitle, body: notifBody, type: notifType, createdAt: new Date().toISOString() });
-            import('react-hot-toast').then(({ default: toast }) => {
-              if (newStatus === 'active') toast.success(notifTitle + ': ' + notifBody, { duration: 7000 });
-              else toast.error(notifTitle + ': ' + notifBody, { duration: 7000 });
-            });
+            dispatchAlert(notifTitle, notifBody, newStatus !== 'active');
             dispatch(workforceApi.util.invalidateTags(['Notifications', 'VendorDashboard', 'CorporateDashboard', 'Wallet']));
           }
 
@@ -221,15 +250,15 @@ export function PanelShell({
             : newUser?.corporateProfile?.status === 'approved';
 
           if (!oldApproved && nowApproved) {
+            const kycTitle = 'Account Verified 🎉';
+            const kycBody = 'Congratulations! Your account verification has just been APPROVED by admin!';
             injectNotificationIntoFeed({
-              title: 'Account Verified 🎉',
-              body: 'Congratulations! Your account verification has just been APPROVED by admin!',
+              title: kycTitle,
+              body: kycBody,
               type: 'KYC_APPROVED',
               createdAt: new Date().toISOString()
             });
-            import('react-hot-toast').then(({ default: toast }) => {
-              toast.success('🎉 Congratulations! Your account verification has just been APPROVED by admin!', { duration: 7000 });
-            });
+            dispatchAlert(kycTitle, kycBody, false);
             dispatch(workforceApi.util.invalidateTags(['Notifications', 'VendorDashboard', 'CorporateDashboard', 'Wallet']));
           }
           
@@ -280,10 +309,8 @@ export function PanelShell({
       }
       
       // Also show a toast so the user definitely sees it inside the app
-      if (typeof window !== 'undefined') {
-        import('react-hot-toast').then(({ default: toast }) => {
-          toast.success(`Notification: ${payload.notification.title}`);
-        });
+      if (typeof window !== 'undefined' && payload?.notification) {
+        dispatchAlert(payload.notification.title || 'New Notification', payload.notification.body || '', false);
       }
 
       // Use service worker showNotification so it appears as native OS popup
@@ -321,7 +348,7 @@ export function PanelShell({
         navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
       }
     };
-  }, [user, token, navigate]);
+  }, [user?._id, token, navigate]);
 
   const title = getTitle(pathname)
   const drawerInitials = adminInitials(user)
@@ -330,8 +357,8 @@ export function PanelShell({
   const [markRead] = workforceApi.useMarkNotificationReadMutation()
   const [deleteNotif] = workforceApi.useDeleteNotificationMutation()
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false)
-  const realNotifs = realNotifsData?.notifications || []
-  const unreadRealCount = realNotifsData?.unreadCount ?? realNotifs.filter(n => !n.isRead && !n.read).length
+  const realNotifs = realNotifsData?.notifications || realNotifsData?.data?.notifications || []
+  const unreadRealCount = realNotifsData?.unreadCount ?? realNotifsData?.data?.unreadCount ?? realNotifs.filter(n => !n.isRead && !n.read).length
   const displayCount = (panelId === 'vendor' ? notifCounts.total : 0) + unreadRealCount
 
   const hideShellHeader =

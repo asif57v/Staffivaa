@@ -14,6 +14,7 @@ import {
   Wallet,
   Wrench,
   UserRound,
+  Briefcase,
 } from 'lucide-react'
 import { USER_ROLES } from '../constants/userRoles.js'
 
@@ -39,12 +40,14 @@ const byRole = {
       { id: 'home', to: '/app', label: 'Home', icon: Home, end: true },
       { id: 'jobs', to: '/app/jobs', label: 'Jobs', icon: HardHat },
       { id: 'attendance', to: '/app/attendance', label: 'Attendance', icon: Clock },
-      { id: 'earnings', to: '/app/earnings', label: 'Earnings', icon: IndianRupee },
+      { id: 'enterprise', to: '/app/enterprise-jobs', label: 'Enterprise', icon: Briefcase },
       { id: 'profile', to: '/app/profile', label: 'Profile', icon: UserRound },
     ],
     drawerNav: [
       { id: 'home', to: '/app', label: 'Home', icon: Home, end: true },
       { id: 'jobs', to: '/app/jobs', label: 'Assignments', icon: HardHat },
+      { id: 'enterprise', to: '/app/enterprise-jobs', label: 'Enterprise Jobs', icon: Briefcase },
+      { id: 'my-apps', to: '/app/my-applications', label: 'My Applications', icon: ClipboardList },
       { id: 'attendance', to: '/app/attendance', label: 'Attendance', icon: Clock },
       { id: 'wallet', to: '/app/wallet', label: 'My Wallet', icon: Wallet },
       { id: 'earnings', to: '/app/earnings', label: 'Earnings & payouts', icon: IndianRupee },

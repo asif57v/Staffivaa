@@ -5,6 +5,7 @@ export const USER_ROLES = {
   LABOUR: 'labour',
   CONTRACTOR: 'contractor',
   ADMIN: 'admin',
+  ENTERPRISE: 'enterprise',
 }
 
 /** Same as backend `ROLE_LIST` */
@@ -15,6 +16,7 @@ export const REGISTERABLE_ROLES = [
   USER_ROLES.CORPORATE,
   USER_ROLES.LABOUR,
   USER_ROLES.CONTRACTOR,
+  USER_ROLES.ENTERPRISE,
 ]
 
 /** Mobile-first app roles — keep in sync with backend `src/constants/roles.js` (`APP_ROLES`) */
@@ -31,10 +33,17 @@ export const ROLE_LABELS = {
   [USER_ROLES.LABOUR]: 'Labour / Worker',
   [USER_ROLES.CONTRACTOR]: 'Contractor / Vendor',
   [USER_ROLES.ADMIN]: 'Administrator',
+  [USER_ROLES.ENTERPRISE]: 'Enterprise Client',
 }
 
 /** Mirror backend `CORPORATE_STATUS` / `KYC_STATUS` for UI badges */
 export const CORPORATE_STATUS = {
+  PENDING: 'pending',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+}
+
+export const ENTERPRISE_STATUS = {
   PENDING: 'pending',
   APPROVED: 'approved',
   REJECTED: 'rejected',

@@ -226,7 +226,7 @@ export const listVendorJobs = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .populate({
       path: 'requestId',
-      select: 'reference status locationText startDate endDate lines scheduleType shiftStart shiftEnd clientId projectId advancePaymentStatus finalPaymentStatus createdAt labourPlatformFee labourPaymentStatus vendorPlatformFeeAmount vendorPlatformFeeStatus',
+      select: 'reference status locationText startDate endDate lines scheduleType shiftStart shiftEnd clientId projectId siteId advancePaymentStatus finalPaymentStatus createdAt labourPlatformFee labourPaymentStatus vendorPlatformFeeAmount vendorPlatformFeeStatus',
       populate: [
         {
           path: 'lines.categoryId',
@@ -238,6 +238,10 @@ export const listVendorJobs = asyncHandler(async (req, res) => {
         },
         {
           path: 'projectId',
+          select: 'name',
+        },
+        {
+          path: 'siteId',
           select: 'name',
         }
       ],
@@ -305,6 +309,8 @@ export const listVendorMarketplaceRequests = asyncHandler(async (req, res) => {
   })
     .sort({ createdAt: -1 })
     .populate('clientId', 'fullName corporateProfile.companyName')
+    .populate('projectId', 'name')
+    .populate('siteId', 'name')
     .populate('lines.categoryId', 'name group')
     .lean()
 

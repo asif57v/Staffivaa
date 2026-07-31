@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { protect, restrictTo } from '../middleware/auth.js'
+import { protect, restrictTo, requireActiveAccount } from '../middleware/auth.js'
 import { USER_ROLES } from '../constants/roles.js'
 import {
   getVendorMe,
@@ -47,11 +47,11 @@ router.get('/dashboard', getVendorDashboard)
 router.get('/crew', listVendorCrew)
 router.post('/crew/link', linkVendorCrew)
 router.get('/jobs', listVendorJobs)
-router.post('/jobs/:id/accept', acceptVendorJob)
-router.post('/jobs/:id/assign', assignWorkforce)
+router.post('/jobs/:id/accept', requireActiveAccount(), acceptVendorJob)
+router.post('/jobs/:id/assign', requireActiveAccount(), assignWorkforce)
 router.get('/settlements', listVendorSettlements)
 router.get('/requests', listVendorMarketplaceRequests)
-router.post('/requests/:id/accept', acceptVendorMarketplaceRequest)
+router.post('/requests/:id/accept', requireActiveAccount(), acceptVendorMarketplaceRequest)
 router.post('/requests/:id/decline', declineVendorMarketplaceRequest)
 
 // Wallet Endpoints

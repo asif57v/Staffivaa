@@ -27,6 +27,9 @@ import {
   ImagePlus,
   Percent,
   Banknote,
+  Building2,
+  ShieldCheck,
+  FileText,
 } from 'lucide-react'
 
 /**
@@ -61,6 +64,7 @@ export const ADMIN_NAV_SECTIONS = [
     title: 'User Management',
     items: [
       { to: '/admin/individuals', label: 'Home / Individual', icon: Home },
+      { to: '/admin/enterprises', label: 'Enterprise Client', icon: Building2 },
       { to: '/admin/corporates', label: 'Corporate Client', icon: Briefcase },
       { to: '/admin/labour', label: 'Labour / Worker', icon: HardHat },
       { to: '/admin/contractors', label: 'Contractor / Vendor', icon: Truck },
@@ -71,6 +75,7 @@ export const ADMIN_NAV_SECTIONS = [
     items: [
       { to: '/admin/users', label: 'All Users (Combined)', icon: Users },
       { to: '/admin/business-verification', label: 'Corporate & vendor KYC', icon: FileCheck },
+      { to: '/admin/enterprise-verification', label: 'Enterprise KYC', icon: ShieldCheck },
     ],
   },
   {
@@ -78,6 +83,7 @@ export const ADMIN_NAV_SECTIONS = [
     items: [
       { to: '/admin/labour', label: 'Labour & KYC', icon: IdCard },
       { to: '/admin/categories', label: 'Skill categories', icon: Layers },
+      { to: '/admin/enterprise-jobs', label: 'Enterprise Jobs', icon: Briefcase },
     ],
   },
   {
@@ -92,6 +98,9 @@ export const ADMIN_NAV_SECTIONS = [
     title: 'Finance',
     items: [
       { to: '/admin/wallet', label: 'Admin Wallet', icon: Wallet },
+      { to: '/admin/enterprise-wallets', label: 'Enterprise Wallets', icon: Wallet },
+      { to: '/admin/enterprise-payments', label: 'Joining Payments & Escrow', icon: ShieldCheck },
+      { to: '/admin/enterprise-payrolls', label: 'Enterprise Payroll & Payouts', icon: Banknote },
       { to: '/admin/refunds', label: 'Refunds', icon: Banknote },
       { to: '/admin/commission', label: 'Commissions', icon: Percent },
       { to: '/admin/pricing', label: 'Pricing Management', icon: BadgeIndianRupee },
@@ -112,11 +121,15 @@ export const ADMIN_NAV_SECTIONS = [
   },
   {
     title: 'System',
-    items: [{ to: '/admin/settings', label: 'Settings', icon: Settings }],
+    items: [
+      { to: '/admin/legal-content', label: 'Legal Content', icon: FileText },
+      { to: '/admin/settings', label: 'Settings', icon: Settings },
+    ],
   },
 ]
 
 const ROUTE_TITLES = [
+  { prefix: '/admin/legal-content', title: 'Legal Content Management' },
   { prefix: '/admin/individuals', title: 'Individual Users' },
   { prefix: '/admin/corporates', title: 'Corporate Clients' },
   { prefix: '/admin/contractors', title: 'Contractors & Vendors' },

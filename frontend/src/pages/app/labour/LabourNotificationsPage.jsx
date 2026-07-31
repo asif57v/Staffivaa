@@ -50,6 +50,7 @@ const TYPE_MAPPING = {
   'WALLET_CREDIT': { icon: Wallet, kind: 'earnings', priority: 'high', category: 'updates' },
   'WALLET_DEBIT': { icon: Wallet, kind: 'earnings', priority: 'normal', category: 'updates' },
   'WITHDRAWAL_COMPLETED': { icon: Wallet, kind: 'earnings', priority: 'high', category: 'updates' },
+  'ENTERPRISE_JOB_ALERT': { icon: Building2, kind: 'job_request', priority: 'high', category: 'jobs' },
 }
 
 const KIND_TONE = {
@@ -104,8 +105,8 @@ function LabourNotificationsPageContent() {
     }
   }, [refetch])
 
-  const feedItems = notificationsData?.data?.notifications || []
-  const unreadCount = notificationsData?.data?.unreadCount || 0
+  const feedItems = notificationsData?.notifications || notificationsData?.data?.notifications || []
+  const unreadCount = notificationsData?.unreadCount ?? notificationsData?.data?.unreadCount ?? 0
   const jobCount = feedItems.filter(n => TYPE_MAPPING[n.type]?.category === 'jobs').length
 
   const mappedFeedItems = useMemo(() => {
@@ -148,7 +149,11 @@ function LabourNotificationsPageContent() {
       refetch()
     }
     
-    // Simple navigation logic based on kind
+    if (n.type === 'ENTERPRISE_JOB_ALERT' || n.relatedModel === 'EnterpriseJob') {
+      navigate('/app/enterprise-jobs')
+      return
+    }
+
     if (n.kind === 'kyc') navigate('/app/kyc')
     else if (n.kind === 'attendance') navigate('/app/attendance')
     else if (n.kind === 'earnings') navigate('/app/earnings')

@@ -38,12 +38,31 @@ export function CorporateProjectsPage() {
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Portfolio</p>
           <h2 className="text-lg font-extrabold text-slate-900">Projects & sites</h2>
         </div>
-        <Link to="/corporate/projects/new">
-          <AppPrimaryButton type="button" className="shrink-0">
+        {user?.accountStatus && user.accountStatus !== 'active' ? (
+          <AppPrimaryButton
+            type="button"
+            className="shrink-0 opacity-60 grayscale cursor-not-allowed"
+            onClick={() => {
+              const statusText =
+                user.accountStatus === 'on_hold' ? 'On Hold' :
+                user.accountStatus === 'suspended' ? 'Suspended' :
+                user.accountStatus === 'blocked' ? 'Blocked' : user.accountStatus;
+              import('react-hot-toast').then(({ default: toast }) => {
+                toast.error(`Action Denied: Your account has been put ${statusText} by Admin. You cannot create new projects.`, { duration: 6000 });
+              });
+            }}
+          >
             <Plus className="mr-1.5 h-4 w-4" />
             New
           </AppPrimaryButton>
-        </Link>
+        ) : (
+          <Link to="/corporate/projects/new">
+            <AppPrimaryButton type="button" className="shrink-0">
+              <Plus className="mr-1.5 h-4 w-4" />
+              New
+            </AppPrimaryButton>
+          </Link>
+        )}
       </div>
 
       {isLoading ? (

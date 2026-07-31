@@ -26,6 +26,11 @@ import webhookRoutes from './webhookRoutes.js'
 import refundRoutes from './refundRoutes.js'
 import adminRefundRoutes from './adminRefundRoutes.js'
 import supportRoutes from './supportRoutes.js'
+import enterpriseRoutes from './enterpriseRoutes.js'
+import adminEnterpriseRoutes from './adminEnterpriseRoutes.js'
+import enterpriseWalletRoutes from './enterpriseWalletRoutes.js'
+import adminEnterpriseWalletRoutes from './adminEnterpriseWalletRoutes.js'
+import legalRoutes from './legalRoutes.js'
 
 const router = Router()
 
@@ -57,5 +62,10 @@ router.use('/admin/commission', adminCommissionRoutes)
 router.use('/wallet/refunds', refundRoutes)
 router.use('/admin/refunds', adminRefundRoutes)
 router.use('/support-tickets', supportRoutes)
+router.use('/enterprise', enterpriseRoutes)
+router.use('/enterprise/wallet', enterpriseWalletRoutes)
+router.use('/admin/enterprise', adminEnterpriseRoutes)
+router.use('/admin/enterprise-wallets', adminEnterpriseWalletRoutes)
+router.use('/legal', legalRoutes)
 
 export default router

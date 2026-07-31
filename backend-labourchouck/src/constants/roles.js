@@ -1,10 +1,11 @@
-/** Aligns with Work Scope: Individual, Corporate, Labour, Contractor, Admin */
+/** Aligns with Work Scope: Individual, Corporate, Labour, Contractor, Admin, Enterprise */
 export const USER_ROLES = {
   INDIVIDUAL: 'individual',
   CORPORATE: 'corporate',
   LABOUR: 'labour',
   CONTRACTOR: 'contractor',
   ADMIN: 'admin',
+  ENTERPRISE: 'enterprise',
 }
 
 export const ROLE_LIST = Object.values(USER_ROLES)
@@ -18,6 +19,12 @@ export const APP_ROLES = [
 ]
 
 export const CORPORATE_STATUS = {
+  PENDING: 'pending',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+}
+
+export const ENTERPRISE_STATUS = {
   PENDING: 'pending',
   APPROVED: 'approved',
   REJECTED: 'rejected',

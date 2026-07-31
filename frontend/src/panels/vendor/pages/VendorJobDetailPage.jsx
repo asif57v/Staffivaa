@@ -160,19 +160,31 @@ export function VendorJobDetailPage() {
         <h1 className="text-base font-extrabold text-slate-900">Job Details</h1>
       </header>
 
-      <div className="px-2 py-4 space-y-3 max-w-md mx-auto">
-        <div className="rounded-[24px] bg-white p-5 shadow-[0_2px_14px_-4px_rgba(0,0,0,0.08)] border border-slate-100/90">
-          <div className="flex flex-wrap justify-between items-start gap-2 border-b border-slate-100 pb-3.5">
-            <div className="flex-1 min-w-0 pr-2">
-              <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 leading-snug tracking-tight">{projectName}</h2>
-              <div className="flex items-center gap-2 mt-1 text-slate-600 font-semibold text-sm">
-                <Building2 className="h-4 w-4 shrink-0 text-brand" />
+      <div className="px-1 sm:px-4 py-2 sm:py-4 space-y-2 sm:space-y-3 max-w-md mx-auto">
+        <div className="rounded-xl sm:rounded-[24px] bg-white p-2.5 sm:p-5 shadow-[0_2px_14px_-4px_rgba(0,0,0,0.08)] border border-slate-100/90">
+          <div className="flex items-start gap-3 border-b border-slate-100 pb-3.5">
+            {/* Site Thumbnail */}
+            <div className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl bg-slate-200 border border-slate-100/50 shadow-sm">
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/20 to-transparent z-10" />
+              <img
+                src="https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=300&q=80"
+                alt="Site"
+                className="h-full w-full object-cover"
+              />
+            </div>
+            {/* Title + Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <h2 className="text-[16px] sm:text-[18px] font-extrabold text-slate-900 leading-snug tracking-tight flex-1">{projectName}</h2>
+                <span className={`flex shrink-0 items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${statusTone}`}>
+                  <StatusIcon className="h-2.5 w-2.5" strokeWidth={3} /> {statusLabel}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 mt-1 text-slate-500 font-semibold text-xs">
+                <Building2 className="h-3 w-3 shrink-0 text-brand" />
                 <span className="leading-normal">{companyName}</span>
               </div>
             </div>
-            <span className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${statusTone}`}>
-              <StatusIcon className="h-3.5 w-3.5" strokeWidth={3} /> {statusLabel}
-            </span>
           </div>
 
           {/* Complete Location Row */}
@@ -186,19 +198,19 @@ export function VendorJobDetailPage() {
             </div>
           </div>
           
-          <div className="mt-3.5 grid grid-cols-2 gap-2 text-slate-700">
-            <div className="flex items-center gap-2 rounded-xl bg-slate-50/60 p-2.5 border border-slate-100/80">
+          <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-700">
+            <div className="flex items-center gap-2.5 rounded-xl bg-slate-50/60 p-3 border border-slate-100/80">
               <Calendar className="h-4 w-4 shrink-0 text-slate-500" />
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Duration</p>
-                <p className="text-xs sm:text-sm font-bold text-slate-800">{durationStr}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Duration</p>
+                <p className="text-xs sm:text-sm font-bold text-slate-800 leading-snug break-words">{durationStr}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 rounded-xl bg-slate-50/60 p-2.5 border border-slate-100/80">
+            <div className="flex items-center gap-2.5 rounded-xl bg-slate-50/60 p-3 border border-slate-100/80">
               <Users className="h-4 w-4 shrink-0 text-slate-500" />
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Workforce</p>
-                <p className="text-xs sm:text-sm font-bold text-slate-800">{totalRequired} Workers Required</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Workforce</p>
+                <p className="text-xs sm:text-sm font-bold text-slate-800 leading-snug">{totalRequired} Workers Required</p>
               </div>
             </div>
           </div>
@@ -220,7 +232,7 @@ export function VendorJobDetailPage() {
 
         {/* Vendor Quotation Status Panel */}
         {quotation ? (
-          <div className="rounded-2xl bg-white p-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100 space-y-4">
+          <div className="rounded-xl sm:rounded-2xl bg-white p-2.5 sm:p-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100 space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div>
                 <h4 className="text-[14px] font-black text-slate-900">Quotation Status</h4>
@@ -281,7 +293,7 @@ export function VendorJobDetailPage() {
           </div>
         ) : (
           !pending && !quotation && (['quotation_unlocked', 'accepted', 'project_active', 'allocated', 'assigned'].includes(req?.status)) && totalAssigned >= totalRequired && (
-            <div className="rounded-[20px] bg-slate-900 p-5 text-white border border-slate-900 space-y-3">
+            <div className="rounded-xl sm:rounded-[20px] bg-slate-900 p-2.5 sm:p-5 text-white border border-slate-900 space-y-3">
               <div className="flex justify-between items-start">
                 <div>
                   <h4 className="text-sm font-black text-slate-100">Prepare Professional Quotation</h4>
@@ -303,7 +315,7 @@ export function VendorJobDetailPage() {
         )}
 
         {/* Request Overview */}
-        <div className="rounded-2xl bg-white p-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
+        <div className="rounded-xl sm:rounded-2xl bg-white p-2.5 sm:p-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
           <h3 className="text-[15px] font-extrabold text-slate-900 mb-4">Job Overview</h3>
           <div className="space-y-3.5">
             <div className="flex justify-between items-start gap-4">
@@ -367,7 +379,7 @@ export function VendorJobDetailPage() {
         </div>
 
         {/* Skill Lines */}
-        <div className="rounded-[20px] bg-white p-5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
+        <div className="rounded-xl sm:rounded-[20px] bg-white p-2.5 sm:p-5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
           <h3 className="text-[15px] font-extrabold text-slate-900 mb-3">Skill Lines</h3>
           <div className="space-y-2">
             {(req.lines ?? []).map((line, i) => (
@@ -381,7 +393,7 @@ export function VendorJobDetailPage() {
 
         {/* Corporate Client */}
         {req.clientId && (
-          <div className="rounded-[20px] bg-indigo-50/50 p-5 shadow-sm border border-indigo-100/50">
+          <div className="rounded-xl sm:rounded-[20px] bg-indigo-50/50 p-2.5 sm:p-5 shadow-sm border border-indigo-100/50">
             <div className="flex items-center gap-2 mb-3">
               <Building2 className="h-4 w-4 text-indigo-500" />
               <h3 className="text-[15px] font-extrabold text-slate-900">Corporate Client</h3>
@@ -408,7 +420,7 @@ export function VendorJobDetailPage() {
 
         {/* Assigned Roster */}
         {(!pending || assignments.length > 0) && (
-          <div className="rounded-[20px] bg-white p-5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
+          <div className="rounded-xl sm:rounded-[20px] bg-white p-2.5 sm:p-5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-amber-500" />
@@ -480,9 +492,21 @@ export function VendorJobDetailPage() {
           </button>
         ) : null}
         
-        <button className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-white border border-slate-200 py-3.5 text-[15px] font-bold text-slate-600 transition hover:bg-slate-50 active:scale-[0.98] shadow-sm">
-          <Phone className="h-4 w-4" /> Contact Client
-        </button>
+        {req.clientId?.phone && ['project_active', 'in_progress', 'completed', 'settlement_pending', 'settlement_completed', 'attendance_tracking'].includes(req?.status) ? (
+          <a
+            href={`tel:${req.clientId.phone}`}
+            className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-white border border-slate-200 py-3.5 text-[15px] font-bold text-slate-600 transition hover:bg-slate-50 active:scale-[0.98] shadow-sm"
+          >
+            <Phone className="h-4 w-4" /> Contact Client
+          </a>
+        ) : (
+          <button
+            onClick={() => alert('Client contact number will be available once the project is active and fee is paid.')}
+            className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-white border border-slate-200 py-3.5 text-[15px] font-bold text-slate-400 transition hover:bg-slate-50 active:scale-[0.98] shadow-sm cursor-not-allowed"
+          >
+            <Phone className="h-4 w-4" /> Contact Client
+          </button>
+        )}
       </div>
 
       {/* Fullscreen Quotation Editor Modal */}

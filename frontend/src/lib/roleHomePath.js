@@ -7,6 +7,8 @@ export function getRoleDashboardPath(role) {
       return '/admin'
     case USER_ROLES.CORPORATE:
       return '/corporate'
+    case USER_ROLES.ENTERPRISE:
+      return '/enterprise'
     case USER_ROLES.CONTRACTOR:
       return '/vendor'
     case USER_ROLES.LABOUR:

@@ -65,9 +65,9 @@ export function VendorJobsPage() {
       if (activeTab === 'Cancelled' && status !== 'cancelled') return false
       if (activeTab === 'Assigned' && status !== 'accepted') return false 
 
-      if (search) {
+      if (search.trim()) {
         const req = a.requestId || {}
-        const query = search.toLowerCase()
+        const query = search.toLowerCase().trim()
         
         const reference = (req.reference || 'CR-MQ8OUOON').toLowerCase()
         const company = (req.clientId?.corporateProfile?.companyName || req.clientId?.fullName || 'Urban Company').toLowerCase()
@@ -185,7 +185,7 @@ export function VendorJobsPage() {
           return (
             <li key={a._id}>
               <Link to={`/vendor/jobs/${a._id}`} className="block transition active:scale-[0.98]">
-                <div className="rounded-[24px] bg-white p-5 shadow-[0_2px_14px_-4px_rgba(0,0,0,0.08)] border border-slate-100/90 hover:shadow-lg transition-shadow">
+                <div className="rounded-xl sm:rounded-[24px] bg-white p-2.5 sm:p-5 shadow-[0_2px_14px_-4px_rgba(0,0,0,0.08)] border border-slate-100/90 hover:shadow-lg transition-shadow">
                   {/* Header Row: Title & Status */}
                   <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-3.5">
                     <div className="flex-1 min-w-0 pr-2">
@@ -217,19 +217,19 @@ export function VendorJobsPage() {
                   </div>
 
                   {/* Schedule & Workers Info Row */}
-                  <div className="mt-3.5 grid grid-cols-2 gap-2 text-slate-700">
-                    <div className="flex items-center gap-2 rounded-xl bg-slate-50/60 p-2.5 border border-slate-100/80">
+                  <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-700">
+                    <div className="flex items-center gap-2.5 rounded-xl bg-slate-50/60 p-3 border border-slate-100/80">
                       <Calendar className="h-4 w-4 shrink-0 text-slate-500" />
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Start Date</p>
-                        <p className="text-xs sm:text-sm font-bold text-slate-800">{formatDate(req.startDate)}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Start Date</p>
+                        <p className="text-xs sm:text-sm font-bold text-slate-800 leading-snug break-words">{formatDate(req.startDate)}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 rounded-xl bg-slate-50/60 p-2.5 border border-slate-100/80">
+                    <div className="flex items-center gap-2.5 rounded-xl bg-slate-50/60 p-3 border border-slate-100/80">
                       <Users className="h-4 w-4 shrink-0 text-slate-500" />
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Workforce</p>
-                        <p className="text-xs sm:text-sm font-bold text-slate-800">{workersCount} Workers Required</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Workforce</p>
+                        <p className="text-xs sm:text-sm font-bold text-slate-800 leading-snug">{workersCount} Workers Required</p>
                       </div>
                     </div>
                   </div>

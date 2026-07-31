@@ -255,7 +255,7 @@ export function AdminLayout() {
         navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage)
       }
     }
-  }, [user, navigate])
+  }, [user?._id, navigate])
   useEffect(() => {
     function handlePointerDown(e) {
       if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false)

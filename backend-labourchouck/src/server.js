@@ -7,13 +7,16 @@ import { startBookingExpirationJob } from './utils/bookingExpiration.js'
 import { startCorporatePaymentCheckJob } from './utils/corporatePaymentScheduler.js'
 import { startPayrollEngineJob } from './utils/payrollJob.js'
 import { startCommissionOverdueJob } from './utils/commissionJob.js'
+import { runPaymentSchedulerChecks } from './utils/paymentScheduler.js'
 import { initializeFirebaseAdmin } from './config/firebase.js'
+import { seedDefaultLegalPages } from './controllers/legalController.js'
 
 const port = Number(process.env.PORT) || 5000
 
 async function main() {
   await connectDb()
   initializeFirebaseAdmin()
+  seedDefaultLegalPages().catch((err) => console.error('[Legal Seeder Error]:', err.message))
   
   const server = http.createServer(app)
   initSocket()
@@ -23,6 +26,12 @@ async function main() {
   startCorporatePaymentCheckJob()
   startPayrollEngineJob()
   startCommissionOverdueJob()
+  
+  // Run Payment Scheduler every 15 minutes
+  runPaymentSchedulerChecks().catch((err) => console.error('[Payment Scheduler Startup Error]:', err.message))
+  setInterval(() => {
+    runPaymentSchedulerChecks().catch((err) => console.error('[Payment Scheduler Error]:', err.message))
+  }, 15 * 60 * 1000)
   
   server.listen(port, () => {
     console.log(`LabourChowck API listening on :${port}`)

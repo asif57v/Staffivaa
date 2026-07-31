@@ -823,23 +823,7 @@ export function IndividualBookingFlowPage() {
             />
           </div>
 
-          <div>
-            <FieldLabel optional>Photos</FieldLabel>
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 py-4 text-xs font-bold text-slate-600">
-              <ImagePlus className="h-4 w-4 text-brand" aria-hidden />
-              Upload images
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="sr-only"
-                onChange={(e) => setImageFiles([...(e.target.files || [])])}
-              />
-            </label>
-            {imageFiles.length ? (
-              <p className="mt-1 text-[11px] text-slate-500">{imageFiles.length} file(s) selected</p>
-            ) : null}
-          </div>
+
 
           <div>
             <FieldLabel>Working duration</FieldLabel>

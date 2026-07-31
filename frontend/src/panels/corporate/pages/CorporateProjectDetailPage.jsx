@@ -20,6 +20,8 @@ export function CorporateProjectDetailPage() {
   const [siteName, setSiteName] = useState('')
   const [siteAddress, setSiteAddress] = useState('')
   const [siteCity, setSiteCity] = useState('')
+  const [siteContactName, setSiteContactName] = useState('')
+  const [siteContactPhone, setSiteContactPhone] = useState('')
   const [addressAutocomplete, setAddressAutocomplete] = useState(null)
   const [cityAutocomplete, setCityAutocomplete] = useState(null)
   const [error, setError] = useState('')
@@ -96,15 +98,22 @@ export function CorporateProjectDetailPage() {
   const handleAddSite = async (e) => {
     e.preventDefault()
     if (!siteName.trim()) return
+    if (!siteAddress.trim()) return
+    if (!siteContactName.trim()) return
+    if (!siteContactPhone.trim()) return
     await addSite({
       projectId: id,
       name: siteName.trim(),
-      address: siteAddress.trim() || undefined,
+      address: siteAddress.trim(),
       city: siteCity.trim() || undefined,
+      contactName: siteContactName.trim(),
+      contactPhone: siteContactPhone.trim(),
     }).unwrap()
     setSiteName('')
     setSiteAddress('')
     setSiteCity('')
+    setSiteContactName('')
+    setSiteContactPhone('')
     setShowForm(false)
   }
 
@@ -162,6 +171,8 @@ export function CorporateProjectDetailPage() {
               placeholder="Site name"
               value={siteName}
               onChange={(e) => setSiteName(e.target.value)}
+              minLength={3}
+              title="Minimum 3 characters required"
               required
             />
             {isLoaded ? (
@@ -178,6 +189,7 @@ export function CorporateProjectDetailPage() {
                   placeholder="Address"
                   value={siteAddress}
                   onChange={(e) => setSiteAddress(e.target.value)}
+                  required
                 />
               </Autocomplete>
             ) : (
@@ -186,6 +198,7 @@ export function CorporateProjectDetailPage() {
                 placeholder="Address"
                 value={siteAddress}
                 onChange={(e) => setSiteAddress(e.target.value)}
+                required
               />
             )}
             {isLoaded ? (
@@ -213,6 +226,27 @@ export function CorporateProjectDetailPage() {
                 onChange={(e) => setSiteCity(e.target.value)}
               />
             )}
+            <input
+              className={inputClass}
+              placeholder="Contact Name"
+              value={siteContactName}
+              onChange={(e) => setSiteContactName(e.target.value)}
+              minLength={3}
+              title="Minimum 3 characters required"
+              required
+            />
+            <input
+              className={inputClass}
+              placeholder="Contact Phone"
+              value={siteContactPhone}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, '')
+                if (val.length <= 10) setSiteContactPhone(val)
+              }}
+              pattern="[0-9]{10}"
+              title="Please enter a valid 10-digit phone number"
+              required
+            />
             <div className="flex justify-end">
               <button
                 type="button"

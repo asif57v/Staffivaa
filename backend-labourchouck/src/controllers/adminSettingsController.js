@@ -31,7 +31,29 @@ export const updateSettings = asyncHandler(async (req, res) => {
     commissionValue,
     commissionTrigger,
     commissionDueDays,
-    radiusConfig
+    minimumEnterpriseSecurityBalance,
+    isEnterpriseSecurityBalanceEnabled,
+    advancePaymentPercentage,
+    remainingPaymentPercentage,
+    platformFeeType,
+    platformFeeValue,
+    isGstEnabled,
+    gstPercentage,
+    paymentDueRule,
+    advanceInvoiceDueDays,
+    remainingInvoiceDueDays,
+    remainingAttendanceDaysTrigger,
+    enterpriseInvoiceDueDays,
+    enterpriseInvoiceGracePeriodDays,
+    reminderFrequencyHours,
+    enableEnterpriseOverdueRestrictions,
+    restrictJobCreationOnOverdue,
+    restrictOfferSendOnOverdue,
+    freezeAccountOnOverdue,
+    blockAttendanceOnOverdue,
+    requireManualApprovalOnOverdue,
+    radiusConfig,
+    timelineConfig
   } = req.body
 
   if (otpProvider != null) settings.otpProvider = otpProvider
@@ -47,10 +69,47 @@ export const updateSettings = asyncHandler(async (req, res) => {
   if (commissionTrigger != null) settings.commissionTrigger = String(commissionTrigger)
   if (commissionDueDays != null) settings.commissionDueDays = Number(commissionDueDays)
 
+  if (minimumEnterpriseSecurityBalance != null) settings.minimumEnterpriseSecurityBalance = Number(minimumEnterpriseSecurityBalance)
+  if (isEnterpriseSecurityBalanceEnabled != null) settings.isEnterpriseSecurityBalanceEnabled = Boolean(isEnterpriseSecurityBalanceEnabled)
+  if (advancePaymentPercentage != null) settings.advancePaymentPercentage = Number(advancePaymentPercentage)
+  if (remainingPaymentPercentage != null) settings.remainingPaymentPercentage = Number(remainingPaymentPercentage)
+  if (platformFeeType != null) settings.platformFeeType = String(platformFeeType)
+  if (platformFeeValue != null) settings.platformFeeValue = Number(platformFeeValue)
+  if (isGstEnabled != null) settings.isGstEnabled = Boolean(isGstEnabled)
+  if (gstPercentage != null) settings.gstPercentage = Number(gstPercentage)
+  if (paymentDueRule != null) settings.paymentDueRule = String(paymentDueRule)
+  if (advanceInvoiceDueDays != null) settings.advanceInvoiceDueDays = Number(advanceInvoiceDueDays)
+  if (remainingInvoiceDueDays != null) settings.remainingInvoiceDueDays = Number(remainingInvoiceDueDays)
+  if (remainingAttendanceDaysTrigger != null) settings.remainingAttendanceDaysTrigger = Number(remainingAttendanceDaysTrigger)
+  if (enterpriseInvoiceDueDays != null) settings.enterpriseInvoiceDueDays = Number(enterpriseInvoiceDueDays)
+  if (enterpriseInvoiceGracePeriodDays != null) settings.enterpriseInvoiceGracePeriodDays = Number(enterpriseInvoiceGracePeriodDays)
+  if (reminderFrequencyHours != null) settings.reminderFrequencyHours = Number(reminderFrequencyHours)
+  if (enableEnterpriseOverdueRestrictions != null) settings.enableEnterpriseOverdueRestrictions = Boolean(enableEnterpriseOverdueRestrictions)
+  if (restrictJobCreationOnOverdue != null) settings.restrictJobCreationOnOverdue = Boolean(restrictJobCreationOnOverdue)
+  if (restrictOfferSendOnOverdue != null) settings.restrictOfferSendOnOverdue = Boolean(restrictOfferSendOnOverdue)
+  if (freezeAccountOnOverdue != null) settings.freezeAccountOnOverdue = Boolean(freezeAccountOnOverdue)
+  if (blockAttendanceOnOverdue != null) settings.blockAttendanceOnOverdue = Boolean(blockAttendanceOnOverdue)
+  if (requireManualApprovalOnOverdue != null) settings.requireManualApprovalOnOverdue = Boolean(requireManualApprovalOnOverdue)
+
   if (radiusConfig != null && typeof radiusConfig === 'object') {
     settings.radiusConfig = {
       ...settings.radiusConfig,
       ...radiusConfig
+    }
+  }
+
+  if (timelineConfig != null && typeof timelineConfig === 'object') {
+    settings.timelineConfig = {
+      ...settings.timelineConfig,
+      ...timelineConfig
+    }
+  }
+
+  const { jobNotificationConfig } = req.body
+  if (jobNotificationConfig != null && typeof jobNotificationConfig === 'object') {
+    settings.jobNotificationConfig = {
+      ...settings.jobNotificationConfig,
+      ...jobNotificationConfig
     }
   }
 

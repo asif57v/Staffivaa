@@ -28,6 +28,7 @@ import { connectSocket } from '../services/socket.js'
 import { fetchMe } from '../api/authApi.js'
 import { setUser } from '../store/slices/authSlice.js'
 import { loadJobDemoState, subscribeJobDemo } from '../lib/labourJobDemoStorage.js'
+import { enterpriseApi } from '../store/api/enterpriseApi.js'
 
 export function AppShell() {
   const { pathname, search } = useLocation()
@@ -50,6 +51,44 @@ export function AppShell() {
     if (isLabour) return subscribeJobDemo(setLocalDemo)
   }, [isLabour])
 
+  const dispatchAlert = useCallback((title, body, isError = false) => {
+    const rawKey = (title || '') + '_' + (body || '');
+    const dedupeKey = rawKey.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const now = Date.now();
+    window._lastAlertLog = window._lastAlertLog || {};
+    if (window._lastAlertLog[dedupeKey] && (now - window._lastAlertLog[dedupeKey] < 15000)) {
+      return;
+    }
+    window._lastAlertLog[dedupeKey] = now;
+
+    const toastId = dedupeKey.slice(0, 45) || 'default-alert-toast';
+    const toastMsg = body ? `${title}: ${body}` : title;
+
+    import('react-hot-toast').then(({ default: toast }) => {
+      if (isError) {
+        toast.error(toastMsg, { id: toastId, duration: 6000 });
+      } else {
+        toast.success(toastMsg, { id: toastId, duration: 6000 });
+      }
+    });
+
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission === 'granted') {
+          new Notification(title || 'Staffivaa Update', { body: body || '', icon: '/vite.svg', badge: '/vite.svg', vibrate: [200, 100, 200], tag: toastId, requireInteraction: true });
+        } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission().then((perm) => {
+            if (perm === 'granted') {
+              new Notification(title || 'Staffivaa Update', { body: body || '', icon: '/vite.svg', badge: '/vite.svg', vibrate: [200, 100, 200], tag: toastId, requireInteraction: true });
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Push error:', err);
+    }
+  }, []);
+
   // --- Socket.IO Real-time Implementation ---
   useEffect(() => {
     if (!user || !token) return;
@@ -57,8 +96,9 @@ export function AppShell() {
     const socket = connectSocket(user, token);
 
     const invalidateCache = () => {
-      console.log('[Socket] Invalidating Assignments and Requests cache');
+      console.log('[Socket] Invalidating Assignments, Requests, and Enterprise Jobs cache');
       dispatch(workforceApi.util.invalidateTags(['Assignments', 'Requests']));
+      dispatch(enterpriseApi.util.invalidateTags(['EnterpriseJobs']));
     };
 
     socket.on('assignment_created', invalidateCache);
@@ -79,14 +119,16 @@ export function AppShell() {
     };
 
     const handleNewNotif = (notification) => {
-      import('react-hot-toast').then(({ default: toast }) => {
-        toast.success(notification.title || 'New Notification');
-      });
+      dispatchAlert(notification.title || 'New Notification', notification.body || notification.message || '', false);
       refreshAppUser();
       dispatch(workforceApi.util.invalidateTags(['Notifications']));
     };
 
-    const handleKycUpdate = () => {
+    const handleKycUpdate = (data) => {
+      const statusStr = data?.status || 'updated';
+      const title = data?.notification?.title || 'Account Status Update ⚠️';
+      const body = data?.notification?.body || 'Your account status or verification has been updated by Admin.';
+      dispatchAlert(title, body, statusStr !== 'approved' && statusStr !== 'active');
       refreshAppUser();
       invalidateCache();
     };
@@ -111,6 +153,8 @@ export function AppShell() {
       socket.off('dashboard:updated', invalidateCache);
     };
   }, [user, token, dispatch]);
+  // ------------------------------------------
+
   // ------------------------------------------
 
   // --- FCM Token Auto-sync & Foreground Listener ---
@@ -154,10 +198,8 @@ export function AppShell() {
 
       if (payload?.notification && Notification.permission === 'granted') {
         // Also show a toast so the user definitely sees it inside the app
-        if (typeof window !== 'undefined') {
-          import('react-hot-toast').then(({ default: toast }) => {
-            toast.success(`Notification: ${payload.notification.title}`);
-          });
+        if (typeof window !== 'undefined' && payload?.notification) {
+          dispatchAlert(payload.notification.title || 'New Notification', payload.notification.body || '', false);
         }
         
         // Use service worker showNotification so it appears as native OS popup
@@ -195,8 +237,11 @@ export function AppShell() {
         navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
       }
     };
-  }, [user, token]);
+  }, [user?._id, token]);
   // ---------------------------
+
+  const { data: notifData } = workforceApi.useGetNotificationsQuery(undefined, { skip: !user })
+  const unreadNotifsCount = notifData?.data?.unreadCount ?? notifData?.unreadCount ?? 0
 
   const pendingJobsCount = useMemo(() => {
     let count = 0
@@ -212,10 +257,16 @@ export function AppShell() {
   const finalBottomNav = useMemo(() => {
     if (!isLabour || !bottomNav) return bottomNav
     return bottomNav.map(item => {
-      if (item.id === 'jobs') return { ...item, badge: pendingJobsCount > 0 ? pendingJobsCount : undefined }
+      if (item.id === 'jobs') {
+        const totalBadge = pendingJobsCount + unreadNotifsCount
+        return { ...item, badge: totalBadge > 0 ? totalBadge : undefined }
+      }
+      if (item.id === 'enterprise' && unreadNotifsCount > 0) {
+        return { ...item, badge: unreadNotifsCount }
+      }
       return item
     })
-  }, [bottomNav, isLabour, pendingJobsCount])
+  }, [bottomNav, isLabour, pendingJobsCount, unreadNotifsCount])
 
   const normalizedPath = pathname.endsWith('/') && pathname !== '/' ? pathname.slice(0, -1) : pathname
   const isIndividualAppHome = user?.role === USER_ROLES.INDIVIDUAL && normalizedPath === '/app'
@@ -225,6 +276,9 @@ export function AppShell() {
   const isLabourEarnings = user?.role === USER_ROLES.LABOUR && normalizedPath === '/app/earnings'
   const isLabourAttendance = user?.role === USER_ROLES.LABOUR && normalizedPath === '/app/attendance'
   const isLabourKyc = user?.role === USER_ROLES.LABOUR && normalizedPath === '/app/kyc'
+  const isLabourEnterpriseJobs = user?.role === USER_ROLES.LABOUR && normalizedPath === '/app/enterprise-jobs'
+  const isLabourEnterpriseJobDetail = user?.role === USER_ROLES.LABOUR && normalizedPath.startsWith('/app/enterprise-jobs/')
+  const isLabourMyApplications = user?.role === USER_ROLES.LABOUR && normalizedPath === '/app/my-applications'
   const hideShellHeader =
     normalizedPath.startsWith('/app/booking/flow') ||
     normalizedPath === '/app/bookings' ||
@@ -237,6 +291,9 @@ export function AppShell() {
     isLabourEarnings ||
     isLabourAttendance ||
     isLabourKyc ||
+    isLabourEnterpriseJobs ||
+    isLabourEnterpriseJobDetail ||
+    isLabourMyApplications ||
     isNotificationsPage ||
     hideBuildMartShellHeader(normalizedPath)
   const onBuildMart = isBuildMartRoute(normalizedPath)

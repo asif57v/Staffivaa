@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs'
 import { User } from '../models/User.js'
 import { logAudit } from '../utils/auditLogger.js'
-import { USER_ROLES, CORPORATE_STATUS } from '../constants/roles.js'
+import { USER_ROLES, CORPORATE_STATUS, ENTERPRISE_STATUS } from '../constants/roles.js'
 import { createOtpChallenge, validateOtpChallenge, deleteOtpChallengeDoc } from '../services/otpService.js'
 import { signAccessToken } from '../services/tokenService.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
@@ -14,6 +14,11 @@ function buildAuthPayload(user, token) {
   if (user.role === USER_ROLES.CORPORATE && user.corporateProfile) {
     flags = {
       corporateApprovalStatus: user.corporateProfile.status,
+    }
+  }
+  if (user.role === USER_ROLES.ENTERPRISE && user.enterpriseProfile) {
+    flags = {
+      enterpriseApprovalStatus: user.enterpriseProfile.status,
     }
   }
   const platform = user.role === USER_ROLES.ADMIN ? 'web' : 'app'
@@ -86,6 +91,13 @@ export const registerVerify = asyncHandler(async (req, res) => {
       companyName,
       gstNumber: gstNumber || undefined,
       status: CORPORATE_STATUS.PENDING,
+    }
+  }
+  if (role === USER_ROLES.ENTERPRISE) {
+    doc.enterpriseProfile = {
+      companyName,
+      gstNumber: gstNumber || undefined,
+      status: ENTERPRISE_STATUS.PENDING,
     }
   }
   if (role === USER_ROLES.CONTRACTOR) {

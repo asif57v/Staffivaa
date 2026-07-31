@@ -36,6 +36,10 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
             .to(`contractor-${uId}`)
             .to(`corporate_${uId}`)
             .to(`corporate-${uId}`)
+            .to(`enterprise_${uId}`)
+            .to(`enterprise-${uId}`)
+            .to(`labour_${uId}`)
+            .to(`labour-${uId}`)
             .to(`user_${uId}`)
             .to(uId)
             .emit('notification:new', notification);
@@ -79,8 +83,19 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
           }
         }
       } else {
-        // Send to all admins
+        // Send to all admins and persist notification for admin users
         io.to('admin').emit('notification:new', notification);
+        const adminUsers = await User.find({ role: 'admin' }).select('_id');
+        for (const admin of adminUsers) {
+          Notification.create({
+            userId: admin._id,
+            title,
+            body,
+            type,
+            relatedId,
+            relatedModel
+          }).catch(e => console.error('[Admin Notification Save Error]:', e.message));
+        }
       }
       
       // Notify dashboard listeners

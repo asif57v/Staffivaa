@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Sparkles,
   User,
+  Briefcase,
 } from 'lucide-react'
 import { MobileShell } from '../../layouts/MobileShell.jsx'
 import { AppAmbientBackground } from '../../components/app/AppAmbientBackground.jsx'
@@ -22,6 +23,7 @@ import { getRoleHomePath } from '../../lib/roleHomePath.js'
 import { requestLoginOtp, requestRegisterOtp, verifyLogin, verifyRegister } from '../../api/authApi.js'
 import { useAuth } from '../../hooks/useAuth.js'
 import { ApiError } from '../../api/http.js'
+import { useGetPublicLegalPagesQuery } from '../../store/api/legalApi.js'
 import authBg from '../../assets/auth-bg.png'
 
 const GST_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i
@@ -46,6 +48,11 @@ const ROLE_OPTIONS = [
     role: USER_ROLES.CONTRACTOR,
     icon: ClipboardList,
     desc: 'Supply and deploy crews for clients',
+  },
+  {
+    role: USER_ROLES.ENTERPRISE,
+    icon: Briefcase,
+    desc: 'B2B Enterprise Workforce Management',
   },
 ]
 
@@ -98,6 +105,8 @@ function handleInputFocus(e) {
 
 export function AuthEntryPage() {
   const navigate = useNavigate()
+  const { data: legalRes } = useGetPublicLegalPagesQuery()
+  const legalPages = legalRes?.data || []
   const { applySession } = useAuth()
   const reduce = useReducedMotion()
   const otpInputRefs = useRef([])
@@ -187,7 +196,7 @@ export function AuthEntryPage() {
           setBusy(false)
           return
         }
-        if (role === USER_ROLES.CORPORATE && !companyName.trim()) {
+        if ((role === USER_ROLES.CORPORATE || role === USER_ROLES.ENTERPRISE) && !companyName.trim()) {
           setBanner({ variant: 'error', message: 'Company name is required.' })
           setBusy(false)
           return
@@ -197,7 +206,7 @@ export function AuthEntryPage() {
           setBusy(false)
           return
         }
-        if (role === USER_ROLES.CORPORATE && gstNumber.trim() && !GST_RE.test(gstNumber.trim())) {
+        if ((role === USER_ROLES.CORPORATE || role === USER_ROLES.ENTERPRISE) && gstNumber.trim() && !GST_RE.test(gstNumber.trim())) {
           setBanner({ variant: 'error', message: 'Invalid GST format (e.g. 22AAAAA0000A1Z5). Enter a valid 15-character GSTIN or leave blank.' })
           setBusy(false)
           return
@@ -260,7 +269,7 @@ export function AuthEntryPage() {
           challengeId,
           fullName: fullName.trim(),
         }
-        if (role === USER_ROLES.CORPORATE) {
+        if (role === USER_ROLES.CORPORATE || role === USER_ROLES.ENTERPRISE) {
           body.companyName = companyName.trim()
           if (gstNumber.trim()) {
             if (!GST_RE.test(gstNumber.trim())) {
@@ -590,7 +599,7 @@ export function AuthEntryPage() {
                           maxLength={50}
                         />
                       </div>
-                      {role === USER_ROLES.CORPORATE ? (
+                      {role === USER_ROLES.CORPORATE || role === USER_ROLES.ENTERPRISE ? (
                         <>
                           <div id="field-company">
                             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Company Name</label>
@@ -738,8 +747,40 @@ export function AuthEntryPage() {
               )}
             </AnimatePresence>
 
+            {/* Dynamic Published Legal Links (TERMS, PRIVACY, SUPPORT, etc.) */}
+            {legalPages.length > 0 && (
+              <div style={{ marginTop: 24, textAlign: 'center' }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#94a3b8', margin: '0 0 8px 0' }}>
+                  By continuing, you agree to our
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  {legalPages.map((page, idx) => (
+                    <div key={page.slug} style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+                      {idx > 0 && <span style={{ color: '#94a3b8', fontSize: 11 }}>•</span>}
+                      <Link
+                        to={`/legal/${page.slug}`}
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 800,
+                          color: '#64748b',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.06em',
+                          textDecoration: 'none',
+                          transition: 'color 0.2s',
+                        }}
+                        onMouseEnter={(e) => (e.target.style.color = '#0f172a')}
+                        onMouseLeave={(e) => (e.target.style.color = '#64748b')}
+                      >
+                        {page.slug === 'terms' ? 'TERMS' : page.slug === 'privacy' ? 'PRIVACY' : page.slug === 'support' ? 'SUPPORT' : page.title.replace(' Policy', '').replace(' & Conditions', '')}
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Admin link */}
-            <p style={{ marginTop: 28, textAlign: 'center', fontSize: 13, color: '#94a3b8' }}>
+            <p style={{ marginTop: 18, textAlign: 'center', fontSize: 13, color: '#94a3b8' }}>
               Admin?{' '}
               <Link to="/admin/login" style={{ fontWeight: 700, color: '#FFD100', textDecoration: 'none' }}>
                 Web login

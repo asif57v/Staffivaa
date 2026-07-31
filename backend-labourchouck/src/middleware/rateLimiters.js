@@ -12,42 +12,16 @@ const keyGenerator = (req, res) => {
   return ipKeyGenerator(req, res)
 }
 
-export const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300,
-  message: { success: false, message: 'Too many requests from this IP, please try again after 15 minutes' },
-  standardHeaders: true,
-  legacyHeaders: false,
-})
+export const globalLimiter = (req, res, next) => next()
 
 export const otpRequestLimiter = (req, res, next) => next()
 
 export const authVerifyLimiter = (req, res, next) => next()
 
-export const uploadLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 20,
-  message: { success: false, message: 'Upload limit exceeded. You can upload up to 20 files per hour.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-})
+export const uploadLimiter = (req, res, next) => next()
 
 export const bookingLimiter = (req, res, next) => next()
 
-export const paymentLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,
-  keyGenerator,
-  message: { success: false, message: 'Too many payment requests. Please wait before trying again.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-})
+export const paymentLimiter = (req, res, next) => next()
 
-export const withdrawalLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3,
-  keyGenerator,
-  message: { success: false, message: 'You can only request a withdrawal 3 times per hour.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-})
+export const withdrawalLimiter = (req, res, next) => next()

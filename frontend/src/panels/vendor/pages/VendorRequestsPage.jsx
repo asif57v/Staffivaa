@@ -95,6 +95,10 @@ export function VendorRequestsPage() {
           let totalLabour = 0
           req.lines?.forEach(l => totalLabour += (l.quantity || 1))
           
+          const company = req.clientId?.corporateProfile?.companyName || req.clientId?.fullName || 'Corporate Client'
+          const projectName = req.projectId?.name || req.projectName || 'Project Request'
+          const siteName = req.siteId?.name
+          
           return (
             <li key={req._id}>
               <AppSurface className="space-y-3 border-brand/20 shadow-sm transition hover:border-brand/40 hover:shadow-md">
@@ -102,7 +106,7 @@ export function VendorRequestsPage() {
                   <div className="flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-extrabold text-slate-900">{req.clientId?.corporateProfile?.companyName || req.clientId?.fullName || 'Corporate Client'}</p>
+                        <p className="text-sm font-extrabold text-slate-900">{projectName}</p>
                         <span className="rounded-md bg-brand/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-brand">
                           {req.status.replace('_', ' ')}
                         </span>
@@ -111,15 +115,32 @@ export function VendorRequestsPage() {
                         {timeAgo(req.createdAt)}
                       </span>
                     </div>
-                    <p className="mt-1 text-xs font-semibold text-slate-700">
+                    <p className="mt-1 text-[11px] font-bold text-slate-500">
+                      {company}{siteName ? ` • ${siteName}` : ''}
+                    </p>
+                    <p className="mt-1.5 text-xs font-semibold text-slate-700">
                       {req.locationText || 'Location TBD'}
                     </p>
-                    <p className="mt-1 text-[11px] text-slate-500 font-semibold capitalize">
-                      {req.scheduleType || 'Daily'} Schedule
-                    </p>
-                    <p className="mt-0.5 text-[11px] text-slate-500">
-                      Start: {formatDate(req.startDate)} {req.endDate ? ` — End: ${formatDate(req.endDate)}` : ''}
-                    </p>
+                    <div className="mt-2 space-y-1 bg-slate-50/50 p-2 rounded-lg border border-slate-100">
+                      <p className="text-[11px] text-slate-600 font-medium flex items-center gap-1.5">
+                        <span className="font-bold text-slate-400">Type:</span> 
+                        <span className="capitalize">{req.bookingType || 'Construction Work'} • {req.scheduleType || 'Daily'} Schedule</span>
+                      </p>
+                      <p className="text-[11px] text-slate-600 font-medium flex items-center gap-1.5">
+                        <span className="font-bold text-slate-400">Duration:</span> 
+                        {formatDate(req.startDate)} {req.endDate ? ` — ${formatDate(req.endDate)}` : ''}
+                      </p>
+                      {(req.shiftStart && req.shiftEnd) ? (
+                        <p className="text-[11px] text-slate-600 font-medium flex items-center gap-1.5">
+                          <span className="font-bold text-slate-400">Shift:</span> 
+                          {req.shiftStart} - {req.shiftEnd}
+                        </p>
+                      ) : null}
+                      <p className="text-[11px] text-slate-600 font-medium flex items-center gap-1.5">
+                        <span className="font-bold text-slate-400">Total Workforce:</span> 
+                        {totalLabour} Workers Required
+                      </p>
+                    </div>
                   </div>
                 </div>
 

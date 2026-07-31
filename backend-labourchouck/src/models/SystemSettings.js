@@ -57,6 +57,101 @@ const systemSettingsSchema = new mongoose.Schema(
       type: String,
       default: 'support@staffivaa.com',
     },
+    // Dynamic Enterprise Payment Configuration (Admin Controlled)
+    minimumEnterpriseSecurityBalance: {
+      type: Number,
+      default: 0,
+    },
+    isEnterpriseSecurityBalanceEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    advancePaymentPercentage: {
+      type: Number,
+      default: 50,
+    },
+    remainingPaymentPercentage: {
+      type: Number,
+      default: 50,
+    },
+    platformFeeType: {
+      type: String,
+      enum: ['fixed', 'percentage'],
+      default: 'percentage',
+    },
+    platformFeeValue: {
+      type: Number,
+      default: 10,
+    },
+    isGstEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    gstPercentage: {
+      type: Number,
+      default: 18,
+    },
+    paymentDueRule: {
+      type: String,
+      enum: ['before_joining', 'after_x_days', 'after_x_attendance_days', 'project_midpoint', 'project_completion'],
+      default: 'before_joining',
+    },
+    advanceInvoiceDueDays: {
+      type: Number,
+      default: 7,
+    },
+    remainingInvoiceDueDays: {
+      type: Number,
+      default: 15,
+    },
+    remainingAttendanceDaysTrigger: {
+      type: Number,
+      default: 15,
+    },
+    enterpriseInvoiceDueDays: {
+      type: Number,
+      default: 15,
+    },
+    enterpriseInvoiceGracePeriodDays: {
+      type: Number,
+      default: 3,
+    },
+    reminderFrequencyHours: {
+      type: Number,
+      default: 24,
+    },
+    enableEnterpriseOverdueRestrictions: {
+      type: Boolean,
+      default: true,
+    },
+    restrictJobCreationOnOverdue: {
+      type: Boolean,
+      default: true,
+    },
+    restrictOfferSendOnOverdue: {
+      type: Boolean,
+      default: true,
+    },
+    freezeAccountOnOverdue: {
+      type: Boolean,
+      default: false,
+    },
+    blockAttendanceOnOverdue: {
+      type: Boolean,
+      default: false,
+    },
+    requireManualApprovalOnOverdue: {
+      type: Boolean,
+      default: true,
+    },
+    // Enterprise Job Timeline Configuration
+    timelineConfig: {
+      defaultApplicationWindowDays: { type: Number, default: 10 },
+      defaultInterviewGapDays: { type: Number, default: 2 },
+      defaultJoiningGapDays: { type: Number, default: 5 },
+      defaultProjectDurationDays: { type: Number, default: 90 },
+      advancePaymentDueBufferHours: { type: Number, default: 48 }, // 48h before expectedJoiningDate
+    },
     // Dynamic Radius Module Config
     radiusConfig: {
       defaultVendorRadius: { type: Number, default: 15 },
@@ -67,6 +162,14 @@ const systemSettingsSchema = new mongoose.Schema(
       enableRadiusMatching: { type: Boolean, default: true },
       enableRealtimeLocationUpdates: { type: Boolean, default: true },
       maxLocationAgeMinutes: { type: Number, default: 5 }
+    },
+    // Enterprise Real-Time Job Notification Settings
+    jobNotificationConfig: {
+      enablePushNotifications: { type: Boolean, default: true },
+      enableInAppNotifications: { type: Boolean, default: true },
+      defaultNotificationRadiusKm: { type: Number, default: 50 },
+      maxNotificationsPerWorkerPerDay: { type: Number, default: 20 },
+      requireKycApprovedForJobNotifications: { type: Boolean, default: true },
     }
   },
   { timestamps: true }

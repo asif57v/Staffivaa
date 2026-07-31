@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { CheckCircle2, Clock, IndianRupee, MapPin, RotateCcw, Sparkles } from 'lucide-react'
+import { CheckCircle2, Clock, IndianRupee, MapPin, RotateCcw, Sparkles, Building2 } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth.js'
 import { KYC_STATUS } from '../../constants/userRoles.js'
 import { io } from 'socket.io-client'
@@ -24,6 +24,7 @@ import {
   useCreateRazorpayOrderMutation,
   useVerifyRazorpayPaymentMutation,
 } from '../../store/api/workforceApi.js'
+import { useGetPublicEnterpriseJobsQuery } from '../../store/api/enterpriseApi.js'
 import {
   bucketsFromAssignments,
   loadJobDemoState,
@@ -50,6 +51,9 @@ export function AppJobsPage() {
   const [checkOut] = useCheckOutMutation()
   const [createOrder, { isLoading: isCreatingOrder }] = useCreateRazorpayOrderMutation()
   const [verifyPayment, { isLoading: isVerifying }] = useVerifyRazorpayPaymentMutation()
+  const { data: enterpriseJobsRes } = useGetPublicEnterpriseJobsQuery(undefined)
+  
+  const activeEnterpriseJobsCount = enterpriseJobsRes?.data?.length || 0
 
   const apiBuckets = useMemo(
     () => bucketsFromAssignments(apiData?.assignments || []),
@@ -529,16 +533,25 @@ export function AppJobsPage() {
 
       <section className="pt-1" aria-label="Quick links">
         <Link
-          to="/app/earnings"
-          className="group flex items-center gap-3 rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-sm ring-1 ring-slate-100/90 transition hover:border-brand/30 hover:shadow-md"
+          to="/app/enterprise-jobs"
+          className="group flex flex-col gap-3 rounded-2xl border border-slate-200/90 bg-linear-to-br from-indigo-50 to-white p-4 shadow-sm ring-1 ring-slate-100/90 transition hover:border-indigo-300 hover:shadow-md relative overflow-hidden"
         >
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700 transition group-hover:bg-emerald-600 group-hover:text-white">
-            <IndianRupee className="h-5 w-5" aria-hidden />
-          </span>
-          <span>
-            <p className="text-xs font-extrabold text-slate-900">Earnings</p>
-            <p className="text-[10px] text-slate-500">Withdraw</p>
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md">
+              <Building2 className="h-6 w-6" aria-hidden />
+            </span>
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-extrabold text-slate-900 tracking-tight">Enterprise Jobs</p>
+                {activeEnterpriseJobsCount > 0 && (
+                  <span className="animate-pulse bg-rose-500 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-sm">
+                    New
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] font-medium text-slate-500 mt-0.5">Full-time premium company roles</p>
+            </div>
+          </div>
         </Link>
       </section>
 
