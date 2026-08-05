@@ -1,6 +1,7 @@
 import { useDispatch, useSelector } from 'react-redux'
 import toast from 'react-hot-toast'
 import { clearSession, setCredentials } from '../store/slices/authSlice.js'
+import { baseApi } from '../store/api/baseApi.js'
 
 export function useAuth() {
   const dispatch = useDispatch()
@@ -11,8 +12,10 @@ export function useAuth() {
     user,
     loading,
     isAuthenticated: Boolean(token && user),
-    applySession: (accessToken, nextUser) =>
-      dispatch(setCredentials({ accessToken, user: nextUser })),
+    applySession: (accessToken, nextUser) => {
+      dispatch(baseApi.util.resetApiState())
+      dispatch(setCredentials({ accessToken, user: nextUser }))
+    },
     logout: async () => {
       try {
         toast.dismiss()
@@ -28,6 +31,7 @@ export function useAuth() {
         console.error('Failed to remove FCM token on logout', err)
       } finally {
         toast.dismiss()
+        dispatch(baseApi.util.resetApiState())
         dispatch(clearSession())
       }
     },

@@ -6,7 +6,25 @@ import {
   Users, Clock, ChevronRight, Building2, ShieldCheck, Star,
   Filter, CheckCircle2, Home, Truck, UtensilsCrossed, HeartPulse,
 } from 'lucide-react'
-import { useGetPublicEnterpriseJobsQuery } from '../../store/api/enterpriseApi.js'
+import { useGetPublicEnterpriseJobsQuery, useGetMyEnterpriseApplicationsQuery } from '../../store/api/enterpriseApi.js'
+import { useAuth } from '../../hooks/useAuth.js'
+
+// ─── Status Config Mappings ───────────────────────────────────────────────────
+const APPLICATION_STATUS_CONFIG = {
+  applied: { label: 'Applied', color: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500' },
+  under_review: { label: 'Under Review', color: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-500' },
+  shortlisted: { label: 'Shortlisted ✓', color: 'bg-purple-50 text-purple-700 border-purple-200', dot: 'bg-purple-500' },
+  interview_scheduled: { label: 'Interview Scheduled', color: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
+  selected: { label: 'Selected 🎉', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+  offered: { label: 'Offer Received 📜', color: 'bg-teal-50 text-teal-700 border-teal-200', dot: 'bg-teal-500' },
+  offer_accepted: { label: 'Offer Accepted', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+  waiting_for_joining_payment: { label: 'Joining Processing', color: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
+  joining_pending: { label: 'Upcoming Joining 🚀', color: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-500' },
+  joining_activated: { label: 'Joining Confirmed', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+  joined: { label: 'Joined Active Workforce', color: 'bg-emerald-100 text-emerald-800 border-emerald-300', dot: 'bg-emerald-600' },
+  rejected: { label: 'Not Selected', color: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' },
+  offer_expired: { label: 'Offer Expired', color: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-500' },
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -66,11 +84,16 @@ function JobCardSkeleton() {
 }
 
 // ─── Job Card ─────────────────────────────────────────────────────────────────
-function JobCard({ job, index = 0 }) {
+function JobCard({ job, index = 0, application = null }) {
   const navigate = useNavigate()
   const logo = companyLogo(job)
   const name = companyName(job)
   const category = job?.categoryId?.name || 'General'
+
+  const appInfo = application || job?.userApplication || null
+  const isApplied = Boolean(job?.alreadyApplied || appInfo)
+  const appStatus = appInfo?.status || 'applied'
+  const statusCfg = APPLICATION_STATUS_CONFIG[appStatus] || APPLICATION_STATUS_CONFIG.applied
 
   return (
     <motion.div
@@ -78,8 +101,21 @@ function JobCard({ job, index = 0 }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.035, duration: 0.3 }}
       onClick={() => navigate(`/app/enterprise-jobs/${job._id}`)}
-      className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 cursor-pointer active:scale-[0.99] hover:border-indigo-200 hover:shadow-md transition-all"
+      className={`bg-white rounded-2xl border ${isApplied ? 'border-emerald-200 ring-1 ring-emerald-100' : 'border-slate-100'} shadow-sm p-4 cursor-pointer active:scale-[0.99] hover:border-indigo-200 hover:shadow-md transition-all relative overflow-hidden`}
     >
+      {/* Already Applied Status Header */}
+      {isApplied && (
+        <div className="mb-3 flex items-center justify-between bg-emerald-50/90 border border-emerald-200/90 rounded-xl px-3 py-1.5 shadow-2xs">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+            <span className="text-[12px] font-extrabold text-emerald-800 shrink-0">Already Applied</span>
+          </div>
+          <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${statusCfg.color}`}>
+            Status: {statusCfg.label}
+          </span>
+        </div>
+      )}
+
       {/* Company row */}
       <div className="flex items-start gap-3 mb-3">
         <div className="shrink-0 h-12 w-12 rounded-xl border border-slate-100 bg-slate-50 flex items-center justify-center overflow-hidden shadow-sm">
@@ -137,9 +173,15 @@ function JobCard({ job, index = 0 }) {
           ? <span className="text-[11px] font-medium text-slate-500">{job.experienceRequired} exp.</span>
           : <span className="text-[11px] font-medium text-slate-400">Freshers welcome</span>
         }
-        <span className="flex items-center gap-1 text-[12px] font-bold text-indigo-600">
-          View Details <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
-        </span>
+        {isApplied ? (
+          <span className="flex items-center gap-1 text-[12px] font-bold text-emerald-600">
+            Already Applied • View Details <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-[12px] font-bold text-indigo-600">
+            View Details <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+          </span>
+        )}
       </div>
     </motion.div>
   )
@@ -297,10 +339,28 @@ function FilterPanel({ filters, setFilters, categories, onClose }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export function LabourEnterpriseJobsPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const isLabour = user?.role === 'labour'
+
   const [search, setSearch] = useState('')
   const [showFilter, setShowFilter] = useState(false)
   const [filters, setFilters] = useState({ minSalary: '', maxSalary: '', location: '', category: '', perks: [] })
   const [visibleCount, setVisibleCount] = useState(10)
+
+  // Fetch applications for current worker to show real-time applied status & progress
+  const { data: myAppsData } = useGetMyEnterpriseApplicationsQuery(undefined, { skip: !isLabour })
+
+  const applicationsMap = useMemo(() => {
+    const map = {}
+    const list = myAppsData?.data || []
+    list.forEach(app => {
+      const jId = app.jobId?._id || app.jobId
+      if (jId) {
+        map[String(jId)] = app
+      }
+    })
+    return map
+  }, [myAppsData])
 
   // Build query params
   const params = useMemo(() => {
@@ -492,7 +552,14 @@ export function LabourEnterpriseJobsPage() {
                   <h2 className="text-[14px] font-extrabold text-slate-800">Featured Jobs</h2>
                 </div>
                 <div className="space-y-3">
-                  {featured.map((job, i) => <JobCard key={job._id} job={job} index={i} />)}
+                  {featured.map((job, i) => (
+                    <JobCard
+                      key={job._id}
+                      job={job}
+                      index={i}
+                      application={applicationsMap[job._id] || job.userApplication}
+                    />
+                  ))}
                 </div>
               </section>
             )}
@@ -519,7 +586,14 @@ export function LabourEnterpriseJobsPage() {
               </div>
               <div className="space-y-3">
                 <AnimatePresence>
-                  {visible.map((job, i) => <JobCard key={job._id} job={job} index={i} />)}
+                  {visible.map((job, i) => (
+                    <JobCard
+                      key={job._id}
+                      job={job}
+                      index={i}
+                      application={applicationsMap[job._id] || job.userApplication}
+                    />
+                  ))}
                 </AnimatePresence>
               </div>
 

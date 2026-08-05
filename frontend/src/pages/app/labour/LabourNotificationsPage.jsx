@@ -28,6 +28,7 @@ import {
   useMarkNotificationReadMutation,
   useMarkAllNotificationsReadMutation,
   useDeleteNotificationMutation,
+  useSendSelfTestNotificationMutation,
 } from '../../../store/api/workforceApi.js'
 
 // TABS defined dynamically inside component
@@ -51,6 +52,7 @@ const TYPE_MAPPING = {
   'WALLET_DEBIT': { icon: Wallet, kind: 'earnings', priority: 'normal', category: 'updates' },
   'WITHDRAWAL_COMPLETED': { icon: Wallet, kind: 'earnings', priority: 'high', category: 'updates' },
   'ENTERPRISE_JOB_ALERT': { icon: Building2, kind: 'job_request', priority: 'high', category: 'jobs' },
+  'SYSTEM_ALERT': { icon: Sparkles, kind: 'system', priority: 'high', category: 'updates' },
 }
 
 const KIND_TONE = {
@@ -80,6 +82,7 @@ function LabourNotificationsPageContent() {
   const isLabour = user?.role === 'LABOUR'
   const [tab, setTab] = useState('all')
   const [toast, setToast] = useState('')
+  const [isSendingTest, setIsSendingTest] = useState(false)
 
   const TABS = [{ id: 'all', label: 'All' }]
   if (isLabour) TABS.push({ id: 'jobs', label: 'Job requests' })
@@ -89,18 +92,38 @@ function LabourNotificationsPageContent() {
   const [markRead] = useMarkNotificationReadMutation()
   const [markAllRead] = useMarkAllNotificationsReadMutation()
   const [deleteNotif] = useDeleteNotificationMutation()
+  const [sendSelfTest] = useSendSelfTestNotificationMutation()
+
+  const handleSendTestNotification = async () => {
+    try {
+      setIsSendingTest(true)
+      await sendSelfTest({
+        title: '⚡ Live Real-time Alert',
+        body: `Test notification received live via Socket.IO at ${new Date().toLocaleTimeString()}!`,
+        type: 'SYSTEM_ALERT',
+      }).unwrap()
+      refetch()
+      showToast('Live test notification sent successfully!')
+    } catch (err) {
+      showToast('Failed to send test notification.')
+    } finally {
+      setIsSendingTest(false)
+    }
+  }
 
   useEffect(() => {
     const handleRealtimeUpdate = () => {
       refetch()
     }
     window.addEventListener('fcm-foreground-message', handleRealtimeUpdate)
+    window.addEventListener('lc-notification-received', handleRealtimeUpdate)
     
-    // Auto-refresh every 15 seconds as a fallback
-    const interval = setInterval(handleRealtimeUpdate, 15000)
+    // Auto-refresh every 10 seconds as a fallback
+    const interval = setInterval(handleRealtimeUpdate, 10000)
     
     return () => {
       window.removeEventListener('fcm-foreground-message', handleRealtimeUpdate)
+      window.removeEventListener('lc-notification-received', handleRealtimeUpdate)
       clearInterval(interval)
     }
   }, [refetch])
@@ -218,6 +241,23 @@ function LabourNotificationsPageContent() {
               <p className="text-[10px] font-bold uppercase tracking-wide text-white/70">{s.label}</p>
             </div>
           ))}
+        </div>
+
+        <div className="relative mt-3 flex items-center justify-between gap-2">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-bold text-emerald-300 ring-1 ring-emerald-400/30">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            Live Real-time Connected
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSendTestNotification}
+            disabled={isSendingTest}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-400/20 px-3 py-1.5 text-xs font-bold text-amber-300 transition hover:bg-amber-400/30 active:scale-95 disabled:opacity-50"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+            {isSendingTest ? 'Sending...' : 'Test Live Notification'}
+          </button>
         </div>
 
         {unreadCount > 0 ? (

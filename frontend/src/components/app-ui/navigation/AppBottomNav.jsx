@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
 import { scrollToTop } from '../../navigation/GlobalScrollManager.jsx'
+import { useKeyboardOpen } from '../../../hooks/useKeyboardOpen.js'
 
 /**
  * Presentational bottom tab bar for `AppShell`.
@@ -10,51 +10,7 @@ import { scrollToTop } from '../../navigation/GlobalScrollManager.jsx'
  */
 export function AppBottomNav({ items }) {
   const reduce = useReducedMotion()
-  const [keyboardOpen, setKeyboardOpen] = useState(false)
-
-  useEffect(() => {
-    // ── Strategy 1: visualViewport resize (Android Chrome) ──────────────────
-    const vv = window.visualViewport
-    const initialHeight = vv?.height ?? window.innerHeight
-
-    const onVVResize = () => {
-      if (!vv) return
-      // Keyboard is open when viewport height drops by >150px
-      setKeyboardOpen(initialHeight - vv.height > 150)
-    }
-
-    if (vv) vv.addEventListener('resize', onVVResize)
-
-    // ── Strategy 2: focusin/focusout on inputs (iOS Safari) ─────────────────
-    // iOS doesn't shrink visualViewport reliably, but we can track
-    // whether a text input has focus
-    const INPUT_SELECTOR = 'input, textarea, select, [contenteditable]'
-
-    const onFocusIn = (e) => {
-      if (e.target.matches(INPUT_SELECTOR)) {
-        setKeyboardOpen(true)
-      }
-    }
-    const onFocusOut = (e) => {
-      if (e.target.matches(INPUT_SELECTOR)) {
-        // Small delay so nav doesn't flicker during focus transfers between inputs
-        setTimeout(() => {
-          if (!document.activeElement?.matches(INPUT_SELECTOR)) {
-            setKeyboardOpen(false)
-          }
-        }, 100)
-      }
-    }
-
-    document.addEventListener('focusin', onFocusIn)
-    document.addEventListener('focusout', onFocusOut)
-
-    return () => {
-      if (vv) vv.removeEventListener('resize', onVVResize)
-      document.removeEventListener('focusin', onFocusIn)
-      document.removeEventListener('focusout', onFocusOut)
-    }
-  }, [])
+  const keyboardOpen = useKeyboardOpen()
 
   // Hide completely when keyboard is open — no floating bar above keyboard
   if (keyboardOpen) return null
@@ -63,7 +19,7 @@ export function AppBottomNav({ items }) {
   return (
     <nav
       className="pointer-events-auto fixed bottom-0 left-1/2 z-30 flex w-full max-w-[430px] -translate-x-1/2 justify-center bg-white border-t border-[#ECECEC] rounded-t-[20px] shadow-[0_-4px_24px_rgba(0,0,0,0.04)]"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)', paddingTop: '4px' }}
       aria-label="Bottom navigation"
     >
       <div className="flex h-[60px] w-full max-w-[430px] items-center justify-around px-4 overflow-visible">

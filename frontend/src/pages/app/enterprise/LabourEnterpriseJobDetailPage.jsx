@@ -7,8 +7,26 @@ import {
   Home, Truck, UtensilsCrossed, HeartPulse, CheckCircle2, AlertCircle,
   Share2, Bookmark,
 } from 'lucide-react'
-import { useGetPublicEnterpriseJobByIdQuery } from '../../../store/api/enterpriseApi.js'
+import { useGetPublicEnterpriseJobByIdQuery, useGetMyEnterpriseApplicationsQuery } from '../../../store/api/enterpriseApi.js'
+import { useAuth } from '../../../hooks/useAuth.js'
 import { LabourApplyModal } from './LabourApplyModal.jsx'
+
+// ─── Status Config Mappings ───────────────────────────────────────────────────
+const APPLICATION_STATUS_CONFIG = {
+  applied: { label: 'Applied', color: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500' },
+  under_review: { label: 'Under Review', color: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-500' },
+  shortlisted: { label: 'Shortlisted ✓', color: 'bg-purple-50 text-purple-700 border-purple-200', dot: 'bg-purple-500' },
+  interview_scheduled: { label: 'Interview Scheduled', color: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
+  selected: { label: 'Selected 🎉', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+  offered: { label: 'Offer Received 📜', color: 'bg-teal-50 text-teal-700 border-teal-200', dot: 'bg-teal-500' },
+  offer_accepted: { label: 'Offer Accepted', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+  waiting_for_joining_payment: { label: 'Joining Processing', color: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
+  joining_pending: { label: 'Upcoming Joining 🚀', color: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-500' },
+  joining_activated: { label: 'Joining Confirmed', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+  joined: { label: 'Joined Active Workforce', color: 'bg-emerald-100 text-emerald-800 border-emerald-300', dot: 'bg-emerald-600' },
+  rejected: { label: 'Not Selected', color: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' },
+  offer_expired: { label: 'Offer Expired', color: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-500' },
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function fmt(d) {
@@ -115,13 +133,26 @@ function MiniJobCard({ job }) {
 export function LabourEnterpriseJobDetailPage() {
   const { jobId } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const isLabour = user?.role === 'labour'
+
   const [showApply, setShowApply] = useState(false)
 
   const { data, isLoading, isError } = useGetPublicEnterpriseJobByIdQuery(jobId)
+  const { data: myAppsData } = useGetMyEnterpriseApplicationsQuery(undefined, { skip: !isLabour })
+
   const job            = data?.data?.job
   const applicantsCount = data?.data?.applicantsCount || 0
-  const alreadyApplied  = data?.data?.alreadyApplied || false
+  const serverAlreadyApplied  = data?.data?.alreadyApplied || false
+  const serverUserApp   = data?.data?.userApplication || null
   const similarJobs     = data?.data?.similarJobs || []
+
+  // Check client RTK query applications map for instant update
+  const clientApp = myAppsData?.data?.find(a => (a.jobId?._id || a.jobId) === jobId) || null
+  const appInfo = clientApp || serverUserApp
+  const alreadyApplied = Boolean(serverAlreadyApplied || clientApp)
+  const appStatus = appInfo?.status || 'applied'
+  const statusCfg = APPLICATION_STATUS_CONFIG[appStatus] || APPLICATION_STATUS_CONFIG.applied
 
   const logo = companyLogo(job)
   const name = companyName(job)
@@ -177,6 +208,24 @@ export function LabourEnterpriseJobDetailPage() {
         </div>
 
         <div className="px-4 -mt-6 space-y-4 pb-28">
+
+          {/* ── Already Applied Banner ──────────────────────────────────────── */}
+          {alreadyApplied && (
+            <div className="bg-emerald-50 border border-emerald-200/90 rounded-2xl p-4 flex items-center justify-between shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-[13px] font-extrabold text-emerald-900">Already Applied</p>
+                  <p className="text-[11px] font-medium text-emerald-700">Application submitted for this role</p>
+                </div>
+              </div>
+              <span className={`text-[11px] font-extrabold px-3 py-1 rounded-full border ${statusCfg.color}`}>
+                Status: {statusCfg.label}
+              </span>
+            </div>
+          )}
 
           {/* ── Company + Title card ─────────────────────────────────────────── */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
@@ -339,7 +388,7 @@ export function LabourEnterpriseJobDetailPage() {
             className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-[15px] font-extrabold shadow-sm cursor-not-allowed opacity-95"
           >
             <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            <span>Already Applied</span>
+            <span>Already Applied ({statusCfg.label})</span>
           </button>
         ) : (
           <button

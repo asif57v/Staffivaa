@@ -2,6 +2,8 @@ import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { RefundRequest } from '../models/RefundRequest.js'
 import { WalletTransaction } from '../models/WalletTransaction.js'
+import { WorkforceRequest } from '../models/WorkforceRequest.js'
+import { triggerNotification } from '../utils/notificationTrigger.js'
 
 /**
  * Get all refund eligibilities/requests for the logged in user
@@ -50,8 +52,23 @@ export const requestRefund = asyncHandler(async (req, res) => {
     { source: 'Refund Requested - Pending Admin Approval' }
   )
 
+  // ── Send notification to all admins ────────────────────────────────────
+  const booking = await WorkforceRequest.findById(bookingId).select('reference').lean()
+  const bookingRef = booking?.reference || bookingId
+  const userName = req.user.fullName || 'A client'
+
+  triggerNotification({
+    userId: null, // null = broadcast to all admins
+    title: 'New Refund Request',
+    body: `${userName} has requested a refund of ₹${refundReq.amount} for booking ${bookingRef}. Please review.`,
+    type: 'REFUND_REQUESTED',
+    relatedId: refundReq._id,
+    relatedModel: 'RefundRequest',
+  })
+
   sendSuccess(res, {
     message: 'Refund requested successfully. It is pending admin approval.',
     data: { refundReq },
   })
 })
+

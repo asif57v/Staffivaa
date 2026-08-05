@@ -10,6 +10,7 @@ import { EnterpriseFinancialAuditLog } from '../models/EnterpriseFinancialAuditL
 import { EnterpriseWallet } from '../models/EnterpriseWallet.js'
 import { EnterpriseWalletTransaction } from '../models/EnterpriseWalletTransaction.js'
 import { SystemSettings } from '../models/SystemSettings.js'
+import { AttendanceRecord } from '../models/AttendanceRecord.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { USER_ROLES } from '../constants/roles.js'
@@ -33,14 +34,39 @@ export async function checkEnterpriseOverdueRestrictions(enterpriseId) {
 
   const now = new Date()
 
-  // Find any invoice for this enterprise that is status 'overdue' OR past gracePeriodEndDate & unpaid
+  // Auto-fix any improperly created invoices where dueDate/gracePeriodEndDate was set in the past on creation date
+  const pendingInvoices = await EnterpriseJoiningInvoice.find({
+    enterpriseId,
+    status: 'payment_pending',
+  })
+
+  for (const inv of pendingInvoices) {
+    const invDate = inv.invoiceDate || inv.createdAt || now
+    const configuredDays = inv.configuredDueDays || settings?.advanceInvoiceDueDays || 7
+    const configuredGrace = inv.configuredGracePeriodDays || settings?.enterpriseInvoiceGracePeriodDays || 3
+    const expectedDueDate = new Date(new Date(invDate).getTime() + configuredDays * 24 * 60 * 60 * 1000)
+    const expectedGraceDate = new Date(expectedDueDate.getTime() + configuredGrace * 24 * 60 * 60 * 1000)
+
+    // If dueDate was set equal to or earlier than creation date, update it to the proper future due date
+    if (!inv.dueDate || new Date(inv.dueDate) <= new Date(invDate) || new Date(inv.dueDate) < new Date(now.getTime() - 24 * 60 * 60 * 1000)) {
+      if (new Date(invDate).getTime() > now.getTime() - configuredDays * 24 * 60 * 60 * 1000) {
+        inv.dueDate = expectedDueDate
+        inv.gracePeriodEndDate = expectedGraceDate
+        await inv.save()
+      }
+    }
+  }
+
+  // An invoice is truly overdue ONLY if explicitly status 'overdue' OR past gracePeriodEndDate & unpaid
   const overdueInvoice = await EnterpriseJoiningInvoice.findOne({
     enterpriseId,
-    status: { $in: ['payment_pending', 'overdue'] },
     $or: [
       { status: 'overdue' },
-      { gracePeriodEndDate: { $lt: now } },
-      { dueDate: { $lt: now } },
+      {
+        status: 'payment_pending',
+        gracePeriodEndDate: { $lt: now },
+        dueDate: { $lt: now },
+      },
     ],
   }).populate('jobId', 'jobTitle')
 
@@ -372,7 +398,34 @@ export const getPublicEnterpriseJobs = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .limit(100)
 
-  return sendSuccess(res, { data: jobs })
+  let myApplicationsMap = {}
+  if (req.user?.role === USER_ROLES.LABOUR) {
+    const jobIds = jobs.map(j => j._id)
+    const apps = await EnterpriseApplication.find({
+      jobId: { $in: jobIds },
+      workerId: req.user._id,
+    }).select('jobId status createdAt enterpriseNote')
+
+    apps.forEach(app => {
+      myApplicationsMap[app.jobId.toString()] = {
+        applicationId: app._id,
+        status: app.status,
+        appliedAt: app.createdAt,
+      }
+    })
+  }
+
+  const jobsWithAppData = jobs.map(job => {
+    const jobObj = job.toObject()
+    const appInfo = myApplicationsMap[job._id.toString()] || null
+    return {
+      ...jobObj,
+      alreadyApplied: Boolean(appInfo),
+      userApplication: appInfo,
+    }
+  })
+
+  return sendSuccess(res, { data: jobsWithAppData })
 })
 
 /** GET /api/enterprise/public-jobs/:id - Single job detail */
@@ -388,9 +441,17 @@ export const getPublicEnterpriseJobById = asyncHandler(async (req, res) => {
   const applicantsCount = await EnterpriseApplication.countDocuments({ jobId: job._id })
 
   let alreadyApplied = false
+  let userApplication = null
   if (req.user?.role === USER_ROLES.LABOUR) {
     const existing = await EnterpriseApplication.findOne({ jobId: job._id, workerId: req.user._id })
     alreadyApplied = Boolean(existing)
+    if (existing) {
+      userApplication = {
+        applicationId: existing._id,
+        status: existing.status,
+        appliedAt: existing.createdAt,
+      }
+    }
   }
 
   const similarJobs = await EnterpriseJob.find({
@@ -409,6 +470,7 @@ export const getPublicEnterpriseJobById = asyncHandler(async (req, res) => {
       job,
       applicantsCount,
       alreadyApplied,
+      userApplication,
       similarJobs,
     },
   })
@@ -917,21 +979,9 @@ export const respondToOffer = asyncHandler(async (req, res) => {
 
     const totalAmount = advanceAmount + gstAmount
 
-    const bufferHours = settings?.timelineConfig?.advancePaymentDueBufferHours ?? 48
-    const expectedJoining = application.jobId?.timeline?.expectedJoiningDate
-      ? new Date(application.jobId.timeline.expectedJoiningDate)
-      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-
     const invoiceDate = new Date()
-    
-    // Due Date = Expected Joining - Buffer Hours
-    let dueDate = new Date(expectedJoining.getTime() - bufferHours * 60 * 60 * 1000)
-    
-    // If the offer was accepted late and due date is in the past, set it to now
-    if (dueDate < invoiceDate) {
-      dueDate = invoiceDate
-    }
-    
+    const dueDaysConfig = dueDays || 7
+    const dueDate = new Date(invoiceDate.getTime() + dueDaysConfig * 24 * 60 * 60 * 1000)
     const gracePeriodEndDate = new Date(dueDate.getTime() + graceDays * 24 * 60 * 60 * 1000)
     const invNumber = `INV-ADV-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`
 
@@ -1412,7 +1462,7 @@ export const getUpcomingJoinings = asyncHandler(async (req, res) => {
 
   const joinings = await EnterpriseApplication.find({
     enterpriseId: req.user._id,
-    status: { $in: ['offer_accepted', 'joining_pending'] },
+    status: { $in: ['offer_accepted', 'joining_pending', 'joining_activated'] },
   })
     .populate({
       path: 'workerId',
@@ -1513,4 +1563,26 @@ export const getLabourCurrentEmployment = asyncHandler(async (req, res) => {
     .sort({ updatedAt: -1 })
 
   return sendSuccess(res, { data: activeApp })
+})
+
+/** GET /api/enterprise/applications/:id/attendance - Get worker attendance history for Enterprise */
+export const getEnterpriseWorkerAttendance = asyncHandler(async (req, res) => {
+  if (req.user.role !== USER_ROLES.ENTERPRISE) {
+    return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  const application = await EnterpriseApplication.findOne({
+    _id: req.params.id,
+    enterpriseId: req.user._id,
+  })
+
+  if (!application) {
+    return sendError(res, { message: 'Application not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  const records = await AttendanceRecord.find({
+    workerId: application.workerId,
+  }).sort({ shiftDate: -1 })
+
+  return sendSuccess(res, { data: records })
 })

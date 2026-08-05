@@ -13,7 +13,7 @@ import { GlassPanel } from '../components/ui/GlassPanel.jsx'
 import { AppBottomNav } from '../components/app-ui/navigation/AppBottomNav.jsx'
 import { AppBadge } from '../components/app-ui/data-display/AppBadge.jsx'
 import { adminInitials } from '../lib/formatAdminLastLogin.js'
-import { readAppUserLocation, parseAppUserLocation } from '../lib/appUserLocationStorage.js'
+import { readAppUserLocation, parseAppUserLocation, autoFetchLiveLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { useVendorNotificationCount } from '../hooks/useVendorNotificationCount.js'
 import { connectSocket } from '../services/socket.js'
@@ -207,68 +207,14 @@ export function PanelShell({
     };
   }, [user, token, dispatch]);
 
-  // Automatic background polling for real-time account status updates & admin approvals
+  // Fetch fresh user profile on initial mount
   useEffect(() => {
-    if (!user || !token) return;
+    if (!token) return;
 
-    // Fetch fresh user profile on initial mount
     fetchMe().then((res) => {
       if (res?.data?.user) dispatch(setUser(res.data.user));
     }).catch(() => {});
-
-    // Polling every 4 seconds guarantees instant updates for Hold, Suspend, Block, Reactivate & KYC approvals even if sockets drop
-    const interval = setInterval(() => {
-      fetchMe().then((res) => {
-        if (res?.data?.user) {
-          const newUser = res.data.user;
-          const oldStatus = user?.accountStatus || 'active';
-          const newStatus = newUser?.accountStatus || 'active';
-          
-          if (newStatus !== oldStatus) {
-            const notifTitle = newStatus === 'on_hold' ? 'Account On Hold ⏸️' :
-                               newStatus === 'suspended' ? 'Account Suspended ⚠️' :
-                               newStatus === 'blocked' ? 'Account Blocked 🚫' :
-                               newStatus === 'active' ? 'Account Reactivated ✅' : 'Account Status Updated ⚠️';
-            const notifBody = newStatus === 'on_hold' ? 'Your account has been temporarily placed on hold by admin.' :
-                              newStatus === 'suspended' ? 'Your account has been suspended by admin.' :
-                              newStatus === 'blocked' ? 'Your account has been blocked by admin.' :
-                              newStatus === 'active' ? 'Your account has been reactivated and is now active!' : 'Your account status is now ' + newStatus + '.';
-            const notifType = newStatus === 'on_hold' ? 'ACCOUNT_ON_HOLD' :
-                              newStatus === 'suspended' ? 'ACCOUNT_SUSPENDED' :
-                              newStatus === 'blocked' ? 'ACCOUNT_BLOCKED' :
-                              newStatus === 'active' ? 'ACCOUNT_REACTIVATED' : 'ACCOUNT_STATUS_UPDATE';
-            injectNotificationIntoFeed({ title: notifTitle, body: notifBody, type: notifType, createdAt: new Date().toISOString() });
-            dispatchAlert(notifTitle, notifBody, newStatus !== 'active');
-            dispatch(workforceApi.util.invalidateTags(['Notifications', 'VendorDashboard', 'CorporateDashboard', 'Wallet']));
-          }
-
-          const oldApproved = (user.role === 'contractor' || user.role === 'vendor')
-            ? user?.contractorProfile?.verificationStatus === 'approved'
-            : user?.corporateProfile?.status === 'approved';
-          const nowApproved = (newUser.role === 'contractor' || newUser.role === 'vendor')
-            ? newUser?.contractorProfile?.verificationStatus === 'approved'
-            : newUser?.corporateProfile?.status === 'approved';
-
-          if (!oldApproved && nowApproved) {
-            const kycTitle = 'Account Verified 🎉';
-            const kycBody = 'Congratulations! Your account verification has just been APPROVED by admin!';
-            injectNotificationIntoFeed({
-              title: kycTitle,
-              body: kycBody,
-              type: 'KYC_APPROVED',
-              createdAt: new Date().toISOString()
-            });
-            dispatchAlert(kycTitle, kycBody, false);
-            dispatch(workforceApi.util.invalidateTags(['Notifications', 'VendorDashboard', 'CorporateDashboard', 'Wallet']));
-          }
-          
-          dispatch(setUser(newUser));
-        }
-      }).catch(() => {});
-    }, 4000);
-    
-    return () => clearInterval(interval);
-  }, [user?._id, user?.accountStatus, user?.role, user?.contractorProfile?.verificationStatus, user?.corporateProfile?.status, token, dispatch]);
+  }, [token, dispatch]);
 
   // --- FCM Token Auto-sync & Foreground Listener ---
   useEffect(() => {
@@ -405,6 +351,10 @@ export function PanelShell({
       })
     }
     window.addEventListener('lc-app-user-location-changed', onLoc)
+
+    // Automatically trigger live location fetch on app load
+    autoFetchLiveLocation({ enableHighAccuracy: true }).catch(() => {})
+
     return () => window.removeEventListener('lc-app-user-location-changed', onLoc)
   }, [])
 

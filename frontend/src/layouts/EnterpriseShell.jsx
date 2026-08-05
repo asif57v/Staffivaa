@@ -1,12 +1,16 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { useDispatch } from 'react-redux'
 import { Bell, LogOut, Search, ChevronDown, Menu, X, Plus, Home, Users, Briefcase, MoreHorizontal, CheckCircle2, LayoutDashboard, Wallet, CalendarCheck, FileText } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth.js'
 import { ENTERPRISE_STATUS } from '../constants/userRoles.js'
 import { AnimatePresence, motion } from 'framer-motion'
-import { getSocket } from '../services/socket.js'
+import { connectSocket, getSocket } from '../services/socket.js'
+import { enterpriseApi } from '../store/api/enterpriseApi.js'
+import { workforceApi } from '../store/api/workforceApi.js'
 import toast from 'react-hot-toast'
 import { scrollToTop } from '../components/navigation/GlobalScrollManager.jsx'
+import { useKeyboardOpen } from '../hooks/useKeyboardOpen.js'
 
 const mobileNavItems = [
   { label: 'Home', icon: LayoutDashboard, path: '/enterprise' },
@@ -36,12 +40,14 @@ const desktopNavGroups = [
 ]
 
 export function EnterpriseShell() {
-  const { user, logout } = useAuth()
+  const { user, token, logout } = useAuth()
   const navigate = useNavigate()
+  const dispatch = useDispatch()
   const { pathname } = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
+  const keyboardOpen = useKeyboardOpen()
 
   // Close menus on route change
   useEffect(() => {
@@ -51,30 +57,39 @@ export function EnterpriseShell() {
 
   // Real-time socket & Notification listener
   useEffect(() => {
-    const socket = getSocket()
-    if (!socket) return
+    if (!user || !token) return
+
+    const socket = connectSocket(user, token)
 
     const handleAppCreated = (data) => {
-      toast.success('💼 New worker application received!', { duration: 5000 })
+      toast.success('💼 New worker candidate applied!', { id: 'new-app-toast', duration: 6000 })
+      dispatch(enterpriseApi.util.invalidateTags(['EnterpriseJobs', 'EnterpriseApplications', 'EnterpriseWorkforce']))
     }
 
     const handleNewNotif = (notif) => {
-      if (notif?.title) {
-        toast(`${notif.title}\n${notif.body || ''}`, {
+      const title = notif?.title || notif?.notification?.title || 'New Notification'
+      const body = notif?.body || notif?.notification?.body || notif?.message || ''
+      if (title) {
+        toast(`${title}\n${body}`, {
+          id: 'notif-toast-' + (notif?._id || Date.now()),
           icon: '🔔',
-          duration: 5000,
+          duration: 6000,
         })
       }
+      dispatch(enterpriseApi.util.invalidateTags(['EnterpriseJobs', 'EnterpriseApplications', 'EnterpriseWorkforce']))
+      dispatch(workforceApi.util.invalidateTags(['Notifications']))
     }
 
     socket.on('enterprise_application_created', handleAppCreated)
     socket.on('notification:new', handleNewNotif)
+    socket.on('dashboard:updated', handleAppCreated)
 
     return () => {
       socket.off('enterprise_application_created', handleAppCreated)
       socket.off('notification:new', handleNewNotif)
+      socket.off('dashboard:updated', handleAppCreated)
     }
-  }, [])
+  }, [user, token, dispatch])
 
   const companyName = user?.enterpriseProfile?.companyName || user?.fullName || 'Luminary Corp'
   const companyInitials = companyName.substring(0, 2).toUpperCase()
@@ -285,23 +300,27 @@ export function EnterpriseShell() {
 
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden relative">
-          <div className="w-full h-full pb-24 lg:pb-8">
+          <div className="w-full h-full pb-36 lg:pb-8">
             <Outlet />
           </div>
         </main>
       </div>
 
       {/* -------------------- MOBILE BOTTOM NAV -------------------- */}
-      <div className="lg:hidden absolute bottom-0 inset-x-0 bg-white border-t border-[#E5E7EB] pb-safe z-40 flex items-center justify-around px-2 h-[72px]">
-        {mobileNavItems.map((item) => {
+      {!keyboardOpen && (
+        <div 
+          className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-[#E5E7EB] z-40 flex items-center justify-around px-2 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)', paddingTop: '8px' }}
+        >
+          {mobileNavItems.map((item) => {
           if (item.isFab) {
             return (
-              <div key="fab" className="relative -top-6 flex flex-col items-center justify-center">
+              <div key="fab" className="relative -top-3 flex flex-col items-center justify-center">
                 <button
                   onClick={() => navigate(item.path)}
-                  className="w-[56px] h-[56px] bg-[#111827] text-white rounded-[20px] flex items-center justify-center shadow-lg active:scale-95 transition-transform"
+                  className="w-[50px] h-[50px] bg-[#111827] text-white rounded-[18px] flex items-center justify-center shadow-lg active:scale-95 transition-transform"
                 >
-                  <Plus className="w-6 h-6 text-[#FFC107]" strokeWidth={3} />
+                  <Plus className="w-5 h-5 text-[#FFC107]" strokeWidth={3} />
                 </button>
               </div>
             )
@@ -312,9 +331,9 @@ export function EnterpriseShell() {
               <button
                 key="more"
                 onClick={() => setMobileMenuOpen(true)}
-                className="flex flex-col items-center justify-center w-16 h-full gap-1 active:scale-95 transition-transform"
+                className="flex flex-col items-center justify-center w-16 gap-0.5 active:scale-95 transition-transform py-0.5"
               >
-                <item.icon className="w-6 h-6 text-slate-400" />
+                <item.icon className="w-5 h-5 text-slate-400" />
                 <span className="text-[10px] font-bold text-slate-500">{item.label}</span>
               </button>
             )
@@ -332,14 +351,15 @@ export function EnterpriseShell() {
                   navigate(item.path)
                 }
               }}
-              className="flex flex-col items-center justify-center w-16 h-full gap-1 active:scale-95 transition-transform"
+              className="flex flex-col items-center justify-center w-16 gap-0.5 active:scale-95 transition-transform py-0.5"
             >
-              <item.icon className={`w-6 h-6 ${isActive ? 'text-[#FFC107]' : 'text-slate-400'}`} />
+              <item.icon className={`w-5 h-5 ${isActive ? 'text-[#FFC107]' : 'text-slate-400'}`} />
               <span className={`text-[10px] font-bold ${isActive ? 'text-[#111827]' : 'text-slate-500'}`}>{item.label}</span>
             </button>
           )
         })}
       </div>
+      )}
     </div>
   )
 }

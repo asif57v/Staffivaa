@@ -18,11 +18,16 @@ import { useLocation, useNavigationType } from 'react-router-dom'
 // In-memory map to store scroll positions keyed by location.key or pathname
 const scrollPositions = new Map()
 
+const getValidScrollContainers = () => {
+  return Array.from(document.querySelectorAll('main, [data-scroll-container], .main-content-scroll')).filter(
+    (c) => !c.closest('aside') && !c.closest('.sidebar-scroll') && !c.classList.contains('no-auto-scroll')
+  )
+}
+
 export function scrollToTop(smooth = true) {
   const behavior = smooth ? 'smooth' : 'instant'
   window.scrollTo({ top: 0, left: 0, behavior })
-  const containers = document.querySelectorAll('main, .overflow-y-auto, [data-scroll-container]')
-  containers.forEach((c) => {
+  getValidScrollContainers().forEach((c) => {
     c.scrollTo({ top: 0, behavior })
   })
 }
@@ -41,7 +46,7 @@ export function GlobalScrollManager() {
       const windowY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0
       const windowX = window.scrollX || window.pageXOffset || document.documentElement.scrollLeft || 0
 
-      const container = document.querySelector('main.overflow-y-auto, [data-scroll-container], main')
+      const container = getValidScrollContainers()[0] || document.querySelector('main')
       const containerY = container ? container.scrollTop : 0
       const containerX = container ? container.scrollLeft : 0
 
@@ -61,7 +66,7 @@ export function GlobalScrollManager() {
 
     window.addEventListener('scroll', handleScroll, { passive: true })
 
-    const containers = document.querySelectorAll('main, .overflow-y-auto, [data-scroll-container]')
+    const containers = getValidScrollContainers()
     containers.forEach((c) => c.addEventListener('scroll', handleScroll, { passive: true }))
 
     return () => {
@@ -83,8 +88,7 @@ export function GlobalScrollManager() {
 
       const restore = () => {
         window.scrollTo({ top: targetY, left: 0, behavior: 'instant' })
-        const containers = document.querySelectorAll('main, .overflow-y-auto, [data-scroll-container]')
-        containers.forEach((c) => {
+        getValidScrollContainers().forEach((c) => {
           c.scrollTop = targetContainerY
         })
       }
@@ -97,8 +101,7 @@ export function GlobalScrollManager() {
       // PUSH or REPLACE Navigation (New Page / Tab Click) -> Always start from TOP!
       const resetToTop = () => {
         window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
-        const containers = document.querySelectorAll('main, .overflow-y-auto, [data-scroll-container]')
-        containers.forEach((c) => {
+        getValidScrollContainers().forEach((c) => {
           c.scrollTop = 0
         })
       }

@@ -4,11 +4,12 @@ import {
   Wallet, Award, FileText, CheckCircle2, XCircle, Clock, Star, Video,
   Send, Eye, Sparkles, Building2
 } from 'lucide-react'
-import { useUpdateApplicationStatusMutation } from '../../../store/api/enterpriseApi.js'
+import { useUpdateApplicationStatusMutation, useMarkWorkerJoinedMutation } from '../../../store/api/enterpriseApi.js'
 import toast from 'react-hot-toast'
 
 export function EnterpriseCandidateProfileDrawer({ application, onClose, onScheduleInterview, onSendOffer }) {
   const [updateStatus, { isLoading }] = useUpdateApplicationStatusMutation()
+  const [markJoined, { isLoading: isJoining }] = useMarkWorkerJoinedMutation()
 
   if (!application) return null
 
@@ -27,6 +28,16 @@ export function EnterpriseCandidateProfileDrawer({ application, onClose, onSched
       toast.success(`Application updated to ${newStatus.replace('_', ' ').toUpperCase()}`)
     } catch (err) {
       toast.error(err?.data?.message || 'Failed to update status')
+    }
+  }
+
+  const handleMarkJoined = async () => {
+    try {
+      await markJoined({ applicationId: application._id }).unwrap()
+      toast.success(`🎉 Candidate ${worker.fullName || ''} marked as JOINED! Added to Active Workforce.`)
+      onClose()
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to mark candidate as joined')
     }
   }
 
@@ -298,6 +309,16 @@ export function EnterpriseCandidateProfileDrawer({ application, onClose, onSched
               className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-[13px] font-extrabold shadow-md shadow-emerald-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <Send className="h-4 w-4 shrink-0" /> Issue Offer Letter
+            </button>
+          )}
+
+          {['waiting_for_joining_payment', 'joining_pending', 'offered', 'offer_sent', 'offer_accepted', 'selected'].includes(status) && (
+            <button
+              onClick={handleMarkJoined}
+              disabled={isJoining}
+              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-[13px] font-extrabold shadow-md shadow-emerald-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <CheckCircle2 className="h-4 w-4 shrink-0" /> Confirm Candidate Joined 🚀
             </button>
           )}
 

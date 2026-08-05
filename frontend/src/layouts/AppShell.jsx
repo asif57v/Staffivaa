@@ -19,7 +19,7 @@ import { GlassPanel } from '../components/ui/GlassPanel.jsx'
 import { AppBottomNav } from '../components/app-ui/navigation/AppBottomNav.jsx'
 import { AppBadge } from '../components/app-ui/data-display/AppBadge.jsx'
 import { adminInitials } from '../lib/formatAdminLastLogin.js'
-import { readAppUserLocation, parseAppUserLocation } from '../lib/appUserLocationStorage.js'
+import { readAppUserLocation, parseAppUserLocation, autoFetchLiveLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { APP_HOME_LOCATION, APP_HOME_PATH, hasBookingFlowQuery } from '../lib/bookingFlowNavigation.js'
 import { ErrorBoundary } from '../components/ErrorBoundary.jsx'
@@ -339,6 +339,10 @@ export function AppShell() {
       })
     }
     window.addEventListener('lc-app-user-location-changed', onLoc)
+
+    // Automatically trigger live location fetch on app load
+    autoFetchLiveLocation({ enableHighAccuracy: true }).catch(() => {})
+
     return () => window.removeEventListener('lc-app-user-location-changed', onLoc)
   }, [])
 

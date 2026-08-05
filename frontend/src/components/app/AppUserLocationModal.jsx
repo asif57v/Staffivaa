@@ -3,7 +3,7 @@ import { useLoadScript } from '@react-google-maps/api'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowLeft, Loader2, MapPin, Navigation, X } from 'lucide-react'
-import { readAppUserLocation, writeAppUserLocation } from '../../lib/appUserLocationStorage.js'
+import { readAppUserLocation, writeAppUserLocation, autoFetchLiveLocation, reverseGeocodeCoords } from '../../lib/appUserLocationStorage.js'
 
 function formatCoords(lat, lng) {
   if (lat == null || lng == null) return ''
@@ -38,6 +38,29 @@ export function AppUserLocationModal({
   const [geoBusy, setGeoBusy] = useState(false)
   const [hint, setHint] = useState('')
 
+  const fetchCurrent = useCallback(async () => {
+    if (!navigator.geolocation) {
+      setHint('Location is not supported on this device.')
+      return
+    }
+    setGeoBusy(true)
+    setHint('Fetching live GPS location…')
+    try {
+      const loc = await autoFetchLiveLocation({ force: true, enableHighAccuracy: true })
+      setAddress(loc.address || '')
+      if (inputRef.current) inputRef.current.value = loc.address || ''
+      setLat(loc.lat)
+      setLng(loc.lng)
+      setAddressComponents(loc.addressComponents || null)
+      setHint('Live location successfully fetched!')
+    } catch (err) {
+      console.warn('[LocationModal] GPS fetch error:', err)
+      setHint('Could not read GPS. Enter your area manually below.')
+    } finally {
+      setGeoBusy(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (!open) return
     const stored = readAppUserLocation()
@@ -49,8 +72,13 @@ export function AppUserLocationModal({
       setLng(stored?.lng ?? null)
       setAddressComponents(stored?.addressComponents ?? null)
       setHint('')
+
+      // If no location saved yet, auto fetch live location
+      if (!stored?.address && stored?.lat == null) {
+        fetchCurrent()
+      }
     })
-  }, [open])
+  }, [open, fetchCurrent])
 
   useEffect(() => {
     if (!open) return
@@ -91,51 +119,6 @@ export function AppUserLocationModal({
       }
     }
   }, [isLoaded, apiKey, open])
-
-  const fetchCurrent = useCallback(() => {
-    if (!navigator.geolocation) {
-      setHint('Location is not supported on this device.')
-      return
-    }
-    setGeoBusy(true)
-    setHint('Getting your location…')
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const la = pos.coords.latitude
-        const ln = pos.coords.longitude
-        setLat(la)
-        setLng(ln)
-        
-        try {
-          if (!window.google || !window.google.maps) {
-             setGeoBusy(false)
-             setHint('Coordinates updated. Add an address label below if you like.')
-             return
-          }
-          const geocoder = new window.google.maps.Geocoder();
-          geocoder.geocode({ location: { lat: la, lng: ln } }, (results, status) => {
-            if (status === "OK" && results && results.length > 0) {
-              setAddress(results[0].formatted_address)
-              setAddressComponents(results[0].address_components || null)
-              if (inputRef.current) inputRef.current.value = results[0].formatted_address
-              setHint('Location successfully updated.')
-            } else {
-              setHint('Coordinates updated. Could not resolve address.')
-            }
-            setGeoBusy(false)
-          });
-        } catch {
-          setGeoBusy(false)
-          setHint('Coordinates updated. Could not resolve address.')
-        }
-      },
-      () => {
-        setGeoBusy(false)
-        setHint('Could not read GPS. Enter your area manually below.')
-      },
-      { enableHighAccuracy: false, timeout: 14_000, maximumAge: 60_000 },
-    )
-  }, [])
 
   const canSave = requireLocation ? Boolean(lat != null && lng != null) : true
 

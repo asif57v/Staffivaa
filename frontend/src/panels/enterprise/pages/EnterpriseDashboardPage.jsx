@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useGetEnterpriseSecuritySettingsQuery, useGetEnterpriseDashboardOverviewQuery } from '../../../store/api/enterpriseApi.js'
-import { ShieldAlert, Plus } from 'lucide-react'
+import { ShieldAlert, Plus, FileText, ChevronDown } from 'lucide-react'
 import { CompanyOverview, QuickActionsRow, WalletOverview, SupportWidget } from './../components/dashboard/OverviewComponents.jsx'
 import { KpiGrid, WorkforceStatus, AttendanceSummary } from './../components/dashboard/KpiComponents.jsx'
 import { ActiveProjectsList, ProjectPerformance } from './../components/dashboard/ProjectComponents.jsx'
@@ -12,6 +13,7 @@ import { ActivityTimeline, NotificationCenter, RecentReports } from './../compon
 
 export function EnterpriseDashboardPage() {
   const navigate = useNavigate()
+  const [showBreakdown, setShowBreakdown] = useState(false)
 
   // Security & wallet threshold checks
   const { data: securityResponse } = useGetEnterpriseSecuritySettingsQuery()
@@ -42,26 +44,100 @@ export function EnterpriseDashboardPage() {
       {/* 1. Header — Company name from real profile */}
       <CompanyOverview companyName={profile.companyName} date={currentDate} time={currentTime} />
 
-      {/* Payment Overdue Warning Banner */}
+      {/* Payment Overdue Warning Banner with Breakdown & Dynamic Duration */}
       {securityInfo.isPaymentOverdueRestricted && (
-        <div className="p-4 sm:p-5 bg-rose-50 border border-rose-200 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs shadow-xs">
-          <div className="flex items-center gap-3 text-rose-950 font-medium">
-            <div className="h-10 w-10 rounded-2xl bg-rose-100 flex items-center justify-center shrink-0">
-              <ShieldAlert className="h-6 w-6 text-rose-600" />
+        <div className="p-5 bg-gradient-to-br from-rose-50 to-rose-100/60 border border-rose-200/80 rounded-3xl space-y-4 shadow-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5 text-rose-950 font-medium">
+              <div className="h-11 w-11 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-rose-200">
+                <ShieldAlert className="h-6 w-6" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-extrabold text-rose-950 text-base">Payment Overdue — Hiring Restricted</p>
+                  <span className="px-2.5 py-0.5 rounded-full bg-rose-200/80 text-rose-900 text-[11px] font-bold">
+                    Pay within {securityInfo.dueDays || 7} Days
+                  </span>
+                </div>
+                <p className="text-rose-800 text-xs leading-relaxed">
+                  {securityInfo.overdueMessage || 'Please clear your outstanding joining invoice to continue hiring on Staffivaa.'}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="font-extrabold text-rose-950 text-sm">Payment Overdue — Hiring Restricted</p>
-              <p className="text-rose-800 mt-0.5">
-                {securityInfo.overdueMessage || 'Please clear your outstanding joining invoice to continue hiring on Staffivaa.'}
-              </p>
+            
+            <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+              <button
+                onClick={() => setShowBreakdown(!showBreakdown)}
+                className="px-4 py-2.5 rounded-xl bg-white border border-rose-200 hover:bg-rose-50 text-rose-900 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <FileText className="w-4 h-4 text-rose-600" />
+                {showBreakdown ? 'Hide Breakdown' : 'View Breakdown 📊'}
+              </button>
+              <button
+                onClick={() => navigate('/enterprise/wallet')}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold shadow-md shadow-rose-200 flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                Pay Invoice Now
+              </button>
             </div>
           </div>
-          <button
-            onClick={() => navigate('/enterprise/wallet')}
-            className="shrink-0 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
-          >
-            Pay Invoice Now
-          </button>
+
+          {/* Expandable Financial Breakdown Box */}
+          <AnimatePresence>
+            {showBreakdown && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="pt-3 border-t border-rose-200/60 overflow-hidden"
+              >
+                <div className="bg-white rounded-2xl p-4 border border-rose-100 shadow-inner space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">
+                      Invoice #{securityInfo.overdueInvoice?.invoiceNumber || 'INV-ADV'} Breakdown
+                    </span>
+                    <span className="text-xs font-bold text-slate-700">
+                      Requirement: {securityInfo.overdueInvoice?.jobId?.jobTitle || 'Role'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Total Project Value</p>
+                      <p className="text-sm font-extrabold text-slate-900 mt-0.5">
+                        ₹{(securityInfo.overdueInvoice?.totalProjectValue || 0).toLocaleString('en-IN')}
+                      </p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-100">
+                      <p className="text-[10px] font-bold text-amber-700 uppercase">50% Advance Milestone</p>
+                      <p className="text-sm font-extrabold text-amber-900 mt-0.5">
+                        ₹{(securityInfo.overdueInvoice?.advanceAmount || 0).toLocaleString('en-IN')}
+                      </p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-indigo-50 border border-indigo-100">
+                      <p className="text-[10px] font-bold text-indigo-700 uppercase">Platform Fee (10%)</p>
+                      <p className="text-sm font-extrabold text-indigo-900 mt-0.5">
+                        ₹{(securityInfo.overdueInvoice?.platformFee || 0).toLocaleString('en-IN')}
+                      </p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-100">
+                      <p className="text-[10px] font-bold text-rose-700 uppercase">GST (18%)</p>
+                      <p className="text-sm font-extrabold text-rose-900 mt-0.5">
+                        ₹{(securityInfo.overdueInvoice?.gstAmount || 0).toLocaleString('en-IN')}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs font-bold">
+                    <span className="text-slate-600">Total Payable Amount</span>
+                    <span className="text-sm font-black text-rose-600">
+                      ₹{(securityInfo.overdueInvoice?.totalAmount || 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
 

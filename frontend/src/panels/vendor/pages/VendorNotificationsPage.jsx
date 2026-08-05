@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
 import {
@@ -29,6 +29,7 @@ import {
   useMarkNotificationReadMutation,
   useMarkAllNotificationsReadMutation,
   useDeleteNotificationMutation,
+  useSendSelfTestNotificationMutation,
 } from '../../../store/api/workforceApi.js'
 
 const TABS = [
@@ -79,11 +80,46 @@ export function VendorNotificationsPage() {
   const { user } = useAuth()
   const [tab, setTab] = useState('all')
   const [toast, setToast] = useState('')
+  const [isSendingTest, setIsSendingTest] = useState(false)
 
   const { data: notificationsData, refetch } = useGetNotificationsQuery(undefined)
   const [markRead] = useMarkNotificationReadMutation()
   const [markAllRead] = useMarkAllNotificationsReadMutation()
   const [deleteNotif] = useDeleteNotificationMutation()
+  const [sendSelfTest] = useSendSelfTestNotificationMutation()
+
+  const handleSendTestNotification = async () => {
+    try {
+      setIsSendingTest(true)
+      await sendSelfTest({
+        title: '⚡ Live Real-time Alert',
+        body: `Test notification received live via Socket.IO at ${new Date().toLocaleTimeString()}!`,
+        type: 'SYSTEM_ALERT',
+      }).unwrap()
+      refetch()
+      showToast('Live test notification sent successfully!')
+    } catch (err) {
+      showToast('Failed to send test notification.')
+    } finally {
+      setIsSendingTest(false)
+    }
+  }
+
+  useEffect(() => {
+    const handleRealtimeUpdate = () => {
+      refetch()
+    }
+    window.addEventListener('fcm-foreground-message', handleRealtimeUpdate)
+    window.addEventListener('lc-notification-received', handleRealtimeUpdate)
+
+    const interval = setInterval(handleRealtimeUpdate, 10000)
+
+    return () => {
+      window.removeEventListener('fcm-foreground-message', handleRealtimeUpdate)
+      window.removeEventListener('lc-notification-received', handleRealtimeUpdate)
+      clearInterval(interval)
+    }
+  }, [refetch])
 
   const feedItems = notificationsData?.notifications || notificationsData?.data?.notifications || []
   const unreadCount = notificationsData?.unreadCount ?? notificationsData?.data?.unreadCount ?? 0
@@ -148,32 +184,51 @@ export function VendorNotificationsPage() {
 
   return (
     <div className="-mx-4 min-h-[70vh] pb-6">
-      <div className="px-4 pt-4 pb-2 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
-            aria-label="Go back"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-black tracking-tight text-slate-900">Real-time Notifications</h1>
-            {unreadCount > 0 && (
-              <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-bold text-red-600">
-                {unreadCount} new
-              </span>
-            )}
+      <div className="px-4 pt-4 pb-2 flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate(-1)}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
+              aria-label="Go back"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-2xl font-black tracking-tight text-slate-900">Real-time Notifications</h1>
+              {unreadCount > 0 && (
+                <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-bold text-red-600">
+                  {unreadCount} new
+                </span>
+              )}
+            </div>
           </div>
+          {unreadCount > 0 && (
+            <button
+              onClick={handleMarkAllRead}
+              className="text-xs font-bold text-amber-600 hover:underline"
+            >
+              Mark all read
+            </button>
+          )}
         </div>
-        {unreadCount > 0 && (
+
+        <div className="flex items-center justify-between gap-2 mt-1">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-800 ring-1 ring-emerald-200">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            Live Real-time Connected
+          </div>
+
           <button
-            onClick={handleMarkAllRead}
-            className="text-xs font-bold text-amber-600 hover:underline"
+            type="button"
+            onClick={handleSendTestNotification}
+            disabled={isSendingTest}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-900 transition hover:bg-amber-100 active:scale-95 disabled:opacity-50"
           >
-            Mark all read
+            <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+            {isSendingTest ? 'Sending...' : 'Test Live Notification'}
           </button>
-        )}
+        </div>
       </div>
 
       <motion.div className="space-y-4 px-4 pt-4">

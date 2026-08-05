@@ -7,10 +7,15 @@ const withdrawalSchema = new mongoose.Schema(
       required: true,
       min: 1,
     },
+    payoutType: {
+      type: String,
+      enum: ['bank_transfer', 'upi'],
+      default: 'bank_transfer',
+    },
     status: {
       type: String,
       required: true,
-      enum: ['Pending', 'Processing', 'Completed', 'Rejected'],
+      enum: ['Pending', 'Processing', 'Approved', 'Completed', 'Rejected', 'Hold'],
       default: 'Pending',
     },
     bankDetails: {
@@ -19,16 +24,47 @@ const withdrawalSchema = new mongoose.Schema(
       bankName: String,
       accountHolderName: String,
     },
+    upiDetails: {
+      upiId: String,
+      accountHolderName: String,
+    },
     utrNumber: {
       type: String,
     },
     rejectionReason: {
       type: String,
     },
+    adminNotes: {
+      type: String,
+    },
+    walletBalanceBefore: {
+      type: Number,
+    },
+    walletBalanceAfter: {
+      type: Number,
+    },
+    enterpriseId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    jobId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'EnterpriseJob',
+    },
+    payrollMonth: {
+      type: String,
+    },
     requestedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
+    },
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    reviewedAt: {
+      type: Date,
     },
   },
   { timestamps: true }

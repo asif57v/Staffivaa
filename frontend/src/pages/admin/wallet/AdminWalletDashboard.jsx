@@ -288,85 +288,98 @@ export function AdminWalletDashboard() {
         </div>
       </div>
 
-      {/* Main Top KPIs Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-5">
-        {/* Available Balance */}
-        <div className="group rounded-[16px] bg-white/80 backdrop-blur-md p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] cursor-pointer flex items-center gap-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-            <Wallet className="h-5 w-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-medium text-slate-500 truncate">Available Balance</p>
-            <p className="text-[30px] font-bold text-slate-900 mt-0.5 tracking-tight leading-none">
-              {loadingSummary ? '...' : formatMoney(summary.availableBalance)}
+      {/* Main Real-time Finance Widgets Deck (10 Real-time Widgets) */}
+      <div className="space-y-3">
+        <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider">Enterprise & Platform Finance Widgets</h3>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {/* 1. Total Escrow Balance */}
+          <div className="rounded-2xl bg-white p-4 border border-slate-100 shadow-sm space-y-1">
+            <p className="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">Total Escrow Balance</p>
+            <p className="text-2xl font-black text-slate-900">
+              {loadingSummary ? '...' : formatMoney(summary.totalEscrowBalance || 0)}
             </p>
-            <div className="flex items-center gap-1 mt-1.5 text-[12px]">
-              <span className="font-semibold text-emerald-600">↑ 12.5%</span>
-              <span className="text-slate-400">vs yesterday</span>
-            </div>
+            <p className="text-[10px] text-slate-400">Secured in Staffivaa</p>
           </div>
-        </div>
 
-        {/* Total Volume */}
-        <div className="group rounded-[16px] bg-white/80 backdrop-blur-md p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] cursor-pointer flex items-center gap-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-            <TrendingUp className="h-5 w-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-medium text-slate-500 truncate">Total Volume</p>
-            <p className="text-[30px] font-bold text-slate-900 mt-0.5 tracking-tight leading-none">
-              {loadingSummary ? '...' : formatMoney(summary.totalRevenue)}
+          {/* 2. Enterprise Payments Received */}
+          <div className="rounded-2xl bg-white p-4 border border-slate-100 shadow-sm space-y-1">
+            <p className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Enterprise Payments</p>
+            <p className="text-2xl font-black text-slate-900">
+              {loadingSummary ? '...' : formatMoney(summary.enterprisePaymentsReceived || 0)}
             </p>
-            <div className="flex items-center gap-1 mt-1.5 text-[12px]">
-              <span className="font-semibold text-emerald-600">↑ 18.7%</span>
-              <span className="text-slate-400">vs yesterday</span>
-            </div>
+            <p className="text-[10px] text-slate-400">Paid Invoices</p>
           </div>
-        </div>
 
-        {/* Pending Settlements */}
-        <div className="group rounded-[16px] bg-white/80 backdrop-blur-md p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] cursor-pointer flex items-center gap-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-600">
-            <Clock className="h-5 w-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-medium text-slate-500 truncate">Pending Settlements</p>
-            <p className="text-[30px] font-bold text-slate-900 mt-0.5 tracking-tight leading-none">
-              {loadingSummary ? '...' : formatMoney(summary.pendingSettlements)}
+          {/* 3. Payroll Pending */}
+          <div className="rounded-2xl bg-white p-4 border border-slate-100 shadow-sm space-y-1">
+            <p className="text-[11px] font-bold text-amber-600 uppercase tracking-wider">Payroll Pending</p>
+            <p className="text-2xl font-black text-slate-900">
+              {loadingSummary ? '...' : formatMoney(summary.payrollPending || 0)}
             </p>
+            <p className="text-[10px] text-slate-400">Awaiting Admin Release</p>
           </div>
-        </div>
 
-        {/* Pending Refund Liability */}
-        <div 
-          onClick={() => navigate('/admin/refunds')}
-          className="group rounded-[16px] bg-white/80 backdrop-blur-md p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] cursor-pointer flex items-center gap-4"
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-50 text-purple-600">
-            <Clock className="h-5 w-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-medium text-slate-500 truncate">Pending Refunds</p>
-            <p className="text-[30px] font-bold text-slate-900 mt-0.5 tracking-tight leading-none">
-              {loadingSummary ? '...' : formatMoney(summary.pendingRefundLiability)}
+          {/* 4. Salary Credited */}
+          <div className="rounded-2xl bg-white p-4 border border-slate-100 shadow-sm space-y-1">
+            <p className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Salary Credited</p>
+            <p className="text-2xl font-black text-slate-900">
+              {loadingSummary ? '...' : formatMoney(summary.salaryCredited || 0)}
             </p>
+            <p className="text-[10px] text-slate-400">Transferred to Wallets</p>
           </div>
-        </div>
 
-        {/* Total Payouts */}
-        <div className="group rounded-[16px] bg-white/80 backdrop-blur-md p-4 border border-slate-100 shadow-[0_2px_10px_rgba(0,0,0,0.02)] transition-all hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] cursor-pointer flex items-center gap-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-600">
-            <ArrowUpRight className="h-5 w-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-medium text-slate-500 truncate">Total Payouts / Debits</p>
-            <p className="text-[30px] font-bold text-slate-900 mt-0.5 tracking-tight leading-none">
-              {loadingSummary ? '...' : formatMoney(summary.totalDebits)}
+          {/* 5. Pending Withdrawals */}
+          <div className="rounded-2xl bg-white p-4 border border-slate-100 shadow-sm space-y-1">
+            <p className="text-[11px] font-bold text-orange-600 uppercase tracking-wider">Pending Withdrawals</p>
+            <p className="text-2xl font-black text-slate-900">
+              {loadingSummary ? '...' : formatMoney(summary.pendingWithdrawals || 0)}
             </p>
-            <div className="flex items-center gap-1 mt-1.5 text-[12px]">
-              <span className="font-semibold text-slate-400">— 0%</span>
-              <span className="text-slate-400">vs yesterday</span>
-            </div>
+            <p className="text-[10px] text-slate-400">Bank Transfer Review</p>
+          </div>
+
+          {/* 6. Completed Withdrawals */}
+          <div className="rounded-2xl bg-white p-4 border border-slate-100 shadow-sm space-y-1">
+            <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Completed Withdrawals</p>
+            <p className="text-2xl font-black text-slate-900">
+              {loadingSummary ? '...' : formatMoney(summary.completedWithdrawals || 0)}
+            </p>
+            <p className="text-[10px] text-slate-400">Disbursed to Banks</p>
+          </div>
+
+          {/* 7. Platform Revenue */}
+          <div className="rounded-2xl bg-white p-4 border border-slate-100 shadow-sm space-y-1">
+            <p className="text-[11px] font-bold text-purple-600 uppercase tracking-wider">Platform Revenue</p>
+            <p className="text-2xl font-black text-slate-900">
+              {loadingSummary ? '...' : formatMoney(summary.platformRevenue || 0)}
+            </p>
+            <p className="text-[10px] text-slate-400">Platform Commissions</p>
+          </div>
+
+          {/* 8. GST Collected */}
+          <div className="rounded-2xl bg-white p-4 border border-slate-100 shadow-sm space-y-1">
+            <p className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">GST Collected</p>
+            <p className="text-2xl font-black text-slate-900">
+              {loadingSummary ? '...' : formatMoney(summary.gstCollected || 0)}
+            </p>
+            <p className="text-[10px] text-slate-400">18% Statutory GST</p>
+          </div>
+
+          {/* 9. Refunds */}
+          <div className="rounded-2xl bg-white p-4 border border-slate-100 shadow-sm space-y-1">
+            <p className="text-[11px] font-bold text-rose-600 uppercase tracking-wider">Refunds Issued</p>
+            <p className="text-2xl font-black text-slate-900">
+              {loadingSummary ? '...' : formatMoney(summary.refunds || 0)}
+            </p>
+            <p className="text-[10px] text-slate-400">Refunded to Wallets</p>
+          </div>
+
+          {/* 10. Failed Withdrawals */}
+          <div className="rounded-2xl bg-white p-4 border border-slate-100 shadow-sm space-y-1">
+            <p className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">Failed Withdrawals</p>
+            <p className="text-2xl font-black text-slate-900">
+              {loadingSummary ? '...' : (summary.failedWithdrawals || 0)} Requests
+            </p>
+            <p className="text-[10px] text-slate-400">Rejected & Restored</p>
           </div>
         </div>
       </div>

@@ -8,6 +8,7 @@ import {
   useGetUpcomingJoiningsQuery,
   useGetActiveWorkforceQuery,
   useMarkWorkerJoinedMutation,
+  useGetEnterpriseWorkerAttendanceQuery,
 } from '../../../store/api/enterpriseApi.js'
 import toast from 'react-hot-toast'
 
@@ -28,7 +29,7 @@ function MarkJoinedModal({ joining, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
-      await markWorkerJoined({
+      await markJoined({
         applicationId: joining._id,
         joiningDate,
         siteLocation,
@@ -145,10 +146,114 @@ function MarkJoinedModal({ joining, onClose }) {
   )
 }
 
+// ─── Worker Attendance Modal ──────────────────────────────────────────────────
+function WorkerAttendanceModal({ item, onClose }) {
+  const { data: attendanceData, isLoading } = useGetEnterpriseWorkerAttendanceQuery(item._id)
+  const records = attendanceData?.data || []
+  const worker = item.workerId || {}
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="w-full max-w-xl bg-white rounded-3xl shadow-2xl overflow-hidden my-8"
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+          <div>
+            <h3 className="text-[17px] font-extrabold text-slate-900">Attendance & Check-in History</h3>
+            <p className="text-[12px] font-medium text-slate-500 mt-0.5">
+              Shift logs for <span className="font-bold text-indigo-600">{worker.fullName || 'Worker'}</span>
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+          {isLoading && (
+            <div className="p-8 text-center text-slate-400 font-medium">Loading shift logs...</div>
+          )}
+
+          {!isLoading && records.length === 0 && (
+            <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
+              <Clock className="h-8 w-8 text-slate-300 mx-auto" />
+              <p className="text-[14px] font-bold text-slate-700">No Check-in Logs Found Yet</p>
+              <p className="text-[12px] text-slate-500">
+                When this worker checks in or out on the Labour App, shift timestamps will appear here in real-time.
+              </p>
+            </div>
+          )}
+
+          {!isLoading && records.length > 0 && (
+            <div className="space-y-3">
+              {records.map((r) => {
+                const shiftDateStr = new Date(r.shiftDate).toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })
+
+                const checkInStr = r.checkInAt
+                  ? new Date(r.checkInAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                  : 'Not Checked In'
+
+                const checkOutStr = r.checkOutAt
+                  ? new Date(r.checkOutAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                  : r.checkInAt ? 'Shift In Progress' : '—'
+
+                return (
+                  <div key={r._id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] font-extrabold text-slate-900">{shiftDateStr}</span>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          r.checkOutAt
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : r.checkInAt
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {r.checkOutAt ? 'Completed' : r.checkInAt ? 'Working / On-Site' : 'Absent'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-[12px] pt-1">
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Check In</p>
+                        <p className="font-extrabold text-slate-800 mt-0.5">{checkInStr}</p>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Check Out</p>
+                        <p className="font-extrabold text-slate-800 mt-0.5">{checkOutStr}</p>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Total Hours</p>
+                        <p className="font-black text-indigo-600 mt-0.5">{r.totalHours ? `${r.totalHours} hrs` : '0 hrs'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export function EnterpriseWorkforcePage() {
   const [activeTab, setActiveTab] = useState('upcoming') // 'upcoming' | 'active'
   const [selectedJoining, setSelectedJoining] = useState(null)
+  const [selectedAttendanceApp, setSelectedAttendanceApp] = useState(null)
 
   const { data: upcomingData, isLoading: loadingUpcoming } = useGetUpcomingJoiningsQuery()
   const { data: activeData, isLoading: loadingActive } = useGetActiveWorkforceQuery()
@@ -327,6 +432,13 @@ export function EnterpriseWorkforcePage() {
                       <p><span className="font-semibold text-slate-400">Manager:</span> {joining.reportingManager || 'Site Supervisor'}</p>
                       <p><span className="font-semibold text-slate-400">Joined On:</span> {joining.joiningDate ? new Date(joining.joiningDate).toLocaleDateString('en-IN') : 'Active'}</p>
                     </div>
+
+                    <button
+                      onClick={() => setSelectedAttendanceApp(item)}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[12px] font-extrabold border border-indigo-200/60 transition-all cursor-pointer"
+                    >
+                      <Clock className="h-4 w-4" /> Attendance & Check-in Logs
+                    </button>
                   </motion.div>
                 )
               })}
@@ -341,6 +453,16 @@ export function EnterpriseWorkforcePage() {
           <MarkJoinedModal
             joining={selectedJoining}
             onClose={() => setSelectedJoining(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Worker Attendance Logs Modal */}
+      <AnimatePresence>
+        {selectedAttendanceApp && (
+          <WorkerAttendanceModal
+            item={selectedAttendanceApp}
+            onClose={() => setSelectedAttendanceApp(null)}
           />
         )}
       </AnimatePresence>

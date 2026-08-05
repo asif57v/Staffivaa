@@ -6,6 +6,8 @@ import { Wallet } from '../models/Wallet.js'
 import { WalletTransaction } from '../models/WalletTransaction.js'
 import { SupportTicket } from '../models/SupportTicket.js'
 import { Assignment } from '../models/Assignment.js'
+import { RefundRequest } from '../models/RefundRequest.js'
+import { Withdrawal } from '../models/Withdrawal.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { sendSuccess } from '../utils/apiResponse.js'
 
@@ -82,6 +84,10 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
   // Support Tickets
   const supportTickets = await SupportTicket.countDocuments({ status: 'open' })
   
+  // Pending Refunds & Withdrawals
+  const pendingRefundsCount = await RefundRequest.countDocuments({ status: 'PENDING' })
+  const pendingWithdrawalsCount = await Withdrawal.countDocuments({ status: 'Pending' })
+  
   return sendSuccess(res, {
     data: {
       totalUsers,
@@ -105,6 +111,8 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       walletBalance,
       supportTickets,
       newUsersToday,
+      pendingRefundsCount,
+      pendingWithdrawalsCount,
     }
   })
 })

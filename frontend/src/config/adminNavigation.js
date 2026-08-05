@@ -101,6 +101,7 @@ export const ADMIN_NAV_SECTIONS = [
       { to: '/admin/enterprise-wallets', label: 'Enterprise Wallets', icon: Wallet },
       { to: '/admin/enterprise-payments', label: 'Joining Payments & Escrow', icon: ShieldCheck },
       { to: '/admin/enterprise-payrolls', label: 'Enterprise Payroll & Payouts', icon: Banknote },
+      { to: '/admin/enterprise-withdrawals', label: 'Withdrawal Requests', icon: Banknote },
       { to: '/admin/refunds', label: 'Refunds', icon: Banknote },
       { to: '/admin/commission', label: 'Commissions', icon: Percent },
       { to: '/admin/pricing', label: 'Pricing Management', icon: BadgeIndianRupee },

@@ -165,12 +165,20 @@ export function AdminLayout() {
     if (pathname === '/admin/reports') {
       updateSeen('supportTickets', stats.supportTickets || 0)
     }
+    if (pathname === '/admin/refunds') {
+      updateSeen('pendingRefundsCount', stats.pendingRefundsCount || 0)
+    }
+    if (pathname === '/admin/enterprise-withdrawals') {
+      updateSeen('pendingWithdrawalsCount', stats.pendingWithdrawalsCount || 0)
+    }
 
     if ((stats.pendingKyc || 0) < (updated.pendingKyc || 0)) updateSeen('pendingKyc', stats.pendingKyc || 0)
     if ((stats.newUsersToday || 0) < (updated.newUsersToday || 0)) updateSeen('newUsersToday', stats.newUsersToday || 0)
     if ((stats.pendingRequests || 0) < (updated.pendingRequests || 0)) updateSeen('pendingRequests', stats.pendingRequests || 0)
     if ((stats.pendingSettlementCount || 0) < (updated.pendingSettlementCount || 0)) updateSeen('pendingSettlementCount', stats.pendingSettlementCount || 0)
     if ((stats.supportTickets || 0) < (updated.supportTickets || 0)) updateSeen('supportTickets', stats.supportTickets || 0)
+    if ((stats.pendingRefundsCount || 0) < (updated.pendingRefundsCount || 0)) updateSeen('pendingRefundsCount', stats.pendingRefundsCount || 0)
+    if ((stats.pendingWithdrawalsCount || 0) < (updated.pendingWithdrawalsCount || 0)) updateSeen('pendingWithdrawalsCount', stats.pendingWithdrawalsCount || 0)
 
     if (changed) {
       setLastSeen(updated)
@@ -343,8 +351,21 @@ export function AdminLayout() {
                   else if (to === '/admin/bookings') badgeCount = Math.max(0, (stats.pendingRequests || 0) - (lastSeen.pendingRequests || 0))
                   else if (to === '/admin/wallet') badgeCount = Math.max(0, (stats.pendingSettlementCount || 0) - (lastSeen.pendingSettlementCount || 0))
                   else if (to === '/admin/reports') badgeCount = Math.max(0, (stats.supportTickets || 0) - (lastSeen.supportTickets || 0))
+                  else if (to === '/admin/refunds') badgeCount = Math.max(0, (stats.pendingRefundsCount || 0) - (lastSeen.pendingRefundsCount || 0))
+                  else if (to === '/admin/enterprise-withdrawals') badgeCount = Math.max(0, (stats.pendingWithdrawalsCount || 0) - (lastSeen.pendingWithdrawalsCount || 0))
                 }
                 
+                // Count unread notifications matching target route
+                if (notifData?.notifications) {
+                  const unreadMatching = notifData.notifications.filter(n => {
+                    if (n.isRead) return false
+                    if (to === '/admin/refunds' && n.type === 'REFUND_REQUESTED') return true
+                    if (to === '/admin/enterprise-withdrawals' && n.type === 'WITHDRAWAL_REQUESTED') return true
+                    return false
+                  }).length
+                  badgeCount = Math.max(badgeCount, unreadMatching)
+                }
+
                 if (pathname.startsWith(to)) {
                   badgeCount = 0
                 }
@@ -542,7 +563,9 @@ export function AdminLayout() {
                             const getNotificationUrl = (item) => {
                               if (item.type.startsWith('KYC')) return '/admin/business-verification'
                               if (item.type.startsWith('BOOKING')) return '/admin/bookings'
-                              if (item.type.startsWith('SETTLEMENT') || item.type.startsWith('REFUND')) return '/admin/wallet'
+                              if (item.type.startsWith('REFUND')) return '/admin/refunds'
+                              if (item.type.startsWith('WITHDRAWAL')) return '/admin/enterprise-withdrawals'
+                              if (item.type.startsWith('SETTLEMENT')) return '/admin/wallet'
                               if (item.type === 'SUPPORT_TICKET_CREATED') return '/admin/reports'
                               if (item.type === 'PRICING_CHANGED') return '/admin/pricing'
                               return '/admin'

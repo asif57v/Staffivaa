@@ -337,7 +337,9 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
           <button onClick={onBack} className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-800 transition active:scale-95">
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <h1 className="ml-4 text-lg font-black text-slate-900">Payment Required</h1>
+          <h1 className="ml-4 text-lg font-black text-slate-900">
+            {request.userPaymentStatus === 'paid' ? 'Request Accepted' : 'Payment Required'}
+          </h1>
         </div>
         <div className="flex-1 overflow-y-auto p-5 space-y-4 pb-24">
           <div className="bg-white rounded-[20px] p-6 shadow-sm ring-1 ring-slate-200 text-center">

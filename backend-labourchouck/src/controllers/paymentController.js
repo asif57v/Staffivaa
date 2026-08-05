@@ -10,6 +10,7 @@ import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { USER_ROLES } from '../constants/roles.js'
 import { emitRequestStatusUpdate, emitToVendor, emitToUser, emitToCorporate } from '../utils/socket.js'
 import { sendNotificationToUser } from '../services/notificationService.js'
+import { triggerNotification } from '../utils/notificationTrigger.js'
 
 // Cache the instance
 let razorpayInstance = null
@@ -183,12 +184,36 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
     if (request.status === 'vendor_platform_fee_pending') {
       request.vendorPlatformFeeStatus = 'paid';
       request.vendorPlatformFeePaidAt = new Date();
+      const reqRef = request.reference || request._id.toString().slice(-6);
+
       if (request.corporatePlatformFeeStatus === 'paid') {
         request.quotationUnlocked = true;
         request.status = 'quotation_unlocked';
+
+        if (request.clientId) {
+          triggerNotification({
+            userId: request.clientId,
+            title: 'Quotation Unlocked! 🎉',
+            body: `Vendor platform fee received for Request #${reqRef}. Quotation is now unlocked!`,
+            type: 'BOOKING_UPDATED',
+            relatedId: request._id,
+            relatedModel: 'WorkforceRequest',
+          }).catch(err => console.error('[Notification Error]:', err.message));
+        }
       } else {
         request.status = 'corporate_platform_fee_pending';
         emitToCorporate(request.clientId?.toString(), 'corporate_fee_pending', { requestId: request._id.toString() });
+
+        if (request.clientId) {
+          triggerNotification({
+            userId: request.clientId,
+            title: 'Vendor Fee Paid! 💳',
+            body: `Vendor has paid their platform fee for Request #${reqRef}. Please pay your platform fee to unlock quotation & worker allocation.`,
+            type: 'PAYMENT_RECEIVED',
+            relatedId: request._id,
+            relatedModel: 'WorkforceRequest',
+          }).catch(err => console.error('[Notification Error]:', err.message));
+        }
       }
     } else {
       request.labourPaymentStatus = 'paid';
@@ -197,16 +222,41 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
     if (request.status === 'corporate_platform_fee_pending') {
       request.corporatePlatformFeeStatus = 'paid';
       request.corporatePlatformFeePaidAt = new Date();
+      const reqRef = request.reference || request._id.toString().slice(-6);
+
+      import('../models/Allocation.js').then(({ Allocation }) => {
+        Allocation.findOne({ requestId: request._id }).then(allocation => {
+          if (allocation && allocation.vendorId) {
+            if (request.vendorPlatformFeeStatus === 'paid') {
+              request.quotationUnlocked = true;
+              request.status = 'quotation_unlocked';
+              emitToVendor(allocation.vendorId.toString(), 'quotation_unlocked', { requestId: request._id.toString() });
+
+              triggerNotification({
+                userId: allocation.vendorId,
+                title: 'Quotation Unlocked! 🎉',
+                body: `Corporate client paid their platform fee for Request #${reqRef}. Quotation is unlocked for worker assignment!`,
+                type: 'BOOKING_UPDATED',
+                relatedId: request._id,
+                relatedModel: 'WorkforceRequest',
+              }).catch(err => console.error('[Notification Error]:', err.message));
+            } else {
+              triggerNotification({
+                userId: allocation.vendorId,
+                title: 'Corporate Fee Paid! 💳',
+                body: `Corporate client paid their platform fee for Request #${reqRef}. Please pay your vendor fee to proceed.`,
+                type: 'PAYMENT_RECEIVED',
+                relatedId: request._id,
+                relatedModel: 'WorkforceRequest',
+              }).catch(err => console.error('[Notification Error]:', err.message));
+            }
+          }
+        }).catch(err => console.error(err));
+      }).catch(err => console.error(err));
+
       if (request.vendorPlatformFeeStatus === 'paid') {
         request.quotationUnlocked = true;
         request.status = 'quotation_unlocked';
-        import('../models/Allocation.js').then(({ Allocation }) => {
-          Allocation.findOne({ requestId: request._id }).then(allocation => {
-            if (allocation && allocation.vendorId) {
-              emitToVendor(allocation.vendorId.toString(), 'quotation_unlocked', { requestId: request._id.toString() });
-            }
-          }).catch(err => console.error(err));
-        }).catch(err => console.error(err));
       }
     } else {
       request.userPaymentStatus = 'paid';

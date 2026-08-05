@@ -23,6 +23,7 @@ import {
   markWorkerJoined,
   getActiveWorkforce,
   getLabourCurrentEmployment,
+  getEnterpriseWorkerAttendance,
 } from '../controllers/enterpriseController.js'
 import {
   calculateEnterpriseMonthlyPayroll,
@@ -57,6 +58,7 @@ router.post('/applications/:id/schedule-interview', protect, scheduleInterview)
 router.patch('/applications/:id/cancel-interview', protect, cancelInterview)
 router.post('/applications/:id/send-offer', protect, sendOfferLetter)
 router.post('/applications/:id/mark-joined', protect, markWorkerJoined)
+router.get('/applications/:id/attendance', protect, getEnterpriseWorkerAttendance)
 
 // ── Enterprise Financial Invoices & Joining Confirmation Payments ─────────────
 router.get('/joining-invoices', protect, getEnterpriseInvoices)

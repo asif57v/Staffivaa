@@ -531,6 +531,11 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       invalidatesTags: ['Notifications'],
     }),
+    sendSelfTestNotification: build.mutation({
+      query: (body) => ({ url: '/notifications/send-test', method: 'POST', body }),
+      transformResponse: unwrap,
+      invalidatesTags: ['Notifications'],
+    }),
     getAuditLogs: build.query({
       query: (params) => ({ url: '/admin/audit-logs', params }),
       transformResponse: unwrap,
@@ -655,6 +660,7 @@ export const {
   useMarkNotificationReadMutation,
   useMarkAllNotificationsReadMutation,
   useDeleteNotificationMutation,
+  useSendSelfTestNotificationMutation,
   useGetAuditLogsQuery,
   useGetTicketsQuery,
   useCreateTicketMutation,

@@ -91,8 +91,8 @@ export function EnterprisePromotionalBanner() {
 
           <button
             type="button"
-            onClick={() => navigate('/app/my-applications')}
-            className="w-full bg-emerald-400 hover:bg-emerald-300 active:scale-[0.98] text-slate-950 font-extrabold py-3 text-[13px] rounded-2xl flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-emerald-950/30"
+            onClick={() => navigate('/app/attendance')}
+            className="w-full bg-emerald-400 hover:bg-emerald-300 active:scale-[0.98] text-slate-950 font-extrabold py-3 text-[13px] rounded-2xl flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-emerald-950/30 cursor-pointer"
           >
             View Employment Status & Details
             <ChevronRight className="w-4 h-4" strokeWidth={3} />

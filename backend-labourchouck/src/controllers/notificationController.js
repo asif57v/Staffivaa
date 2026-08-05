@@ -2,6 +2,23 @@ import { getMessaging, getApps } from '../config/firebase.js';
 import { Notification } from '../models/Notification.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendSuccess, sendError, HTTP_STATUS } from '../utils/apiResponse.js';
+import { triggerNotification } from '../utils/notificationTrigger.js';
+
+export const createSelfTestNotification = asyncHandler(async (req, res) => {
+  const { title, body, type } = req.body || {};
+
+  const notification = await triggerNotification({
+    userId: req.user._id,
+    title: title || '⚡ Real-time Alert',
+    body: body || `Live notification generated at ${new Date().toLocaleTimeString()}`,
+    type: type || 'SYSTEM_ALERT',
+  });
+
+  return sendSuccess(res, {
+    message: 'Test notification triggered successfully',
+    data: { notification }
+  });
+});
 
 export const sendTestNotification = async (req, res, next) => {
   try {

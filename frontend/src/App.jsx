@@ -53,6 +53,7 @@ const AdminEnterpriseJobsPage = lazy(() => import('./pages/admin/AdminEnterprise
 const AdminEnterpriseWalletsPage = lazy(() => import('./pages/admin/AdminEnterpriseWalletsPage.jsx').then(m => ({ default: m.AdminEnterpriseWalletsPage })))
 const AdminJoiningPaymentsPage = lazy(() => import('./pages/admin/AdminJoiningPaymentsPage.jsx').then(m => ({ default: m.AdminJoiningPaymentsPage })))
 const AdminEnterprisePayrollsPage = lazy(() => import('./pages/admin/AdminEnterprisePayrollsPage.jsx').then(m => ({ default: m.AdminEnterprisePayrollsPage })))
+const AdminWithdrawalRequestsPage = lazy(() => import('./pages/admin/AdminWithdrawalRequestsPage.jsx').then(m => ({ default: m.AdminWithdrawalRequestsPage })))
 const AdminLegalContentPage = lazy(() => import('./pages/admin/AdminLegalContentPage.jsx').then(m => ({ default: m.AdminLegalContentPage })))
 const PublicLegalPage = lazy(() => import('./pages/PublicLegalPage.jsx').then(m => ({ default: m.PublicLegalPage })))
 
@@ -173,6 +174,7 @@ function App() {
               <Route path="enterprise-wallets" element={<AdminEnterpriseWalletsPage />} />
               <Route path="enterprise-payments" element={<AdminJoiningPaymentsPage />} />
               <Route path="enterprise-payrolls" element={<AdminEnterprisePayrollsPage />} />
+              <Route path="enterprise-withdrawals" element={<AdminWithdrawalRequestsPage />} />
               <Route path="buildmart" element={<AdminBuildMartLeadsPage />} />
               <Route path="bookings" element={<AdminBookingsPage />} />
               <Route path="allocations" element={<AdminAllocationsPage />} />

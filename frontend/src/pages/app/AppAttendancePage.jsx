@@ -9,6 +9,8 @@ import {
   useGetAttendanceQuery,
   useVerifyCheckInOtpMutation,
 } from '../../store/api/workforceApi.js'
+import { useGetLabourCurrentEmploymentQuery } from '../../store/api/enterpriseApi.js'
+import { useAuth } from '../../hooks/useAuth.js'
 import { getSocket } from '../../services/socket.js'
 import {
   loadJobDemoState,
@@ -73,11 +75,14 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 const GEOFENCE_RADIUS = 120 // meters
 
 export function AppAttendancePage() {
+  const { user } = useAuth()
   const reduce = useReducedMotion()
   const [toast, setToast] = useState('')
   const [selectedDay, setSelectedDay] = useState(new Date().getDate())
   
   const { data: assignmentsData, isLoading: loadingAssignments, refetch } = useGetLabourAssignmentsQuery(undefined, { pollingInterval: 5000, refetchOnMountOrArgChange: true })
+  const { data: currentEmpData, isLoading: loadingEmp } = useGetLabourCurrentEmploymentQuery(undefined, { pollingInterval: 5000, refetchOnMountOrArgChange: true })
+  const currentEmp = currentEmpData?.data
   
   // Fetch ALL historical attendance records for this worker, without date filtering
   const { data: attendanceData, isLoading: loadingAttendance } = useGetAttendanceQuery(undefined, { pollingInterval: 5000, refetchOnMountOrArgChange: true })
@@ -315,20 +320,44 @@ export function AppAttendancePage() {
   const todayStr = getLocalDateStr(new Date())
 
   // Visibility Rule: Show if accepted/on_site AND current date is not past project end date.
-  const activeAssignments = assignments.filter((a) => {
-    if (a.status !== 'accepted' && a.status !== 'on_site') return false
-    
-    // Only show attendance for vendor or corporate assignments
-    const source = a.requestId?.sourceType;
-    if (source !== 'vendor' && source !== 'corporate') return false;
+  const activeAssignments = [
+    ...(currentEmp ? [{
+      _id: currentEmp._id,
+      id: currentEmp._id,
+      status: 'accepted',
+      isEnterprise: true,
+      isDemo: false,
+      title: currentEmp.jobId?.jobTitle || 'Enterprise Deployment',
+      contractor: currentEmp.enterpriseId?.enterpriseProfile?.companyName || currentEmp.enterpriseId?.fullName || 'Enterprise Client',
+      vendorName: currentEmp.enterpriseId?.enterpriseProfile?.companyName || 'Staffivaa Enterprise',
+      trade: currentEmp.jobId?.jobTitle || 'Worker',
+      location: currentEmp.joiningDetails?.siteLocation || currentEmp.jobId?.locationText || 'Main Site Location',
+      shiftWindow: currentEmp.jobId?.shift || '09:00 AM - 06:00 PM',
+      requestId: {
+        projectName: currentEmp.jobId?.jobTitle || 'Enterprise Deployment',
+        clientId: currentEmp.enterpriseId,
+        locationText: currentEmp.joiningDetails?.siteLocation || currentEmp.jobId?.locationText || 'Main Site Location',
+        shiftStart: currentEmp.jobId?.shift?.split('-')?.[0]?.trim() || '09:00 AM',
+        shiftEnd: currentEmp.jobId?.shift?.split('-')?.[1]?.trim() || '06:00 PM',
+        startDate: currentEmp.joiningDetails?.joiningDate || currentEmp.offerDetails?.joiningDate || currentEmp.createdAt,
+        endDate: currentEmp.joiningDetails?.endDate || currentEmp.offerDetails?.endDate || currentEmp.jobId?.timeline?.projectEndDate || currentEmp.jobId?.timeline?.applicationLastDate || null,
+      },
+      categoryId: { name: currentEmp.jobId?.jobTitle || 'Worker' },
+      joiningDetails: currentEmp.joiningDetails,
+      jobId: currentEmp.jobId,
+      enterpriseId: currentEmp.enterpriseId,
+    }] : []),
+    ...assignments.filter((a) => {
+      if (a.status !== 'accepted' && a.status !== 'on_site') return false
 
-    // If there is an end date, hide it if today is past the end date
-    if (a.requestId?.endDate) {
-      const endStr = getLocalDateStr(a.requestId.endDate)
-      if (todayStr > endStr) return false
-    }
-    return true
-  }).map(a => ({ ...a, isDemo: false }))
+      // If there is an end date, hide it if today is past the end date
+      if (a.requestId?.endDate) {
+        const endStr = getLocalDateStr(a.requestId.endDate)
+        if (todayStr > endStr) return false
+      }
+      return true
+    }).map(a => ({ ...a, isDemo: false }))
+  ]
 
   const now = new Date()
   const currentMonth = now.getMonth()
@@ -341,8 +370,7 @@ export function AppAttendancePage() {
   // Find the most recent completed assignment if no active one
   const completedAssignments = (assignmentsData?.assignments ?? []).filter((a) => {
     if (a.status !== 'completed' && a.status !== 'closed') return false
-    const source = a.requestId?.sourceType
-    return source === 'vendor' || source === 'corporate'
+    return true
   })
   const latestCompleted = completedAssignments.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))[0]
 
@@ -350,31 +378,41 @@ export function AppAttendancePage() {
   const isDemo = displayAssignment?.isDemo
   const req = displayAssignment?.requestId || {}
 
-  let corporateName, vendorName, roleName, locationStr, shiftStr
+  let projectName, corporateName, vendorName, roleName, locationStr, shiftStr
   if (displayAssignment) {
     if (isDemo) {
+      projectName = displayAssignment.title || 'Demo Project'
       corporateName = displayAssignment.contractor || 'Corporate Client'
       vendorName = displayAssignment.vendorName || 'Vendor'
       roleName = displayAssignment.trade || 'Worker'
       locationStr = displayAssignment.location || displayAssignment.site || 'Location not specified'
       shiftStr = displayAssignment.shiftWindow || '08:00 AM - 06:00 PM'
     } else {
-      corporateName = req.clientId?.corporateProfile?.companyName || req.clientId?.fullName || 'Corporate Client'
-      vendorName = displayAssignment.vendorId?.contractorProfile?.businessName || displayAssignment.vendorId?.fullName || 'Vendor'
+      projectName = req.projectName || req.title || displayAssignment.title || 'Assigned Project'
+      corporateName = req.clientId?.corporateProfile?.companyName || req.clientId?.enterpriseProfile?.companyName || req.clientId?.fullName || 'Client Company'
+      vendorName = displayAssignment.vendorId?.contractorProfile?.businessName || displayAssignment.vendorId?.fullName || 'Staffivaa Partner'
       roleName = displayAssignment.categoryId?.name || req.lines?.[0]?.categoryId?.name || 'Worker'
-      locationStr = req.locationText || req.siteId?.address || 'Location not specified'
-      shiftStr = (req.shiftStart && req.shiftEnd) ? `${req.shiftStart} - ${req.shiftEnd}` : '08:00 AM - 06:00 PM'
+      locationStr = req.locationText || req.siteId?.address || displayAssignment.location || 'Location not specified'
+      shiftStr = (req.shiftStart && req.shiftEnd) ? `${req.shiftStart} - ${req.shiftEnd}` : '09:00 AM - 06:00 PM'
     }
   }
 
+  let startDateFormatted = '—'
+  let endDateFormatted = '—'
   let durationStr = '—'
+
   if (displayAssignment) {
     if (isDemo) {
+      startDateFormatted = '23 Jun 2026'
+      endDateFormatted = '30 Jun 2026'
       durationStr = '23 Jun 2026 – 30 Jun 2026'
-    } else if (req.startDate) {
-      durationStr = `${formatDate(req.startDate)}${req.endDate ? ` – ${formatDate(req.endDate)}` : ''}`
     } else {
-      durationStr = 'Not specified'
+      const sRaw = req.startDate || displayAssignment.joiningDetails?.joiningDate || displayAssignment.offerDetails?.joiningDate || displayAssignment.jobId?.timeline?.applicationStartDate || displayAssignment.createdAt
+      const eRaw = req.endDate || displayAssignment.joiningDetails?.endDate || displayAssignment.offerDetails?.endDate || displayAssignment.jobId?.timeline?.projectEndDate || displayAssignment.jobId?.timeline?.applicationLastDate
+
+      startDateFormatted = sRaw ? formatDate(sRaw) : 'Not specified'
+      endDateFormatted = eRaw ? formatDate(eRaw) : 'Ongoing / Full-Time'
+      durationStr = eRaw ? `${startDateFormatted} ➔ ${endDateFormatted}` : `${startDateFormatted} (Ongoing)`
     }
   }
 
@@ -399,10 +437,12 @@ export function AppAttendancePage() {
   // Map records for the current month
   const recordMap = {}
   if (records && displayAssignment) {
-    const relevantRecords = records.filter(r => 
-      String(r.assignmentId) === String(displayAssignment._id) || 
-      (r.assignmentId && String(r.assignmentId._id) === String(displayAssignment._id))
-    )
+    const relevantRecords = records.filter(r => {
+      const matchAssignmentId = r.assignmentId && (String(r.assignmentId) === String(displayAssignment._id) || String(r.assignmentId._id) === String(displayAssignment._id))
+      const matchEnterpriseAppId = r.enterpriseApplicationId && (String(r.enterpriseApplicationId) === String(displayAssignment._id) || String(r.enterpriseApplicationId._id) === String(displayAssignment._id))
+      const matchWorkerId = displayAssignment.isEnterprise && (String(r.workerId?._id || r.workerId) === String(user?._id))
+      return matchAssignmentId || matchEnterpriseAppId || matchWorkerId
+    })
     relevantRecords.forEach(r => {
       const d = new Date(r.shiftDate)
       d.setHours(0, 0, 0, 0)
@@ -501,7 +541,10 @@ export function AppAttendancePage() {
   // History Records
   const historyRecords = !displayAssignment ? [] : records
     .filter(r => {
-      if (String(r.assignmentId) !== String(displayAssignment._id) && (!r.assignmentId || String(r.assignmentId._id) !== String(displayAssignment._id))) {
+      const matchAssignmentId = r.assignmentId && (String(r.assignmentId) === String(displayAssignment._id) || String(r.assignmentId._id) === String(displayAssignment._id))
+      const matchEnterpriseAppId = r.enterpriseApplicationId && (String(r.enterpriseApplicationId) === String(displayAssignment._id) || String(r.enterpriseApplicationId._id) === String(displayAssignment._id))
+      const matchWorkerId = displayAssignment.isEnterprise && (String(r.workerId?._id || r.workerId) === String(user?._id))
+      if (!matchAssignmentId && !matchEnterpriseAppId && !matchWorkerId) {
         return false
       }
       const d = new Date(r.shiftDate)
@@ -588,34 +631,34 @@ export function AppAttendancePage() {
             border: '1px solid #F1F5F9', boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
           }}>
             <div style={{ background: '#0F172A', padding: '16px', color: '#FFFFFF', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#1E293B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Building2 style={{ width: 20, height: 20, color: '#38BDF8' }} />
+              <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg, #1E293B 0%, #334155 100%)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', shrink: 0 }}>
+                <Building2 style={{ width: 22, height: 22, color: '#38BDF8' }} />
               </div>
-              <div>
-                <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>{corporateName}</h2>
-                <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>{req?.projectName || req?.title || 'Corporate Project'}</p>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <h2 style={{ fontSize: 17, fontWeight: 800, margin: 0, color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{projectName}</h2>
+                <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{corporateName}</p>
               </div>
             </div>
-            <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <div>
-                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}><Briefcase style={{ width: 12, height: 12 }} /> Role</p>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 }}><Briefcase style={{ width: 12, height: 12 }} /> Role</p>
                 <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>{roleName}</p>
               </div>
               <div>
-                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}><MapPin style={{ width: 12, height: 12 }} /> Location</p>
-                <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{locationStr}</p>
-              </div>
-              <div>
-                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}><CalendarDays style={{ width: 12, height: 12 }} /> Assigned</p>
-                <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>{formatDate(assignedDate)}</p>
-              </div>
-              <div>
-                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}><Clock style={{ width: 12, height: 12 }} /> Shift</p>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 }}><Clock style={{ width: 12, height: 12 }} /> Daily Shift</p>
                 <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>{shiftStr}</p>
               </div>
+              <div>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 }}><CalendarDays style={{ width: 12, height: 12 }} /> Start Date</p>
+                <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>{startDateFormatted}</p>
+              </div>
+              <div>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 }}><CalendarDays style={{ width: 12, height: 12 }} /> End Date</p>
+                <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>{endDateFormatted}</p>
+              </div>
               <div style={{ gridColumn: '1 / -1' }}>
-                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}><CalendarDays style={{ width: 12, height: 12 }} /> Project Duration</p>
-                <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0 }}>{durationStr}</p>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 }}><MapPin style={{ width: 12, height: 12 }} /> Deployed Site Location</p>
+                <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0, leading: '1.4' }}>{locationStr}</p>
               </div>
             </div>
             <div style={{ padding: '12px 16px', background: '#F8FAFC', borderTop: '1px solid #F1F5F9' }}>
@@ -852,13 +895,16 @@ export function AppAttendancePage() {
                 let isEndDay = false
                 let isInRange = false
                 
-                if (req?.startDate) {
-                  const sDate = new Date(req.startDate)
+                const sRawDate = req?.startDate || (displayAssignment?.isEnterprise ? (displayAssignment.joiningDetails?.joiningDate || displayAssignment.createdAt) : null)
+                const eRawDate = req?.endDate || (displayAssignment?.joiningDetails?.endDate || displayAssignment?.offerDetails?.endDate || displayAssignment?.jobId?.timeline?.projectEndDate || null)
+
+                if (sRawDate) {
+                  const sDate = new Date(sRawDate)
                   sDate.setHours(0, 0, 0, 0)
                   if (iterDate.getTime() === sDate.getTime()) isStartDay = true
-                  
-                  if (req?.endDate) {
-                    const eDate = new Date(req.endDate)
+
+                  if (eRawDate) {
+                    const eDate = new Date(eRawDate)
                     eDate.setHours(0, 0, 0, 0)
                     if (iterDate.getTime() === eDate.getTime()) isEndDay = true
                     if (iterDate > sDate && iterDate < eDate) isInRange = true

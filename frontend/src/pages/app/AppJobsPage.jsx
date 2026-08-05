@@ -124,6 +124,11 @@ export function AppJobsPage() {
       refetch()
     })
 
+    socket.on('assignment_assigned', (data) => {
+      console.log('[LabourJobs] New assignment assigned:', data)
+      refetch()
+    })
+
     socket.on('booking_cancelled', (data) => {
       console.log('[LabourJobs] Booking cancelled:', data)
       setToast(`Booking Cancelled: ${data?.message || 'Timeout'}`)
@@ -139,6 +144,7 @@ export function AppJobsPage() {
       socket.off('platformFeeConfigurationUpdated')
       socket.off('payment_status_update')
       socket.off('request_status_update')
+      socket.off('assignment_assigned')
       socket.off('booking_cancelled')
       socket.disconnect()
     }

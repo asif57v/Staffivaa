@@ -4,6 +4,7 @@ import {
   getTransactions,
   createWithdrawal,
   getWithdrawals,
+  getWithdrawalDetailsById,
   getReports,
   reviewWithdrawal
 } from '../controllers/adminWalletController.js'
@@ -18,6 +19,7 @@ router.get('/summary', getWalletSummary)
 router.get('/transactions', getTransactions)
 router.post('/withdraw', createWithdrawal)
 router.get('/withdrawals', getWithdrawals)
+router.get('/withdrawals/:id', getWithdrawalDetailsById)
 router.patch('/withdrawals/:id/review', reviewWithdrawal)
 router.get('/reports', getReports)
 

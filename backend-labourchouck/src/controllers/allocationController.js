@@ -209,6 +209,17 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
     assignment.status = ASSIGNMENT_STATUS.ACCEPTED
     assignment.acceptedAt = new Date()
 
+    const existingRequest = await WorkforceRequest.findById(assignment.requestId)
+    const isUserPaid = existingRequest?.userPaymentStatus === 'paid' || existingRequest?.paymentStatus === 'paid'
+    const isLabourPaid = existingRequest?.labourPaymentStatus === 'paid' || existingRequest?.labourPlatformFee === 0
+
+    let nextStatus = REQUEST_STATUS.PLATFORM_FEE_PENDING
+    let nextLifecycle = isUserPaid ? 'partial' : 'none'
+    if (isUserPaid && isLabourPaid) {
+      nextStatus = REQUEST_STATUS.CONFIRMED
+      nextLifecycle = 'completed'
+    }
+
     let request = await WorkforceRequest.findOneAndUpdate(
       {
         _id: assignment.requestId,
@@ -220,14 +231,14 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       },
       {
         $set: {
-          status: REQUEST_STATUS.PLATFORM_FEE_PENDING,
+          status: nextStatus,
           labourId: req.user._id,
           labourName: req.user.fullName,
           labourPhone: req.user.phone,
           acceptedAt: new Date(),
           acceptedBy: req.user._id,
           platformFeePendingAt: new Date(),
-          platformFeePaymentLifecycle: 'none'
+          platformFeePaymentLifecycle: nextLifecycle
         }
       },
       { new: true }
@@ -369,14 +380,101 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       request.acceptedAt = null
       request.acceptedBy = null
       request.platformFeePendingAt = null
-      request.platformFeePaymentLifecycle = 'none'
+      request.labourPaymentStatus = 'pending'
+      request.labourRazorpayOrderId = null
+      
+      // Extend expiration timer by 10 minutes so listLabourAssignments does not filter it out
+      request.expiresAt = new Date(Date.now() + 10 * 60 * 1000)
+      
+      const isUserPaid = request.userPaymentStatus === 'paid' || request.paymentStatus === 'paid'
+      if (isUserPaid) {
+        request.platformFeePaymentLifecycle = 'partial'
+      } else {
+        request.platformFeePaymentLifecycle = 'none'
+      }
       await request.save()
+
+      // --- RE-BROADCAST REAL-TIME SEARCH TO ALL NEARBY WORKERS ---
+      const categoryId = request.lines?.[0]?.categoryId
+      if (categoryId) {
+        // Fetch candidate workers (excluding cancelling worker)
+        let candidates = await User.find({
+          role: USER_ROLES.LABOUR,
+          _id: { $ne: req.user._id },
+          $or: [
+            { 'labourProfile.categoryIds': categoryId },
+            { 'labourProfile.categoryIds': categoryId.toString() },
+            { 'labourProfile.categoryIds': { $size: 0 } },
+            { 'labourProfile.categoryIds': { $exists: false } }
+          ]
+        }).limit(50)
+
+        // Fallback: If no candidate matched the skill query, grab all labour workers except cancelling one
+        if (!candidates || candidates.length === 0) {
+          candidates = await User.find({
+            role: USER_ROLES.LABOUR,
+            _id: { $ne: req.user._id }
+          }).limit(50)
+        }
+
+        let matchingWorkers = candidates
+        if (request.locationLat && request.locationLng) {
+          const filteredByDistance = candidates.filter(w => {
+            if (!w.labourProfile || !w.labourProfile.locationLat || !w.labourProfile.locationLng) {
+              return false
+            }
+            const radius = w.labourProfile.workRadius || 15
+            const R = 6371
+            const dLat = (w.labourProfile.locationLat - request.locationLat) * (Math.PI / 180)
+            const dLon = (w.labourProfile.locationLng - request.locationLng) * (Math.PI / 180)
+            const a =
+              Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(request.locationLat * (Math.PI / 180)) * Math.cos(w.labourProfile.locationLat * (Math.PI / 180)) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2)
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+            return (R * c) <= radius
+          })
+          if (filteredByDistance.length > 0) {
+            matchingWorkers = filteredByDistance
+          }
+        }
+
+        if (matchingWorkers.length > 0) {
+          await Assignment.deleteMany({ requestId: request._id, status: { $ne: ASSIGNMENT_STATUS.CANCELLED } })
+
+          let allocation = await Allocation.findOne({ requestId: request._id })
+          if (!allocation) {
+            allocation = await Allocation.create({ requestId: request._id, notes: 'Re-allocated on worker cancellation' })
+          }
+
+          const LabourCategory = mongoose.model('LabourCategory')
+          const category = await LabourCategory.findById(categoryId)
+          const baseRate = category?.baseRate || 800
+
+          const assignmentsToCreate = matchingWorkers.map((w) => ({
+            allocationId: allocation._id,
+            requestId: request._id,
+            labourId: w._id,
+            categoryId,
+            status: ASSIGNMENT_STATUS.OFFERED,
+            perDayRate: baseRate,
+          }))
+
+          const createdAssignments = await Assignment.insertMany(assignmentsToCreate)
+
+          createdAssignments.forEach((newAss) => {
+            emitToUser('labour', newAss.labourId.toString(), 'assignment_assigned', { assignmentId: newAss._id.toString() })
+            sendNotificationToUser(newAss.labourId.toString(), 'New Job Available!', 'A new job matching your skills is available. Tap to view.', { url: '/app/jobs' })
+          })
+        }
+      }
 
       try {
         const io = getIO()
         io.to(`request_${request._id.toString()}`).emit('bookingCancelledByLabour', { message: 'The assigned worker had to cancel. We are finding a new worker for you immediately.' })
         emitToUser('individual', request.clientId?.toString(), 'request_updated', { requestId: request._id.toString() })
         emitRequestStatusUpdate(request._id.toString(), {
+          requestStatus: REQUEST_STATUS.SEARCHING,
           event: 'status_changed',
           assignmentStatus: assignment.status,
           updatedAt: new Date()

@@ -4,6 +4,7 @@ import { ATTENDANCE_STATUS, REQUEST_STATUS } from '../constants/workforceConstan
 import { User } from '../models/User.js'
 import { Assignment } from '../models/Assignment.js'
 import { AttendanceRecord } from '../models/AttendanceRecord.js'
+import { EnterpriseApplication } from '../models/EnterpriseApplication.js'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { AttendanceOTP } from '../models/AttendanceOTP.js'
 import { OtpAuditLog } from '../models/OtpAuditLog.js'
@@ -38,8 +39,54 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 
 export const checkIn = asyncHandler(async (req, res) => {
   const { assignmentId, lat, lng } = req.body
-  const assignment = await Assignment.findOne({ _id: assignmentId, labourId: req.user._id })
-  if (!assignment) return sendError(res, { message: 'Assignment not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  let assignment = await Assignment.findOne({ _id: assignmentId, labourId: req.user._id })
+  let enterpriseApp = null
+
+  if (!assignment) {
+    enterpriseApp = await EnterpriseApplication.findOne({ _id: assignmentId, workerId: req.user._id, status: 'joined' })
+  }
+
+  if (!assignment && !enterpriseApp) {
+    return sendError(res, { message: 'Assignment not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  if (enterpriseApp) {
+    const shiftDate = new Date()
+    shiftDate.setHours(0, 0, 0, 0)
+
+    let record = await AttendanceRecord.findOne({
+      workerId: req.user._id,
+      shiftDate,
+    })
+
+    if (!record) {
+      record = await AttendanceRecord.create({
+        enterpriseApplicationId: enterpriseApp._id,
+        enterpriseJobId: enterpriseApp.jobId,
+        enterpriseId: enterpriseApp.enterpriseId,
+        workerId: req.user._id,
+        shiftDate,
+        checkInAt: new Date(),
+        attendanceStatus: ATTENDANCE_STATUS.PRESENT,
+        projectStatus: 'working',
+        status: 'checked_in',
+        workingHoursStartedAt: new Date(),
+        verifiedBy: 'labour',
+      })
+    } else {
+      record.checkInAt = new Date()
+      record.attendanceStatus = ATTENDANCE_STATUS.PRESENT
+      record.projectStatus = 'working'
+      record.status = 'checked_in'
+      record.workingHoursStartedAt = new Date()
+      await record.save()
+    }
+
+    return sendSuccess(res, {
+      message: 'Checked in successfully',
+      data: { record }
+    })
+  }
 
   const request = await WorkforceRequest.findById(assignment.requestId).lean()
   if (!request) return sendError(res, { message: 'Workforce request not found', statusCode: HTTP_STATUS.NOT_FOUND })
@@ -270,16 +317,30 @@ export const startWork = asyncHandler(async (req, res) => {
 
 export const checkOut = asyncHandler(async (req, res) => {
   const { assignmentId } = req.body
-  const assignment = await Assignment.findOne({ _id: assignmentId, labourId: req.user._id })
-  if (!assignment) return sendError(res, { message: 'Assignment not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  let assignment = await Assignment.findOne({ _id: assignmentId, labourId: req.user._id })
+  let enterpriseApp = null
 
-  const record = await AttendanceRecord.findOne({ assignmentId }).sort({ shiftDate: -1 })
-  if (!record) return sendError(res, { message: 'No check-in found', statusCode: HTTP_STATUS.BAD_REQUEST })
-
-  const request = await WorkforceRequest.findById(assignment.requestId)
-  if (request && request.status === 'platform_fee_pending' && request.labourPaymentStatus !== 'paid') {
-    return sendError(res, { message: 'Platform fee must be paid before checking out', statusCode: HTTP_STATUS.BAD_REQUEST })
+  if (!assignment) {
+    enterpriseApp = await EnterpriseApplication.findOne({ _id: assignmentId, workerId: req.user._id, status: 'joined' })
   }
+
+  if (!assignment && !enterpriseApp) {
+    return sendError(res, { message: 'Assignment not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  const shiftDate = new Date()
+  shiftDate.setHours(0, 0, 0, 0)
+
+  let record = await AttendanceRecord.findOne({
+    workerId: req.user._id,
+    shiftDate,
+  }).sort({ createdAt: -1 })
+
+  if (!record && assignment) {
+    record = await AttendanceRecord.findOne({ assignmentId }).sort({ shiftDate: -1 })
+  }
+
+  if (!record) return sendError(res, { message: 'No check-in found', statusCode: HTTP_STATUS.BAD_REQUEST })
 
   record.checkOutAt = new Date()
   const checkInTime = record.checkInAt ? record.checkInAt.getTime() : record.shiftDate.getTime()
@@ -288,13 +349,21 @@ export const checkOut = asyncHandler(async (req, res) => {
   record.projectStatus = 'completed'
   record.status = 'completed'
   record.workingHoursEndedAt = new Date()
-  
+
   const workingStartedTime = record.workingHoursStartedAt ? record.workingHoursStartedAt.getTime() : checkInTime
   const diffMinutes = Math.max(0, Math.floor((record.workingHoursEndedAt.getTime() - workingStartedTime) / 60000))
   record.totalWorkingMinutes = diffMinutes
-
   record.billableUnits = billableUnitsForStatus(record.attendanceStatus)
   await record.save()
+
+  if (enterpriseApp) {
+    return sendSuccess(res, { message: 'Checked out successfully', data: { record } })
+  }
+
+  const request = await WorkforceRequest.findById(assignment.requestId)
+  if (request && request.status === 'platform_fee_pending' && request.labourPaymentStatus !== 'paid') {
+    return sendError(res, { message: 'Platform fee must be paid before checking out', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
 
   // Mark the assignment as completed ONLY if it's an individual (1-day) project
   if (request && request.sourceType === 'individual') {

@@ -39,6 +39,9 @@ export function WalletPage() {
   const [isProcessing, setIsProcessing] = useState(false)
 
   const balance = walletData?.data?.balance || 0
+  const pendingBalance = walletData?.data?.pendingBalance || 0
+  const totalWithdrawn = walletData?.data?.totalWithdrawn || 0
+  const lifetimeEarnings = walletData?.data?.lifetimeEarnings || 0
   const transactions = walletData?.data?.transactions || []
 
   const handleWithdraw = async (details) => {
@@ -153,15 +156,18 @@ export function WalletPage() {
             <ArrowLeft className="h-5 w-5 text-gray-800" />
           </button>
           <div>
-            <h1 className="text-lg font-bold text-gray-900 tracking-tight">My Wallet</h1>
-            <p className="text-gray-500 text-xs mt-0.5">Manage your balance and transactions</p>
+            <h1 className="text-lg font-bold text-gray-900 tracking-tight">My Staffivaa Wallet</h1>
+            <p className="text-gray-500 text-xs mt-0.5">Manage your balance, salary credits, and withdrawals</p>
           </div>
         </div>
       </div>
 
       <div className="px-4 pt-2.5 pb-8 max-w-lg mx-auto space-y-6">
         <WalletBalanceCard 
-          balance={balance} 
+          balance={balance}
+          pendingBalance={pendingBalance}
+          totalWithdrawn={totalWithdrawn}
+          lifetimeEarnings={lifetimeEarnings} 
           onAddMoney={() => setIsAddMoneyOpen(true)}
           onWithdraw={() => setIsWithdrawOpen(true)}
         />

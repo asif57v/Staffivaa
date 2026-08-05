@@ -6,6 +6,27 @@ import { store } from './store/index.js'
 import './index.css'
 import App from './App.jsx'
 
+// Global DOM Safety Guard for Browser Auto-Translation & Framer-Motion Unmounting
+if (typeof window !== 'undefined') {
+  const originalRemoveChild = Node.prototype.removeChild
+  Node.prototype.removeChild = function (child) {
+    if (child.parentNode !== this) {
+      if (console && console.warn) console.warn('Safely handled removeChild on detached node:', child)
+      return child
+    }
+    return originalRemoveChild.apply(this, arguments)
+  }
+
+  const originalInsertBefore = Node.prototype.insertBefore
+  Node.prototype.insertBefore = function (newNode, referenceNode) {
+    if (referenceNode && referenceNode.parentNode !== this) {
+      if (console && console.warn) console.warn('Safely handled insertBefore on detached reference node:', referenceNode)
+      return newNode
+    }
+    return originalInsertBefore.apply(this, arguments)
+  }
+}
+
 class GlobalErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
