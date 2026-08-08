@@ -254,6 +254,21 @@ export function PanelShell({
         return;
       }
       
+      if (payload?.notification) {
+        if (
+          payload?.data?.type === 'NEW_ORDER' ||
+          payload?.data?.sound === 'new_job_order' ||
+          payload?.notification?.title?.toLowerCase().includes('new job')
+        ) {
+          try {
+            const audio = new Audio('/new_job_order.mp3');
+            audio.play().catch((err) => console.log('[Audio] Play blocked/deferred:', err));
+          } catch (err) {
+            console.error('[Audio] Exception playing sound:', err);
+          }
+        }
+      }
+
       // Also show a toast so the user definitely sees it inside the app
       if (typeof window !== 'undefined' && payload?.notification) {
         dispatchAlert(payload.notification.title || 'New Notification', payload.notification.body || '', false);
@@ -294,7 +309,7 @@ export function PanelShell({
         navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
       }
     };
-  }, [user?._id, token, navigate]);
+  }, [user, token, navigate]);
 
   const title = getTitle(pathname)
   const drawerInitials = adminInitials(user)

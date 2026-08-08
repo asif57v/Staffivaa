@@ -44,7 +44,15 @@ export const requestForToken = async () => {
     // We do not delete the old token anymore, so the browser can cache it efficiently
     // This stops the extra API calls to Firebase and makes it instant.
 
-    const currentToken = await getToken(messaging, { vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY });
+    let serviceWorkerRegistration = undefined;
+    if ('serviceWorker' in navigator) {
+      serviceWorkerRegistration = await navigator.serviceWorker.ready.catch(() => undefined);
+    }
+
+    const currentToken = await getToken(messaging, { 
+      vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+      serviceWorkerRegistration
+    });
     if (currentToken) {
       console.log('FCM Token:', currentToken);
       return currentToken;
