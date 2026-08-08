@@ -40,6 +40,9 @@ export const initSocket = () => {
       } else if (role === 'corporate') {
         socket.join(`corporate-${_id}`);
         socket.join(`corporate_${_id}`);
+      } else if (role === 'enterprise') {
+        socket.join(`enterprise-${_id}`);
+        socket.join(`enterprise_${_id}`);
       }
 
       console.log(`[Socket.io] Socket ${socket.id} joined rooms for user ${_id} (${role})`);

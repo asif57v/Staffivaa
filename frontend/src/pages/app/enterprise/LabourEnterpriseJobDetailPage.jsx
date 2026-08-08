@@ -5,7 +5,6 @@ import {
   ArrowLeft, Building2, ShieldCheck, MapPin, Wallet, Users,
   Clock, Briefcase, Calendar, GraduationCap, Star, ChevronRight,
   Home, Truck, UtensilsCrossed, HeartPulse, CheckCircle2, AlertCircle,
-  Share2, Bookmark,
 } from 'lucide-react'
 import { useGetPublicEnterpriseJobByIdQuery, useGetMyEnterpriseApplicationsQuery } from '../../../store/api/enterpriseApi.js'
 import { useAuth } from '../../../hooks/useAuth.js'
@@ -177,75 +176,71 @@ export function LabourEnterpriseJobDetailPage() {
 
   return (
     <>
-      <div className="min-h-screen bg-[#F8F9FB] pb-36 overflow-x-hidden">
+      <div className="-mx-4 -mt-4 min-h-screen bg-[#F8F9FB] pb-36 overflow-x-hidden">
 
         {/* ── Hero banner ───────────────────────────────────────────────────── */}
         <div className="relative h-48 bg-gradient-to-br from-indigo-700 via-indigo-600 to-purple-700 overflow-hidden">
           <div className="absolute -top-10 -right-10 h-48 w-48 rounded-full bg-white/5" />
           <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black/30 to-transparent" />
 
-          {/* Back + share */}
-          <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 pt-4">
-            <button
-              onClick={() => navigate(-1)}
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm text-white"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-            <div className="flex gap-2">
-              <button className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm text-white">
-                <Share2 className="h-4 w-4" />
+          {/* Back + category */}
+          <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 pt-4 z-10">
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={() => navigate(-1)}
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm text-white active:scale-95 transition-transform"
+              >
+                <ArrowLeft className="h-5 w-5" />
               </button>
+              <span className="bg-white/20 backdrop-blur-sm text-white text-[11px] font-bold px-3 py-1 rounded-full border border-white/30 shadow-2xs">
+                {category}
+              </span>
             </div>
-          </div>
-
-          {/* Category badge */}
-          <div className="absolute bottom-4 left-4">
-            <span className="bg-white/20 backdrop-blur-sm text-white text-[11px] font-bold px-3 py-1 rounded-full border border-white/30">
-              {category}
-            </span>
           </div>
         </div>
 
-        <div className="px-4 -mt-6 space-y-4 pb-28">
+        <div className="px-3 -mt-8 space-y-3.5 pb-28 relative z-10">
 
           {/* ── Already Applied Banner ──────────────────────────────────────── */}
           {alreadyApplied && (
-            <div className="bg-emerald-50 border border-emerald-200/90 rounded-2xl p-4 flex items-center justify-between shadow-xs">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            <div className="bg-emerald-50/95 border border-emerald-200/90 rounded-2xl p-3 flex items-center justify-between gap-2 shadow-xs">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="h-8 w-8 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600" />
                 </div>
-                <div>
-                  <p className="text-[13px] font-extrabold text-emerald-900">Already Applied</p>
-                  <p className="text-[11px] font-medium text-emerald-700">Application submitted for this role</p>
+                <div className="min-w-0">
+                  <p className="text-[12.5px] font-extrabold text-emerald-950 leading-tight">Already Applied</p>
+                  <p className="text-[10.5px] font-medium text-emerald-700 truncate">Submitted for this role</p>
                 </div>
               </div>
-              <span className={`text-[11px] font-extrabold px-3 py-1 rounded-full border ${statusCfg.color}`}>
-                Status: {statusCfg.label}
+              <span className={`text-[10.5px] font-extrabold px-2.5 py-1 rounded-full border shrink-0 whitespace-nowrap shadow-2xs ${statusCfg.color}`}>
+                {statusCfg.label}
               </span>
             </div>
           )}
 
           {/* ── Company + Title card ─────────────────────────────────────────── */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-            {/* Company row */}
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-14 w-14 rounded-2xl border-2 border-white shadow-md bg-slate-50 flex items-center justify-center overflow-hidden shrink-0">
+            {/* Company row (Highlighted) */}
+            <div className="flex items-center gap-3 mb-4 p-3.5 bg-gradient-to-r from-indigo-50/90 via-purple-50/40 to-slate-50/50 rounded-2xl border border-indigo-100 shadow-xs">
+              <div className="h-14 w-14 rounded-2xl border-2 border-white shadow-md bg-white flex items-center justify-center overflow-hidden shrink-0">
                 {logo
                   ? <img src={logo} alt={name} className="h-full w-full object-cover" />
-                  : <Building2 className="h-7 w-7 text-indigo-400" />}
+                  : <Building2 className="h-7 w-7 text-indigo-600" />}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[14px] font-bold text-slate-800 truncate">{name}</span>
-                  <span className="flex items-center gap-0.5 text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-100">
-                    <ShieldCheck className="h-3 w-3" /> VERIFIED
+                  <span className="text-[16px] font-black text-slate-900 tracking-tight leading-tight">{name}</span>
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-extrabold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-full border border-amber-200 shadow-2xs">
+                    <ShieldCheck className="h-3 w-3 text-amber-600" /> VERIFIED
                   </span>
                 </div>
+                <p className="text-[11px] font-extrabold text-indigo-600/90 mt-0.5 flex items-center gap-1">
+                  <Building2 className="h-3 w-3 text-indigo-500 shrink-0" /> Enterprise Employer
+                </p>
                 {job.enterpriseId?.enterpriseProfile?.city && (
-                  <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
-                    <MapPin className="h-3 w-3" />
+                  <p className="text-[11px] font-medium text-slate-500 mt-0.5 flex items-center gap-1">
+                    <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
                     {[job.enterpriseId.enterpriseProfile.city, job.enterpriseId.enterpriseProfile.state].filter(Boolean).join(', ')}
                   </p>
                 )}
@@ -381,19 +376,19 @@ export function LabourEnterpriseJobDetailPage() {
       </div>
 
       {/* ── Sticky Apply Button ──────────────────────────────────────────────── */}
-      <div className="fixed bottom-[60px] left-1/2 -translate-x-1/2 w-full max-w-[430px] z-40 bg-white border-t border-slate-100 px-4 py-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}>
+      <div className="fixed bottom-[86px] left-1/2 -translate-x-1/2 w-full max-w-[430px] z-40 bg-white/95 backdrop-blur-md border-t border-slate-100 px-3 py-2 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] rounded-t-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 4px)' }}>
         {alreadyApplied ? (
           <button
             disabled
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-[15px] font-extrabold shadow-sm cursor-not-allowed opacity-95"
+            className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[13px] font-extrabold shadow-2xs cursor-not-allowed leading-tight"
           >
-            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            <span>Already Applied ({statusCfg.label})</span>
+            <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
+            <span className="truncate">Already Applied ({statusCfg.label})</span>
           </button>
         ) : (
           <button
             onClick={() => setShowApply(true)}
-            className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white text-[15px] font-extrabold shadow-lg shadow-indigo-300 transition-all cursor-pointer"
+            className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white text-[14px] font-extrabold shadow-md shadow-indigo-200 transition-all cursor-pointer leading-tight"
           >
             Apply Now
           </button>

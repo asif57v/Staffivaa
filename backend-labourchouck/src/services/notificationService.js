@@ -27,23 +27,29 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
       return { success: false, sentCount: 0, failedTokens: [] };
     }
 
+    const soundName = data.sound || 'new_job_order';
     const message = {
       notification: {
         title,
         body
       },
       data: {
+        type: 'NEW_ORDER',
+        sound: soundName,
         ...data,
         targetUserId: userId.toString(),
         click_action: 'FLUTTER_NOTIFICATION_CLICK'
       },
       android: {
         priority: 'high',
-        notification: { sound: 'default' }
+        notification: {
+          sound: soundName,
+          channelId: 'new_job_channel'
+        }
       },
       apns: {
         headers: { 'apns-priority': '10' },
-        payload: { aps: { sound: 'default' } }
+        payload: { aps: { sound: `${soundName}.mp3` } }
       },
       webpush: {
         headers: { Urgency: 'high' }

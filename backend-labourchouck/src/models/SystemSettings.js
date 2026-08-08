@@ -68,11 +68,11 @@ const systemSettingsSchema = new mongoose.Schema(
     },
     advancePaymentPercentage: {
       type: Number,
-      default: 50,
+      default: 0,
     },
     remainingPaymentPercentage: {
       type: Number,
-      default: 50,
+      default: 100,
     },
     platformFeeType: {
       type: String,

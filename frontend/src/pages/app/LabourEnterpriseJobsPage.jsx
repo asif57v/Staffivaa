@@ -118,20 +118,20 @@ function JobCard({ job, index = 0, application = null }) {
 
       {/* Company row */}
       <div className="flex items-start gap-3 mb-3">
-        <div className="shrink-0 h-12 w-12 rounded-xl border border-slate-100 bg-slate-50 flex items-center justify-center overflow-hidden shadow-sm">
+        <div className="shrink-0 h-12 w-12 rounded-xl border border-indigo-100 bg-indigo-50/50 flex items-center justify-center overflow-hidden shadow-xs">
           {logo
             ? <img src={logo} alt={name} className="h-full w-full object-cover" />
-            : <Building2 className="h-6 w-6 text-indigo-400" />
+            : <Building2 className="h-6 w-6 text-indigo-600" />
           }
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[12px] font-semibold text-slate-600 truncate max-w-[160px]">{name}</span>
-            <span className="flex items-center gap-0.5 text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-100">
-              <ShieldCheck className="h-3 w-3" /> VERIFIED
+            <span className="text-[14px] font-extrabold text-slate-900 truncate max-w-[170px] leading-tight">{name}</span>
+            <span className="flex items-center gap-0.5 text-[10px] font-extrabold text-amber-800 bg-amber-100/90 px-1.5 py-0.5 rounded-md border border-amber-200">
+              <ShieldCheck className="h-3 w-3 text-amber-600" /> VERIFIED
             </span>
           </div>
-          <span className="text-[10px] font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full mt-1 inline-block">
+          <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full mt-1 inline-block border border-indigo-100">
             {category}
           </span>
         </div>

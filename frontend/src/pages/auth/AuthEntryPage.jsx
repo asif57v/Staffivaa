@@ -478,7 +478,7 @@ export function AuthEntryPage() {
                       boxShadow: mode === m ? '0 2px 12px rgba(255,209,0,0.35)' : 'none',
                     }}
                   >
-                    {m === 'login' ? 'Login' : 'Register'}
+                    {m === 'login' ? 'Start' : 'Register'}
                   </button>
                 ))}
               </div>
@@ -589,11 +589,11 @@ export function AuthEntryPage() {
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
-                                Explore more account types
+                                Registration for
                               </span>
                             </div>
                             <p style={{ fontSize: 11, fontWeight: 600, color: '#64748b', margin: '2px 0 0 0' }}>
-                              For Businesses, Contractors & Workers
+                              For Businesses, Enterprises, Contractors & Workers
                             </p>
                             <p style={{ fontSize: 10, fontWeight: 500, color: '#94a3b8', margin: '2px 0 0 0' }}>
                               Tap to choose another account type

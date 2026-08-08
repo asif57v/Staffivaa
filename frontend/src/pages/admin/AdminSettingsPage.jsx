@@ -17,8 +17,8 @@ export function AdminSettingsPage() {
   // Dynamic Enterprise Payment Configuration
   const [minimumEnterpriseSecurityBalance, setMinimumEnterpriseSecurityBalance] = useState(0)
   const [isEnterpriseSecurityBalanceEnabled, setIsEnterpriseSecurityBalanceEnabled] = useState(false)
-  const [advancePaymentPercentage, setAdvancePaymentPercentage] = useState(50)
-  const [remainingPaymentPercentage, setRemainingPaymentPercentage] = useState(50)
+  const [advancePaymentPercentage, setAdvancePaymentPercentage] = useState(0)
+  const [remainingPaymentPercentage, setRemainingPaymentPercentage] = useState(100)
   const [platformFeeType, setPlatformFeeType] = useState('percentage')
   const [platformFeeValue, setPlatformFeeValue] = useState(10)
   const [isGstEnabled, setIsGstEnabled] = useState(true)
@@ -74,8 +74,8 @@ export function AdminSettingsPage() {
       
       setMinimumEnterpriseSecurityBalance(data.settings.minimumEnterpriseSecurityBalance ?? 0)
       setIsEnterpriseSecurityBalanceEnabled(data.settings.isEnterpriseSecurityBalanceEnabled ?? false)
-      setAdvancePaymentPercentage(data.settings.advancePaymentPercentage ?? 50)
-      setRemainingPaymentPercentage(data.settings.remainingPaymentPercentage ?? 50)
+      setAdvancePaymentPercentage(data.settings.advancePaymentPercentage ?? 0)
+      setRemainingPaymentPercentage(data.settings.remainingPaymentPercentage ?? 100)
       setPlatformFeeType(data.settings.platformFeeType || 'percentage')
       setPlatformFeeValue(data.settings.platformFeeValue ?? 10)
       setIsGstEnabled(data.settings.isGstEnabled ?? true)

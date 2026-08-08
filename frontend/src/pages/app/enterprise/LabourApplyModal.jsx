@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { X, Briefcase, CheckCircle2, AlertCircle, Loader2, MapPin, Wallet, ArrowRight, ClipboardList } from 'lucide-react'
+import { X, Briefcase, CheckCircle2, AlertCircle, Loader2, MapPin, Wallet, ArrowRight, ClipboardList, Building2 } from 'lucide-react'
 import { useApplyToEnterpriseJobMutation } from '../../../store/api/enterpriseApi.js'
 import toast from 'react-hot-toast'
 
@@ -81,8 +81,9 @@ export function LabourApplyModal({ job, onClose }) {
                 <p className="text-[14px] font-extrabold text-slate-900 leading-tight line-clamp-2 break-words">
                   {job.jobTitle}
                 </p>
-                <p className="text-[12px] font-semibold text-slate-500 mt-0.5 truncate">
-                  {companyName(job)}
+                <p className="text-[13px] font-extrabold text-indigo-700 mt-1 flex items-center gap-1">
+                  <Building2 className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                  <span>{companyName(job)}</span>
                 </p>
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">

@@ -941,133 +941,167 @@ export const respondToOffer = asyncHandler(async (req, res) => {
   let invoice = null
 
   if (action === 'accept') {
-    application.status = 'waiting_for_joining_payment'
     application.workerAcceptedOfferAt = new Date()
 
     // Fetch Admin System Settings for Dynamic Calculation Engine
     let settings = await SystemSettings.findOne({ singletonId: 'SYSTEM_SETTINGS' })
-    const advancePct = settings?.advancePaymentPercentage ?? 50
-    const remainingPct = 100 - advancePct
-    const platformFeeType = settings?.platformFeeType || 'percentage'
-    const platformFeeValue = settings?.platformFeeValue ?? 10
-    const isGstEnabled = settings?.isGstEnabled ?? true
-    const gstRate = settings?.gstPercentage ?? 18
-    const dueDays = settings?.advanceInvoiceDueDays ?? 7
-    const graceDays = settings?.enterpriseInvoiceGracePeriodDays ?? 3
+    const advancePct = Number(settings?.advancePaymentPercentage ?? 0)
 
-    const totalProjectValue = Number(application.offerDetails?.salary || application.jobId?.salary || 10000)
+    if (advancePct > 0) {
+      application.status = 'waiting_for_joining_payment'
+      const remainingPct = 100 - advancePct
+      const platformFeeType = settings?.platformFeeType || 'percentage'
+      const platformFeeValue = settings?.platformFeeValue ?? 10
+      const isGstEnabled = settings?.isGstEnabled ?? true
+      const gstRate = settings?.gstPercentage ?? 18
+      const dueDays = settings?.advanceInvoiceDueDays ?? 7
+      const graceDays = settings?.enterpriseInvoiceGracePeriodDays ?? 3
 
-    // 1. Calculate Platform Fee dynamically (Fixed vs Percentage)
-    let platformFee = 0
-    if (platformFeeType === 'fixed') {
-      platformFee = Number(platformFeeValue)
-    } else {
-      platformFee = Math.round(totalProjectValue * (platformFeeValue / 100))
-    }
+      const totalProjectValue = Number(application.offerDetails?.salary || application.jobId?.salary || 10000)
 
-    const grossSubtotal = totalProjectValue + platformFee
+      // 1. Calculate Platform Fee dynamically (Fixed vs Percentage)
+      let platformFee = 0
+      if (platformFeeType === 'fixed') {
+        platformFee = Number(platformFeeValue)
+      } else {
+        platformFee = Math.round(totalProjectValue * (platformFeeValue / 100))
+      }
 
-    // 2. Calculate Advance & Remaining amounts dynamically
-    const advanceAmount = Math.round(grossSubtotal * (advancePct / 100))
-    const remainingAmount = grossSubtotal - advanceAmount
+      const grossSubtotal = totalProjectValue + platformFee
 
-    // 3. Calculate GST dynamically (Enabled/Disabled & Configured Rate)
-    let gstAmount = 0
-    if (isGstEnabled) {
-      gstAmount = Math.round(advanceAmount * (gstRate / 100))
-    }
+      // 2. Calculate Advance & Remaining amounts dynamically
+      const advanceAmount = Math.round(grossSubtotal * (advancePct / 100))
+      const remainingAmount = grossSubtotal - advanceAmount
 
-    const totalAmount = advanceAmount + gstAmount
+      // 3. Calculate GST dynamically (Enabled/Disabled & Configured Rate)
+      let gstAmount = 0
+      if (isGstEnabled) {
+        gstAmount = Math.round(advanceAmount * (gstRate / 100))
+      }
 
-    const invoiceDate = new Date()
-    const dueDaysConfig = dueDays || 7
-    const dueDate = new Date(invoiceDate.getTime() + dueDaysConfig * 24 * 60 * 60 * 1000)
-    const gracePeriodEndDate = new Date(dueDate.getTime() + graceDays * 24 * 60 * 60 * 1000)
-    const invNumber = `INV-ADV-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`
+      const totalAmount = advanceAmount + gstAmount
 
-    // Generate Dynamic Advance Confirmation Invoice
-    invoice = await EnterpriseJoiningInvoice.create({
-      invoiceNumber: invNumber,
-      invoiceType: 'advance_50',
-      enterpriseId: application.enterpriseId,
-      jobId: application.jobId._id,
-      applicationId: application._id,
-      workerId: req.user._id,
-      totalProjectValue,
-      advancePercentage: advancePct,
-      remainingPercentage: remainingPct,
-      advanceAmount,
-      remainingAmount,
-      platformFeeType,
-      platformFeeValue,
-      platformFee,
-      grossSubtotal,
-      isGstApplied: isGstEnabled,
-      gstRate: isGstEnabled ? gstRate : 0,
-      gstAmount,
-      totalAmount,
-      securityDeposit: advanceAmount,
-      invoiceDate,
-      configuredDueDays: dueDays,
-      configuredGracePeriodDays: graceDays,
-      dueDate,
-      gracePeriodEndDate,
-      status: 'payment_pending',
-    })
+      const invoiceDate = new Date()
+      const dueDaysConfig = dueDays || 7
+      const dueDate = new Date(invoiceDate.getTime() + dueDaysConfig * 24 * 60 * 60 * 1000)
+      const gracePeriodEndDate = new Date(dueDate.getTime() + graceDays * 24 * 60 * 60 * 1000)
+      const invNumber = `INV-ADV-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`
 
-    application.joiningInvoiceId = invoice._id
-
-    // Financial Audit Log
-    await EnterpriseFinancialAuditLog.create({
-      enterpriseId: application.enterpriseId,
-      action: 'invoice_generated',
-      amount: totalAmount,
-      performedBy: req.user._id,
-      relatedInvoiceId: invoice._id,
-      relatedApplicationId: application._id,
-      details: {
+      // Generate Dynamic Advance Confirmation Invoice
+      invoice = await EnterpriseJoiningInvoice.create({
         invoiceNumber: invNumber,
+        invoiceType: 'advance_50',
+        enterpriseId: application.enterpriseId,
+        jobId: application.jobId._id,
+        applicationId: application._id,
         workerId: req.user._id,
-        dueDate: invoice.dueDate,
-      },
-    })
+        totalProjectValue,
+        advancePercentage: advancePct,
+        remainingPercentage: remainingPct,
+        advanceAmount,
+        remainingAmount,
+        platformFeeType,
+        platformFeeValue,
+        platformFee,
+        grossSubtotal,
+        isGstApplied: isGstEnabled,
+        gstRate: isGstEnabled ? gstRate : 0,
+        gstAmount,
+        totalAmount,
+        securityDeposit: advanceAmount,
+        invoiceDate,
+        configuredDueDays: dueDays,
+        configuredGracePeriodDays: graceDays,
+        dueDate,
+        gracePeriodEndDate,
+        status: 'payment_pending',
+      })
 
-    // Real-time Push & System Notifications across Enterprise, Worker & Admin
-    const workerUser = await User.findById(req.user._id).select('fullName')
-    const workerName = workerUser?.fullName || 'Worker'
-    const jobTitle = application.jobId?.jobTitle || 'Role'
-    const enterpriseUser = await User.findById(application.enterpriseId).select('fullName enterpriseProfile')
-    const companyName = enterpriseUser?.enterpriseProfile?.companyName || enterpriseUser?.fullName || 'Enterprise'
+      application.joiningInvoiceId = invoice._id
 
-    // 1. Enterprise HR Notification (Event 1 & 2)
-    triggerNotification({
-      userId: application.enterpriseId,
-      title: 'Worker Accepted Offer! Joining Invoice Generated 📜',
-      body: `Your selected worker ${workerName} has accepted the offer for "${jobTitle}". Please complete the required advance payment (Invoice #${invNumber}) before the due date to confirm joining.`,
-      type: 'JOINING_INVOICE_GENERATED',
-      relatedId: invoice._id,
-      relatedModel: 'EnterpriseJoiningInvoice',
-    }).catch((err) => console.error('[Notification Error]:', err.message))
+      // Financial Audit Log
+      await EnterpriseFinancialAuditLog.create({
+        enterpriseId: application.enterpriseId,
+        action: 'invoice_generated',
+        amount: totalAmount,
+        performedBy: req.user._id,
+        relatedInvoiceId: invoice._id,
+        relatedApplicationId: application._id,
+        details: {
+          invoiceNumber: invNumber,
+          workerId: req.user._id,
+          dueDate: invoice.dueDate,
+        },
+      })
 
-    // 2. Worker Notification
-    triggerNotification({
-      userId: req.user._id,
-      title: 'Offer Accepted: Waiting For Employer Confirmation ⏳',
-      body: `Your offer for "${jobTitle}" has been accepted. Waiting for the employer to complete the joining payment.`,
-      type: 'WAITING_FOR_JOINING_PAYMENT',
-      relatedId: application._id,
-      relatedModel: 'EnterpriseApplication',
-    }).catch((err) => console.error('[Notification Error]:', err.message))
+      // Real-time Push & System Notifications across Enterprise, Worker & Admin
+      const workerUser = await User.findById(req.user._id).select('fullName')
+      const workerName = workerUser?.fullName || 'Worker'
+      const jobTitle = application.jobId?.jobTitle || 'Role'
+      const enterpriseUser = await User.findById(application.enterpriseId).select('fullName enterpriseProfile')
+      const companyName = enterpriseUser?.enterpriseProfile?.companyName || enterpriseUser?.fullName || 'Enterprise'
 
-    // 3. Admin System Notification
-    triggerNotification({
-      userId: null, // Broadcasts to all Admins
-      title: 'New Joining Invoice Generated 📄',
-      body: `New Joining Invoice #${invNumber} (₹${totalAmount.toLocaleString('en-IN')}) generated for candidate ${workerName} at ${companyName}. Status: Payment Pending.`,
-      type: 'ADMIN_INVOICE_GENERATED',
-      relatedId: invoice._id,
-      relatedModel: 'EnterpriseJoiningInvoice',
-    }).catch((err) => console.error('[Notification Error]:', err.message))
+      // 1. Enterprise HR Notification
+      triggerNotification({
+        userId: application.enterpriseId,
+        title: 'Worker Accepted Offer! Joining Invoice Generated 📜',
+        body: `Your selected worker ${workerName} has accepted the offer for "${jobTitle}". Please complete the required advance payment (${advancePct}% Advance: Invoice #${invNumber}) before the due date to confirm joining.`,
+        type: 'JOINING_INVOICE_GENERATED',
+        relatedId: invoice._id,
+        relatedModel: 'EnterpriseJoiningInvoice',
+      }).catch((err) => console.error('[Notification Error]:', err.message))
+
+      // 2. Worker Notification
+      triggerNotification({
+        userId: req.user._id,
+        title: 'Offer Accepted: Waiting For Employer Confirmation ⏳',
+        body: `Your offer for "${jobTitle}" has been accepted. Waiting for the employer to complete the joining payment.`,
+        type: 'WAITING_FOR_JOINING_PAYMENT',
+        relatedId: application._id,
+        relatedModel: 'EnterpriseApplication',
+      }).catch((err) => console.error('[Notification Error]:', err.message))
+
+      // 3. Admin System Notification
+      triggerNotification({
+        userId: null,
+        title: 'New Joining Invoice Generated 📄',
+        body: `New Joining Invoice #${invNumber} (₹${totalAmount.toLocaleString('en-IN')}) generated for candidate ${workerName} at ${companyName}. Status: Payment Pending.`,
+        type: 'ADMIN_INVOICE_GENERATED',
+        relatedId: invoice._id,
+        relatedModel: 'EnterpriseJoiningInvoice',
+      }).catch((err) => console.error('[Notification Error]:', err.message))
+    } else {
+      // FREE JOINING (advancePaymentPercentage === 0)
+      // Directly activate joining so candidate can join without payment upfront
+      application.status = 'joining_activated'
+      if (!application.joiningDetails) application.joiningDetails = {}
+      application.joiningDetails.markedJoinedAt = new Date()
+
+      const workerUser = await User.findById(req.user._id).select('fullName')
+      const workerName = workerUser?.fullName || 'Worker'
+      const jobTitle = application.jobId?.jobTitle || 'Role'
+      const joiningDateStr = application.offerDetails?.joiningDate
+        ? new Date(application.offerDetails.joiningDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+        : 'scheduled date'
+
+      triggerNotification({
+        userId: application.enterpriseId,
+        title: 'Worker Accepted Offer! Joining Confirmed 🎉',
+        body: `${workerName} has accepted the job offer for "${jobTitle}". Candidate joining is confirmed for ${joiningDateStr}.`,
+        type: 'ENTERPRISE_JOINING_CONFIRMED',
+        relatedId: application._id,
+        relatedModel: 'EnterpriseApplication',
+      }).catch((err) => console.error('[Notification Error]:', err.message))
+
+      triggerNotification({
+        userId: req.user._id,
+        title: 'Offer Accepted: Joining Confirmed! 🎉',
+        body: `Congratulations! You accepted the offer for "${jobTitle}". Your joining is confirmed for ${joiningDateStr}.`,
+        type: 'JOINING_CONFIRMED',
+        relatedId: application._id,
+        relatedModel: 'EnterpriseApplication',
+      }).catch((err) => console.error('[Notification Error]:', err.message))
+    }
   } else {
     application.status = 'rejected'
     application.workerRejectedOfferAt = new Date()
@@ -1077,14 +1111,16 @@ export const respondToOffer = asyncHandler(async (req, res) => {
   await application.save()
 
   emitToRole('enterprise', 'enterprise_application_updated', {
-    type: action === 'accept' ? 'offer_accepted' : 'offer_rejected',
+    type: action === 'accept' ? (invoice ? 'offer_accepted' : 'joining_confirmed') : 'offer_rejected',
     applicationId: application._id,
     enterpriseId: application.enterpriseId,
     invoiceId: invoice?._id,
   })
 
   return sendSuccess(res, {
-    message: action === 'accept' ? 'Offer accepted! Your employer has been issued a Joining Confirmation Invoice.' : 'Offer declined.',
+    message: action === 'accept'
+      ? (invoice ? 'Offer accepted! Your employer has been issued a Joining Confirmation Invoice.' : 'Offer accepted! Your joining is confirmed.')
+      : 'Offer declined.',
     data: { application, invoice },
   })
 })

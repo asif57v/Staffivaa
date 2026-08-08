@@ -3,6 +3,7 @@ import { body, param, query } from 'express-validator'
 import { protect, restrictTo } from '../middleware/auth.js'
 import { validateRequest } from '../middleware/validateRequest.js'
 import * as user from '../controllers/userController.js'
+import { getRequest } from '../controllers/requestController.js'
 import { USER_ROLES } from '../constants/roles.js'
 import { validateUserIdParam } from '../validators/authValidators.js'
 
@@ -11,6 +12,7 @@ const router = Router()
 router.use(protect)
 
 router.get('/me', user.getProfile)
+router.get('/bookings/:id', getRequest)
 router.post('/me/fcm-token', user.saveFcmToken)
 router.post('/me/fcm-token/remove', user.removeFcmToken)
 router.patch(

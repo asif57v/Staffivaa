@@ -463,8 +463,15 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
           const createdAssignments = await Assignment.insertMany(assignmentsToCreate)
 
           createdAssignments.forEach((newAss) => {
-            emitToUser('labour', newAss.labourId.toString(), 'assignment_assigned', { assignmentId: newAss._id.toString() })
-            sendNotificationToUser(newAss.labourId.toString(), 'New Job Available!', 'A new job matching your skills is available. Tap to view.', { url: '/app/jobs' })
+            emitToUser('labour', newAss.labourId.toString(), 'assignment_assigned', { assignmentId: newAss._id.toString(), type: 'NEW_ORDER' })
+            triggerNotification({
+              userId: newAss.labourId,
+              title: 'New Job Available!',
+              body: 'A new job matching your skills is available. Tap to view.',
+              type: 'NEW_ORDER',
+              relatedId: newAss._id,
+              relatedModel: 'Assignment'
+            }).catch(err => console.error('[Notification Error]:', err.message));
           })
         }
       }

@@ -71,18 +71,18 @@ export function EnterpriseJobDetailPage() {
   const filledPct = Math.min(Math.round(filledRatio * 100), 100)
 
   return (
-    <div className="p-6 pb-28 space-y-6 max-w-7xl mx-auto min-h-screen bg-slate-50/50">
+    <div className="px-3.5 py-4 sm:p-6 pb-28 space-y-5 max-w-7xl mx-auto min-h-screen bg-slate-50/50">
       {/* Back button + Title */}
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate('/enterprise/jobs')}
-          className="flex h-9 w-9 items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+          className="flex h-9 w-9 items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors shrink-0"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-[22px] font-extrabold text-slate-900 leading-tight">{job.jobTitle}</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-[20px] sm:text-[22px] font-extrabold text-slate-900 leading-tight">{job.jobTitle}</h1>
             <span
               className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
                 job.status === 'approved'
@@ -95,24 +95,24 @@ export function EnterpriseJobDetailPage() {
               {job.status.toUpperCase()}
             </span>
           </div>
-          <p className="text-[13px] font-medium text-slate-500 mt-0.5">
+          <p className="text-[12.5px] font-medium text-slate-500 mt-0.5">
             Category: <span className="font-bold text-slate-700">{job.categoryId?.name || job.department || 'General'}</span>
           </p>
         </div>
       </div>
 
       {/* Main Job Overview Card */}
-      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 space-y-6">
+      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-100 shadow-sm p-4 sm:p-6 space-y-4 sm:space-y-6">
         {/* Progress Bar & Vacancy Stats */}
-        <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 space-y-3">
+        <div className="bg-slate-50 border border-slate-100 rounded-xl sm:rounded-2xl p-4 sm:p-5 space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[12px] font-extrabold text-slate-400 uppercase tracking-wide">Vacancy Completion</p>
-              <p className="text-[20px] font-black text-slate-900 mt-0.5">
+              <p className="text-[11px] sm:text-[12px] font-extrabold text-slate-400 uppercase tracking-wide">Vacancy Completion</p>
+              <p className="text-[17px] sm:text-[20px] font-black text-slate-900 mt-0.5">
                 {job.acceptedCount || 0} of {job.numberOfWorkers} Vacancies Filled
               </p>
             </div>
-            <span className="text-[22px] font-black text-indigo-600">{filledPct}%</span>
+            <span className="text-[20px] sm:text-[22px] font-black text-indigo-600">{filledPct}%</span>
           </div>
           <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden">
             <div
@@ -120,31 +120,31 @@ export function EnterpriseJobDetailPage() {
               style={{ width: `${filledPct}%` }}
             />
           </div>
-          <div className="flex items-center justify-between text-[12px] font-bold text-slate-500">
+          <div className="flex items-center justify-between text-[11px] sm:text-[12px] font-bold text-slate-500">
             <span>{job.joinedCount || 0} Joined Active Workforce</span>
             <span>{(job.numberOfWorkers || 0) - (job.acceptedCount || 0)} Vacancies Remaining</span>
           </div>
         </div>
 
         {/* Specs Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Salary Payout</p>
-            <p className="text-[15px] font-black text-emerald-700 mt-0.5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
+          <div className="p-3 sm:p-4 bg-slate-50 border border-slate-100 rounded-xl sm:rounded-2xl">
+            <p className="text-[10.5px] sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Salary Payout</p>
+            <p className="text-[14px] sm:text-[15px] font-black text-emerald-700 mt-0.5">
               ₹{Number(job.salary).toLocaleString('en-IN')} / {job.salaryType || 'month'}
             </p>
           </div>
-          <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Work Location</p>
-            <p className="text-[13px] font-bold text-slate-800 leading-snug break-words mt-0.5">{job.locationText || 'Main Site'}</p>
+          <div className="p-3 sm:p-4 bg-slate-50 border border-slate-100 rounded-xl sm:rounded-2xl">
+            <p className="text-[10.5px] sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Work Location</p>
+            <p className="text-[12.5px] sm:text-[13px] font-bold text-slate-800 leading-snug break-words mt-0.5">{job.locationText || 'Main Site'}</p>
           </div>
-          <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Daily Shift</p>
-            <p className="text-[14px] font-bold text-slate-800 mt-0.5">{job.shift || '09:00 AM - 06:00 PM'}</p>
+          <div className="p-3 sm:p-4 bg-slate-50 border border-slate-100 rounded-xl sm:rounded-2xl">
+            <p className="text-[10.5px] sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Daily Shift</p>
+            <p className="text-[13px] sm:text-[14px] font-bold text-slate-800 mt-0.5">{job.shift || '09:00 AM - 06:00 PM'}</p>
           </div>
-          <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Working Hours</p>
-            <p className="text-[14px] font-bold text-slate-800 mt-0.5">{job.workingHours || 8} hrs/day</p>
+          <div className="p-3 sm:p-4 bg-slate-50 border border-slate-100 rounded-xl sm:rounded-2xl">
+            <p className="text-[10.5px] sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Working Hours</p>
+            <p className="text-[13px] sm:text-[14px] font-bold text-slate-800 mt-0.5">{job.workingHours || 8} hrs/day</p>
           </div>
         </div>
 

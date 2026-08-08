@@ -95,14 +95,35 @@ export function AppShell() {
 
     const socket = connectSocket(user, token);
 
+    const playNewJobRingSound = () => {
+      try {
+        const audio = new Audio('/new_job_order.mp3');
+        audio.volume = 1.0;
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((err) => {
+            console.warn('[Audio] Autoplay error in AppShell:', err);
+          });
+        }
+      } catch (err) {
+        console.error('[Audio] Sound error:', err);
+      }
+    };
+
     const invalidateCache = () => {
       console.log('[Socket] Invalidating Assignments, Requests, and Enterprise Jobs cache');
       dispatch(workforceApi.util.invalidateTags(['Assignments', 'Requests']));
       dispatch(enterpriseApi.util.invalidateTags(['EnterpriseJobs']));
     };
 
+    const handleAssignmentAssigned = (data) => {
+      console.log('[Socket] assignment_assigned event received:', data);
+      playNewJobRingSound();
+      invalidateCache();
+    };
+
     socket.on('assignment_created', invalidateCache);
-    socket.on('assignment_assigned', invalidateCache);
+    socket.on('assignment_assigned', handleAssignmentAssigned);
     socket.on('assignment_accepted', invalidateCache);
     socket.on('assignment_rejected', invalidateCache);
     socket.on('assignment_completed', invalidateCache);
@@ -119,6 +140,14 @@ export function AppShell() {
     };
 
     const handleNewNotif = (notification) => {
+      if (
+        notification?.type === 'NEW_ORDER' ||
+        notification?.type === 'LABOUR_ASSIGNED' ||
+        notification?.type === 'OFFER_SENT' ||
+        (notification?.title && notification.title.toLowerCase().includes('new job'))
+      ) {
+        playNewJobRingSound();
+      }
       dispatchAlert(notification.title || 'New Notification', notification.body || notification.message || '', false);
       refreshAppUser();
       dispatch(workforceApi.util.invalidateTags(['Notifications']));
@@ -139,7 +168,7 @@ export function AppShell() {
 
     return () => {
       socket.off('assignment_created', invalidateCache);
-      socket.off('assignment_assigned', invalidateCache);
+      socket.off('assignment_assigned', handleAssignmentAssigned);
       socket.off('assignment_accepted', invalidateCache);
       socket.off('assignment_rejected', invalidateCache);
       socket.off('assignment_completed', invalidateCache);
@@ -196,25 +225,41 @@ export function AppShell() {
         return;
       }
 
-      if (payload?.notification && Notification.permission === 'granted') {
-        // Also show a toast so the user definitely sees it inside the app
-        if (typeof window !== 'undefined' && payload?.notification) {
-          dispatchAlert(payload.notification.title || 'New Notification', payload.notification.body || '', false);
+      if (payload?.notification) {
+        // Play ring sound for new job / order notifications
+        if (
+          payload?.data?.type === 'NEW_ORDER' ||
+          payload?.data?.sound === 'new_job_order' ||
+          payload?.notification?.title?.toLowerCase().includes('new job')
+        ) {
+          try {
+            const audio = new Audio('/new_job_order.mp3');
+            audio.play().catch((err) => console.log('[Audio] Play blocked/deferred:', err));
+          } catch (err) {
+            console.error('[Audio] Exception playing sound:', err);
+          }
         }
+
+        if (Notification.permission === 'granted') {
+          // Also show a toast so the user definitely sees it inside the app
+          if (typeof window !== 'undefined') {
+            dispatchAlert(payload.notification.title || 'New Notification', payload.notification.body || '', false);
+          }
         
-        // Use service worker showNotification so it appears as native OS popup
-        // even when the app tab is currently focused (Chrome blocks new Notification() in foreground)
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.ready.then((registration) => {
-            registration.showNotification(payload.notification.title || 'Staffivaa', {
-              body: payload.notification.body || '',
-              icon: '/favicon.svg',
-              badge: '/favicon.svg',
-              requireInteraction: false,
-              tag: 'staffivaa-fcm-notification', // Collapse duplicates if multiple tabs are open
-              data: payload.data || {},
+          // Use service worker showNotification so it appears as native OS popup
+          // even when the app tab is currently focused (Chrome blocks new Notification() in foreground)
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then((registration) => {
+              registration.showNotification(payload.notification.title || 'Staffivaa', {
+                body: payload.notification.body || '',
+                icon: '/favicon.svg',
+                badge: '/favicon.svg',
+                requireInteraction: false,
+                tag: 'staffivaa-fcm-notification', // Collapse duplicates if multiple tabs are open
+                data: payload.data || {},
+              });
             });
-          });
+          }
         }
       }
     };
@@ -237,7 +282,7 @@ export function AppShell() {
         navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
       }
     };
-  }, [user?._id, token]);
+  }, [user, token]);
   // ---------------------------
 
   const { data: notifData } = workforceApi.useGetNotificationsQuery(undefined, { skip: !user })

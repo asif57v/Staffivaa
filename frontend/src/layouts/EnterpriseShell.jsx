@@ -67,10 +67,10 @@ export function EnterpriseShell() {
     }
 
     const handleNewNotif = (notif) => {
-      const title = notif?.title || notif?.notification?.title || 'New Notification'
+      const title = notif?.title || notif?.notification?.title || 'New Notification 💼'
       const body = notif?.body || notif?.notification?.body || notif?.message || ''
       if (title) {
-        toast(`${title}\n${body}`, {
+        toast.success(`${title}\n${body}`, {
           id: 'notif-toast-' + (notif?._id || Date.now()),
           icon: '🔔',
           duration: 6000,
@@ -90,6 +90,64 @@ export function EnterpriseShell() {
       socket.off('dashboard:updated', handleAppCreated)
     }
   }, [user, token, dispatch])
+
+  // FCM Push Token Auto-sync & Foreground Listener
+  useEffect(() => {
+    if (!user || !token) return
+
+    const syncFcmToken = async () => {
+      try {
+        if (typeof window === 'undefined' || !('Notification' in window)) return
+        let permission = window.Notification.permission
+        if (permission === 'default') {
+          permission = await window.Notification.requestPermission()
+        }
+        if (permission === 'granted') {
+          const { requestForToken } = await import('../lib/firebase.js')
+          const fcmToken = await requestForToken()
+          if (fcmToken) {
+            const { apiClient } = await import('../api/http.js')
+            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
+              .catch(err => console.error('Failed to sync FCM token:', err))
+          }
+        }
+      } catch (err) {
+        console.error('Firebase FCM sync error in EnterpriseShell:', err)
+      }
+    }
+
+    syncFcmToken()
+
+    const handleFcmMessage = (event) => {
+      const payload = event.detail
+      const targetUserId = payload?.data?.targetUserId
+      if (targetUserId && user?._id && targetUserId !== user._id) return
+
+      if (payload?.notification && Notification.permission === 'granted') {
+        const title = payload.notification.title || 'New Job Application Received! 💼'
+        const body = payload.notification.body || ''
+        toast.success(`${title}\n${body}`, { id: 'fcm-ent-toast-' + Date.now(), duration: 6000 })
+
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.showNotification(title, {
+              body,
+              icon: '/favicon.svg',
+              badge: '/favicon.svg',
+              requireInteraction: true,
+              tag: 'enterprise-app-notification',
+              data: payload.data || {},
+            })
+          })
+        }
+      }
+    }
+
+    window.addEventListener('fcm-foreground-message', handleFcmMessage)
+    return () => {
+      window.removeEventListener('fcm-foreground-message', handleFcmMessage)
+    }
+  }, [user?._id, token])
 
   const companyName = user?.enterpriseProfile?.companyName || user?.fullName || 'Luminary Corp'
   const companyInitials = companyName.substring(0, 2).toUpperCase()

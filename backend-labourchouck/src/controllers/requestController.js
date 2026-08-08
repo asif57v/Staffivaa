@@ -329,8 +329,15 @@ export const createRequest = asyncHandler(async (req, res) => {
 
       // Notify all matching workers instantly
       createdAssignments.forEach((assignment) => {
-        emitToUser('labour', assignment.labourId.toString(), 'assignment_assigned', { assignmentId: assignment._id.toString() })
-        sendNotificationToUser(assignment.labourId.toString(), 'New Job Available!', 'A new job matching your skills is available. Tap to view.', { url: '/app/jobs' })
+        emitToUser('labour', assignment.labourId.toString(), 'assignment_assigned', { assignmentId: assignment._id.toString(), type: 'NEW_ORDER' })
+        triggerNotification({
+          userId: assignment.labourId,
+          title: 'New Job Available!',
+          body: 'A new job matching your skills is available. Tap to view.',
+          type: 'NEW_ORDER',
+          relatedId: assignment._id,
+          relatedModel: 'Assignment'
+        }).catch(err => console.error('[Notification Error]:', err.message));
       })
       }
     }
