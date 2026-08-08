@@ -335,7 +335,7 @@ export function AdminSettingsPage() {
               Enterprise Advance Payment & Milestone Settings
             </h3>
             <p className="text-xs text-slate-500">
-              Configure 50% Advance Offer Confirmation rules, Milestone due dates, and hiring restriction triggers.
+              Configure Advance Payment rules (0% - 100%), Milestone due dates, and hiring restriction triggers.
             </p>
           </div>
 
@@ -399,7 +399,7 @@ export function AdminSettingsPage() {
                   }}
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
                 >
-                  {[10, 20, 30, 40, 50, 60, 75, 100].map((pct) => (
+                  {[0, 10, 20, 30, 40, 50, 60, 75, 100].map((pct) => (
                     <option key={pct} value={pct}>{pct}% Advance</option>
                   ))}
                 </select>

@@ -647,8 +647,8 @@ export function EnterpriseWalletPage() {
                       </div>
                     )}
                     <div className="flex justify-between text-indigo-700 font-extrabold">
-                      <span>{inv.invoiceType === 'remaining_50' ? `Remaining Amount (${inv.remainingPercentage || 50}%):` : `Advance Required (${inv.advancePercentage || 50}%):`}</span>
-                      <span>₹{(inv.invoiceType === 'remaining_50' ? inv.remainingAmount : inv.advanceAmount || inv.totalAmount).toLocaleString('en-IN')}</span>
+                      <span>{inv.invoiceType === 'remaining_50' ? `Remaining Amount (${inv.remainingPercentage ?? 50}%):` : `Advance Required (${inv.advancePercentage ?? 50}%):`}</span>
+                      <span>₹{(inv.invoiceType === 'remaining_50' ? inv.remainingAmount : inv.advanceAmount ?? inv.totalAmount).toLocaleString('en-IN')}</span>
                     </div>
                     {inv.isGstApplied && inv.gstAmount > 0 && (
                       <div className="flex justify-between text-slate-500 font-medium">

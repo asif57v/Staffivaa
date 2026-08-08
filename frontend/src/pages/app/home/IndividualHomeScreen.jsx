@@ -169,35 +169,35 @@ export function IndividualHomeScreen({ user }) {
       actionType: 'search'
     },
     {
-      image: '/3d_icon_ac.png',
+      image: '/service_ac.png',
       title: 'AC Technician',
       subtitle: 'Expert AC repair, servicing, and installation.',
       price: '₹149/hr',
       slug: 'ac-technician'
     },
     {
-      image: '/3d_icon_cook.png',
+      image: '/service_cook_realistic.png',
       title: 'Professional Cook',
       subtitle: 'Delicious home-cooked meals by verified chefs.',
       price: '₹199/hr',
       slug: 'cook'
     },
     {
-      image: '/3d_icon_tools.png',
+      image: '/service_electrician_realistic.png',
       title: 'Expert Electrician',
       subtitle: 'Safe and reliable electrical repairs and wiring.',
       price: '₹99/hr',
       slug: 'electrician'
     },
     {
-      image: '/3d_icon_tools.png',
+      image: '/service_plumber_realistic.png',
       title: 'Skilled Plumber',
       subtitle: 'Fix leaks, blockages, and pipe installations.',
       price: '₹99/hr',
       slug: 'plumber'
     },
     {
-      image: '/3d_icon_painter.png',
+      image: '/service_painter.png',
       title: 'House Painter',
       subtitle: 'Professional home painting and touch-ups.',
       price: '₹120/hr',
@@ -531,50 +531,45 @@ export function IndividualHomeScreen({ user }) {
               <div
                 key={i}
                 onClick={() => handleHeroSlideClick(slide)}
-                className="w-[85%] sm:w-[90%] shrink-0 snap-center relative overflow-hidden rounded-[20px] bg-slate-100 border border-slate-200 shadow-sm min-h-[120px] flex items-stretch cursor-pointer hover:border-[#FFD100]/60 active:scale-[0.99] transition-all"
+                className="w-[88%] sm:w-[90%] shrink-0 snap-center relative overflow-hidden rounded-[24px] bg-slate-100 border border-slate-200/90 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.06)] min-h-[145px] flex items-stretch cursor-pointer hover:border-[#FFD100]/80 hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12)] active:scale-[0.99] transition-all duration-200 group"
               >
+                {/* Full card background image spanning 100% width and 100% height */}
+                <img
+                  src={slide.image}
+                  alt={slide.title || 'Banner'}
+                  className="absolute inset-0 w-full h-full object-cover object-center scale-105 transition-transform duration-500 group-hover:scale-110"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    if (e.target.parentElement) {
+                      e.target.parentElement.classList.add('bg-slate-200');
+                    }
+                  }}
+                />
+
                 {slide.title ? (
                   <>
-                    <div className="flex-1 p-3 flex flex-col justify-center relative z-10">
-                      <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 break-words">
+                    {/* Left side white gradient overlay to ensure text contrast while showing full image on middle & right */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-white via-white/85 via-55% to-transparent z-10 pointer-events-none" />
+
+                    {/* Left text content */}
+                    <div className="relative z-20 w-[60%] sm:w-[55%] p-4 sm:p-5 flex flex-col justify-center min-w-0">
+                      <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900 leading-[1.25] break-words">
                         {slide.title}
                       </h2>
-                      <p className="mt-0.5 text-[10px] sm:text-[11px] font-medium leading-tight text-slate-500 line-clamp-2 pr-2 break-words">
-                        {slide.subtitle}
-                      </p>
-                      <div className="mt-2 inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 shadow-sm border border-slate-100 w-max max-w-full">
-                        <span className="text-[11px] sm:text-xs font-black text-[#F43F5E] truncate">{slide.price}</span>
-                        <span className="ml-1 text-[8px] sm:text-[9px] font-medium text-slate-400 shrink-0">Starting*</span>
-                      </div>
-                    </div>
-                    <div className="w-[45%] relative shrink-0 overflow-hidden">
-                      <img
-                        src={slide.image}
-                        alt={slide.title}
-                        className="absolute inset-0 w-full h-full object-cover object-[center_20%]"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          if (e.target.parentElement) {
-                            e.target.parentElement.classList.add('bg-slate-200');
-                          }
-                        }}
-                      />
-                      <div className="absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-slate-100 to-transparent z-10" />
+                      {slide.subtitle && (
+                        <p className="mt-1 text-[11px] sm:text-xs font-medium leading-snug text-slate-600 line-clamp-2 break-words">
+                          {slide.subtitle}
+                        </p>
+                      )}
+                      {slide.price && (
+                        <div className="mt-3 inline-flex items-center rounded-full bg-white px-3.5 py-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.08)] border border-slate-200/80 w-max max-w-full">
+                          <span className="text-xs sm:text-sm font-black text-[#F43F5E] truncate">{slide.price}</span>
+                          <span className="ml-1.5 text-[9px] sm:text-[10px] font-semibold text-slate-400 shrink-0 uppercase tracking-wide">Starting*</span>
+                        </div>
+                      )}
                     </div>
                   </>
-                ) : (
-                  <img
-                    src={slide.image}
-                    alt="Banner"
-                    className="absolute inset-0 w-full h-full object-cover"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                      if (e.target.parentElement) {
-                        e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center bg-slate-200 text-slate-400 text-xs font-semibold">Image Not Found</div>';
-                      }
-                    }}
-                  />
-                )}
+                ) : null}
               </div>
             ))}
           </div>
@@ -1076,8 +1071,8 @@ export function IndividualHomeScreen({ user }) {
           </div>
         </section>
 
-        {/* Bottom padding for tab bar */}
-        <div className="h-28" />
+        {/* Bottom padding spacer */}
+        <div className="h-2" />
 
       </section>
       <CategoryPickBottomSheet

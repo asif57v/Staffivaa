@@ -677,7 +677,7 @@ export function AppShell() {
         ) : null}
 
         <main
-          className={`relative z-10 flex-1 px-4 pb-36 ${
+          className={`relative z-10 flex-1 px-4 pb-20 ${
             hideShellHeader
               ? isLabourAppHome || isNotificationsPage
                 ? 'pt-0'

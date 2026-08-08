@@ -12,6 +12,9 @@ import {
   Sparkles,
   User,
   Briefcase,
+  ChevronDown,
+  ChevronRight,
+  Check,
 } from 'lucide-react'
 import { MobileShell } from '../../layouts/MobileShell.jsx'
 import { AppAmbientBackground } from '../../components/app/AppAmbientBackground.jsx'
@@ -31,26 +34,31 @@ const GST_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i
 const ROLE_OPTIONS = [
   {
     role: USER_ROLES.INDIVIDUAL,
+    title: 'Homeowner / Individual',
     icon: Home,
     desc: 'Hire verified labour for your home or renovation',
   },
   {
     role: USER_ROLES.CORPORATE,
+    title: 'Corporate Client',
     icon: Building2,
     desc: 'Bulk workforce for sites and projects',
   },
   {
     role: USER_ROLES.LABOUR,
+    title: 'Labour / Worker',
     icon: HardHat,
     desc: 'Get matched to jobs near you',
   },
   {
     role: USER_ROLES.CONTRACTOR,
+    title: 'Contractor / Vendor',
     icon: ClipboardList,
     desc: 'Supply and deploy crews for clients',
   },
   {
     role: USER_ROLES.ENTERPRISE,
+    title: 'Enterprise Client',
     icon: Briefcase,
     desc: 'B2B Enterprise Workforce Management',
   },
@@ -114,6 +122,7 @@ export function AuthEntryPage() {
   const [mode, setMode] = useState('login')
   const [step, setStep] = useState('form')
   const [role, setRole] = useState(USER_ROLES.INDIVIDUAL)
+  const [isAccordionOpen, setIsAccordionOpen] = useState(false)
   const [phone, setPhone] = useState('')
   const [fullName, setFullName] = useState('')
   const [companyName, setCompanyName] = useState('')
@@ -172,6 +181,7 @@ export function AuthEntryPage() {
 
   function switchMode(next) {
     setMode(next)
+    setIsAccordionOpen(false)
     resetFlowToForm()
   }
 
@@ -441,7 +451,7 @@ export function AuthEntryPage() {
               background: '#ffffff',
               borderRadius: '24px 24px 0 0',
               marginTop: -16,
-              padding: '28px 20px 220px',
+              padding: '28px 20px 40px',
               position: 'relative',
               zIndex: 2,
               boxShadow: '0 -4px 40px rgba(0,0,0,0.25)',
@@ -485,44 +495,208 @@ export function AuthEntryPage() {
                 >
                   {/* Role selector for register */}
                   {mode === 'register' ? (
-                    <div>
-                      <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>I am a</p>
-                      <div style={{ display: 'grid', gap: 8 }}>
-                        {ROLE_OPTIONS.map((opt) => {
-                          const Icon = opt.icon
-                          const active = role === opt.role
-                          return (
-                            <button
-                              key={opt.role}
-                              type="button"
-                              onClick={() => setRole(opt.role)}
-                              style={{
-                                display: 'flex', alignItems: 'center', gap: 12,
-                                padding: '12px 14px', borderRadius: 14, border: '2px solid',
-                                borderColor: active ? '#FFD100' : '#e2e8f0',
-                                background: active ? 'linear-gradient(135deg, rgba(255,209,0,0.08), rgba(255,209,0,0.04))' : '#fff',
-                                cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
-                                boxShadow: active ? '0 0 0 3px rgba(255,209,0,0.15)' : 'none',
-                              }}
-                            >
+                    <div style={{ marginBottom: 16 }}>
+                      <p style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>
+                        I AM A
+                      </p>
+
+                      {/* Default / Selected Main Card */}
+                      {(() => {
+                        const activeOpt = ROLE_OPTIONS.find((o) => o.role === role) || ROLE_OPTIONS[0]
+                        const ActiveIcon = activeOpt.icon
+                        return (
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 12,
+                              padding: '14px 16px',
+                              borderRadius: 18,
+                              border: '2px solid #FFD100',
+                              background: 'linear-gradient(135deg, rgba(255,209,0,0.1), rgba(255,209,0,0.03))',
+                              boxShadow: '0 4px 16px rgba(255,209,0,0.18)',
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
                               <span
                                 style={{
-                                  width: 38, height: 38, borderRadius: 10, flexShrink: 0,
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  background: active ? '#FFD100' : '#f1f5f9',
-                                  color: active ? '#1a0800' : '#64748b',
+                                  width: 42,
+                                  height: 42,
+                                  borderRadius: 14,
+                                  flexShrink: 0,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: '#FFD100',
+                                  color: '#1a0800',
+                                  boxShadow: '0 2px 8px rgba(255,209,0,0.3)',
                                 }}
                               >
-                                <Icon style={{ width: 18, height: 18 }} />
+                                <ActiveIcon style={{ width: 20, height: 20 }} />
                               </span>
-                              <span>
-                                <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{ROLE_LABELS[opt.role]}</span>
-                                <span style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginTop: 1, lineHeight: 1.4 }}>{opt.desc}</span>
+                              <div style={{ minWidth: 0, flex: 1 }}>
+                                <span style={{ display: 'block', fontSize: 15, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+                                  {activeOpt.title}
+                                </span>
+                                <span style={{ display: 'block', fontSize: 11, color: '#64748b', marginTop: 3, lineHeight: 1.35 }}>
+                                  {activeOpt.desc}
+                                </span>
+                              </div>
+                            </div>
+                            <span
+                              style={{
+                                width: 22,
+                                height: 22,
+                                borderRadius: '50%',
+                                background: '#FFD100',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                                boxShadow: '0 2px 6px rgba(255,209,0,0.35)',
+                              }}
+                            >
+                              <Check style={{ width: 13, height: 13, color: '#1a0800', strokeWidth: 3 }} />
+                            </span>
+                          </div>
+                        )
+                      })()}
+
+                      {/* Expandable Accordion Trigger Card */}
+                      <div style={{ marginTop: 10 }}>
+                        <button
+                          type="button"
+                          onClick={() => setIsAccordionOpen((prev) => !prev)}
+                          style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 12,
+                            padding: '14px 16px',
+                            borderRadius: 18,
+                            border: '1px solid #f1f5f9',
+                            background: '#ffffff',
+                            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.03)',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            transition: 'all 0.2s ease',
+                            outline: 'none',
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
+                                Explore more account types
                               </span>
-                            </button>
-                          )
-                        })}
+                            </div>
+                            <p style={{ fontSize: 11, fontWeight: 600, color: '#64748b', margin: '2px 0 0 0' }}>
+                              For Businesses, Contractors & Workers
+                            </p>
+                            <p style={{ fontSize: 10, fontWeight: 500, color: '#94a3b8', margin: '2px 0 0 0' }}>
+                              Tap to choose another account type
+                            </p>
+                          </div>
+                          <motion.div
+                            animate={{ rotate: isAccordionOpen ? 180 : 0 }}
+                            transition={{ duration: 0.25, ease: 'easeInOut' }}
+                            style={{
+                              width: 30,
+                              height: 30,
+                              borderRadius: '50%',
+                              background: '#f8fafc',
+                              border: '1px solid #e2e8f0',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              color: '#475569',
+                            }}
+                          >
+                            <ChevronDown style={{ width: 16, height: 16 }} />
+                          </motion.div>
+                        </button>
+
+                        {/* Accordion Content with Framer Motion */}
+                        <AnimatePresence initial={false}>
+                          {isAccordionOpen && (
+                            <motion.div
+                              key="account-types-accordion"
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: reduce ? 0 : 0.28, ease: [0.25, 0.1, 0.25, 1.0] }}
+                              style={{ overflow: 'hidden' }}
+                            >
+                              <div style={{ display: 'grid', gap: 8, paddingTop: 10 }}>
+                                {ROLE_OPTIONS.filter((opt) => opt.role !== role).map((opt) => {
+                                  const Icon = opt.icon
+                                  return (
+                                    <motion.button
+                                      key={opt.role}
+                                      type="button"
+                                      initial={{ y: -6, opacity: 0 }}
+                                      animate={{ y: 0, opacity: 1 }}
+                                      exit={{ y: -6, opacity: 0 }}
+                                      transition={{ duration: 0.2 }}
+                                      whileHover={{ scale: 1.01, backgroundColor: '#f8fafc' }}
+                                      whileTap={{ scale: 0.98 }}
+                                      onClick={() => {
+                                        setRole(opt.role)
+                                        setIsAccordionOpen(false)
+                                      }}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: 12,
+                                        padding: '11px 14px',
+                                        borderRadius: 14,
+                                        border: '1px solid #e2e8f0',
+                                        background: '#ffffff',
+                                        cursor: 'pointer',
+                                        textAlign: 'left',
+                                        transition: 'border-color 0.15s, box-shadow 0.15s',
+                                        outline: 'none',
+                                      }}
+                                    >
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                                        <span
+                                          style={{
+                                            width: 34,
+                                            height: 34,
+                                            borderRadius: 10,
+                                            flexShrink: 0,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            background: '#f1f5f9',
+                                            color: '#475569',
+                                          }}
+                                        >
+                                          <Icon style={{ width: 16, height: 16 }} />
+                                        </span>
+                                        <div style={{ minWidth: 0, flex: 1 }}>
+                                          <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
+                                            {opt.title}
+                                          </span>
+                                          <span style={{ display: 'block', fontSize: 10.5, color: '#64748b', marginTop: 1 }}>
+                                            {opt.desc}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <ChevronRight style={{ width: 15, height: 15, color: '#94a3b8', flexShrink: 0 }} />
+                                    </motion.button>
+                                  )
+                                })}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
+
                       {role === USER_ROLES.LABOUR ? (
                         <p style={{ marginTop: 10, fontSize: 11, color: '#64748b', background: 'rgba(255,209,0,0.06)', padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,209,0,0.2)' }}>
                           After OTP, you&apos;ll pick your work areas on this screen.

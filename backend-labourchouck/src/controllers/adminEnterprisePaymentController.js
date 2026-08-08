@@ -377,7 +377,7 @@ export const verifyApproveJoining = asyncHandler(async (req, res) => {
         workerId: invoice.workerId._id || invoice.workerId,
         totalProjectValue: invoice.totalProjectValue,
         advancePercentage: invoice.advancePercentage,
-        remainingPercentage: invoice.remainingPercentage || (100 - (invoice.advancePercentage || 50)),
+        remainingPercentage: invoice.remainingPercentage ?? (100 - (invoice.advancePercentage ?? 50)),
         advanceAmount: invoice.advanceAmount,
         remainingAmount: baseRemaining,
         platformFeeType: invoice.platformFeeType,
