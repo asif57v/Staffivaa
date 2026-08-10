@@ -74,7 +74,8 @@ export async function validateOtpChallenge({ phone, purpose, code, challengeId }
   }
 
   const match = await bcrypt.compare(String(code).trim(), doc.codeHash)
-  const isDefaultOtp = String(code).trim() === '123456'
+  const allowDefaultOtp = process.env.ALLOW_DEFAULT_OTP === 'true'
+  const isDefaultOtp = allowDefaultOtp && String(code).trim() === '123456'
   
   if (!match && !isDefaultOtp) {
     doc.attempts += 1
