@@ -401,6 +401,11 @@ export function AppShell() {
   const isLabourEnterpriseJobs = user?.role === USER_ROLES.LABOUR && normalizedPath === '/app/enterprise-jobs'
   const isLabourEnterpriseJobDetail = user?.role === USER_ROLES.LABOUR && normalizedPath.startsWith('/app/enterprise-jobs/')
   const isLabourMyApplications = user?.role === USER_ROLES.LABOUR && normalizedPath === '/app/my-applications'
+  const hideBottomNav =
+    normalizedPath.startsWith('/app/booking/flow') ||
+    normalizedPath.startsWith('/app/navigation') ||
+    isLabourEnterpriseJobDetail ||
+    normalizedPath.includes('/interview')
   const hideShellHeader =
     normalizedPath.startsWith('/app/booking/flow') ||
     normalizedPath === '/app/bookings' ||
@@ -799,7 +804,9 @@ export function AppShell() {
         ) : null}
 
         <main
-          className={`relative z-10 flex-1 px-4 pb-20 ${
+          className={`relative z-10 flex-1 px-4 ${
+            hideBottomNav ? 'pb-8' : 'pb-20'
+          } ${
             hideShellHeader
               ? isLabourAppHome || isNotificationsPage
                 ? 'pt-0'
@@ -815,7 +822,7 @@ export function AppShell() {
         </main>
       </div>
 
-      <AppBottomNav items={finalBottomNav} />
+      {!hideBottomNav ? <AppBottomNav items={finalBottomNav} /> : null}
 
       {isIndividualAppHome ? (
         <AppUserLocationModal

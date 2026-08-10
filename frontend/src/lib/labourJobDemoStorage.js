@@ -94,7 +94,7 @@ export { nowIso }
 /** Map API assignment + request to job card shape */
 export function assignmentToJobCard(assignment) {
   const req = assignment.requestId
-  const loc = typeof req === 'object' ? req?.locationText : ''
+  const loc = typeof req === 'object' ? (req?.locationText || req?.address || req?.siteId?.address) : ''
   const catName = assignment.categoryId?.name || req?.lines?.[0]?.categoryId?.name
   const company = typeof req === 'object' ? req?.clientId?.companyName : null
   const fullName = typeof req === 'object' ? req?.clientId?.fullName : null
@@ -106,6 +106,8 @@ export function assignmentToJobCard(assignment) {
     title: loc || 'Site assignment',
     site: loc || 'See job details',
     location: loc || '',
+    userName: fullName || company || 'Customer',
+    userPhone: phone || '',
     shiftWindow: typeof req === 'object' && (req?.shift || req?.timeSlot) ? (req?.shift || req?.timeSlot) : '',
     rateLabel: 'Per shift',
     trade: catName || 'Labour',

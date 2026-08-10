@@ -211,16 +211,24 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
           Complete your platform fee payment to unlock this booking.
         </p>
         
-        <div className="w-full rounded-xl bg-slate-50 p-4 mb-6 border border-slate-100 text-left">
-          <div className="flex justify-between items-center mb-2">
+        <div className="w-full rounded-xl bg-slate-50 p-4 mb-6 border border-slate-100 text-left space-y-2.5">
+          <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
+            <span className="text-xs font-bold text-slate-500">Customer Name</span>
+            <span className="text-sm font-black text-slate-900">{job.userName || job.supervisor || job.contractor || 'Customer'}</span>
+          </div>
+          <div className="flex justify-between items-start pb-2 border-b border-slate-200/60">
+            <span className="text-xs font-bold text-slate-500 shrink-0">Work Location</span>
+            <span className="text-xs font-extrabold text-slate-800 text-right ml-2 leading-snug">{job.location || job.site || job.title || 'Location provided'}</span>
+          </div>
+          <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-slate-500">Distance to Site</span>
-            <span className="text-sm font-black text-slate-900">{job.distanceKm != null ? `${job.distanceKm} km` : 'Calculating...'}</span>
+            <span className="text-sm font-black text-slate-900">{distance != null ? formatDistance(distance) : (job.distanceKm != null ? `${job.distanceKm} km` : 'Calculating...')}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-slate-500">Platform Fee</span>
             <span className="text-sm font-black text-slate-900 flex items-center"><IndianRupee className="h-3 w-3 mr-0.5"/> {job.labourPlatformFee || 0}</span>
           </div>
-          <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-200">
+          <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-200">
             <span className="text-xs font-bold text-slate-500">Time Remaining</span>
             <span className={`text-sm font-black ${timeLeft < 60 ? 'text-red-500' : 'text-slate-900'}`}>{formatTime(timeLeft)}</span>
           </div>
@@ -244,13 +252,25 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
         </div>
         <h3 className="mb-2 text-lg font-black text-slate-900">Booking Accepted</h3>
         
-        <div className="w-full rounded-xl bg-slate-50 p-4 mb-6 border border-slate-100 text-left">
-          <div className="flex justify-between items-center mb-3">
+        <div className="w-full rounded-xl bg-slate-50 p-4 mb-6 border border-slate-100 text-left space-y-2.5">
+          <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
+            <span className="text-xs font-bold text-slate-500">Customer Name</span>
+            <span className="text-sm font-black text-slate-900">{job.userName || job.supervisor || job.contractor || 'Customer'}</span>
+          </div>
+          <div className="flex justify-between items-start pb-2 border-b border-slate-200/60">
+            <span className="text-xs font-bold text-slate-500 shrink-0">Work Location</span>
+            <span className="text-xs font-extrabold text-slate-800 text-right ml-2 leading-snug">{job.location || job.site || job.title || 'Location provided'}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-xs font-bold text-slate-500">Distance to Site</span>
+            <span className="text-sm font-black text-slate-900">{distance != null ? formatDistance(distance) : (job.distanceKm != null ? `${job.distanceKm} km` : 'Calculating...')}</span>
+          </div>
+          <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-slate-500">Your Platform Fee</span>
             <span className="text-sm font-black text-emerald-600 flex items-center">Paid ✅</span>
           </div>
-          <div className="border-t border-slate-200 pt-3 flex flex-col gap-1">
-            <span className="text-sm font-bold text-slate-700">
+          <div className="border-t border-slate-200 pt-2 flex flex-col gap-1">
+            <span className="text-xs font-bold text-slate-700">
               {timeLeft <= 0 ? 'Cancelling Booking...' : 'Waiting for Customer Payment...'}
             </span>
             <div className="flex justify-between items-center mt-1">

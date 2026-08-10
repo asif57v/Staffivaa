@@ -249,11 +249,11 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     }
   }, [currentStatus, onBack])
 
-  // Only fallback to demo/draft workers if the booking has actually been accepted
-  const isAcceptedOrBeyond = ['accepted', 'in_progress', 'on_site', 'completed'].includes(currentStatus)
+  // Only fallback to demo/draft workers if the booking has actually been accepted or pending payment
+  const isAcceptedOrBeyond = ['accepted', 'in_progress', 'on_site', 'completed', 'platform_fee_pending'].includes(currentStatus)
   const fallbackWorker = isAcceptedOrBeyond ? (booking?.assignedWorker || worker || (draft?.selectedWorkers || [])[0]) : null
 
-  const assignedLabour = activeAssignment?.labourId || null
+  const assignedLabour = activeAssignment?.labourId || fallbackWorker || null
 
   // Normalize fields so they always display correctly
   // activeAssignment?.labourId is populated from the backend, so it's an object containing _id, fullName, phone, etc.
@@ -347,11 +347,35 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
               <CheckCircle2 className="h-8 w-8" />
             </div>
             <h2 className="text-xl font-black text-slate-900 mb-2">Worker Accepted!</h2>
-            <p className="text-sm font-semibold text-slate-500 mb-6">
+            <p className="text-sm font-semibold text-slate-500 mb-4">
               {request.userPaymentStatus === 'paid' 
                 ? "Platform fee paid successfully. Waiting for the worker to confirm their payment to dispatch."
                 : "Please pay the Staffivaa platform fee to confirm the booking and dispatch your worker."}
             </p>
+
+            {assignedLabour ? (
+              <div className="flex items-center gap-3 bg-slate-50 border border-slate-200/90 p-3.5 rounded-2xl mb-5 text-left shadow-xs">
+                {workerPic ? (
+                  <img src={workerPic} alt={workerName} className="h-12 w-12 rounded-full object-cover border-2 border-amber-400 shrink-0" />
+                ) : (
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-900 font-extrabold text-base border-2 border-amber-300">
+                    {workerName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="font-extrabold text-slate-900 text-sm truncate">{workerName}</h3>
+                    <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                  </div>
+                  <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1 mt-0.5">
+                    <span>Verified Worker</span>
+                    {shortWorkerId && shortWorkerId !== 'N/A' && (
+                      <span className="text-[10px] bg-slate-200/80 px-1.5 py-0.5 rounded text-slate-700 font-bold">{shortWorkerId}</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            ) : null}
             
             <div className="text-left space-y-3 mb-6 bg-slate-50 rounded-2xl p-4 border border-slate-100">
               <div className="flex justify-between items-center pb-3 border-b border-slate-200">
