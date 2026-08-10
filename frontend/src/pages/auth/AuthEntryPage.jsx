@@ -953,13 +953,6 @@ export function AuthEntryPage() {
               </div>
             )}
 
-            {/* Admin link */}
-            <p style={{ marginTop: 18, textAlign: 'center', fontSize: 13, color: '#94a3b8' }}>
-              Admin?{' '}
-              <Link to="/admin/login" style={{ fontWeight: 700, color: '#FFD100', textDecoration: 'none' }}>
-                Web login
-              </Link>
-            </p>
           </div>
         </>
       )}
