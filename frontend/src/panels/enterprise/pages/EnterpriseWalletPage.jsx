@@ -414,7 +414,12 @@ export function EnterpriseWalletPage() {
   const [payJoiningInvoice, { isLoading: isPayingInvoice }] = usePayJoiningInvoiceMutation()
   const [verifyInvoicePayment] = useVerifyInvoicePaymentMutation()
   const invoices = invoicesData?.data || []
-  const pendingInvoices = invoices.filter((i) => i.status === 'payment_pending')
+  const pendingInvoices = invoices.filter((i) => {
+    if (i.status !== 'payment_pending') return false
+    const appStatus = i.applicationId?.status
+    if (appStatus && ['joining_activated', 'joined', 'completed', 'cancelled', 'rejected'].includes(appStatus)) return false
+    return true
+  })
 
   return (
     <div className="p-6 pb-32 space-y-6 max-w-7xl mx-auto min-h-screen bg-slate-50/50">
@@ -442,33 +447,6 @@ export function EnterpriseWalletPage() {
         </div>
       </div>
 
-      {/* Low Balance Warning Banner */}
-      {summary.isLowBalance && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between gap-4"
-        >
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
-              <AlertTriangle className="h-5 w-5 text-amber-600" />
-            </div>
-            <div>
-              <h4 className="text-[14px] font-extrabold text-amber-900">Low Wallet Balance Warning</h4>
-              <p className="text-[12px] font-medium text-amber-700">
-                Your available balance is below ₹{(summary.lowBalanceThreshold || 5000).toLocaleString('en-IN')}. Please recharge to ensure uninterrupted candidate joining & payroll payments.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowAddMoney(true)}
-            className="shrink-0 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-[12px] font-extrabold rounded-xl shadow-sm"
-          >
-            Recharge Now
-          </button>
-        </motion.div>
-      )}
-
       {/* Main Wallet Hero Balance Card */}
       <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-2xl border border-indigo-900/40">
         <div className="absolute top-0 right-0 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl" />
@@ -482,17 +460,11 @@ export function EnterpriseWalletPage() {
               ₹{(summary.balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </p>
             <p className="text-[12px] font-medium text-slate-400">
-              Primary payment source for joining fees, payroll & invoice settlements
+              Primary ledger for payroll & project invoice settlements
             </p>
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            <button
-              onClick={() => setShowAddMoney(true)}
-              className="flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-indigo-500 hover:bg-indigo-600 active:scale-[0.98] text-white text-[14px] font-extrabold shadow-lg shadow-indigo-500/30 transition-all cursor-pointer"
-            >
-              <Plus className="h-5 w-5" /> + Add Money
-            </button>
             <button
               onClick={() => setShowStatement(true)}
               className="flex items-center gap-2 px-5 py-3.5 rounded-2xl bg-white/10 hover:bg-white/15 text-white text-[14px] font-extrabold backdrop-blur-md transition-all border border-white/10 cursor-pointer"
@@ -507,7 +479,6 @@ export function EnterpriseWalletPage() {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
           { label: 'Current Balance', val: `₹${(summary.balance || 0).toLocaleString('en-IN')}`, color: 'text-indigo-600 bg-indigo-50 border-indigo-100' },
-          { label: 'Total Added', val: `₹${(summary.totalRecharged || 0).toLocaleString('en-IN')}`, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
           { label: 'Total Spent', val: `₹${(summary.totalSpent || 0).toLocaleString('en-IN')}`, color: 'text-rose-600 bg-rose-50 border-rose-100' },
           { label: 'Pending Payments', val: `₹${(summary.pendingPaymentsAmount || 0).toLocaleString('en-IN')}`, color: 'text-amber-600 bg-amber-50 border-amber-100' },
           { label: 'Total Refunded', val: `₹${(summary.totalRefunded || 0).toLocaleString('en-IN')}`, color: 'text-teal-600 bg-teal-50 border-teal-100' },

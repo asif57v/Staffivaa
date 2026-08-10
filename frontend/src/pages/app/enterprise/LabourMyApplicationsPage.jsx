@@ -17,8 +17,10 @@ const STATUS_CONFIG = {
   interview_scheduled: { label: 'Interview Scheduled', color: 'bg-amber-50 text-amber-700 border-amber-100', dot: 'bg-amber-500' },
   selected: { label: 'Selected 🎉', color: 'bg-emerald-50 text-emerald-700 border-emerald-100', dot: 'bg-emerald-500' },
   offered: { label: 'Offer Received 📜', color: 'bg-teal-50 text-teal-700 border-teal-100', dot: 'bg-teal-500' },
-  offer_accepted: { label: 'Offer Accepted', color: 'bg-emerald-50 text-emerald-700 border-emerald-100', dot: 'bg-emerald-500' },
+  offer_accepted: { label: 'Offer Accepted 🤝', color: 'bg-emerald-50 text-emerald-700 border-emerald-100', dot: 'bg-emerald-500' },
+  waiting_for_joining_payment: { label: 'Offer Accepted 🤝', color: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' },
   joining_pending: { label: 'Upcoming Joining 🚀', color: 'bg-indigo-50 text-indigo-700 border-indigo-100', dot: 'bg-indigo-500' },
+  joining_activated: { label: 'Active Deployment 🏗️', color: 'bg-emerald-100 text-emerald-800 border-emerald-200', dot: 'bg-emerald-600' },
   joined: { label: 'Joined Active Workforce', color: 'bg-emerald-100 text-emerald-800 border-emerald-200', dot: 'bg-emerald-600' },
   rejected: { label: 'Not Selected', color: 'bg-rose-50 text-rose-700 border-rose-100', dot: 'bg-rose-500' },
 }

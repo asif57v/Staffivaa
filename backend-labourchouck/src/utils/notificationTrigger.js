@@ -95,6 +95,13 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
             relatedId,
             relatedModel
           }).catch(e => console.error('[Admin Notification Save Error]:', e.message));
+          
+          // Trigger Admin FCM Push Notification
+          sendNotificationToUser(admin._id, title, body, {
+            type,
+            relatedId: relatedId ? relatedId.toString() : '',
+            relatedModel: relatedModel || ''
+          }).catch(err => console.error('[Admin FCM Push Error]:', err.message));
         }
       }
       
@@ -102,7 +109,7 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
       io.emit('dashboard:updated');
     }
 
-    // 3. Trigger FCM Push Notification
+    // 3. Trigger FCM Push Notification (for specific user)
     if (userId) {
       sendNotificationToUser(userId, title, body, {
         type,

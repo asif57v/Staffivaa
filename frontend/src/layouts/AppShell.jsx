@@ -29,6 +29,7 @@ import { fetchMe } from '../api/authApi.js'
 import { setUser } from '../store/slices/authSlice.js'
 import { loadJobDemoState, subscribeJobDemo } from '../lib/labourJobDemoStorage.js'
 import { enterpriseApi } from '../store/api/enterpriseApi.js'
+import { walletApi } from '../store/api/walletApi.js'
 
 export function AppShell() {
   const { pathname, search } = useLocation()
@@ -148,9 +149,25 @@ export function AppShell() {
       ) {
         playNewJobRingSound();
       }
+
+      // Show in-app alert toast for all notifications
       dispatchAlert(notification.title || 'New Notification', notification.body || notification.message || '', false);
-      refreshAppUser();
+
+      // Always refresh notification list
       dispatch(workforceApi.util.invalidateTags(['Notifications']));
+
+      // If it's a salary credit or withdrawal approval/rejection, also refresh wallet balance
+      if (
+        notification?.type === 'SALARY_RELEASED' ||
+        notification?.type === 'WITHDRAWAL_APPROVED' ||
+        notification?.type === 'WITHDRAWAL_ON_HOLD' ||
+        notification?.type === 'WITHDRAWAL_REJECTED'
+      ) {
+        dispatch(walletApi.util.invalidateTags(['Wallet']));
+      }
+
+      // Refresh user object (balance, status etc)
+      refreshAppUser();
     };
 
     const handleKycUpdate = (data) => {
@@ -245,6 +262,21 @@ export function AppShell() {
           if (typeof window !== 'undefined') {
             dispatchAlert(payload.notification.title || 'New Notification', payload.notification.body || '', false);
           }
+
+          // Refresh wallet cache if salary/withdrawal push notification
+          const notifType = payload?.data?.type;
+          if (
+            notifType === 'SALARY_RELEASED' ||
+            notifType === 'WITHDRAWAL_APPROVED' ||
+            notifType === 'WITHDRAWAL_ON_HOLD' ||
+            notifType === 'WITHDRAWAL_REJECTED'
+          ) {
+            dispatch(walletApi.util.invalidateTags(['Wallet']));
+            refreshAppUser();
+          }
+
+          // Also always refresh notification bell count
+          dispatch(workforceApi.util.invalidateTags(['Notifications']));
         
           // Use service worker showNotification so it appears as native OS popup
           // even when the app tab is currently focused (Chrome blocks new Notification() in foreground)
@@ -286,7 +318,52 @@ export function AppShell() {
   // ---------------------------
 
   const { data: notifData } = workforceApi.useGetNotificationsQuery(undefined, { skip: !user })
-  const unreadNotifsCount = notifData?.data?.unreadCount ?? notifData?.unreadCount ?? 0
+  const notifList = useMemo(() => {
+    return notifData?.data?.notifications || notifData?.notifications || []
+  }, [notifData])
+
+  const { unreadEnterpriseNotifsCount, unreadRegularJobNotifsCount } = useMemo(() => {
+    let enterpriseCount = 0
+    let regularJobCount = 0
+
+    notifList.forEach((n) => {
+      if (n.isRead) return
+      const isEnterprise =
+        n.type === 'ENTERPRISE_JOB_ALERT' ||
+        n.type?.startsWith('ENTERPRISE_') ||
+        n.type?.startsWith('INTERVIEW_') ||
+        n.type === 'WAITING_FOR_JOINING_PAYMENT' ||
+        n.type === 'JOINING_CONFIRMED' ||
+        n.type === 'NEW_JOB_APPLICATION' ||
+        n.relatedModel?.startsWith('Enterprise')
+
+      if (isEnterprise) {
+        enterpriseCount++
+      } else {
+        const isRegularJobNotif =
+          n.type === 'BOOKING_CREATED' ||
+          n.type === 'BOOKING_UPDATED' ||
+          n.type === 'BOOKING_CANCELLED' ||
+          n.type === 'LABOUR_ASSIGNED' ||
+          n.type === 'LABOUR_REPLACED' ||
+          n.type === 'OFFER_SENT' ||
+          n.type === 'NEW_ORDER' ||
+          n.relatedModel === 'Assignment' ||
+          n.relatedModel === 'Booking' ||
+          n.relatedModel === 'LabourAssignment' ||
+          n.relatedModel === 'JobOrder'
+
+        if (isRegularJobNotif) {
+          regularJobCount++
+        }
+      }
+    })
+
+    return {
+      unreadEnterpriseNotifsCount: enterpriseCount,
+      unreadRegularJobNotifsCount: regularJobCount,
+    }
+  }, [notifList])
 
   const pendingJobsCount = useMemo(() => {
     let count = 0
@@ -303,15 +380,15 @@ export function AppShell() {
     if (!isLabour || !bottomNav) return bottomNav
     return bottomNav.map(item => {
       if (item.id === 'jobs') {
-        const totalBadge = pendingJobsCount + unreadNotifsCount
+        const totalBadge = pendingJobsCount + unreadRegularJobNotifsCount
         return { ...item, badge: totalBadge > 0 ? totalBadge : undefined }
       }
-      if (item.id === 'enterprise' && unreadNotifsCount > 0) {
-        return { ...item, badge: unreadNotifsCount }
+      if (item.id === 'enterprise') {
+        return { ...item, badge: unreadEnterpriseNotifsCount > 0 ? unreadEnterpriseNotifsCount : undefined }
       }
       return item
     })
-  }, [bottomNav, isLabour, pendingJobsCount, unreadNotifsCount])
+  }, [bottomNav, isLabour, pendingJobsCount, unreadRegularJobNotifsCount, unreadEnterpriseNotifsCount])
 
   const normalizedPath = pathname.endsWith('/') && pathname !== '/' ? pathname.slice(0, -1) : pathname
   const isIndividualAppHome = user?.role === USER_ROLES.INDIVIDUAL && normalizedPath === '/app'

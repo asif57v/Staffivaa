@@ -398,12 +398,17 @@ export function AdminUserDetailsPage() {
                       {user.labourProfile.kycStatus === 'pending' && (
                         <div className="flex gap-3 pt-4 border-t border-slate-100">
                           <button
-                            onClick={() => openDialog({
-                              title: 'Approve KYC',
-                              description: 'Are you sure you want to approve this labour account? They will be able to start accepting jobs immediately.',
-                              confirmText: 'Approve',
-                              onConfirm: () => handleKycReview('approved', '')
-                            })}
+                            onClick={() => {
+                              const hasVideo = Boolean(user.labourProfile?.kycVideoUrl)
+                              openDialog({
+                                title: hasVideo ? 'Approve KYC' : '⚠️ Video KYC Not Submitted',
+                                description: hasVideo
+                                  ? 'Are you sure you want to approve this labour account? They will be able to start accepting jobs immediately.'
+                                  : 'This worker has NOT submitted a Video KYC yet. Are you sure you still want to verify and approve this account?',
+                                confirmText: hasVideo ? 'Approve' : 'Yes, Verify Anyway',
+                                onConfirm: () => handleKycReview('approved', '')
+                              })
+                            }}
                             className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
                           >
                             Approve KYC

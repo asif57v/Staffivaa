@@ -92,10 +92,22 @@ export const adminEnterpriseApi = baseApi.injectEndpoints({
       invalidatesTags: ['AdminEnterprisePayrolls'],
     }),
     releaseEnterpriseSalary: builder.mutation({
-      query: (id) => ({
-        url: `/admin/enterprise/payrolls/${id}/release`,
-        method: 'POST',
-      }),
+      query: (arg) => {
+        let id = ''
+        let body = {}
+        if (typeof arg === 'string') {
+          id = arg
+        } else if (arg && typeof arg === 'object') {
+          id = typeof arg.id === 'object' ? (arg.id?._id || arg.id?.toString()) : String(arg.id || '')
+          const { id: _idVal, ...rest } = arg
+          body = rest
+        }
+        return {
+          url: `/admin/enterprise/payrolls/${id}/release`,
+          method: 'POST',
+          body,
+        }
+      },
       invalidatesTags: ['AdminEnterprisePayrolls', 'AdminJoiningPayments'],
     }),
   }),

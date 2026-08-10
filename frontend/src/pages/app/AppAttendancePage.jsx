@@ -53,7 +53,7 @@ function LiveDuration({ checkInAt }) {
       setElapsedStr(`${h.toString().padStart(2, '0')}h ${m.toString().padStart(2, '0')}m`)
     }
     update()
-    const intv = setInterval(update, 60000) // Update every minute
+    const intv = setInterval(update, 5000) // Update every 5 seconds
     return () => clearInterval(intv)
   }, [checkInAt])
 
@@ -72,7 +72,39 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-const GEOFENCE_RADIUS = 120 // meters
+const GEOFENCE_RADIUS = 400 // meters (400m geofence)
+
+function matchesCurrentAssignment(r, displayAssignment) {
+  if (!r || !displayAssignment) return false
+
+  const dispId = String(displayAssignment._id || displayAssignment.id || '')
+  const dispReqId = String(displayAssignment.requestId?._id || displayAssignment.requestId || '')
+  const dispJobId = String(displayAssignment.jobId?._id || displayAssignment.jobId || displayAssignment.enterpriseJobId || '')
+  const dispProjectId = String(displayAssignment.requestId?.projectId?._id || displayAssignment.requestId?.projectId || displayAssignment.projectId || '')
+
+  const recordAssignId = String(r.assignmentId?._id || r.assignmentId || '')
+  const recordReqId = String(r.requestId?._id || r.requestId || '')
+  const recordEntAppId = String(r.enterpriseApplicationId?._id || r.enterpriseApplicationId || '')
+  const recordEntJobId = String(r.enterpriseJobId?._id || r.enterpriseJobId || '')
+  const recordProjectId = String(r.projectId?._id || r.projectId || '')
+
+  // 1. Direct Assignment match
+  if (recordAssignId && dispId && recordAssignId === dispId) return true
+
+  // 2. Direct Enterprise Application match
+  if (recordEntAppId && dispId && recordEntAppId === dispId) return true
+
+  // 3. Request match (for regular jobs under same workforce request)
+  if (recordReqId && dispReqId && recordReqId === dispReqId) return true
+
+  // 4. Enterprise Job match (for enterprise jobs)
+  if (recordEntJobId && dispJobId && recordEntJobId === dispJobId) return true
+
+  // 5. Project match
+  if (recordProjectId && dispProjectId && recordProjectId === dispProjectId) return true
+
+  return false
+}
 
 export function AppAttendancePage() {
   const { user } = useAuth()
@@ -80,12 +112,12 @@ export function AppAttendancePage() {
   const [toast, setToast] = useState('')
   const [selectedDay, setSelectedDay] = useState(new Date().getDate())
   
-  const { data: assignmentsData, isLoading: loadingAssignments, refetch } = useGetLabourAssignmentsQuery(undefined, { pollingInterval: 5000, refetchOnMountOrArgChange: true })
-  const { data: currentEmpData, isLoading: loadingEmp } = useGetLabourCurrentEmploymentQuery(undefined, { pollingInterval: 5000, refetchOnMountOrArgChange: true })
+  const { data: assignmentsData, isLoading: loadingAssignments, refetch } = useGetLabourAssignmentsQuery()
+  const { data: currentEmpData, isLoading: loadingEmp } = useGetLabourCurrentEmploymentQuery()
   const currentEmp = currentEmpData?.data
   
   // Fetch ALL historical attendance records for this worker, without date filtering
-  const { data: attendanceData, isLoading: loadingAttendance } = useGetAttendanceQuery(undefined, { pollingInterval: 5000, refetchOnMountOrArgChange: true })
+  const { data: attendanceData, isLoading: loadingAttendance } = useGetAttendanceQuery()
   
   const [localDemo, setLocalDemo] = useState(() => loadJobDemoState())
   useEffect(() => subscribeJobDemo(setLocalDemo), [])
@@ -187,10 +219,10 @@ export function AppAttendancePage() {
       const source = a.requestId?.sourceType
       return source === 'vendor' || source === 'corporate'
     })
-    const primary = activeAssigns[0]
+    const primary = activeAssigns[0] || (currentEmp ? { isEnterprise: true, jobId: currentEmp.jobId } : null)
     const siteReq = primary?.requestId
-    const siteLat = siteReq?.locationLat
-    const siteLng = siteReq?.locationLng
+    const siteLat = siteReq?.locationLat ?? primary?.jobId?.locationPoint?.coordinates?.[1]
+    const siteLng = siteReq?.locationLng ?? primary?.jobId?.locationPoint?.coordinates?.[0]
 
     if (siteLat == null || siteLng == null) {
       // No site coordinates — skip distance tracking
@@ -407,11 +439,26 @@ export function AppAttendancePage() {
       endDateFormatted = '30 Jun 2026'
       durationStr = '23 Jun 2026 – 30 Jun 2026'
     } else {
-      const sRaw = req.startDate || displayAssignment.joiningDetails?.joiningDate || displayAssignment.offerDetails?.joiningDate || displayAssignment.jobId?.timeline?.applicationStartDate || displayAssignment.createdAt
-      const eRaw = req.endDate || displayAssignment.joiningDetails?.endDate || displayAssignment.offerDetails?.endDate || displayAssignment.jobId?.timeline?.projectEndDate || displayAssignment.jobId?.timeline?.applicationLastDate
+      const jobTimeline = displayAssignment.jobId?.timeline || displayAssignment.timeline || {}
+      const joiningDetails = displayAssignment.joiningDetails || {}
+      const offerDetails = displayAssignment.offerDetails || {}
+
+      const sRaw =
+        req.startDate ||
+        joiningDetails.joiningDate ||
+        offerDetails.joiningDate ||
+        jobTimeline.expectedJoiningDate ||
+        jobTimeline.applicationStartDate ||
+        displayAssignment.createdAt
+
+      const eRaw =
+        req.endDate ||
+        joiningDetails.endDate ||
+        offerDetails.endDate ||
+        jobTimeline.projectEndDate
 
       startDateFormatted = sRaw ? formatDate(sRaw) : 'Not specified'
-      endDateFormatted = eRaw ? formatDate(eRaw) : 'Ongoing / Full-Time'
+      endDateFormatted = eRaw ? formatDate(eRaw) : (displayAssignment.jobId?.contractDuration ? `${displayAssignment.jobId.contractDuration}` : 'Ongoing / Full-Time')
       durationStr = eRaw ? `${startDateFormatted} ➔ ${endDateFormatted}` : `${startDateFormatted} (Ongoing)`
     }
   }
@@ -437,12 +484,7 @@ export function AppAttendancePage() {
   // Map records for the current month
   const recordMap = {}
   if (records && displayAssignment) {
-    const relevantRecords = records.filter(r => {
-      const matchAssignmentId = r.assignmentId && (String(r.assignmentId) === String(displayAssignment._id) || String(r.assignmentId._id) === String(displayAssignment._id))
-      const matchEnterpriseAppId = r.enterpriseApplicationId && (String(r.enterpriseApplicationId) === String(displayAssignment._id) || String(r.enterpriseApplicationId._id) === String(displayAssignment._id))
-      const matchWorkerId = displayAssignment.isEnterprise && (String(r.workerId?._id || r.workerId) === String(user?._id))
-      return matchAssignmentId || matchEnterpriseAppId || matchWorkerId
-    })
+    const relevantRecords = records.filter(r => matchesCurrentAssignment(r, displayAssignment))
     relevantRecords.forEach(r => {
       const d = new Date(r.shiftDate)
       d.setHours(0, 0, 0, 0)
@@ -457,8 +499,11 @@ export function AppAttendancePage() {
   let totalLate = 0
   let totalWeeklyOff = 0
   let totalHoursSum = 0
+  let totalOvertimeSum = 0
   let daysWithHours = 0
   let assignedWorkingDays = 0
+
+  const STANDARD_SHIFT_HOURS = 8
 
   const calendarDays = Array.from({ length: daysInMonth }, (_, i) => i + 1)
 
@@ -513,13 +558,19 @@ export function AppAttendancePage() {
     if (r && r.totalHours) {
       totalHoursSum += r.totalHours
       daysWithHours++
+      // Calculate overtime from real record data
+      const recordOT = r.overtimeHours != null && r.overtimeHours > 0 ? r.overtimeHours : Math.max(0, r.totalHours - STANDARD_SHIFT_HOURS)
+      totalOvertimeSum += recordOT
     }
   })
 
   const avgHours = daysWithHours > 0 ? (totalHoursSum / daysWithHours).toFixed(1) : 0
 
+  // Find if there's any ongoing shift (even if it started yesterday)
+  const activeOngoingRecord = records.find(r => r.checkInAt && !r.checkOutAt)
+  
   // Today's Check In Status
-  const todayRecord = recordMap[now.getDate()] || (isDemo && primaryAssignment?.status === 'on_site' ? { checkInAt: primaryAssignment.onSiteAt || nowIso(), projectStatus: 'working' } : null)
+  const todayRecord = activeOngoingRecord || recordMap[now.getDate()] || (isDemo && primaryAssignment?.status === 'on_site' ? { checkInAt: primaryAssignment.onSiteAt || nowIso(), projectStatus: 'working' } : null)
   const isPendingOtp = todayRecord && todayRecord.status === 'otp_pending'
   const isCheckedIn = todayRecord && todayRecord.status !== 'otp_pending' && (todayRecord.projectStatus === 'working' || (todayRecord.checkInAt && !todayRecord.checkOutAt))
   const isCompleted = todayRecord && (todayRecord.status === 'completed' || todayRecord.projectStatus === 'completed' || (todayRecord.checkInAt && todayRecord.checkOutAt))
@@ -541,10 +592,7 @@ export function AppAttendancePage() {
   // History Records
   const historyRecords = !displayAssignment ? [] : records
     .filter(r => {
-      const matchAssignmentId = r.assignmentId && (String(r.assignmentId) === String(displayAssignment._id) || String(r.assignmentId._id) === String(displayAssignment._id))
-      const matchEnterpriseAppId = r.enterpriseApplicationId && (String(r.enterpriseApplicationId) === String(displayAssignment._id) || String(r.enterpriseApplicationId._id) === String(displayAssignment._id))
-      const matchWorkerId = displayAssignment.isEnterprise && (String(r.workerId?._id || r.workerId) === String(user?._id))
-      if (!matchAssignmentId && !matchEnterpriseAppId && !matchWorkerId) {
+      if (!matchesCurrentAssignment(r, displayAssignment)) {
         return false
       }
       const d = new Date(r.shiftDate)
@@ -696,7 +744,7 @@ export function AppAttendancePage() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
               <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: 12, border: '1px solid #F1F5F9' }}>
                 <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', marginBottom: 2 }}>Check In</p>
                 <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>
@@ -710,6 +758,43 @@ export function AppAttendancePage() {
                 </p>
               </div>
             </div>
+            {/* Today's Duration & Overtime Row */}
+            {(isCompleted || isCheckedIn) && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                <div style={{ background: '#F0F9FF', padding: '12px', borderRadius: 12, border: '1px solid #BAE6FD' }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: '#0284C7', textTransform: 'uppercase', marginBottom: 2 }}>Working Duration</p>
+                  <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                    {isCheckedIn && !todayRecord?.checkOutAt ? (
+                      <LiveDuration checkInAt={todayRecord.checkInAt} />
+                    ) : todayRecord?.checkInAt && todayRecord?.checkOutAt ? (
+                      (() => {
+                        const mins = Math.floor((new Date(todayRecord.checkOutAt).getTime() - new Date(todayRecord.checkInAt).getTime()) / 60000)
+                        return `${Math.floor(mins / 60)}h ${mins % 60}m`
+                      })()
+                    ) : todayRecord?.totalHours != null && todayRecord.totalHours > 0 ? (
+                      `${Math.floor(todayRecord.totalHours)}h ${Math.round((todayRecord.totalHours % 1) * 60)}m`
+                    ) : (
+                      '--'
+                    )}
+                  </p>
+                </div>
+                <div style={{ background: '#FFFBEB', padding: '12px', borderRadius: 12, border: '1px solid #FDE68A' }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: '#B45309', textTransform: 'uppercase', marginBottom: 2 }}>Overtime (OT)</p>
+                  <p style={{ fontSize: 14, fontWeight: 800, color: todayRecord?.overtimeHours > 0 || (todayRecord?.totalHours > STANDARD_SHIFT_HOURS) ? '#D97706' : '#94A3B8', margin: 0 }}>
+                    {(() => {
+                      let workedHours = todayRecord?.totalHours || 0
+                      if (isCheckedIn && !todayRecord?.checkOutAt && todayRecord?.checkInAt) {
+                        workedHours = (Date.now() - new Date(todayRecord.checkInAt).getTime()) / 3600000
+                      }
+                      const ot = todayRecord?.overtimeHours != null && todayRecord.overtimeHours > 0 
+                        ? todayRecord.overtimeHours 
+                        : (workedHours > STANDARD_SHIFT_HOURS ? parseFloat((workedHours - STANDARD_SHIFT_HOURS).toFixed(2)) : 0)
+                      return ot > 0 ? `+${Math.floor(ot)}h ${Math.round((ot % 1) * 60)}m` : '0h 0m'
+                    })()}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Live Distance & Check In / Check Out Actions */}
             {isPendingOtp ? (
@@ -738,16 +823,16 @@ export function AppAttendancePage() {
             ) : canCheckInToday && !isCheckedIn && !isCompleted ? (
               <>
                 {/* Live distance indicator */}
-                {req?.locationLat != null && req?.locationLng != null ? (
+                {(req?.locationLat != null && req?.locationLng != null) || (displayAssignment?.jobId?.locationPoint?.coordinates?.[1] != null && displayAssignment?.jobId?.locationPoint?.coordinates?.[0] != null) ? (
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
                     borderRadius: 12, marginBottom: 10,
-                    background: distanceToSite != null && distanceToSite <= GEOFENCE_RADIUS ? '#ECFDF5' : distanceToSite != null && distanceToSite <= 300 ? '#FFFBEB' : '#FEF2F2',
-                    border: `1px solid ${distanceToSite != null && distanceToSite <= GEOFENCE_RADIUS ? '#A7F3D0' : distanceToSite != null && distanceToSite <= 300 ? '#FDE68A' : '#FECACA'}`,
+                    background: distanceToSite != null && distanceToSite <= GEOFENCE_RADIUS ? '#ECFDF5' : distanceToSite != null && distanceToSite <= 600 ? '#FFFBEB' : '#FEF2F2',
+                    border: `1px solid ${distanceToSite != null && distanceToSite <= GEOFENCE_RADIUS ? '#A7F3D0' : distanceToSite != null && distanceToSite <= 600 ? '#FDE68A' : '#FECACA'}`,
                   }}>
                     <Navigation style={{
                       width: 16, height: 16, flexShrink: 0,
-                      color: distanceToSite != null && distanceToSite <= GEOFENCE_RADIUS ? '#10B981' : distanceToSite != null && distanceToSite <= 300 ? '#F59E0B' : '#EF4444',
+                      color: distanceToSite != null && distanceToSite <= GEOFENCE_RADIUS ? '#10B981' : distanceToSite != null && distanceToSite <= 600 ? '#F59E0B' : '#EF4444',
                     }} />
                     <div style={{ flex: 1 }}>
                       {gpsStatus === 'error' ? (
@@ -763,7 +848,7 @@ export function AppAttendancePage() {
                           ✅ You are {distanceToSite}m from the site — ready to check in!
                         </p>
                       ) : (
-                        <p style={{ fontSize: 11, fontWeight: 700, color: distanceToSite <= 300 ? '#B45309' : '#DC2626', margin: 0 }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: distanceToSite <= 600 ? '#B45309' : '#DC2626', margin: 0 }}>
                           📍 You are <strong>{distanceToSite >= 1000 ? `${(distanceToSite / 1000).toFixed(1)}km` : `${distanceToSite}m`}</strong> away. Move within {GEOFENCE_RADIUS}m to check in.
                         </p>
                       )}
@@ -774,21 +859,21 @@ export function AppAttendancePage() {
                 <button
                   type="button"
                   onClick={() => handleCheckIn(primaryAssignment._id || primaryAssignment.id, isDemo)}
-                  disabled={isCheckingIn || (req?.locationLat != null && req?.locationLng != null && (distanceToSite == null || distanceToSite > GEOFENCE_RADIUS))}
+                  disabled={isCheckingIn || (((req?.locationLat != null && req?.locationLng != null) || (displayAssignment?.jobId?.locationPoint?.coordinates?.[1] != null)) && (distanceToSite == null || distanceToSite > GEOFENCE_RADIUS))}
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                     padding: '14px 0', borderRadius: 14, border: 'none', cursor: 'pointer',
-                    background: (req?.locationLat != null && (distanceToSite == null || distanceToSite > GEOFENCE_RADIUS))
+                    background: (((req?.locationLat != null && req?.locationLng != null) || (displayAssignment?.jobId?.locationPoint?.coordinates?.[1] != null)) && (distanceToSite == null || distanceToSite > GEOFENCE_RADIUS))
                       ? '#94A3B8' : 'linear-gradient(135deg, #10B981, #059669)',
                     color: '#FFFFFF',
                     fontSize: 14, fontWeight: 800, letterSpacing: '0.3px',
-                    boxShadow: (req?.locationLat != null && (distanceToSite == null || distanceToSite > GEOFENCE_RADIUS))
+                    boxShadow: (((req?.locationLat != null && req?.locationLng != null) || (displayAssignment?.jobId?.locationPoint?.coordinates?.[1] != null)) && (distanceToSite == null || distanceToSite > GEOFENCE_RADIUS))
                       ? 'none' : '0 4px 14px rgba(16,185,129,0.35)',
                     opacity: isCheckingIn ? 0.7 : 1, transition: 'all 0.2s',
                   }}
                 >
                   <LogIn style={{ width: 18, height: 18 }} />
-                  {isCheckingIn ? 'Checking In...' : (req?.locationLat != null && (distanceToSite == null || distanceToSite > GEOFENCE_RADIUS)) ? 'Move closer to check in' : 'Check In'}
+                  {isCheckingIn ? 'Checking In...' : (((req?.locationLat != null && req?.locationLng != null) || (displayAssignment?.jobId?.locationPoint?.coordinates?.[1] != null)) && (distanceToSite == null || distanceToSite > GEOFENCE_RADIUS)) ? 'Move closer to check in (within 400m)' : 'Check In'}
                 </button>
               </>
             ) : isCheckedIn && !isCompleted ? (
@@ -852,13 +937,17 @@ export function AppAttendancePage() {
                 </div>
               ))}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-               <div style={{ background: '#FFFFFF', borderRadius: 14, padding: '12px 16px', border: `1px solid #F1F5F9`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                 <p style={{ fontSize: 10, fontWeight: 700, color: '#64748B', margin: 0, display: 'flex', alignItems: 'center', gap: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}><Clock style={{ width: 12, height: 12 }} /> Total Hrs</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+               <div style={{ background: '#FFFFFF', borderRadius: 14, padding: '12px 10px', border: `1px solid #F1F5F9`, textAlign: 'center' }}>
+                 <p style={{ fontSize: 9, fontWeight: 700, color: '#64748B', margin: '0 0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, textTransform: 'uppercase', letterSpacing: '0.4px' }}><Clock style={{ width: 11, height: 11 }} /> Total Hrs</p>
                  <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>{totalHoursSum.toFixed(1)}h</p>
                </div>
-               <div style={{ background: '#FFFFFF', borderRadius: 14, padding: '12px 16px', border: `1px solid #F1F5F9`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                 <p style={{ fontSize: 10, fontWeight: 700, color: '#64748B', margin: 0, display: 'flex', alignItems: 'center', gap: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}><Clock style={{ width: 12, height: 12 }} /> Avg / Day</p>
+               <div style={{ background: '#FFFBEB', borderRadius: 14, padding: '12px 10px', border: `1px solid #FDE68A`, textAlign: 'center' }}>
+                 <p style={{ fontSize: 9, fontWeight: 700, color: '#B45309', margin: '0 0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, textTransform: 'uppercase', letterSpacing: '0.4px' }}><Clock style={{ width: 11, height: 11 }} /> Overtime</p>
+                 <p style={{ fontSize: 14, fontWeight: 800, color: totalOvertimeSum > 0 ? '#D97706' : '#94A3B8', margin: 0 }}>{totalOvertimeSum.toFixed(1)}h</p>
+               </div>
+               <div style={{ background: '#FFFFFF', borderRadius: 14, padding: '12px 10px', border: `1px solid #F1F5F9`, textAlign: 'center' }}>
+                 <p style={{ fontSize: 9, fontWeight: 700, color: '#64748B', margin: '0 0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, textTransform: 'uppercase', letterSpacing: '0.4px' }}><Clock style={{ width: 11, height: 11 }} /> Avg/Day</p>
                  <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>{avgHours}h</p>
                </div>
             </div>
@@ -1015,11 +1104,25 @@ export function AppAttendancePage() {
                          <p style={{ fontSize: 14, fontWeight: 800, color: (isSelectedToday ? isCompleted : selectedRecord?.checkOutAt) ? '#0F172A' : '#94A3B8', margin: '0 0 6px' }}>
                            {(isSelectedToday ? isCompleted : selectedRecord?.checkOutAt) ? 'Checked Out' : 'Not Checked Out'}
                          </p>
-                         {(isSelectedToday ? todayRecord?.totalHours : selectedRecord?.totalHours) != null && (
-                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, color: '#64748B' }}>
-                             <Clock style={{ width: 12, height: 12 }} /> Total: <span style={{ fontWeight: 800 }}>{(isSelectedToday ? todayRecord?.totalHours : selectedRecord?.totalHours)} hrs</span>
-                           </span>
-                         )}
+                          {(() => {
+                            const recTH = isSelectedToday ? todayRecord?.totalHours : selectedRecord?.totalHours
+                            const recOT = isSelectedToday ? (todayRecord?.overtimeHours || 0) : (selectedRecord?.overtimeHours || 0)
+                            const computedOT = recTH != null && recTH > STANDARD_SHIFT_HOURS ? parseFloat((recTH - STANDARD_SHIFT_HOURS).toFixed(2)) : 0
+                            const finalOT = recOT > 0 ? recOT : computedOT
+                            return recTH != null ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, color: '#64748B' }}>
+                                  <Clock style={{ width: 12, height: 12 }} /> Total: <span style={{ fontWeight: 800 }}>{recTH} hrs</span>
+                                  {recTH > 0 && <span style={{ color: '#94A3B8' }}>({Math.floor(recTH)}h {Math.round((recTH % 1) * 60)}m)</span>}
+                                </span>
+                                {finalOT > 0 && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: '#D97706', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '2px 8px' }}>
+                                    ⏱ Overtime: +{finalOT} hrs
+                                  </span>
+                                )}
+                              </div>
+                            ) : null
+                          })()}
                        </div>
                      </div>
                   </div>
@@ -1058,6 +1161,9 @@ export function AppAttendancePage() {
                   const rColor = (st === 'Present' || st === 'Working') ? '#10B981' : (st === 'Late' || st === 'Incomplete') ? '#F59E0B' : '#EF4444'
                   const rBg = (st === 'Present' || st === 'Working') ? '#ECFDF5' : (st === 'Late' || st === 'Incomplete') ? '#FFFBEB' : '#FEF2F2'
 
+                  const hTotalHrs = r.totalHours != null && r.totalHours > 0 ? r.totalHours : (r.checkInAt && r.checkOutAt ? parseFloat(((new Date(r.checkOutAt) - new Date(r.checkInAt)) / 3600000).toFixed(2)) : 0)
+                  const hOtHrs = r.overtimeHours != null && r.overtimeHours > 0 ? r.overtimeHours : Math.max(0, parseFloat((hTotalHrs - STANDARD_SHIFT_HOURS).toFixed(2)))
+
                   return (
                     <div key={r._id || i} style={{ background: '#FFFFFF', borderRadius: 16, padding: '16px', border: '1px solid #F1F5F9', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -1080,9 +1186,19 @@ export function AppAttendancePage() {
                           </p>
                         </div>
                       </div>
-                      <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', margin: 0 }}>Total Hours</p>
-                        <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>{r.totalHours ? `${r.totalHours}h` : '0h'}</p>
+                      <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', margin: '0 0 2px' }}>Total Duration</p>
+                          <p style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                            {hTotalHrs > 0 ? `${Math.floor(hTotalHrs)}h ${Math.round((hTotalHrs % 1) * 60)}m` : '0h 0m'}
+                          </p>
+                        </div>
+                        <div>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: '#B45309', textTransform: 'uppercase', margin: '0 0 2px' }}>Overtime</p>
+                          <p style={{ fontSize: 14, fontWeight: 800, color: hOtHrs > 0 ? '#D97706' : '#94A3B8', margin: 0 }}>
+                            {hOtHrs > 0 ? `+${Math.floor(hOtHrs)}h ${Math.round((hOtHrs % 1) * 60)}m` : '0h 0m'}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )

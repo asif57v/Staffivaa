@@ -27,6 +27,8 @@ import {
   Phone,
   Shield,
   ShieldCheck,
+  ShieldAlert,
+  IdCard,
   Sparkles,
   Timer,
   Wallet,
@@ -683,7 +685,31 @@ export function LabourHomeScreen({ user }) {
       </section>
 
       <div className="space-y-5 px-4 pt-3">
-
+        {!kycOk && (
+          <FadeInSection delay={0.02}>
+            <div className="rounded-2xl border border-amber-200/90 bg-amber-50/90 p-4 shadow-sm backdrop-blur-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-900">
+                  <IdCard className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-extrabold text-amber-950 flex items-center gap-1.5">
+                    Complete Your KYC to Unlock Jobs! 🆔
+                  </h3>
+                  <p className="mt-0.5 text-xs font-medium text-amber-900/90 leading-snug">
+                    Your KYC verification is incomplete. Complete your Aadhaar & PAN details now to receive job assignments and daily payouts.
+                  </p>
+                  <Link
+                    to="/app/kyc"
+                    className="mt-2.5 inline-flex items-center gap-1.5 rounded-xl bg-amber-900 px-3.5 py-1.5 text-xs font-extrabold text-white shadow-xs hover:bg-amber-950 transition-all active:scale-95"
+                  >
+                    Complete KYC Now <ChevronRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </FadeInSection>
+        )}
 
         {/* 3. Today's job */}
         <FadeInSection delay={0.05}>

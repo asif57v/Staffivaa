@@ -638,9 +638,10 @@ export function AdminLabourPage() {
                         className="aspect-video w-full rounded-xl border border-slate-200/90 bg-slate-950 object-contain"
                       />
                     ) : (
-                      <p className="rounded-xl border border-amber-200/80 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                        No KYC video found for this worker.
-                      </p>
+                      <div className="rounded-xl border border-amber-200/80 bg-amber-50 p-3 text-xs text-amber-950 space-y-1">
+                        <p className="font-bold text-amber-900">⚠️ No KYC video submitted by this worker.</p>
+                        <p className="text-amber-800/90 font-medium">You can still approve & verify this account below if documents are valid.</p>
+                      </div>
                     )}
                   </div>
                   <div>
@@ -668,8 +669,15 @@ export function AdminLabourPage() {
                     <AppPrimaryButton
                       type="button"
                       className="flex-1 py-3 text-sm"
-                      disabled={reviewBusy || !detailUser.labourProfile?.kycSubmittedAt || !detailUser.labourProfile?.kycVideoUrl}
-                      onClick={() => runKycReview('approved')}
+                      disabled={reviewBusy}
+                      onClick={() => {
+                        const hasVideo = Boolean(detailUser.labourProfile?.kycVideoUrl)
+                        if (!hasVideo) {
+                          const proceed = window.confirm('⚠️ Video KYC is not submitted by this worker.\n\nDo you still want to verify and approve this account?')
+                          if (!proceed) return
+                        }
+                        runKycReview('approved')
+                      }}
                     >
                       {reviewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                       Approve KYC

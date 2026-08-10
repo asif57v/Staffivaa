@@ -222,6 +222,11 @@ export const enterpriseApi = baseApi.injectEndpoints({
       query: () => '/enterprise/dashboard-overview',
       providesTags: ['EnterpriseJobs', 'EnterpriseApplications', 'EnterpriseWorkforce', 'EnterpriseInvoices', 'EnterpriseWallet'],
     }),
+
+    getJobWorkersAttendance: builder.query({
+      query: (jobId) => `/enterprise/jobs/${jobId}/workers-attendance`,
+      providesTags: ['EnterpriseWorkforce'],
+    }),
   }),
 })
 
@@ -253,4 +258,5 @@ export const {
   useGetActiveWorkforceQuery,
   useGetEnterpriseWorkerAttendanceQuery,
   useGetEnterpriseDashboardOverviewQuery,
+  useGetJobWorkersAttendanceQuery,
 } = enterpriseApi

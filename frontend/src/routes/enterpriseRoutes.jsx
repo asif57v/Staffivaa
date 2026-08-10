@@ -9,6 +9,7 @@ const EnterpriseApplicationsPage = lazy(() => import('../panels/enterprise/pages
 const EnterpriseWorkforcePage = lazy(() => import('../panels/enterprise/pages/EnterpriseWorkforcePage.jsx').then(m => ({ default: m.EnterpriseWorkforcePage })))
 const EnterpriseWalletPage = lazy(() => import('../panels/enterprise/pages/EnterpriseWalletPage.jsx').then(m => ({ default: m.EnterpriseWalletPage })))
 const EnterprisePayrollPage = lazy(() => import('../panels/enterprise/pages/EnterprisePayrollPage.jsx').then(m => ({ default: m.EnterprisePayrollPage })))
+const EnterpriseNotificationsPage = lazy(() => import('../panels/enterprise/pages/EnterpriseNotificationsPage.jsx').then(m => ({ default: m.EnterpriseNotificationsPage })))
 
 export const enterpriseChildRoutes = (
   <>
@@ -22,5 +23,6 @@ export const enterpriseChildRoutes = (
     <Route path="workers" element={<EnterpriseWorkforcePage />} />
     <Route path="wallet" element={<EnterpriseWalletPage />} />
     <Route path="payroll" element={<EnterprisePayrollPage />} />
+    <Route path="notifications" element={<EnterpriseNotificationsPage />} />
   </>
 )

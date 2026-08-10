@@ -1,11 +1,15 @@
 import crypto from 'crypto'
 import { EnterpriseWallet } from '../models/EnterpriseWallet.js'
 import { EnterpriseWalletTransaction } from '../models/EnterpriseWalletTransaction.js'
+import { AttendanceRecord } from '../models/AttendanceRecord.js'
+import { User } from '../models/User.js'
+import { EnterpriseJob } from '../models/EnterpriseJob.js'
 import { razorpay } from '../config/razorpay.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { USER_ROLES } from '../constants/roles.js'
 import { logAudit } from '../utils/auditLogger.js'
+import { triggerNotification } from '../utils/notificationTrigger.js'
 
 /** GET /api/enterprise/wallet/summary - Get wallet summary & balance */
 export const getEnterpriseWalletSummary = asyncHandler(async (req, res) => {
@@ -65,8 +69,8 @@ export const createRechargeOrder = asyncHandler(async (req, res) => {
   const { amount } = req.body
   const numAmount = Number(amount)
 
-  if (!numAmount || numAmount < 100) {
-    return sendError(res, { message: 'Minimum recharge amount is ₹100', statusCode: HTTP_STATUS.BAD_REQUEST })
+  if (!numAmount || numAmount < 1) {
+    return sendError(res, { message: 'Minimum payment amount is ₹1', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
 
   const wallet = await EnterpriseWallet.findOne({ enterpriseId: req.user._id })
@@ -126,7 +130,7 @@ export const verifyRechargePayment = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
   }
 
-  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, paymentMethod } = req.body
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, paymentMethod, jobId, workerId, applicationId } = req.body
 
   if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
     return sendError(res, { message: 'Incomplete payment parameters', statusCode: HTTP_STATUS.BAD_REQUEST })
@@ -176,18 +180,94 @@ export const verifyRechargePayment = asyncHandler(async (req, res) => {
   transaction.gatewayResponse = { status: 'captured', paymentId: razorpay_payment_id }
   await transaction.save()
 
+  // 🟢 Mark Attendance / Job Settlement Records as PAID & Create/Update EnterprisePayroll Record for Admin
+  if (workerId || jobId || applicationId) {
+    const query = {}
+    if (workerId) query.workerId = workerId
+    if (jobId || applicationId) {
+      query.$or = []
+      if (jobId) query.$or.push({ enterpriseJobId: jobId })
+      if (applicationId) query.$or.push({ enterpriseApplicationId: applicationId })
+    }
+    await AttendanceRecord.updateMany(query, {
+      $set: {
+        paymentStatus: 'paid',
+        settledAt: new Date(),
+        settledAmount: transaction.amount,
+      },
+    })
+
+    if (workerId) {
+      const now = new Date()
+      const month = now.getMonth() + 1
+      const year = now.getFullYear()
+
+      await EnterprisePayroll.findOneAndUpdate(
+        { workerId, month, year, enterpriseId: req.user._id },
+        {
+          $set: {
+            enterpriseId: req.user._id,
+            workerId,
+            jobId: jobId || undefined,
+            month,
+            year,
+            grossSalary: transaction.amount,
+            netSalary: transaction.amount,
+            status: 'approved',
+            paidAt: new Date(),
+            paymentReference: transaction.razorpayPaymentId || transaction.transactionId,
+          },
+        },
+        { upsert: true, new: true }
+      )
+    }
+  }
+
+  // 🔔 Trigger Push & In-App Notifications for BOTH Enterprise & Admin
+  const workerDoc = workerId ? await User.findById(workerId).select('fullName').lean() : null
+  const jobDoc = jobId ? await EnterpriseJob.findById(jobId).select('jobTitle').lean() : null
+  const workerName = workerDoc?.fullName || 'Worker'
+  const jobTitle = jobDoc?.jobTitle || 'Job Requirement'
+  const companyName = req.user?.enterpriseProfile?.companyName || req.user?.fullName || 'Enterprise'
+
+  // 1. Enterprise Notification
+  await triggerNotification({
+    userId: req.user._id,
+    role: 'enterprise',
+    title: 'Payment Successful! 🎉',
+    message: `Wage Settlement of ₹${transaction.amount.toLocaleString('en-IN')} for ${workerName} (${jobTitle}) is successful. Funds secured in Escrow.`,
+    type: 'JOB_WAGE_PAID',
+    payload: { jobId, workerId, amount: transaction.amount, redirectUrl: `/enterprise/jobs/${jobId}` },
+  })
+
+  // 2. Admin Push & In-App Notification
+  const admins = await User.find({ role: USER_ROLES.ADMIN, isActive: true }).select('_id').lean()
+  await Promise.all(
+    admins.map(async (admin) => {
+      await triggerNotification({
+        userId: admin._id,
+        role: 'admin',
+        title: 'Enterprise Payment Received 💰',
+        message: `${companyName} paid ₹${transaction.amount.toLocaleString('en-IN')} for worker ${workerName} on "${jobTitle}". Escrow balance updated.`,
+        type: 'ADMIN_ENTERPRISE_WAGE_PAID',
+        payload: { enterpriseId: req.user._id, jobId, workerId, amount: transaction.amount, redirectUrl: '/admin/enterprise-payroll' },
+      })
+    })
+  )
+
   await logAudit({
     adminId: req.user._id,
-    action: `Wallet Recharged by ₹${transaction.amount}`,
+    action: `Wallet Recharged / Job Settlement of ₹${transaction.amount} paid by Enterprise`,
     module: 'Enterprise Wallet',
     req,
   })
 
   return sendSuccess(res, {
-    message: `₹${transaction.amount.toLocaleString('en-IN')} added to wallet successfully!`,
+    message: `₹${transaction.amount.toLocaleString('en-IN')} paid successfully! Status updated to PAID & SETTLED.`,
     data: {
       balance: wallet.balance,
       transaction,
+      isPaid: true,
     },
   })
 })

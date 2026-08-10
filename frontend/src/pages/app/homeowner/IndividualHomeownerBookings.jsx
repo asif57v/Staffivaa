@@ -84,18 +84,22 @@ export function IndividualHomeownerBookings() {
   const filteredHistory = useMemo(() => {
     return displayHistory.filter((item) => {
       const status = String(item.status || '').toLowerCase()
+      const ageMs = item.createdAt ? (Date.now() - new Date(item.createdAt).getTime()) : 0
+      const isTimedOut = (status === 'searching' || status === 'pending_review') && ageMs > 2.5 * 60 * 1000
+      const effectiveStatus = isTimedOut ? 'cancelled' : status
+
       if (selectedFilter === 'all') return true
       if (selectedFilter === 'active') {
-        return ['searching', 'pending_review', 'confirmed', 'assigned', 'accepted', 'in_progress', 'on_site'].includes(status)
+        return ['searching', 'pending_review', 'confirmed', 'assigned', 'accepted', 'in_progress', 'on_site'].includes(effectiveStatus)
       }
       if (selectedFilter === 'finding_labour') {
-        return status === 'searching' || status === 'pending_review'
+        return effectiveStatus === 'searching' || effectiveStatus === 'pending_review'
       }
       if (selectedFilter === 'in_progress') {
-        return status === 'in_progress' || status === 'on_site'
+        return effectiveStatus === 'in_progress' || effectiveStatus === 'on_site'
       }
       if (selectedFilter === 'completed') {
-        return status === 'completed'
+        return effectiveStatus === 'completed'
       }
       return true
     })
@@ -109,24 +113,70 @@ export function IndividualHomeownerBookings() {
   const { data: serverRequestsData } = useGetMyRequestsQuery(undefined)
 
   useEffect(() => {
-    if (!serverRequestsData?.requests) return
-    
     setHistory(prevHistory => {
       let updated = false
       const newHistory = prevHistory.map(b => {
-        if (!b.requestId) return b
-        const serverReq = serverRequestsData.requests.find(r => r._id === b.requestId)
-        if (!serverReq) return b
+        const ageMs = b.createdAt ? (Date.now() - new Date(b.createdAt).getTime()) : 0
+        const isLocallyTimedOut = (b.status === 'searching' || b.status === 'pending_review') && ageMs > 2.5 * 60 * 1000
+
+        if (!b.requestId) {
+          if (isLocallyTimedOut && b.status !== 'cancelled') {
+            updated = true
+            return { ...b, status: 'cancelled', cancelReason: 'timed_out' }
+          }
+          return b
+        }
+
+        const serverReq = serverRequestsData?.requests?.find(r => r._id === b.requestId)
+        if (!serverReq) {
+          if ((b.status === 'searching' || b.status === 'pending_review' || isLocallyTimedOut) && b.status !== 'cancelled') {
+            updated = true
+            return { ...b, status: 'cancelled', cancelReason: 'timed_out' }
+          }
+          return b
+        }
 
         let newStatus = b.status
         if (serverReq.status) {
           if (serverReq.status === 'pending') newStatus = 'searching'
           else newStatus = serverReq.status
         }
+        if (isLocallyTimedOut && (newStatus === 'searching' || newStatus === 'pending_review')) {
+          newStatus = 'cancelled'
+        }
 
-        if (newStatus !== b.status) {
+        // Merge real server data into local booking
+        const serverLines = (serverReq.lines || []).map(ln => ({
+          groupName: ln.categoryId?.group || ln.groupName || b.lines?.[0]?.groupName || '',
+          categoryName: ln.categoryId?.name || ln.categoryName || b.lines?.[0]?.categoryName || '',
+          categoryId: ln.categoryId?._id || ln.categoryId || '',
+          quantity: ln.quantity || 1,
+          baseRate: ln.categoryId?.baseRate,
+        }))
+
+        const mergedBooking = {
+          ...b,
+          status: newStatus,
+          ref: serverReq.reference || b.ref,
+          address: serverReq.locationText || b.address,
+          notes: serverReq.notes || b.notes,
+          lines: serverLines.length > 0 ? serverLines : b.lines,
+          userPlatformFee: serverReq.userPlatformFee ?? b.userPlatformFee,
+          labourCharge: serverReq.labourCharge ?? b.labourCharge,
+          createdAt: serverReq.createdAt || b.createdAt,
+        }
+
+        // Check if anything changed
+        const hasChanged = newStatus !== b.status ||
+          mergedBooking.ref !== b.ref ||
+          mergedBooking.address !== b.address ||
+          mergedBooking.userPlatformFee !== b.userPlatformFee ||
+          mergedBooking.labourCharge !== b.labourCharge ||
+          JSON.stringify(mergedBooking.lines) !== JSON.stringify(b.lines)
+
+        if (hasChanged) {
           updated = true
-          return { ...b, status: newStatus }
+          return mergedBooking
         }
         return b
       })
@@ -191,11 +241,15 @@ export function IndividualHomeownerBookings() {
     (ref) => {
       const booking = findBookingByRef(displayHistory, ref)
       if (booking) {
-        if (booking.status === 'searching' || booking.status === 'assigned') {
+        const status = String(booking.status || '').toLowerCase()
+        const ageMs = booking.createdAt ? (Date.now() - new Date(booking.createdAt).getTime()) : 0
+        const isTimedOut = (status === 'searching' || status === 'pending_review') && ageMs > 2.5 * 60 * 1000
+
+        if (!isTimedOut && (status === 'searching' || status === 'pending_review')) {
           navigate(buildBookingFlowPath('searching', { ref }))
           return
         }
-        if (booking.status === 'accepted' || booking.status === 'in_progress' || booking.status === 'on_site') {
+        if (status === 'accepted' || status === 'in_progress' || status === 'on_site') {
           navigate(buildBookingFlowPath('active', { ref }))
           return
         }
@@ -252,6 +306,14 @@ export function IndividualHomeownerBookings() {
     const updated = stored.map((b) => (b.id === booking.id ? { ...b, status: newStatus } : b))
     saveIndividualBookings(updated)
     setHistory(updated)
+  }, [])
+
+  const handleDeleteBooking = useCallback((bookingRefOrId) => {
+    setHistory((prevHistory) => {
+      const updated = prevHistory.filter((b) => b.id !== bookingRefOrId && b.ref !== bookingRefOrId)
+      saveIndividualBookings(updated)
+      return updated
+    })
   }, [])
 
   if (detailRef) {
@@ -350,6 +412,7 @@ export function IndividualHomeownerBookings() {
           onTrack={handleTrack}
           onRebook={handleRebook}
           onViewDetail={handleViewDetail}
+          onDelete={handleDeleteBooking}
         />
       </motion.div>
     </div>

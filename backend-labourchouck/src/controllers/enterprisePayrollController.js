@@ -11,6 +11,7 @@ import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { USER_ROLES } from '../constants/roles.js'
 import { emitToRole } from '../utils/socket.js'
+import { AttendanceRecord } from '../models/AttendanceRecord.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
 
 // ─── Enterprise HR Controllers ──────────────────────────────────────────────
@@ -222,9 +223,28 @@ export const submitPayrollForReview = asyncHandler(async (req, res) => {
     details: { payrollId: payroll._id, month: payroll.month, year: payroll.year },
   })
 
+  const enterpriseUser = await User.findById(req.user._id).select('fullName enterpriseProfile')
+  const companyName = enterpriseUser?.enterpriseProfile?.companyName || enterpriseUser?.fullName || 'Enterprise Client'
+
+  // Trigger Push Notification, In-App DB Notification and Socket Alert for all Admin Users
+  const adminUsers = await User.find({ role: USER_ROLES.ADMIN }).select('_id')
+  const notifTitle = 'New Enterprise Payroll Submitted 💼'
+  const notifBody = `${companyName} submitted Monthly Payroll for Month ${payroll.month}/${payroll.year} (₹${payroll.netSalary.toLocaleString('en-IN')}) for verification & Escrow release.`
+
+  for (const admin of adminUsers) {
+    triggerNotification({
+      userId: admin._id,
+      title: notifTitle,
+      body: notifBody,
+      type: 'ENTERPRISE_PAYROLL_SUBMITTED',
+      relatedId: payroll._id,
+      relatedModel: 'EnterprisePayroll',
+    }).catch((err) => console.error('[Admin Notification Error]:', err.message))
+  }
+
   emitToRole('admin', 'admin_notification', {
     type: 'ENTERPRISE_PAYROLL_SUBMITTED',
-    message: `Enterprise submitted payroll for Month ${payroll.month}/${payroll.year} (₹${payroll.netSalary.toLocaleString('en-IN')}) for review & release.`,
+    message: notifBody,
   })
 
   return sendSuccess(res, {
@@ -241,6 +261,71 @@ export const getAdminEnterprisePayrolls = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
   }
 
+  // 🔄 Auto-Sync: ONLY create payroll entries for attendance records that are actually PAID (settled via Razorpay)
+  try {
+    const paidAttendanceRecords = await AttendanceRecord.find({
+      paymentStatus: 'paid',
+      enterpriseId: { $exists: true, $ne: null },
+      workerId: { $exists: true, $ne: null },
+    }).lean()
+
+    // Group by unique (workerId + enterpriseId + jobId + month + year) to avoid duplicates
+    const groupKey = (r) => {
+      const sd = r.shiftDate ? new Date(r.shiftDate) : new Date(r.settledAt || r.createdAt)
+      return `${r.workerId}_${r.enterpriseId}_${r.enterpriseJobId || 'nojob'}_${sd.getMonth() + 1}_${sd.getFullYear()}`
+    }
+
+    const grouped = {}
+    for (const r of paidAttendanceRecords) {
+      const key = groupKey(r)
+      if (!grouped[key]) {
+        grouped[key] = { records: [], workerId: r.workerId, enterpriseId: r.enterpriseId, jobId: r.enterpriseJobId }
+      }
+      grouped[key].records.push(r)
+    }
+
+    for (const key of Object.keys(grouped)) {
+      const g = grouped[key]
+      const firstRecord = g.records[0]
+      const sd = firstRecord.shiftDate ? new Date(firstRecord.shiftDate) : new Date(firstRecord.settledAt || firstRecord.createdAt)
+      const m = sd.getMonth() + 1
+      const y = sd.getFullYear()
+
+      const existing = await EnterprisePayroll.findOne({
+        workerId: g.workerId,
+        enterpriseId: g.enterpriseId,
+        month: m,
+        year: y,
+      })
+
+      if (!existing) {
+        // Aggregate real stats from all paid attendance records in this group
+        const totalHrs = g.records.reduce((sum, r) => sum + (r.totalHours || 0), 0)
+        const totalOT = g.records.reduce((sum, r) => sum + (r.overtimeHours || 0), 0)
+        const totalSettled = g.records.reduce((sum, r) => sum + (r.settledAmount || 0), 0)
+        const presentDays = g.records.filter(r => r.attendanceStatus === 'present' || r.checkInAt).length
+
+        await EnterprisePayroll.create({
+          enterpriseId: g.enterpriseId,
+          workerId: g.workerId,
+          jobId: g.jobId || undefined,
+          month: m,
+          year: y,
+          presentDays,
+          totalWorkingHours: parseFloat(totalHrs.toFixed(2)),
+          overtimeHours: parseFloat(totalOT.toFixed(2)),
+          grossSalary: totalSettled,
+          netSalary: totalSettled,
+          status: 'approved',
+          paidAt: firstRecord.settledAt || new Date(),
+          paymentReference: `PAY-SETTLE-${firstRecord._id.toString().slice(-6)}`,
+        })
+      }
+    }
+  } catch (syncErr) {
+    console.error('Auto-sync payroll error:', syncErr)
+  }
+
   const { month, year, status, enterpriseId } = req.query
   const filter = {}
   if (month) filter.month = Number(month)
@@ -250,12 +335,61 @@ export const getAdminEnterprisePayrolls = asyncHandler(async (req, res) => {
 
   const payrolls = await EnterprisePayroll.find(filter)
     .populate('enterpriseId', 'fullName companyName email phone profileImageUrl enterpriseProfile')
-    .populate('workerId', 'fullName profileImageUrl phone email labourProfile')
-    .populate('jobId', 'jobTitle workLocation')
+    .populate('workerId', 'fullName profileImageUrl phone email labourProfile walletBalance bankAccountDetails upiDetails accountStatus')
+    .populate('jobId', 'jobTitle workLocation workingHours salary salaryType')
     .populate('escrowId', 'escrowNumber amount workerSalaryPool status')
     .sort({ createdAt: -1 })
+    .lean()
 
-  return sendSuccess(res, { data: payrolls })
+  // Attach daily attendance logs for each payroll record — query by workerId + enterpriseId (+ optional jobId)
+  const enrichedPayrolls = await Promise.all(
+    payrolls.map(async (p) => {
+      const wId = p.workerId?._id || p.workerId
+      const eId = p.enterpriseId?._id || p.enterpriseId
+      const jId = p.jobId?._id || p.jobId
+
+      const attendanceQuery = { workerId: wId, enterpriseId: eId }
+      if (jId) attendanceQuery.enterpriseJobId = jId
+
+      const records = await AttendanceRecord.find(attendanceQuery)
+        .sort({ shiftDate: -1, checkInAt: -1 })
+        .limit(31)
+        .lean()
+
+      const enrichedRecords = records.map((r) => {
+        const totalH =
+          r.totalHours != null && r.totalHours > 0
+            ? r.totalHours
+            : r.checkInAt && r.checkOutAt
+            ? parseFloat(((new Date(r.checkOutAt) - new Date(r.checkInAt)) / 3600000).toFixed(2))
+            : 0
+        const otH =
+          r.overtimeHours != null && r.overtimeHours > 0
+            ? r.overtimeHours
+            : Math.max(0, parseFloat((totalH - (p.jobId?.workingHours || 8)).toFixed(2)))
+        return {
+          ...r,
+          totalHours: totalH,
+          overtimeHours: otH,
+        }
+      })
+
+      // Recalculate real attendance summary from actual records
+      const realPresentDays = enrichedRecords.filter(r => r.checkInAt).length
+      const realTotalHours = enrichedRecords.reduce((sum, r) => sum + (r.totalHours || 0), 0)
+      const realOvertimeHours = enrichedRecords.reduce((sum, r) => sum + (r.overtimeHours || 0), 0)
+
+      return {
+        ...p,
+        presentDays: realPresentDays || p.presentDays,
+        totalWorkingHours: parseFloat(realTotalHours.toFixed(2)) || p.totalWorkingHours,
+        overtimeHours: parseFloat(realOvertimeHours.toFixed(2)) || p.overtimeHours,
+        attendanceLogs: enrichedRecords || [],
+      }
+    })
+  )
+
+  return sendSuccess(res, { data: enrichedPayrolls })
 })
 
 /** PATCH /api/admin/enterprise-payroll/:id/review - Review, Approve, Hold, or Reject payroll */
@@ -327,7 +461,48 @@ export const releaseEnterpriseSalary = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Salary has already been released and credited to worker wallet.', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
 
-  // Ensure atomic payout using Mongoose ACID Transaction (Reusing existing vendor payout pattern)
+  // Parse optional admin deductions from request body
+  const {
+    adminDeductionType = 'fixed',  // 'fixed' | 'percent'
+    adminDeductionValue = 0,
+    platformCommission = 0,
+    tdsDeduction = 0,
+    pfDeduction = 0,
+    esicDeduction = 0,
+    ptDeduction = 0,
+    adminNotes = '',
+  } = req.body || {}
+
+  // Calculate admin custom deduction
+  let adminDeductionAmount = 0
+  if (adminDeductionType === 'percent') {
+    adminDeductionAmount = Math.round((payroll.netSalary * Number(adminDeductionValue)) / 100)
+  } else {
+    adminDeductionAmount = Math.round(Number(adminDeductionValue) || 0)
+  }
+
+  // Calculate total statutory deductions
+  const totalStatutory = Math.round(Number(tdsDeduction) + Number(pfDeduction) + Number(esicDeduction) + Number(ptDeduction))
+  const totalPlatformComm = Math.round(Number(platformCommission))
+
+  // Final credit amount to worker
+  const totalDeductions = adminDeductionAmount + totalStatutory + totalPlatformComm
+  const creditAmount = Math.max(0, payroll.netSalary - totalDeductions)
+
+  if (creditAmount <= 0) {
+    return sendError(res, { message: 'Final credit amount after deductions cannot be zero or negative', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  // Save deduction breakdown on the payroll record
+  payroll.platformCommission = totalPlatformComm
+  payroll.tdsDeduction = Math.round(Number(tdsDeduction))
+  payroll.pfDeduction = Math.round(Number(pfDeduction))
+  payroll.esicDeduction = Math.round(Number(esicDeduction))
+  payroll.ptDeduction = Math.round(Number(ptDeduction))
+  payroll.otherDeductions = adminDeductionAmount
+  if (adminNotes) payroll.adminNotes = adminNotes
+
+  // Ensure atomic payout using Mongoose ACID Transaction
   const session = await mongoose.startSession()
   session.startTransaction()
   let lockedWorker
@@ -339,25 +514,31 @@ export const releaseEnterpriseSalary = asyncHandler(async (req, res) => {
     }
 
     const previousBalance = lockedWorker.walletBalance || 0
-    lockedWorker.walletBalance = previousBalance + payroll.netSalary
+    lockedWorker.walletBalance = previousBalance + creditAmount
     await lockedWorker.save({ session })
 
     // Create wallet transaction ledger entry for labour
     const walletTxn = await WalletTransaction.create([{
+      transactionId: `WTXN-SAL-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
       userId: lockedWorker._id,
+      labourId: lockedWorker._id,
       type: 'Credit',
-      amount: payroll.netSalary,
+      source: 'Enterprise Payroll Escrow Payout',
+      amount: creditAmount,
       balanceBefore: previousBalance,
       balanceAfter: lockedWorker.walletBalance,
       status: 'Completed',
       referenceId: payroll._id,
       referenceModel: 'EnterprisePayroll',
-      description: `Enterprise Salary Payout for Month ${payroll.month}/${payroll.year} via Staffivaa Escrow Release`,
+      description: `Enterprise Salary Payout for Month ${payroll.month}/${payroll.year} via Staffivaa Escrow Release${totalDeductions > 0 ? ` (₹${totalDeductions} deducted)` : ''}`,
       metadata: {
         month: payroll.month,
         year: payroll.year,
         enterpriseId: payroll.enterpriseId._id || payroll.enterpriseId,
         escrowId: payroll.escrowId,
+        grossSalary: payroll.grossSalary,
+        totalDeductions,
+        creditAmount,
       }
     }], { session })
 
@@ -370,7 +551,8 @@ export const releaseEnterpriseSalary = asyncHandler(async (req, res) => {
       )
     }
 
-    // Update Payroll record status
+    // Update Payroll record status with final credited amount
+    payroll.netSalary = creditAmount
     payroll.status = 'paid'
     payroll.releasedBy = req.user._id
     payroll.releasedAt = new Date()
@@ -402,11 +584,14 @@ export const releaseEnterpriseSalary = asyncHandler(async (req, res) => {
     session.endSession()
   }
 
-  // Real-time Push & Socket Notification to Labour worker
+  // 🔔 Real-time Dual Push & In-App Notification to Labour worker
+  const totalDeds = (payroll.otherDeductions || 0) + (payroll.platformCommission || 0) + (payroll.tdsDeduction || 0) + (payroll.pfDeduction || 0) + (payroll.esicDeduction || 0) + (payroll.ptDeduction || 0)
+  const dedNote = totalDeds > 0 ? ` (after ₹${totalDeds.toLocaleString('en-IN')} deductions)` : ''
+
   triggerNotification({
     userId: lockedWorker._id,
-    title: '🎉 Salary Credited to Your Wallet!',
-    body: `Your salary of ₹${payroll.netSalary.toLocaleString('en-IN')} for Month ${payroll.month}/${payroll.year} has been credited to your Staffivaa wallet. You can withdraw to your bank account instantly!`,
+    title: `🎉 ₹${payroll.netSalary.toLocaleString('en-IN')} Salary Credited!`,
+    body: `Your net salary of ₹${payroll.netSalary.toLocaleString('en-IN')}${dedNote} for Month ${payroll.month}/${payroll.year} has been credited to your Staffivaa wallet. Tap to view details or withdraw!`,
     type: 'SALARY_RELEASED',
     relatedId: payroll._id,
     relatedModel: 'EnterprisePayroll',

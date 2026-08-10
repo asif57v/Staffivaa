@@ -169,18 +169,54 @@ export function AppJobsPage() {
     refetch()
   }, [refetch])
 
+  const [deletedHistoryIds, setDeletedHistoryIds] = useState(() => {
+    try {
+      const raw = localStorage.getItem('lc_deleted_history_ids')
+      return raw ? JSON.parse(raw) : []
+    } catch {
+      return []
+    }
+  })
+
+  const saveDeletedHistoryIds = useCallback((ids) => {
+    setDeletedHistoryIds(ids)
+    try {
+      localStorage.setItem('lc_deleted_history_ids', JSON.stringify(ids))
+    } catch (e) {
+      console.error(e)
+    }
+  }, [])
+
+  const filteredHistory = useMemo(() => {
+    return demo.history.filter((job) => !deletedHistoryIds.includes(String(job.id || job._id)))
+  }, [demo.history, deletedHistoryIds])
+
+  const handleDeleteHistoryItem = useCallback((job) => {
+    const jobIdStr = String(job.id || job._id)
+    const next = [...deletedHistoryIds, jobIdStr]
+    saveDeletedHistoryIds(next)
+    showToast('History item deleted.')
+  }, [deletedHistoryIds, saveDeletedHistoryIds, showToast])
+
+  const handleClearAllHistory = useCallback(() => {
+    const allIds = filteredHistory.map((j) => String(j.id || j._id))
+    const next = Array.from(new Set([...deletedHistoryIds, ...allIds]))
+    saveDeletedHistoryIds(next)
+    showToast('History cleared.')
+  }, [deletedHistoryIds, filteredHistory, saveDeletedHistoryIds, showToast])
+
   const thisMonthCount = useMemo(() => {
     const ym = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
-    return demo.history.filter((h) => String(h.completedAt || '').startsWith(ym)).length
-  }, [demo.history])
+    return filteredHistory.filter((h) => String(h.completedAt || '').startsWith(ym)).length
+  }, [filteredHistory])
 
   const tabCounts = useMemo(
     () => ({
       offers: demo.offers.length,
       active: demo.active.length,
-      history: demo.history.length,
+      history: filteredHistory.length,
     }),
-    [demo.offers.length, demo.active.length, demo.history.length],
+    [demo.offers.length, demo.active.length, filteredHistory.length],
   )
 
   const handleDeclineOffer = async (id) => {
@@ -509,23 +545,37 @@ export function AppJobsPage() {
           ))}
 
         {tab === 'history' &&
-          (demo.history.length === 0 ? (
+          (filteredHistory.length === 0 ? (
             <AppEmptyState icon={CheckCircle2} title={emptyCopy.title} subtitle={emptyCopy.subtitle} className="pt-2" />
           ) : (
             <div>
+              <div className="flex items-center justify-between pb-2 px-1">
+                <span className="text-xs font-bold text-slate-500">Completed jobs ({filteredHistory.length})</span>
+                <button
+                  type="button"
+                  onClick={handleClearAllHistory}
+                  className="text-xs font-semibold text-rose-600 hover:text-rose-700 transition"
+                >
+                  Clear history
+                </button>
+              </div>
               <ul className="space-y-2 pt-1">
-                {(showAllHistory ? demo.history : demo.history.slice(0, 3)).map((job, i) => (
+                {(showAllHistory ? filteredHistory : filteredHistory.slice(0, 3)).map((job, i) => (
                   <motion.div
                     key={`${job.id}-${job.completedAt}`}
                     initial={reduce ? false : { opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.03 }}
                   >
-                    <LabourJobHistoryCard job={job} onOpenDetail={(j) => openDetail(j, 'history')} />
+                    <LabourJobHistoryCard
+                      job={job}
+                      onOpenDetail={(j) => openDetail(j, 'history')}
+                      onDelete={handleDeleteHistoryItem}
+                    />
                   </motion.div>
                 ))}
               </ul>
-              {demo.history.length > 3 && !showAllHistory && (
+              {filteredHistory.length > 3 && !showAllHistory && (
                 <div className="mt-4 px-2 pb-2">
                   <AppButton 
                     type="button" 

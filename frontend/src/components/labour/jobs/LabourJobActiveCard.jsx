@@ -170,7 +170,7 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
     return `${Math.round(d)} m`
   }
 
-  const isCheckInDisabled = hasCoordinates && distance != null && distance > 120
+  const isCheckInDisabled = hasCoordinates && distance != null && distance > 400
 
   // Timer logic for waiting screen
   const [timeLeft, setTimeLeft] = useState(150) // 2.5 mins in seconds
@@ -369,7 +369,7 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
             </AppPrimaryButton>
             {hasCoordinates && distance != null && (
               <p className={`mt-2 text-center text-[10px] font-semibold ${isCheckInDisabled ? 'text-rose-600' : 'text-emerald-600'}`}>
-                {isCheckInDisabled ? `You are ${Math.round(distance)} meters away. Move within 120 meters to verify arrival.` : 'You have arrived near the work location.'}
+                {isCheckInDisabled ? `You are ${Math.round(distance)} meters away. Move within 400 meters to verify arrival.` : 'You have arrived near the work location.'}
               </p>
             )}
           </div>

@@ -561,6 +561,8 @@ export function AdminLayout() {
                         ) : (
                           notifData.notifications.map((n) => {
                             const getNotificationUrl = (item) => {
+                              if (item.type?.includes('SHIFT') || item.type?.includes('ATTENDANCE')) return '/admin/attendance'
+                              if (item.type?.includes('PAYMENT') || item.type?.includes('INVOICE') || item.type?.includes('PAYROLL')) return '/admin/enterprise-payroll'
                               if (item.type.startsWith('KYC')) return '/admin/business-verification'
                               if (item.type.startsWith('BOOKING')) return '/admin/bookings'
                               if (item.type.startsWith('REFUND')) return '/admin/refunds'

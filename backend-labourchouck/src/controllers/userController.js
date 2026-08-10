@@ -294,15 +294,11 @@ export const reviewLabourKyc = asyncHandler(async (req, res) => {
   user.labourProfile = user.labourProfile || {}
 
   if (decision === 'approved') {
-    if (!user.labourProfile.kycSubmittedAt || !labourHasKycVideo(user.labourProfile)) {
-      return sendError(res, {
-        message: 'This worker has not submitted a KYC video yet',
-        statusCode: HTTP_STATUS.BAD_REQUEST,
-        code: 'NO_KYC_SUBMISSION',
-      })
-    }
     user.labourProfile.kycStatus = KYC_STATUS.VERIFIED
     user.labourProfile.kycReviewNote = undefined
+    if (!user.labourProfile.kycSubmittedAt) {
+      user.labourProfile.kycSubmittedAt = new Date()
+    }
   } else {
     user.labourProfile.kycStatus = KYC_STATUS.FAILED
     user.labourProfile.kycReviewNote = typeof note === 'string' ? note.trim().slice(0, 500) : ''

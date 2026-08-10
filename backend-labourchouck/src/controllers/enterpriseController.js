@@ -338,6 +338,14 @@ export const createEnterpriseJob = asyncHandler(async (req, res) => {
   })
 })
 
+const HIRED_STATUSES = [
+  'offer_accepted',
+  'waiting_for_joining_payment',
+  'joining_pending',
+  'joining_activated',
+  'joined',
+]
+
 /** GET /api/enterprise/jobs - List enterprise jobs for the logged-in company */
 export const getEnterpriseJobs = asyncHandler(async (req, res) => {
   if (req.user.role !== USER_ROLES.ENTERPRISE) {
@@ -348,19 +356,33 @@ export const getEnterpriseJobs = asyncHandler(async (req, res) => {
     .populate('categoryId', CATEGORY_SELECT)
     .sort({ createdAt: -1 })
 
+  const now = new Date()
+
   const jobsWithStats = await Promise.all(
     jobs.map(async (job) => {
       const jobObj = job.toObject()
       const acceptedCount = await EnterpriseApplication.countDocuments({
         jobId: job._id,
-        status: { $in: ['offer_accepted', 'joining_pending', 'joined'] },
+        status: { $in: HIRED_STATUSES },
       })
       const joinedCount = await EnterpriseApplication.countDocuments({
         jobId: job._id,
-        status: 'joined',
+        status: { $in: ['joining_activated', 'joined'] },
       })
+
+      const isFilled = acceptedCount >= (job.numberOfWorkers || 1)
+      let isExpired = false
+      if (job.timeline?.applicationLastDate) {
+        const lastDate = new Date(job.timeline.applicationLastDate)
+        lastDate.setHours(23, 59, 59, 999)
+        if (now > lastDate) isExpired = true
+      }
+
       jobObj.acceptedCount = acceptedCount
       jobObj.joinedCount = joinedCount
+      jobObj.isFilled = isFilled
+      jobObj.isExpired = isExpired
+      jobObj.displayStatus = isFilled ? 'filled' : isExpired ? 'expired' : job.status
       return jobObj
     })
   )
@@ -398,9 +420,38 @@ export const getPublicEnterpriseJobs = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .limit(100)
 
+  const now = new Date()
+  const validJobs = []
+
+  for (const job of jobs) {
+    // 1. Check if application deadline has expired
+    if (job.timeline?.applicationLastDate) {
+      const lastDate = new Date(job.timeline.applicationLastDate)
+      lastDate.setHours(23, 59, 59, 999)
+      if (now > lastDate) {
+        continue // Skip expired jobs
+      }
+    }
+
+    // 2. Check if all vacancies have been hired/accepted
+    const hiredCount = await EnterpriseApplication.countDocuments({
+      jobId: job._id,
+      status: { $in: HIRED_STATUSES },
+    })
+
+    if (hiredCount >= (job.numberOfWorkers || 1)) {
+      continue // Skip fully filled jobs
+    }
+
+    const jobObj = job.toObject()
+    jobObj.remainingVacancies = Math.max(0, (job.numberOfWorkers || 1) - hiredCount)
+    jobObj.hiredCount = hiredCount
+    validJobs.push(jobObj)
+  }
+
   let myApplicationsMap = {}
   if (req.user?.role === USER_ROLES.LABOUR) {
-    const jobIds = jobs.map(j => j._id)
+    const jobIds = validJobs.map(j => j._id)
     const apps = await EnterpriseApplication.find({
       jobId: { $in: jobIds },
       workerId: req.user._id,
@@ -415,9 +466,8 @@ export const getPublicEnterpriseJobs = asyncHandler(async (req, res) => {
     })
   }
 
-  const jobsWithAppData = jobs.map(job => {
-    const jobObj = job.toObject()
-    const appInfo = myApplicationsMap[job._id.toString()] || null
+  const jobsWithAppData = validJobs.map(jobObj => {
+    const appInfo = myApplicationsMap[jobObj._id.toString()] || null
     return {
       ...jobObj,
       alreadyApplied: Boolean(appInfo),
@@ -436,6 +486,29 @@ export const getPublicEnterpriseJobById = asyncHandler(async (req, res) => {
 
   if (!job) {
     return sendError(res, { message: 'Job not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  // Check if expired or filled
+  const now = new Date()
+  if (job.timeline?.applicationLastDate) {
+    const lastDate = new Date(job.timeline.applicationLastDate)
+    lastDate.setHours(23, 59, 59, 999)
+    if (now > lastDate) {
+      return sendError(res, { message: 'This job requirement deadline has expired', statusCode: HTTP_STATUS.GONE })
+    }
+  }
+
+  const hiredCount = await EnterpriseApplication.countDocuments({
+    jobId: job._id,
+    status: { $in: HIRED_STATUSES },
+  })
+
+  const existingApp = req.user?.role === USER_ROLES.LABOUR
+    ? await EnterpriseApplication.findOne({ jobId: job._id, workerId: req.user._id })
+    : null
+
+  if (hiredCount >= (job.numberOfWorkers || 1) && !existingApp) {
+    return sendError(res, { message: 'All vacancies for this job requirement have been filled', statusCode: HTTP_STATUS.GONE })
   }
 
   const applicantsCount = await EnterpriseApplication.countDocuments({ jobId: job._id })
@@ -651,10 +724,30 @@ export const updateApplicationStatus = asyncHandler(async (req, res) => {
   const jobObj = await EnterpriseJob.findById(application.jobId).select('jobTitle')
   const jobTitleStr = jobObj?.jobTitle || 'Job Requirement'
 
+  const enterpriseUser = await User.findById(req.user._id).select('fullName enterpriseProfile')
+  const companyName = enterpriseUser?.enterpriseProfile?.companyName || enterpriseUser?.fullName || 'Enterprise Client'
+
+  let notifTitle = `Application Status Updated: ${status.replace('_', ' ').toUpperCase()} 📋`
+  let notifBody = `Your application status for "${jobTitleStr}" at ${companyName} has been updated to ${status.replace('_', ' ')}.`
+
+  if (status === 'shortlisted') {
+    notifTitle = 'You Are Shortlisted! 🎉'
+    notifBody = `Congratulations! Your application for "${jobTitleStr}" at ${companyName} has been shortlisted. Expect an interview invitation soon!`
+  } else if (status === 'selected') {
+    notifTitle = 'You Are Selected! 🏆'
+    notifBody = `Great news! You have been selected for "${jobTitleStr}" at ${companyName}. Check your application for official offer letter details.`
+  } else if (status === 'rejected') {
+    notifTitle = 'Application Status Update 📌'
+    notifBody = `Your application for "${jobTitleStr}" at ${companyName} was not selected. Keep applying for new job opportunities!`
+  } else if (status === 'joining_activated' || status === 'joined') {
+    notifTitle = 'Deployment Activated! 🏗️'
+    notifBody = `Your joining has been confirmed for "${jobTitleStr}" at ${companyName}. You can now start daily site check-ins!`
+  }
+
   triggerNotification({
     userId: application.workerId,
-    title: `Application Status Updated: ${status.replace('_', ' ').toUpperCase()} 📋`,
-    body: `Your application status for "${jobTitleStr}" has been updated to ${status.replace('_', ' ')}.`,
+    title: notifTitle,
+    body: notifBody,
     type: 'APPLICATION_STATUS_UPDATED',
     relatedId: application._id,
     relatedModel: 'EnterpriseApplication',
@@ -1131,7 +1224,10 @@ export const getEnterpriseInvoices = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
   }
 
-  const invoices = await EnterpriseJoiningInvoice.find({ enterpriseId: req.user._id })
+  const settings = await SystemSettings.findOne({ singletonId: 'SYSTEM_SETTINGS' })
+  const advancePct = Number(settings?.advancePaymentPercentage ?? 0)
+
+  let invoices = await EnterpriseJoiningInvoice.find({ enterpriseId: req.user._id })
     .populate({
       path: 'workerId',
       select: WORKER_SELECT,
@@ -1140,8 +1236,29 @@ export const getEnterpriseInvoices = asyncHandler(async (req, res) => {
       path: 'jobId',
       select: 'jobTitle locationText salary salaryType department',
     })
+    .populate({
+      path: 'applicationId',
+      select: 'status',
+    })
     .populate('escrowTransactionId')
     .sort({ createdAt: -1 })
+
+  // Dynamic Rule: If system Advance Payment Percentage is 0%, OR if candidate is already activated/joined/completed,
+  // mark advance joining confirmation invoices as cancelled so they do not show up as pending.
+  invoices = invoices.map(inv => {
+    const invObj = inv.toObject()
+    const appStatus = invObj.applicationId?.status
+    const isAdvanceInv = invObj.advanceAmount > 0 || invObj.invoiceType === 'advance_50'
+
+    if (invObj.status === 'payment_pending') {
+      if (advancePct === 0 && isAdvanceInv) {
+        invObj.status = 'cancelled'
+      } else if (appStatus && ['joining_activated', 'joined', 'completed', 'rejected', 'cancelled'].includes(appStatus) && isAdvanceInv) {
+        invObj.status = 'cancelled'
+      }
+    }
+    return invObj
+  })
 
   return sendSuccess(res, { data: invoices })
 })
@@ -1586,11 +1703,11 @@ export const getLabourCurrentEmployment = asyncHandler(async (req, res) => {
   // Find latest joined employment application
   const activeApp = await EnterpriseApplication.findOne({
     workerId: req.user._id,
-    status: 'joined',
+    status: { $in: ['joining_activated', 'joined', 'waiting_for_joining_payment', 'joining_pending', 'offer_accepted'] },
   })
     .populate({
       path: 'jobId',
-      select: 'jobTitle salary salaryType locationText shift workingHours department',
+      select: 'jobTitle salary salaryType locationText shift workingHours department timeline contractDuration',
     })
     .populate({
       path: 'enterpriseId',
@@ -1610,7 +1727,7 @@ export const getEnterpriseWorkerAttendance = asyncHandler(async (req, res) => {
   const application = await EnterpriseApplication.findOne({
     _id: req.params.id,
     enterpriseId: req.user._id,
-  })
+  }).populate('jobId', 'workingHours jobTitle shift')
 
   if (!application) {
     return sendError(res, { message: 'Application not found', statusCode: HTTP_STATUS.NOT_FOUND })
@@ -1618,7 +1735,182 @@ export const getEnterpriseWorkerAttendance = asyncHandler(async (req, res) => {
 
   const records = await AttendanceRecord.find({
     workerId: application.workerId,
-  }).sort({ shiftDate: -1 })
+    $or: [
+      { enterpriseApplicationId: application._id },
+      { enterpriseJobId: application.jobId?._id || application.jobId },
+    ],
+  })
+    .sort({ shiftDate: -1, createdAt: -1 })
+    .lean()
 
-  return sendSuccess(res, { data: records })
+  const standardShiftHours = application.jobId?.workingHours || 8
+
+  const enrichedRecords = records.map((r) => {
+    const totalH =
+      r.totalHours != null && r.totalHours > 0
+        ? r.totalHours
+        : r.checkInAt && r.checkOutAt
+        ? parseFloat(((new Date(r.checkOutAt) - new Date(r.checkInAt)) / 3600000).toFixed(2))
+        : 0
+    const otH =
+      r.overtimeHours != null && r.overtimeHours > 0
+        ? r.overtimeHours
+        : Math.max(0, parseFloat((totalH - standardShiftHours).toFixed(2)))
+    return {
+      ...r,
+      totalHours: totalH,
+      overtimeHours: otH,
+      standardShiftHours,
+    }
+  })
+
+  return sendSuccess(res, { data: enrichedRecords })
+})
+
+/** GET /api/enterprise/jobs/:jobId/workers-attendance - Get all workers & their attendance for a specific enterprise job */
+export const getJobWorkersAttendance = asyncHandler(async (req, res) => {
+  if (req.user.role !== USER_ROLES.ENTERPRISE) {
+    return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  const jobId = req.params.jobId
+
+  const jobDoc = await EnterpriseJob.findById(jobId).lean()
+  const defaultSalary = jobDoc?.salary || 0
+  const defaultSalaryType = jobDoc?.salaryType || 'daily'
+  const shiftHours = jobDoc?.workingHours || 8
+
+  // Get all active/engaged workers for this job (joined, joining_activated, completed, etc.)
+  const joinedApplications = await EnterpriseApplication.find({
+    jobId,
+    enterpriseId: req.user._id,
+    status: { $in: ['joined', 'joining_activated', 'completed', 'waiting_for_joining_payment', 'offer_accepted'] },
+  }).populate('workerId', 'fullName phone profileImageUrl')
+    .populate('jobId', 'workingHours jobTitle shift salary salaryType')
+    .lean()
+
+  const standardShiftHours = shiftHours
+
+  // For each worker, get today's attendance + attendance summary
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+
+  const results = await Promise.all(
+    joinedApplications.map(async (app) => {
+      const worker = app.workerId || {}
+      const wIdStr = worker._id ? worker._id.toString() : (app.workerId ? app.workerId.toString() : null)
+
+      // Get attendance records ONLY for this particular job requirement
+      const records = await AttendanceRecord.find({
+        workerId: wIdStr,
+        $or: [
+          { enterpriseApplicationId: app._id },
+          { enterpriseJobId: jobId },
+        ],
+      })
+        .sort({ shiftDate: -1, checkInAt: -1, createdAt: -1 })
+        .lean()
+
+      // Today's record (check shiftDate OR checkInAt)
+      const todayRecord = records.find((r) => {
+        const d1 = r.shiftDate ? new Date(r.shiftDate) : null
+        if (d1) d1.setHours(0, 0, 0, 0)
+        const d2 = r.checkInAt ? new Date(r.checkInAt) : null
+        if (d2) d2.setHours(0, 0, 0, 0)
+        return (d1 && d1.getTime() === todayStart.getTime()) || (d2 && d2.getTime() === todayStart.getTime())
+      })
+
+      // Fetch Job salary details for dynamic wage calculation
+      const jobSalary = defaultSalary || app.jobId?.salary || app.offerDetails?.salary || 0
+      const jobSalaryType = defaultSalaryType || app.jobId?.salaryType || app.offerDetails?.salaryType || 'daily'
+
+      // Summary stats & real dynamic wage calculation
+      let presentDays = 0
+      let absentDays = 0
+      let totalHrs = 0
+      let totalOT = 0
+      let calculatedWage = 0
+
+      records.forEach((r) => {
+        if (r.checkInAt) {
+          presentDays++
+          const rHrs = r.totalHours || 0
+          totalHrs += rHrs
+          const rOT = r.overtimeHours != null && r.overtimeHours > 0 ? r.overtimeHours : Math.max(0, rHrs - shiftHours)
+          totalOT += rOT
+
+          // Dynamic Hourly Wage Calculation (Actual Hours vs Shift Hours)
+          if (r.checkOutAt || rHrs > 0) {
+            let hourlyRate = 0
+            if (jobSalaryType === 'daily' || jobSalaryType === 'per_day') {
+              hourlyRate = jobSalary / shiftHours
+            } else if (jobSalaryType === 'hourly' || jobSalaryType === 'per_hour') {
+              hourlyRate = jobSalary
+            } else {
+              // Monthly rate / 26 days
+              hourlyRate = (jobSalary / 26) / shiftHours
+            }
+
+            const normalHrs = Math.min(rHrs, shiftHours)
+            const otHrs = Math.max(0, rHrs - shiftHours)
+            const shiftWage = (normalHrs * hourlyRate) + (otHrs * hourlyRate * 1.5)
+            calculatedWage += shiftWage
+          }
+        } else {
+          absentDays++
+        }
+      })
+
+      const completionPercentage = shiftHours > 0 ? Math.min(100, Math.round((totalHrs / shiftHours) * 100)) : 100
+
+      // Today status
+      let todayStatus = 'not_checked_in'
+      if (todayRecord) {
+        if (todayRecord.checkOutAt) todayStatus = 'completed'
+        else if (todayRecord.checkInAt) todayStatus = 'working'
+      }
+
+      const isPaid = records.length > 0 && records.some((r) => r.paymentStatus === 'paid')
+
+      return {
+        applicationId: app._id,
+        worker: {
+          _id: worker._id,
+          fullName: worker.fullName,
+          phone: worker.phone,
+          profileImageUrl: worker.profileImageUrl,
+        },
+        todayStatus,
+        todayCheckIn: todayRecord?.checkInAt || null,
+        todayCheckOut: todayRecord?.checkOutAt || null,
+        todayTotalHours: todayRecord?.totalHours || 0,
+        todayOvertimeHours: todayRecord?.overtimeHours || 0,
+        summary: {
+          presentDays,
+          absentDays,
+          totalHours: parseFloat(totalHrs.toFixed(2)),
+          totalOvertime: parseFloat(totalOT.toFixed(2)),
+          calculatedWage: Math.round(calculatedWage),
+          completionPercentage,
+          isPaid,
+        },
+        records: records.slice(0, 30).map((r) => {
+          const tH = r.totalHours || 0
+          const oH = r.overtimeHours != null && r.overtimeHours > 0 ? r.overtimeHours : Math.max(0, tH - standardShiftHours)
+          return {
+            _id: r._id,
+            shiftDate: r.shiftDate,
+            checkInAt: r.checkInAt,
+            checkOutAt: r.checkOutAt,
+            totalHours: tH,
+            overtimeHours: parseFloat(oH.toFixed(2)),
+            attendanceStatus: r.attendanceStatus,
+            status: r.status,
+          }
+        }),
+      }
+    }),
+  )
+
+  return sendSuccess(res, { data: results, standardShiftHours })
 })

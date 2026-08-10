@@ -5,6 +5,7 @@ import { User } from '../models/User.js'
 import { Assignment } from '../models/Assignment.js'
 import { AttendanceRecord } from '../models/AttendanceRecord.js'
 import { EnterpriseApplication } from '../models/EnterpriseApplication.js'
+import { EnterpriseJob } from '../models/EnterpriseJob.js'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { AttendanceOTP } from '../models/AttendanceOTP.js'
 import { OtpAuditLog } from '../models/OtpAuditLog.js'
@@ -51,6 +52,20 @@ export const checkIn = asyncHandler(async (req, res) => {
   }
 
   if (enterpriseApp) {
+    const jobDoc = await EnterpriseJob.findById(enterpriseApp.jobId).lean()
+    if (jobDoc && jobDoc.locationPoint && Array.isArray(jobDoc.locationPoint.coordinates) && jobDoc.locationPoint.coordinates.length === 2) {
+      const [siteLng, siteLat] = jobDoc.locationPoint.coordinates
+      if (siteLat != null && siteLng != null) {
+        if (lat == null || lng == null) {
+          return sendError(res, { message: 'Location is required to check-in', statusCode: HTTP_STATUS.BAD_REQUEST })
+        }
+        const distance = calculateDistance(lat, lng, siteLat, siteLng)
+        if (distance != null && distance > 400) {
+          return sendError(res, { message: `You are ${Math.round(distance)} meters away from the job site. Move within 400 meters to mark check-in.`, statusCode: HTTP_STATUS.BAD_REQUEST })
+        }
+      }
+    }
+
     const shiftDate = new Date()
     shiftDate.setHours(0, 0, 0, 0)
 
@@ -82,6 +97,15 @@ export const checkIn = asyncHandler(async (req, res) => {
       await record.save()
     }
 
+    try {
+      const { getIO } = await import('../utils/socket.js')
+      const io = getIO()
+      if (io) {
+        if (enterpriseApp.enterpriseId) io.to(`enterprise_${enterpriseApp.enterpriseId.toString()}`).emit('attendance:updated', { recordId: record._id, jobId: enterpriseApp.jobId })
+        io.emit('attendance:updated', { recordId: record._id })
+      }
+    } catch (err) {}
+
     return sendSuccess(res, {
       message: 'Checked in successfully',
       data: { record }
@@ -111,8 +135,8 @@ export const checkIn = asyncHandler(async (req, res) => {
       return sendError(res, { message: 'Location is required to check-in', statusCode: HTTP_STATUS.BAD_REQUEST })
     }
     const distance = calculateDistance(lat, lng, request.locationLat, request.locationLng)
-    if (distance != null && distance > 120) {
-      return sendError(res, { message: `You are ${Math.round(distance)} meters away from the job site. Move within 120 meters to mark check-in.`, statusCode: HTTP_STATUS.BAD_REQUEST })
+    if (distance != null && distance > 400) {
+      return sendError(res, { message: `You are ${Math.round(distance)} meters away from the job site. Move within 400 meters to mark check-in.`, statusCode: HTTP_STATUS.BAD_REQUEST })
     }
   }
 
@@ -322,30 +346,44 @@ export const checkOut = asyncHandler(async (req, res) => {
 
   if (!assignment) {
     enterpriseApp = await EnterpriseApplication.findOne({ _id: assignmentId, workerId: req.user._id, status: 'joined' })
+      .populate('jobId')
+      .populate('enterpriseId', 'fullName enterpriseProfile')
   }
 
   if (!assignment && !enterpriseApp) {
     return sendError(res, { message: 'Assignment not found', statusCode: HTTP_STATUS.NOT_FOUND })
   }
 
-  const shiftDate = new Date()
-  shiftDate.setHours(0, 0, 0, 0)
-
+  // First, find the active shift that is missing a checkOutAt
   let record = await AttendanceRecord.findOne({
     workerId: req.user._id,
-    shiftDate,
-  }).sort({ createdAt: -1 })
+    ...(assignment ? { assignmentId } : { enterpriseApplicationId: enterpriseApp._id }),
+    checkInAt: { $ne: null },
+    checkOutAt: null
+  }).sort({ shiftDate: -1, createdAt: -1 })
+
+  // Fallback if somehow missing
+  if (!record) {
+    const shiftDate = new Date()
+    shiftDate.setHours(0, 0, 0, 0)
+    record = await AttendanceRecord.findOne({
+      workerId: req.user._id,
+      shiftDate,
+      ...(assignment ? { assignmentId } : { enterpriseApplicationId: enterpriseApp._id })
+    }).sort({ createdAt: -1 })
+  }
 
   if (!record && assignment) {
     record = await AttendanceRecord.findOne({ assignmentId }).sort({ shiftDate: -1 })
   }
 
-  if (!record) return sendError(res, { message: 'No check-in found', statusCode: HTTP_STATUS.BAD_REQUEST })
+  if (!record) return sendError(res, { message: 'No active check-in found to check out', statusCode: HTTP_STATUS.BAD_REQUEST })
 
   record.checkOutAt = new Date()
   const checkInTime = record.checkInAt ? record.checkInAt.getTime() : record.shiftDate.getTime()
   const hours = (record.checkOutAt.getTime() - checkInTime) / (1000 * 60 * 60)
   record.totalHours = parseFloat(hours.toFixed(2))
+  record.overtimeHours = Math.max(0, parseFloat((record.totalHours - 8).toFixed(2)))
   record.projectStatus = 'completed'
   record.status = 'completed'
   record.workingHoursEndedAt = new Date()
@@ -357,6 +395,59 @@ export const checkOut = asyncHandler(async (req, res) => {
   await record.save()
 
   if (enterpriseApp) {
+    try {
+      const { getIO } = await import('../utils/socket.js')
+      const io = getIO()
+      if (io) {
+        const entIdStr = enterpriseApp.enterpriseId?._id ? enterpriseApp.enterpriseId._id.toString() : enterpriseApp.enterpriseId?.toString()
+        if (entIdStr) io.to(`enterprise_${entIdStr}`).emit('attendance:updated', { recordId: record._id, jobId: enterpriseApp.jobId?._id || enterpriseApp.jobId })
+        io.emit('attendance:updated', { recordId: record._id })
+      }
+
+      const workerUser = await User.findById(req.user._id).select('fullName')
+      const workerName = workerUser?.fullName || 'Worker'
+      const jobTitle = enterpriseApp.jobId?.jobTitle || 'Enterprise Job'
+      const companyName = enterpriseApp.enterpriseId?.enterpriseProfile?.companyName || enterpriseApp.enterpriseId?.fullName || 'Enterprise Client'
+      const totalHrs = record.totalHours || 0
+
+      // Calculate shift pay estimation
+      let shiftPay = 0
+      const salary = enterpriseApp.jobId?.salary || enterpriseApp.offerDetails?.salary || 0
+      const salaryType = enterpriseApp.jobId?.salaryType || enterpriseApp.offerDetails?.salaryType || 'per_month'
+      if (salaryType === 'per_day') {
+        shiftPay = Math.round(salary)
+      } else if (salaryType === 'per_hour') {
+        shiftPay = Math.round(salary * totalHrs)
+      } else {
+        shiftPay = Math.round((salary / 26) * (totalHrs / 8))
+      }
+
+      // 1. Trigger Push & In-App Notification to Enterprise (Redirects directly to Wallet / Invoices)
+      if (enterpriseApp.enterpriseId) {
+        const entId = enterpriseApp.enterpriseId._id || enterpriseApp.enterpriseId
+        triggerNotification({
+          userId: entId,
+          title: 'Worker Shift Completed 🏁',
+          body: `${workerName} completed shift for "${jobTitle}" (${totalHrs} hrs). Est. Wage: ₹${shiftPay.toLocaleString('en-IN')}. Tap to view wallet & settlement.`,
+          type: 'JOB_SHIFT_COMPLETED',
+          relatedId: enterpriseApp._id,
+          relatedModel: 'EnterpriseJoiningInvoice',
+        }).catch((err) => console.error('[Notification Error]:', err.message))
+      }
+
+      // 2. Trigger System & Push Notification to Admin (Contains Project & Payment Details)
+      triggerNotification({
+        userId: null,
+        title: 'Project Shift Completed 📋',
+        body: `Project: "${jobTitle}" (${companyName}) | Worker: ${workerName} | Worked: ${totalHrs}h | Payment: ₹${shiftPay.toLocaleString('en-IN')}.`,
+        type: 'ADMIN_SHIFT_COMPLETED',
+        relatedId: record._id,
+        relatedModel: 'AttendanceRecord',
+      }).catch((err) => console.error('[Notification Error]:', err.message))
+
+    } catch (err) {
+      console.error('[CheckOut Notification Error]:', err)
+    }
     return sendSuccess(res, { message: 'Checked out successfully', data: { record } })
   }
 
@@ -612,7 +703,36 @@ export const monitorAttendance = asyncHandler(async (req, res) => {
     }
   }
 
+  // --- ADD ENTERPRISE DIRECT HIRES ---
+  let enterpriseAppsQuery = { status: { $in: ['joining_activated', 'joined'] } }
+  if (userRole === 'enterprise') {
+    enterpriseAppsQuery.enterpriseId = req.user._id
+  } else if (userRole === 'admin' && corporateId && mongoose.Types.ObjectId.isValid(corporateId)) {
+    // If corporate filter is applied, also check if it matches enterpriseId
+    enterpriseAppsQuery.enterpriseId = corporateId
+  } else if (userRole === 'contractor') {
+    // Vendors don't have enterprise direct hires
+    enterpriseAppsQuery._id = null // effectively skip
+  }
+
+  const enterpriseApps = await mongoose.model('EnterpriseApplication').find(enterpriseAppsQuery)
+    .populate('workerId', 'fullName phone')
+    .populate({
+      path: 'jobId',
+      select: 'jobTitle locationText workingHours timeline'
+    })
+    .populate('enterpriseId', 'enterpriseProfile.companyName fullName')
+    .lean()
+  
+  const enterpriseAppIds = enterpriseApps.map(a => a._id)
+  
+  const enterpriseRecords = await AttendanceRecord.find({
+    enterpriseApplicationId: { $in: enterpriseAppIds },
+    shiftDate: { $gte: targetStart, $lte: targetEnd }
+  }).sort({ shiftDate: -1 }).lean()
+
   const projectGroups = {}
+
 
   for (const assignment of assignments) {
     const reqData = requestMap[String(assignment.requestId)]
@@ -634,6 +754,7 @@ export const monitorAttendance = asyncHandler(async (req, res) => {
 
       projectGroups[projIdStr] = {
         projectId: projIdStr,
+        sourceType: 'corporate',
         projectName: projName,
         corporateName,
         projectLocation,
@@ -693,6 +814,79 @@ export const monitorAttendance = asyncHandler(async (req, res) => {
         otp: latestRecord.otp,
         otpExpiresAt: latestRecord.otpExpiresAt,
         assignedAt: assignment.acceptedAt || assignment.createdAt,
+        records: workerRecords
+      })
+    }
+  }
+
+  // --- PROCESS ENTERPRISE APPS ---
+  for (const app of enterpriseApps) {
+    if (!app.jobId) continue
+    
+    const jobIdStr = String(app.jobId._id)
+    if (projectId && jobIdStr !== String(projectId)) continue
+    
+    const projName = app.jobId.jobTitle || 'Enterprise Job'
+    const corporateName = app.enterpriseId?.enterpriseProfile?.companyName || app.enterpriseId?.fullName || 'Enterprise Client'
+    const projectLocation = app.jobId.locationText || 'Location TBD'
+    
+    if (!projectGroups[jobIdStr]) {
+      projectGroups[jobIdStr] = {
+        projectId: jobIdStr,
+        sourceType: 'enterprise',
+        projectName: projName,
+        corporateName,
+        projectLocation,
+        projectStatus: 'Active',
+        startDate: app.joiningDetails?.joiningDate || app.jobId.timeline?.expectedJoiningDate,
+        endDate: app.jobId.timeline?.projectEndDate || null,
+        requiredWorkers: app.jobId.numberOfWorkers || 1,
+        assignedWorkers: 0,
+        present: 0,
+        absent: 0,
+        late: 0,
+        weeklyOff: 0,
+        workingNow: 0,
+        completedToday: 0,
+        workers: []
+      }
+    }
+    
+    const pg = projectGroups[jobIdStr]
+    pg.assignedWorkers++
+    
+    const workerRecords = enterpriseRecords.filter(r => String(r.enterpriseApplicationId) === String(app._id))
+    
+    if (workerRecords.length === 0) {
+      pg.absent++
+      pg.workers.push({
+        assignmentId: app._id, // using app._id as key
+        workerId: app.workerId?._id,
+        workerName: app.workerId?.fullName || 'Unknown Worker',
+        role: 'Direct Hire',
+        status: 'Absent',
+        assignedAt: app.joiningDetails?.markedJoinedAt || app.createdAt,
+        records: []
+      })
+    } else {
+      const latestRecord = workerRecords[0]
+      if (latestRecord.projectStatus === 'working') pg.workingNow++
+      if (latestRecord.projectStatus === 'completed') pg.completedToday++
+      
+      if (latestRecord.attendanceStatus === 'Late') pg.late++
+      else if (latestRecord.attendanceStatus === 'Weekly Off') pg.weeklyOff++
+      else if (latestRecord.attendanceStatus === 'Present' || latestRecord.attendanceStatus === 'Half Day') pg.present++
+      else pg.absent++
+
+      pg.workers.push({
+        assignmentId: app._id,
+        workerId: app.workerId?._id,
+        workerName: app.workerId?.fullName || 'Unknown Worker',
+        role: 'Direct Hire',
+        status: latestRecord.status || latestRecord.attendanceStatus || latestRecord.projectStatus,
+        otp: latestRecord.otp,
+        otpExpiresAt: latestRecord.otpExpiresAt,
+        assignedAt: app.joiningDetails?.markedJoinedAt || app.createdAt,
         records: workerRecords
       })
     }

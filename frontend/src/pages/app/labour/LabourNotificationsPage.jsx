@@ -168,19 +168,66 @@ function LabourNotificationsPageContent() {
 
   const handleOpen = async (n) => {
     if (!n.isRead) {
-      await markRead(n._id).unwrap()
+      markRead(n._id).unwrap().catch(() => {})
       refetch()
     }
-    
-    if (n.type === 'ENTERPRISE_JOB_ALERT' || n.relatedModel === 'EnterpriseJob') {
+
+    const type = n.type || ''
+    const model = n.relatedModel || ''
+    const relId = n.relatedId || ''
+
+    // 1. Interview Invitations & Full Pass Page
+    if (type === 'INTERVIEW_SCHEDULED' || type === 'INTERVIEW_CANCELLED') {
+      if (relId) {
+        navigate(`/app/my-applications/${relId}/interview`)
+      } else {
+        navigate('/app/my-applications')
+      }
+      return
+    }
+
+    // 2. Job Offer Letter, Shortlist, Selection & Application Updates
+    if (
+      type === 'OFFER_SENT' ||
+      type === 'APPLICATION_STATUS_UPDATED' ||
+      type === 'APPLICATION_ACCEPTED' ||
+      type === 'APPLICATION_REJECTED' ||
+      model === 'EnterpriseApplication'
+    ) {
+      navigate('/app/my-applications')
+      return
+    }
+
+    // 3. KYC Reminders & Verification
+    if (type === 'KYC_REMINDER' || type === 'KYC_APPROVED' || type === 'KYC_REJECTED' || n.kind === 'kyc') {
+      navigate('/app/kyc')
+      return
+    }
+
+    // 4. Job Alerts & Requirements
+    if (type === 'ENTERPRISE_JOB_ALERT' || type === 'NEW_JOB_POSTED' || model === 'EnterpriseJob') {
       navigate('/app/enterprise-jobs')
       return
     }
 
-    if (n.kind === 'kyc') navigate('/app/kyc')
-    else if (n.kind === 'attendance') navigate('/app/attendance')
-    else if (n.kind === 'earnings') navigate('/app/earnings')
-    else if (n.kind === 'assignment' || n.kind === 'job_request') navigate('/app/jobs')
+    // 5. Earnings, Salary & Wallet
+    if (type === 'SALARY_CREDITED' || type === 'PAYROLL_RELEASED' || n.kind === 'earnings') {
+      navigate('/app/earnings')
+      return
+    }
+
+    // 6. Attendance & Shift Check-ins
+    if (type === 'ATTENDANCE_LOGGED' || n.kind === 'attendance') {
+      navigate('/app/attendance')
+      return
+    }
+
+    // Default Fallbacks
+    if (n.kind === 'assignment' || n.kind === 'job_request') {
+      navigate('/app/jobs')
+    } else {
+      navigate('/app/my-applications')
+    }
   }
 
   const handleDismiss = async (id, e) => {

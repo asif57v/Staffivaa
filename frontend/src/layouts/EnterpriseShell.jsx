@@ -1,13 +1,19 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
-import { Bell, LogOut, Search, ChevronDown, Menu, X, Plus, Home, Users, Briefcase, MoreHorizontal, CheckCircle2, LayoutDashboard, Wallet, CalendarCheck, FileText } from 'lucide-react'
+import { Bell, LogOut, Search, ChevronDown, Menu, X, Plus, Home, Users, Briefcase, MoreHorizontal, CheckCircle2, LayoutDashboard, Wallet, CalendarCheck, FileText, Check, Trash2, ExternalLink } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth.js'
 import { ENTERPRISE_STATUS } from '../constants/userRoles.js'
 import { AnimatePresence, motion } from 'framer-motion'
 import { connectSocket, getSocket } from '../services/socket.js'
 import { enterpriseApi } from '../store/api/enterpriseApi.js'
-import { workforceApi } from '../store/api/workforceApi.js'
+import {
+  workforceApi,
+  useGetNotificationsQuery,
+  useMarkNotificationReadMutation,
+  useMarkAllNotificationsReadMutation,
+  useDeleteNotificationMutation,
+} from '../store/api/workforceApi.js'
 import toast from 'react-hot-toast'
 import { scrollToTop } from '../components/navigation/GlobalScrollManager.jsx'
 import { useKeyboardOpen } from '../hooks/useKeyboardOpen.js'
@@ -47,12 +53,22 @@ export function EnterpriseShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
   const keyboardOpen = useKeyboardOpen()
+
+  const { data: notificationsData } = useGetNotificationsQuery()
+  const [markRead] = useMarkNotificationReadMutation()
+  const [markAllRead] = useMarkAllNotificationsReadMutation()
+  const [deleteNotif] = useDeleteNotificationMutation()
+
+  const rawNotifs = notificationsData?.notifications || notificationsData?.data?.notifications || notificationsData?.data || []
+  const unreadCount = notificationsData?.unreadCount ?? notificationsData?.data?.unreadCount ?? rawNotifs.filter(n => !n.isRead).length
 
   // Close menus on route change
   useEffect(() => {
     setSidebarOpen(false)
     setMobileMenuOpen(false)
+    setNotificationsOpen(false)
   }, [pathname])
 
   // Real-time socket & Notification listener
@@ -314,10 +330,128 @@ export function EnterpriseShell() {
           </div>
 
           <div className="flex items-center gap-3 sm:gap-4">
-            <button className="relative p-2 text-slate-500 hover:text-slate-800 transition rounded-full hover:bg-slate-100">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2.5 w-1.5 h-1.5 bg-rose-500 rounded-full"></span>
-            </button>
+            {/* Bell Icon & Real-Time Notification Popover */}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setNotificationsOpen(!notificationsOpen)
+                  setProfileDropdownOpen(false)
+                }}
+                className="relative p-2 text-slate-500 hover:text-slate-800 transition rounded-full hover:bg-slate-100 focus:outline-none"
+              >
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-0.5 right-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-600 px-1 text-[9px] font-black text-white shadow-xs ring-2 ring-white">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              <AnimatePresence>
+                {notificationsOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setNotificationsOpen(false)} />
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="fixed inset-x-3 top-16 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 py-3 z-50 overflow-hidden"
+                    >
+                      <div className="px-4 pb-2.5 border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-[14px] font-extrabold text-slate-900">Notifications</h4>
+                          {unreadCount > 0 && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-700">
+                              {unreadCount} New
+                            </span>
+                          )}
+                        </div>
+                        {unreadCount > 0 && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await markAllRead().unwrap()
+                                toast.success('All marked as read')
+                              } catch {}
+                            }}
+                            className="text-[11px] font-extrabold text-indigo-600 hover:text-indigo-800"
+                          >
+                            Mark all read
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
+                        {rawNotifs.length === 0 ? (
+                          <div className="p-8 text-center text-slate-400 font-medium text-[13px]">
+                            No notifications yet.
+                          </div>
+                        ) : (
+                          rawNotifs.slice(0, 10).map((n) => {
+                            const isUnread = !n.isRead
+                            const timeStr = n.createdAt ? new Date(n.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Just now'
+                            return (
+                              <div
+                                key={n._id}
+                                onClick={async () => {
+                                  if (!n.isRead) markRead(n._id).catch(() => {})
+                                  setNotificationsOpen(false)
+                                   if (n.relatedModel === 'EnterpriseJoiningInvoice' || n.type === 'JOB_SHIFT_COMPLETED' || n.type === 'JOB_COMPLETED' || n.type?.includes('PAYMENT')) {
+                                     navigate('/enterprise/wallet')
+                                   } else if (n.relatedModel === 'EnterpriseApplication' || n.type === 'NEW_JOB_APPLICATION') {
+                                     navigate('/enterprise/applications')
+                                   } else if (n.relatedModel === 'EnterpriseJob') {
+                                     navigate(`/enterprise/jobs/${n.relatedId}`)
+                                   } else {
+                                     navigate('/enterprise/wallet')
+                                   }
+                                }}
+                                className={`p-3.5 hover:bg-slate-50 transition-colors cursor-pointer flex items-start gap-3 ${
+                                  isUnread ? 'bg-indigo-50/30' : ''
+                                }`}
+                              >
+                                <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 text-[11px] font-bold ${
+                                  n.type === 'NEW_JOB_APPLICATION' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'
+                                }`}>
+                                  <Bell className="h-4 w-4" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <p className={`text-[12.5px] font-extrabold truncate ${isUnread ? 'text-slate-900' : 'text-slate-700'}`}>
+                                      {n.title}
+                                    </p>
+                                    <span className="text-[10px] font-medium text-slate-400 shrink-0">{timeStr}</span>
+                                  </div>
+                                  <p className="text-[11.5px] font-medium text-slate-500 leading-snug line-clamp-2 mt-0.5">
+                                    {n.body || n.message}
+                                  </p>
+                                </div>
+                                {isUnread && (
+                                  <span className="h-2 w-2 rounded-full bg-indigo-600 shrink-0 mt-1.5" />
+                                )}
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+
+                      <div className="px-4 pt-2.5 border-t border-slate-100 text-center bg-slate-50/50">
+                        <button
+                          onClick={() => {
+                            setNotificationsOpen(false)
+                            navigate('/enterprise/notifications')
+                          }}
+                          className="text-[12px] font-extrabold text-slate-700 hover:text-indigo-600 flex items-center justify-center gap-1 w-full py-1"
+                        >
+                          View All Notifications <ExternalLink className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
 
             <div className="relative">
               <button

@@ -7,6 +7,7 @@ import { signAccessToken } from '../services/tokenService.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { populateLabourCategories } from '../utils/populateLabourCategories.js'
+import { triggerNotification } from '../utils/notificationTrigger.js'
 
 function buildAuthPayload(user, token) {
   const safe = user.toSafeObject()
@@ -126,6 +127,18 @@ export const registerVerify = asyncHandler(async (req, res) => {
   }
   await deleteOtpChallengeDoc(otp.doc)
   const token = signAccessToken(user)
+
+  if (role === USER_ROLES.LABOUR) {
+    triggerNotification({
+      userId: user._id,
+      title: 'Complete Your KYC to Unlock Jobs! 🆔',
+      body: 'Welcome to Staffivaa! Complete your Aadhaar & PAN verification now to start accepting jobs and getting paid.',
+      type: 'KYC_REMINDER',
+      relatedId: user._id,
+      relatedModel: 'User',
+    }).catch((err) => console.error('[Notification Error]:', err.message))
+  }
+
   return sendSuccess(res, {
     message: 'Account created',
     statusCode: HTTP_STATUS.CREATED,
@@ -202,6 +215,17 @@ export const loginVerify = asyncHandler(async (req, res) => {
   await user.save()
   await deleteOtpChallengeDoc(otp.doc)
   
+  if (user.role === USER_ROLES.LABOUR && user.labourProfile?.kycStatus !== 'verified') {
+    triggerNotification({
+      userId: user._id,
+      title: 'Complete Your KYC to Unlock Jobs! 🆔',
+      body: 'Your KYC is incomplete. Verify your Aadhaar & PAN now to receive job assignments and daily payouts.',
+      type: 'KYC_REMINDER',
+      relatedId: user._id,
+      relatedModel: 'User',
+    }).catch((err) => console.error('[Notification Error]:', err.message))
+  }
+
   const token = signAccessToken(user)
   const payload = buildAuthPayload(user, token)
 

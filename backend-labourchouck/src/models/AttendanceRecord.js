@@ -21,6 +21,7 @@ const attendanceRecordSchema = new mongoose.Schema(
     checkInAt: Date,
     checkOutAt: Date,
     totalHours: { type: Number, default: 0 },
+    overtimeHours: { type: Number, default: 0 },
     attendanceStatus: {
       type: String,
       enum: Object.values(ATTENDANCE_STATUS),
@@ -44,6 +45,14 @@ const attendanceRecordSchema = new mongoose.Schema(
     workingHoursStartedAt: Date,
     workingHoursEndedAt: Date,
     totalWorkingMinutes: { type: Number, default: 0 },
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'paid'],
+      default: 'pending',
+      index: true,
+    },
+    settledAt: Date,
+    settledAmount: Number,
   },
   { timestamps: true },
 )

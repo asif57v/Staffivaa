@@ -38,6 +38,7 @@ export function AdminAttendancePage() {
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
   const [expandedProjectIds, setExpandedProjectIds] = useState(new Set())
+  const [activeTab, setActiveTab] = useState('corporate') // 'corporate' | 'enterprise'
 
   const queryParams = useMemo(() => {
     if (datePreset === 'custom') {
@@ -49,7 +50,11 @@ export function AdminAttendancePage() {
   const { data: monitorData, isLoading, isError } = useGetAttendanceMonitorQuery(queryParams)
   const [verify, { isLoading: verifying }] = useVerifyAttendanceMutation()
   
-  const projects = monitorData?.projects ?? []
+  const allProjects = monitorData?.projects ?? []
+  
+  const projects = useMemo(() => {
+    return allProjects.filter(p => p.sourceType === activeTab)
+  }, [allProjects, activeTab])
 
   const handleVerify = async (id) => {
     try {
@@ -76,6 +81,30 @@ export function AdminAttendancePage() {
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900">Platform Attendance Monitoring</h1>
         <p className="mt-2 text-sm text-slate-600">Complete workforce visibility across all corporate clients and vendors.</p>
+      </div>
+      
+      {/* Tabs */}
+      <div className="flex bg-slate-100/80 p-1 rounded-xl w-fit">
+        <button
+          onClick={() => setActiveTab('corporate')}
+          className={`px-4 py-2 text-sm font-bold rounded-lg transition ${
+            activeTab === 'corporate' 
+              ? 'bg-white text-brand shadow-[0_1px_3px_rgba(0,0,0,0.1)]' 
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+          }`}
+        >
+          Corporate & Vendor
+        </button>
+        <button
+          onClick={() => setActiveTab('enterprise')}
+          className={`px-4 py-2 text-sm font-bold rounded-lg transition ${
+            activeTab === 'enterprise' 
+              ? 'bg-white text-brand shadow-[0_1px_3px_rgba(0,0,0,0.1)]' 
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+          }`}
+        >
+          Enterprise Direct Hires
+        </button>
       </div>
 
       {/* Filters Bar */}
@@ -181,7 +210,7 @@ export function AdminAttendancePage() {
                 </div>
 
                 {isExpanded && (
-                  <div className="overflow-x-auto border-t border-slate-100 bg-slate-50/50">
+                  <div className="overflow-x-auto overflow-y-auto max-h-[60vh] border-t border-slate-100 bg-slate-50/50 scrollbar-thin">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-100 bg-white">

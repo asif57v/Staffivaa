@@ -28,6 +28,8 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
     }
 
     const soundName = data.sound || 'new_job_order';
+    const rawSoundName = String(soundName).replace(/\.(mp3|wav|caf|ogg)$/i, '');
+
     const message = {
       notification: {
         title,
@@ -35,7 +37,11 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
       },
       data: {
         type: 'NEW_ORDER',
-        sound: soundName,
+        sound: rawSoundName,
+        sound_name: rawSoundName,
+        soundName: rawSoundName,
+        channel_id: 'new_job_ring_v2',
+        channelId: 'new_job_ring_v2',
         ...data,
         targetUserId: userId.toString(),
         click_action: 'FLUTTER_NOTIFICATION_CLICK'
@@ -43,13 +49,23 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
       android: {
         priority: 'high',
         notification: {
-          sound: soundName,
-          channelId: 'new_job_channel'
+          sound: rawSoundName,
+          channelId: 'new_job_ring_v2',
+          defaultSound: false,
+          defaultVibrateTimings: true,
+          priority: 'max',
+          visibility: 'public',
+          clickAction: 'FLUTTER_NOTIFICATION_CLICK'
         }
       },
       apns: {
         headers: { 'apns-priority': '10' },
-        payload: { aps: { sound: `${soundName}.mp3` } }
+        payload: {
+          aps: {
+            sound: `${rawSoundName}.mp3`,
+            'content-available': 1
+          }
+        }
       },
       webpush: {
         headers: { Urgency: 'high' }

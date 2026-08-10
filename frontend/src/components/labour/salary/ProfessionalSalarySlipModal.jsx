@@ -29,29 +29,29 @@ export function ProfessionalSalarySlipModal({ payroll, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto print:p-0 print:bg-white">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/75 backdrop-blur-sm p-2 sm:p-6 flex justify-center items-start sm:items-center min-h-screen print:p-0 print:bg-white">
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 15 }}
-        className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl overflow-hidden my-8 border border-slate-200 print:shadow-none print:border-none print:my-0 print:rounded-none"
+        className="w-full max-w-3xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden my-auto border border-slate-200 print:shadow-none print:border-none print:my-0 print:rounded-none max-h-[94vh] flex flex-col"
       >
         {/* Top Actions Bar (Hidden on Print) */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-900 text-white print:hidden">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-slate-100 bg-slate-900 text-white shrink-0 print:hidden">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-emerald-400" />
-            <span className="text-[15px] font-black tracking-wide">Staffivaa Verified PaySlip</span>
+            <span className="text-[14px] sm:text-[15px] font-black tracking-wide">Staffivaa Verified PaySlip</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={handlePrint}
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-extrabold flex items-center gap-1.5 shadow-sm cursor-pointer"
+              className="px-3 sm:px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[12px] sm:text-[13px] font-extrabold flex items-center gap-1.5 shadow-xs cursor-pointer"
             >
               <Printer className="h-4 w-4" /> Print / Save PDF
             </button>
             <button
               onClick={onClose}
-              className="h-8 w-8 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 flex items-center justify-center transition-colors"
+              className="h-8 w-8 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
             >
               <X className="h-5 w-5" />
             </button>
@@ -59,7 +59,7 @@ export function ProfessionalSalarySlipModal({ payroll, onClose }) {
         </div>
 
         {/* Printable PaySlip Content */}
-        <div className="p-8 sm:p-10 space-y-8 print:p-6" id="printable-salary-slip">
+        <div className="p-4 sm:p-10 space-y-6 sm:space-y-8 overflow-y-auto flex-1 print:p-6 print:overflow-visible" id="printable-salary-slip">
           {/* Header Section */}
           <div className="flex flex-col sm:flex-row justify-between items-start gap-4 border-b-2 border-slate-900 pb-6">
             <div>

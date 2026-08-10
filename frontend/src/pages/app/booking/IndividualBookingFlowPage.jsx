@@ -227,6 +227,21 @@ export function IndividualBookingFlowPage() {
       setNoMatch(false)
     }
 
+    const handleCancellationOrTimeout = () => {
+      if (cancelled) return
+      setNoMatch(true)
+      if (activeBooking) {
+        const updated = {
+          ...activeBooking,
+          status: 'cancelled',
+          jobTimelineStep: 'cancelled',
+        }
+        setActiveBooking(updated)
+        const stored = loadIndividualBookings().map((b) => (b.id === updated.id || b.ref === updated.ref ? updated : b))
+        saveIndividualBookings(stored)
+      }
+    }
+
     const pollSpecificRequest = async (requestId) => {
       try {
         const token = store.getState().auth.token
@@ -240,9 +255,22 @@ export function IndividualBookingFlowPage() {
             'Pragma': 'no-cache',
           },
         })
-        if (!res.ok) { console.warn('[Homeowner] Poll fetch failed:', res.status); return }
+        if (!res.ok) {
+          if (res.status === 404) {
+            console.warn('[Homeowner] Request 404 / deleted on server')
+            handleCancellationOrTimeout()
+          }
+          return
+        }
         const json = await res.json()
         const { request, assignments } = json?.data || json || {}
+
+        if (request?.status === 'cancelled' || request?.status === 'timed_out' || request?.status === 'expired' || request?.status === 'failed') {
+          console.log('[Homeowner] Request status is cancelled/expired:', request?.status)
+          handleCancellationOrTimeout()
+          return
+        }
+
         const acceptedAssignment = assignments?.find(a => ['accepted', 'on_site', 'in_progress', 'completed'].includes(a.status))
         console.log('[Homeowner] Poll specific request:', requestId, 'status:', request?.status, 'acceptedAssignment:', !!acceptedAssignment)
 
@@ -271,18 +299,14 @@ export function IndividualBookingFlowPage() {
         const requests = json?.data?.requests || json?.requests || []
         console.log('[Homeowner] Poll all requests, count:', requests.length)
 
-        // Find the most recent request that isn't cancelled/completed
         if (!activeBooking?.requestId) return
 
-        const activeReq = requests.find(
-          r => r._id === activeBooking.requestId
-        )
-
-
-
-
-        if (!activeReq) return
-        if (!activeReq) return
+        const activeReq = requests.find(r => r._id === activeBooking.requestId)
+        if (!activeReq || activeReq.status === 'cancelled' || activeReq.status === 'timed_out' || activeReq.status === 'expired') {
+          console.log('[Homeowner] Active request not found or cancelled in pollAllRequests')
+          handleCancellationOrTimeout()
+          return
+        }
 
         // Now fetch that specific request to get its assignments
         const detailRes = await fetch(`${baseUrl}/workforce/requests/${activeReq._id}`, {
@@ -366,6 +390,16 @@ export function IndividualBookingFlowPage() {
         } : null
         transitionToActive(workerInfo)
       })
+
+      socket.on('bookingExpired', (data) => {
+        console.log('[Homeowner] bookingExpired socket event received:', data)
+        handleCancellationOrTimeout()
+      })
+
+      socket.on('booking_cancelled', (data) => {
+        console.log('[Homeowner] booking_cancelled socket event received:', data)
+        handleCancellationOrTimeout()
+      })
     } catch (err) {
       console.error('Socket init error:', err)
     }
@@ -378,6 +412,8 @@ export function IndividualBookingFlowPage() {
         socket.off('connect_error')
         socket.off('reconnect')
         socket.off('bookingAccepted')
+        socket.off('bookingExpired')
+        socket.off('booking_cancelled')
         if (activeBooking?.requestId) socket.emit('leave_request', activeBooking.requestId)
         socket.disconnect()
       }

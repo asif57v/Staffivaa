@@ -207,6 +207,9 @@ function WorkerAttendanceModal({ item, onClose }) {
                   ? new Date(r.checkOutAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
                   : r.checkInAt ? 'Shift In Progress' : '—'
 
+                const totalHrs = r.totalHours != null && r.totalHours > 0 ? r.totalHours : (r.checkInAt && r.checkOutAt ? parseFloat(((new Date(r.checkOutAt) - new Date(r.checkInAt)) / 3600000).toFixed(2)) : 0)
+                const otHrs = r.overtimeHours != null && r.overtimeHours > 0 ? r.overtimeHours : Math.max(0, parseFloat((totalHrs - (r.standardShiftHours || 8)).toFixed(2)))
+
                 return (
                   <div key={r._id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-2">
                     <div className="flex items-center justify-between">
@@ -224,7 +227,7 @@ function WorkerAttendanceModal({ item, onClose }) {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 text-[12px] pt-1">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[12px] pt-1">
                       <div className="bg-white p-2.5 rounded-xl border border-slate-100">
                         <p className="text-[10px] font-bold text-slate-400 uppercase">Check In</p>
                         <p className="font-extrabold text-slate-800 mt-0.5">{checkInStr}</p>
@@ -235,7 +238,13 @@ function WorkerAttendanceModal({ item, onClose }) {
                       </div>
                       <div className="bg-white p-2.5 rounded-xl border border-slate-100">
                         <p className="text-[10px] font-bold text-slate-400 uppercase">Total Hours</p>
-                        <p className="font-black text-indigo-600 mt-0.5">{r.totalHours ? `${r.totalHours} hrs` : '0 hrs'}</p>
+                        <p className="font-black text-indigo-600 mt-0.5">{totalHrs ? `${totalHrs} hrs` : '0 hrs'}</p>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Overtime (OT)</p>
+                        <p className={`font-black mt-0.5 ${otHrs > 0 ? 'text-amber-600 font-extrabold' : 'text-slate-500'}`}>
+                          {otHrs > 0 ? `${otHrs} hrs` : '0 hrs'}
+                        </p>
                       </div>
                     </div>
                   </div>

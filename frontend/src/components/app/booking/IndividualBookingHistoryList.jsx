@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
-import { Calendar, MapPin, RefreshCw, Eye, MoreVertical, CalendarClock } from 'lucide-react'
+import { Calendar, MapPin, RefreshCw, Eye, MoreVertical, CalendarClock, X, Trash2 } from 'lucide-react'
 import {
   bookingStatusToUi,
   formatBookingSchedule,
@@ -39,9 +39,12 @@ function getThumbnail(bookingLine) {
   return '/home_service_hero.png'
 }
 
-function getStatusBadge(status) {
+function getStatusBadge(status, createdAt) {
   const s = String(status || '').toLowerCase()
-  if (s === 'searching' || s === 'pending_review') {
+  const ageMs = createdAt ? (Date.now() - new Date(createdAt).getTime()) : 0
+  const isTimedOut = (s === 'searching' || s === 'pending_review') && ageMs > 2.5 * 60 * 1000
+
+  if (!isTimedOut && (s === 'searching' || s === 'pending_review')) {
     return {
       label: 'Finding Labour',
       tone: 'bg-[#FFFDF5] text-[#D6A11E] border border-[#FDF2C2]',
@@ -74,14 +77,14 @@ function getStatusBadge(status) {
     }
   }
   return {
-    label: 'Cancelled',
-    tone: 'bg-slate-50 text-slate-500 border border-slate-200',
-    dot: 'bg-slate-400',
-    border: 'border-l-4 border-l-slate-300',
+    label: s === 'timed_out' || isTimedOut ? 'Timed Out' : 'Cancelled',
+    tone: 'bg-rose-50 text-rose-600 border border-rose-200',
+    dot: 'bg-rose-500',
+    border: 'border-l-4 border-l-rose-400',
   }
 }
 
-export function IndividualBookingHistoryList({ items, isDemo, onTrack, onRebook, onViewDetail }) {
+export function IndividualBookingHistoryList({ items, isDemo, onTrack, onRebook, onViewDetail, onDelete }) {
   const reduce = useReducedMotion()
   const navigate = useNavigate()
   const [openDropdownId, setOpenDropdownId] = useState(null)
@@ -110,7 +113,7 @@ export function IndividualBookingHistoryList({ items, isDemo, onTrack, onRebook,
   return (
     <ul className="space-y-3">
       {items.map((h, idx) => {
-        const badge = getStatusBadge(h.status)
+        const badge = getStatusBadge(h.status, h.createdAt)
         const primary = (h.lines || [])[0]
         const title = primary?.categoryName || 'Labour booking'
         const workers = totalWorkersFromLines(h.lines)
@@ -148,15 +151,27 @@ export function IndividualBookingHistoryList({ items, isDemo, onTrack, onRebook,
                           e.stopPropagation();
                           setOpenDropdownId(openDropdownId === (h.id || h.ref) ? null : (h.id || h.ref))
                         }}
-                        className={`p-1 -mr-1 rounded-full transition-colors ${openDropdownId === (h.id || h.ref) ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'}`}
+                        className={`p-1 rounded-full transition-colors ${openDropdownId === (h.id || h.ref) ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'}`}
                         aria-label="More options"
                       >
                         <MoreVertical className="h-4 w-4" />
                       </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onDelete) onDelete(h.id || h.ref);
+                        }}
+                        className="p-1 -mr-1 rounded-full text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        title="Delete from history"
+                        aria-label="Delete from history"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
                       
                       {openDropdownId === (h.id || h.ref) && (
                         <div 
-                          className="absolute right-4 top-10 w-40 bg-white rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-slate-100 py-1 z-50 overflow-hidden"
+                          className="absolute right-4 top-10 w-44 bg-white rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-slate-100 py-1 z-50 overflow-hidden"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <button
@@ -166,7 +181,7 @@ export function IndividualBookingHistoryList({ items, isDemo, onTrack, onRebook,
                               if (onViewDetail) onViewDetail(h.ref);
                               else onTrack(h.ref);
                             }}
-                            className="w-full text-left px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+                            className="w-full text-left px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
                           >
                             View Details
                           </button>
@@ -176,10 +191,26 @@ export function IndividualBookingHistoryList({ items, isDemo, onTrack, onRebook,
                               setOpenDropdownId(null);
                               navigate('/app/support');
                             }}
-                            className="w-full text-left px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+                            className="w-full text-left px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
                           >
                             Get Support
                           </button>
+                          {onDelete && (
+                            <>
+                              <div className="my-1 border-t border-slate-100" />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenDropdownId(null);
+                                  onDelete(h.id || h.ref);
+                                }}
+                                className="w-full text-left px-4 py-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50 transition flex items-center gap-2"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Delete History
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>

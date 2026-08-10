@@ -24,6 +24,7 @@ import {
   getActiveWorkforce,
   getLabourCurrentEmployment,
   getEnterpriseWorkerAttendance,
+  getJobWorkersAttendance,
 } from '../controllers/enterpriseController.js'
 import {
   calculateEnterpriseMonthlyPayroll,
@@ -59,6 +60,7 @@ router.patch('/applications/:id/cancel-interview', protect, cancelInterview)
 router.post('/applications/:id/send-offer', protect, sendOfferLetter)
 router.post('/applications/:id/mark-joined', protect, markWorkerJoined)
 router.get('/applications/:id/attendance', protect, getEnterpriseWorkerAttendance)
+router.get('/jobs/:jobId/workers-attendance', protect, getJobWorkersAttendance)
 
 // ── Enterprise Financial Invoices & Joining Confirmation Payments ─────────────
 router.get('/joining-invoices', protect, getEnterpriseInvoices)
