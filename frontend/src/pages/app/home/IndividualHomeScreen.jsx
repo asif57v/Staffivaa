@@ -205,9 +205,33 @@ export function IndividualHomeScreen({ user }) {
     }
   ], [user?.fullName])
   
+function formatBannerPrice(rawPrice) {
+  if (rawPrice === null || rawPrice === undefined) return null
+  const str = String(rawPrice).trim()
+  if (!str) return null
+
+  let priceVal = str
+  if (!priceVal.startsWith('₹') && !priceVal.toLowerCase().includes('rs')) {
+    priceVal = `₹${priceVal}`
+  }
+  if (!priceVal.toLowerCase().includes('/hr') && !priceVal.toLowerCase().includes('/day') && !priceVal.toLowerCase().includes('/shift')) {
+    priceVal = `${priceVal}/hr`
+  }
+  return priceVal
+}
+
   const activeCarouselBanners = useMemo(() => {
     const banners = marketingBanners.filter(b => b.position === 'CAROUSEL' || b.position === 'TOP')
-    return banners.length > 0 ? banners : HERO_SLIDES
+    if (banners.length > 0) {
+      return banners.map(b => ({
+        ...b,
+        image: b.image || b.imageUrl,
+        title: b.title || 'Expert Home Services',
+        subtitle: b.subtitle || 'Book verified experts for reliable, fast, and quality service.',
+        priceText: b.priceText ?? b.price ?? null,
+      }))
+    }
+    return HERO_SLIDES
   }, [marketingBanners, HERO_SLIDES])
 
   const middleBanners = useMemo(() => marketingBanners.filter(b => b.position === 'MIDDLE'), [marketingBanners])
@@ -527,51 +551,55 @@ export function IndividualHomeScreen({ user }) {
             onTouchEnd={() => { isHeroHoveredRef.current = false }}
             className="relative overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-none flex gap-3 pb-2 pt-1 px-3 w-full min-h-[130px]"
           >
-            {activeCarouselBanners.map((slide, i) => (
-              <div
-                key={i}
-                onClick={() => handleHeroSlideClick(slide)}
-                className="w-[88%] sm:w-[90%] shrink-0 snap-center relative overflow-hidden rounded-[24px] bg-slate-100 border border-slate-200/90 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.06)] min-h-[145px] flex items-stretch cursor-pointer hover:border-[#FFD100]/80 hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12)] active:scale-[0.99] transition-all duration-200 group"
-              >
-                {/* Full card background image spanning 100% width and 100% height */}
-                <img
-                  src={slide.image}
-                  alt={slide.title || 'Banner'}
-                  className="absolute inset-0 w-full h-full object-cover object-center scale-105 transition-transform duration-500 group-hover:scale-110"
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    if (e.target.parentElement) {
-                      e.target.parentElement.classList.add('bg-slate-200');
-                    }
-                  }}
-                />
+            {activeCarouselBanners.map((slide, i) => {
+              const slideImage = slide.image || slide.imageUrl || '/home_service_hero.png'
+              const slideTitle = slide.title || 'Expert Home Services'
+              const slideSubtitle = slide.subtitle || 'Book verified experts for reliable, fast, and quality service.'
+              const rawPrice = slide.priceText ?? slide.price ?? null
+              const formattedPrice = formatBannerPrice(rawPrice)
 
-                {slide.title ? (
-                  <>
-                    {/* Left side white gradient overlay to ensure text contrast while showing full image on middle & right */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-white via-white/85 via-55% to-transparent z-10 pointer-events-none" />
+              return (
+                <div
+                  key={slide._id || slide.id || i}
+                  onClick={() => handleHeroSlideClick(slide)}
+                  className="w-[88%] sm:w-[90%] shrink-0 snap-center relative overflow-hidden rounded-[24px] bg-slate-100 border border-slate-200/90 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.06)] min-h-[145px] flex items-stretch cursor-pointer hover:border-[#FFD100]/80 hover:shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12)] active:scale-[0.99] transition-all duration-200 group"
+                >
+                  {/* Full card background image spanning 100% width and 100% height */}
+                  <img
+                    src={slideImage}
+                    alt={slideTitle || 'Banner'}
+                    className="absolute inset-0 w-full h-full object-cover object-center scale-105 transition-transform duration-500 group-hover:scale-110"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      if (e.target.parentElement) {
+                        e.target.parentElement.classList.add('bg-slate-200');
+                      }
+                    }}
+                  />
 
-                    {/* Left text content */}
-                    <div className="relative z-20 w-[60%] sm:w-[55%] p-4 sm:p-5 flex flex-col justify-center min-w-0">
-                      <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900 leading-[1.25] break-words">
-                        {slide.title}
-                      </h2>
-                      {slide.subtitle && (
-                        <p className="mt-1 text-[11px] sm:text-xs font-medium leading-snug text-slate-600 line-clamp-2 break-words">
-                          {slide.subtitle}
-                        </p>
-                      )}
-                      {slide.price && (
-                        <div className="mt-3 inline-flex items-center rounded-full bg-white px-3.5 py-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.08)] border border-slate-200/80 w-max max-w-full">
-                          <span className="text-xs sm:text-sm font-black text-[#F43F5E] truncate">{slide.price}</span>
-                          <span className="ml-1.5 text-[9px] sm:text-[10px] font-semibold text-slate-400 shrink-0 uppercase tracking-wide">Starting*</span>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                ) : null}
-              </div>
-            ))}
+                  {/* Left side white gradient overlay to ensure text contrast while showing full image on middle & right */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-white via-white/85 via-55% to-transparent z-10 pointer-events-none" />
+
+                  {/* Left text content */}
+                  <div className="relative z-20 w-[60%] sm:w-[55%] p-4 sm:p-5 flex flex-col justify-center min-w-0">
+                    <h2 className="text-[17px] sm:text-xl font-black tracking-tight text-slate-900 leading-[1.18] break-words">
+                      {user?.fullName ? `Welcome, ${user.fullName}! 👋` : slideTitle}
+                    </h2>
+                    {slideSubtitle && (
+                      <p className="mt-1.5 text-[11px] sm:text-xs font-bold leading-snug text-slate-700 line-clamp-2 break-words">
+                        {slideSubtitle}
+                      </p>
+                    )}
+                    {formattedPrice ? (
+                      <div className="mt-3 inline-flex items-center rounded-full bg-white px-3.5 py-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.08)] border border-slate-200/80 w-max max-w-full">
+                        <span className="text-xs sm:text-sm font-black text-[#F43F5E] truncate">{formattedPrice}</span>
+                        <span className="ml-1.5 text-[9px] sm:text-[10px] font-semibold text-slate-400 shrink-0 uppercase tracking-wide">STARTING*</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </motion.div>
       </section>
