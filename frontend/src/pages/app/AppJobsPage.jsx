@@ -126,10 +126,7 @@ export function AppJobsPage() {
 
     socket.on('assignment_assigned', (data) => {
       console.log('[LabourJobs] New assignment assigned:', data)
-      try {
-        const audio = new Audio('/new_job_order.mp3')
-        audio.play().catch(() => {})
-      } catch (e) {}
+      // Sound and popup are now handled globally in AppShell
       refetch()
     })
 

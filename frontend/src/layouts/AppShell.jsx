@@ -30,6 +30,8 @@ import { setUser } from '../store/slices/authSlice.js'
 import { loadJobDemoState, subscribeJobDemo } from '../lib/labourJobDemoStorage.js'
 import { enterpriseApi } from '../store/api/enterpriseApi.js'
 import { walletApi } from '../store/api/walletApi.js'
+import { IncomingJobPopup } from '../components/labour/jobs/IncomingJobPopup.jsx'
+import { useRespondAssignmentMutation } from '../store/api/workforceApi.js'
 
 export function AppShell() {
   const { pathname, search } = useLocation()
@@ -48,6 +50,28 @@ export function AppShell() {
   const isLabour = user?.role === USER_ROLES.LABOUR
   const { data: apiData } = useGetLabourAssignmentsQuery(undefined, { skip: !isLabour })
   const [localDemo, setLocalDemo] = useState(() => loadJobDemoState())
+  const [incomingJob, setIncomingJob] = useState(null)
+  const [isAcceptingPopup, setIsAcceptingPopup] = useState(false)
+  const incomingJobRef = useRef(null)
+  const globalAudioRef = useRef(null)
+  const [respondAssignment] = useRespondAssignmentMutation()
+
+  const stopGlobalRingSound = useCallback(() => {
+    if (globalAudioRef.current) {
+      try {
+        globalAudioRef.current.pause();
+        globalAudioRef.current.currentTime = 0;
+      } catch (e) {}
+      globalAudioRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!incomingJob) {
+      stopGlobalRingSound();
+    }
+  }, [incomingJob, stopGlobalRingSound]);
+  
   useEffect(() => {
     if (isLabour) return subscribeJobDemo(setLocalDemo)
   }, [isLabour])
@@ -98,8 +122,11 @@ export function AppShell() {
 
     const playNewJobRingSound = () => {
       try {
+        stopGlobalRingSound();
         const audio = new Audio('/new_job_order.mp3');
         audio.volume = 1.0;
+        audio.loop = true;
+        globalAudioRef.current = audio;
         const playPromise = audio.play();
         if (playPromise !== undefined) {
           playPromise.catch((err) => {
@@ -112,27 +139,49 @@ export function AppShell() {
     };
 
     const invalidateCache = () => {
-      console.log('[Socket] Invalidating Assignments, Requests, and Enterprise Jobs cache');
-      dispatch(workforceApi.util.invalidateTags(['Assignments', 'Requests']));
+      console.log('[Socket] Invalidating Assignments, Requests, Notifications, and Enterprise Jobs cache');
+      dispatch(workforceApi.util.invalidateTags(['Assignments', 'Requests', 'Notifications']));
       dispatch(enterpriseApi.util.invalidateTags(['EnterpriseJobs']));
     };
 
     const handleAssignmentAssigned = (data) => {
       console.log('[Socket] assignment_assigned event received:', data);
-      playNewJobRingSound();
+      
+      // Handle the rich popup payload
+      if (data.requestId && data.type === 'NEW_ORDER') {
+        setIncomingJob(data);
+        incomingJobRef.current = data;
+      }
+      
       invalidateCache();
     };
+
+    const handleAssignmentEnded = () => {
+      stopGlobalRingSound();
+      setIncomingJob(null);
+      incomingJobRef.current = null;
+      invalidateCache();
+    };
+
+    socket.on('bookingAcceptedGlobal', (data) => {
+      if (incomingJobRef.current && incomingJobRef.current.requestId === data.requestId) {
+        stopGlobalRingSound();
+        setIncomingJob(null);
+        incomingJobRef.current = null;
+      }
+      invalidateCache();
+    });
 
     socket.on('assignment_created', invalidateCache);
     socket.on('assignment_assigned', handleAssignmentAssigned);
     socket.on('assignment_accepted', invalidateCache);
-    socket.on('assignment_rejected', invalidateCache);
+    socket.on('assignment_rejected', handleAssignmentEnded);
     socket.on('assignment_completed', invalidateCache);
-    socket.on('assignment_cancelled', invalidateCache);
+    socket.on('assignment_cancelled', handleAssignmentEnded);
 
     socket.on('request_created', invalidateCache);
     socket.on('request_updated', invalidateCache);
-    socket.on('request_cancelled', invalidateCache);
+    socket.on('request_cancelled', handleAssignmentEnded);
 
     const refreshAppUser = () => {
       fetchMe().then((res) => {
@@ -141,15 +190,7 @@ export function AppShell() {
     };
 
     const handleNewNotif = (notification) => {
-      if (
-        notification?.type === 'NEW_ORDER' ||
-        notification?.type === 'LABOUR_ASSIGNED' ||
-        notification?.type === 'OFFER_SENT' ||
-        (notification?.title && notification.title.toLowerCase().includes('new job'))
-      ) {
-        playNewJobRingSound();
-      }
-
+      // Ring sound is handled exclusively by assignment_assigned and incomingJob popup state.
       // Show in-app alert toast for all notifications
       dispatchAlert(notification.title || 'New Notification', notification.body || notification.message || '', false);
 
@@ -184,21 +225,84 @@ export function AppShell() {
     socket.on('dashboard:updated', invalidateCache);
 
     return () => {
+      stopGlobalRingSound();
       socket.off('assignment_created', invalidateCache);
       socket.off('assignment_assigned', handleAssignmentAssigned);
       socket.off('assignment_accepted', invalidateCache);
-      socket.off('assignment_rejected', invalidateCache);
+      socket.off('assignment_rejected', handleAssignmentEnded);
       socket.off('assignment_completed', invalidateCache);
-      socket.off('assignment_cancelled', invalidateCache);
+      socket.off('assignment_cancelled', handleAssignmentEnded);
 
       socket.off('request_created', invalidateCache);
       socket.off('request_updated', invalidateCache);
-      socket.off('request_cancelled', invalidateCache);
+      socket.off('request_cancelled', handleAssignmentEnded);
       socket.off('notification:new', handleNewNotif);
       socket.off('kyc:updated', handleKycUpdate);
       socket.off('dashboard:updated', invalidateCache);
+      socket.off('bookingAcceptedGlobal');
     };
   }, [user, token, dispatch]);
+  // ------------------------------------------
+
+  // --- Incoming Job Popup Handlers ---
+  const handlePopupAccept = useCallback(async () => {
+    stopGlobalRingSound();
+    if (!incomingJob?.assignmentId) return;
+    setIsAcceptingPopup(true);
+    try {
+      const loc = readAppUserLocation();
+      if (!loc?.lat || !loc?.lng) {
+        dispatchAlert('Location Required', 'Please update your Work Area with a valid GPS location first.', true);
+        setIsAcceptingPopup(false);
+        return;
+      }
+      const res = await respondAssignment({
+        id: incomingJob.assignmentId,
+        action: 'accept',
+        labourLat: loc?.lat,
+        labourLng: loc?.lng
+      }).unwrap();
+      
+      setIncomingJob(null);
+      incomingJobRef.current = null;
+      
+      if (res.request && res.request.status === 'platform_fee_pending') {
+        dispatchAlert('Booking Accepted!', 'Please pay the platform fee in your active jobs tab.');
+      } else {
+        dispatchAlert('Job accepted!', 'Head to Active tab to view details.');
+      }
+      // Navigate to the Jobs tab active section
+      navigate('/app/jobs');
+    } catch (e) {
+      console.error('Popup accept error:', e);
+      dispatchAlert('Failed to accept', e?.data?.message || e?.message || 'Please try from Offers tab.', true);
+    } finally {
+      setIsAcceptingPopup(false);
+    }
+  }, [incomingJob, respondAssignment, navigate, dispatchAlert, stopGlobalRingSound]);
+
+  const handlePopupDecline = useCallback(async () => {
+    stopGlobalRingSound();
+    if (!incomingJob?.assignmentId) {
+      setIncomingJob(null);
+      incomingJobRef.current = null;
+      return;
+    }
+    try {
+      await respondAssignment({ id: incomingJob.assignmentId, action: 'decline' }).unwrap();
+    } catch (e) {
+      console.error('Popup decline error:', e);
+    }
+    setIncomingJob(null);
+    incomingJobRef.current = null;
+  }, [incomingJob, respondAssignment, stopGlobalRingSound]);
+
+  const handlePopupTimeout = useCallback(() => {
+    stopGlobalRingSound();
+    setIncomingJob(null);
+    incomingJobRef.current = null;
+    dispatchAlert('Missed Opportunity', 'Job request timed out.', true);
+  }, [dispatchAlert, stopGlobalRingSound]);
   // ------------------------------------------
 
   // ------------------------------------------
@@ -249,12 +353,7 @@ export function AppShell() {
           payload?.data?.sound === 'new_job_order' ||
           payload?.notification?.title?.toLowerCase().includes('new job')
         ) {
-          try {
-            const audio = new Audio('/new_job_order.mp3');
-            audio.play().catch((err) => console.log('[Audio] Play blocked/deferred:', err));
-          } catch (err) {
-            console.error('[Audio] Exception playing sound:', err);
-          }
+          playNewJobRingSound();
         }
 
         if (Notification.permission === 'granted') {
@@ -380,15 +479,14 @@ export function AppShell() {
     if (!isLabour || !bottomNav) return bottomNav
     return bottomNav.map(item => {
       if (item.id === 'jobs') {
-        const totalBadge = pendingJobsCount + unreadRegularJobNotifsCount
-        return { ...item, badge: totalBadge > 0 ? totalBadge : undefined }
+        return { ...item, badge: pendingJobsCount > 0 ? pendingJobsCount : undefined }
       }
       if (item.id === 'enterprise') {
         return { ...item, badge: unreadEnterpriseNotifsCount > 0 ? unreadEnterpriseNotifsCount : undefined }
       }
       return item
     })
-  }, [bottomNav, isLabour, pendingJobsCount, unreadRegularJobNotifsCount, unreadEnterpriseNotifsCount])
+  }, [bottomNav, isLabour, pendingJobsCount, unreadEnterpriseNotifsCount])
 
   const normalizedPath = pathname.endsWith('/') && pathname !== '/' ? pathname.slice(0, -1) : pathname
   const isIndividualAppHome = user?.role === USER_ROLES.INDIVIDUAL && normalizedPath === '/app'
@@ -831,6 +929,17 @@ export function AppShell() {
           onSaved={() => setAppLocation(readAppUserLocation())}
         />
       ) : null}
+
+      {/* Rapido-style Incoming Job Popup (Global for Workers) */}
+      {incomingJob && isLabour && (
+        <IncomingJobPopup
+          job={incomingJob}
+          onAccept={handlePopupAccept}
+          onDecline={handlePopupDecline}
+          onTimeout={handlePopupTimeout}
+          isAccepting={isAcceptingPopup}
+        />
+      )}
     </div>
   )
 }

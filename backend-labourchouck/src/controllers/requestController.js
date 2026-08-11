@@ -327,13 +327,25 @@ export const createRequest = asyncHandler(async (req, res) => {
       const createdAssignments = await Assignment.insertMany(assignmentsToCreate)
       // Keep status as SEARCHING until a worker accepts
 
-      // Notify all matching workers instantly
+      // Notify all matching workers instantly with rich payload for popup card
       createdAssignments.forEach((assignment) => {
-        emitToUser('labour', assignment.labourId.toString(), 'assignment_assigned', { assignmentId: assignment._id.toString(), type: 'NEW_ORDER' })
+        emitToUser('labour', assignment.labourId.toString(), 'assignment_assigned', {
+          assignmentId: assignment._id.toString(),
+          type: 'NEW_ORDER',
+          requestId: request._id.toString(),
+          clientName: user.fullName || 'Customer',
+          locationText: request.locationText || '',
+          categoryName: category?.name || 'Worker',
+          perDayRate: baseRate,
+          startDate: request.startDate,
+          shiftStart: request.shiftStart || '',
+          shiftEnd: request.shiftEnd || '',
+          timeoutSeconds: 90
+        })
         triggerNotification({
           userId: assignment.labourId,
           title: 'New Job Available!',
-          body: 'A new job matching your skills is available. Tap to view.',
+          body: `${user.fullName || 'A customer'} needs a ${category?.name || 'worker'} near ${request.locationText || 'your area'}. Tap to view.`,
           type: 'NEW_ORDER',
           relatedId: assignment._id,
           relatedModel: 'Assignment'

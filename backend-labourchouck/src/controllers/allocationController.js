@@ -396,6 +396,7 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
 
       // --- RE-BROADCAST REAL-TIME SEARCH TO ALL NEARBY WORKERS ---
       const categoryId = request.lines?.[0]?.categoryId
+      const clientUser = await User.findById(request.clientId).select('fullName').lean()
       if (categoryId) {
         // Fetch candidate workers (excluding cancelling worker)
         let candidates = await User.find({
@@ -463,11 +464,23 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
           const createdAssignments = await Assignment.insertMany(assignmentsToCreate)
 
           createdAssignments.forEach((newAss) => {
-            emitToUser('labour', newAss.labourId.toString(), 'assignment_assigned', { assignmentId: newAss._id.toString(), type: 'NEW_ORDER' })
+            emitToUser('labour', newAss.labourId.toString(), 'assignment_assigned', {
+              assignmentId: newAss._id.toString(),
+              type: 'NEW_ORDER',
+              requestId: request._id.toString(),
+              clientName: clientUser?.fullName || 'Customer',
+              locationText: request.locationText || '',
+              categoryName: category?.name || 'Worker',
+              perDayRate: baseRate,
+              startDate: request.startDate,
+              shiftStart: request.shiftStart || '',
+              shiftEnd: request.shiftEnd || '',
+              timeoutSeconds: 90
+            })
             triggerNotification({
               userId: newAss.labourId,
               title: 'New Job Available!',
-              body: 'A new job matching your skills is available. Tap to view.',
+              body: `A customer needs a ${category?.name || 'worker'} near ${request.locationText || 'your area'}. Tap to view.`,
               type: 'NEW_ORDER',
               relatedId: newAss._id,
               relatedModel: 'Assignment'

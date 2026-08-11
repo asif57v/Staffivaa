@@ -43,6 +43,9 @@ const TYPE_MAPPING = {
   'BOOKING_CREATED': { icon: Flame, kind: 'job_request', priority: 'high', category: 'jobs' },
   'BOOKING_UPDATED': { icon: Flame, kind: 'job_request', priority: 'normal', category: 'jobs' },
   'BOOKING_CANCELLED': { icon: Flame, kind: 'job_request', priority: 'high', category: 'jobs' },
+  'NEW_ORDER': { icon: HardHat, kind: 'job_request', priority: 'high', category: 'jobs' },
+  'ASSIGNMENT_CREATED': { icon: HardHat, kind: 'job_request', priority: 'high', category: 'jobs' },
+  'ASSIGNMENT_ASSIGNED': { icon: HardHat, kind: 'job_request', priority: 'high', category: 'jobs' },
   'LABOUR_ASSIGNED': { icon: HardHat, kind: 'assignment', priority: 'high', category: 'jobs' },
   'LABOUR_CHECK_IN': { icon: Timer, kind: 'attendance', priority: 'normal', category: 'updates' },
   'LABOUR_CHECK_OUT': { icon: Timer, kind: 'attendance', priority: 'normal', category: 'updates' },
@@ -51,12 +54,15 @@ const TYPE_MAPPING = {
   'WALLET_CREDIT': { icon: Wallet, kind: 'earnings', priority: 'high', category: 'updates' },
   'WALLET_DEBIT': { icon: Wallet, kind: 'earnings', priority: 'normal', category: 'updates' },
   'WITHDRAWAL_COMPLETED': { icon: Wallet, kind: 'earnings', priority: 'high', category: 'updates' },
-  'ENTERPRISE_JOB_ALERT': { icon: Building2, kind: 'job_request', priority: 'high', category: 'jobs' },
+  'ENTERPRISE_JOB_ALERT': { icon: Building2, kind: 'enterprise', priority: 'high', category: 'jobs' },
+  'ENTERPRISE_JOB_POSTED': { icon: Building2, kind: 'enterprise', priority: 'high', category: 'jobs' },
+  'NEW_JOB_POSTED': { icon: Building2, kind: 'enterprise', priority: 'high', category: 'jobs' },
   'SYSTEM_ALERT': { icon: Sparkles, kind: 'system', priority: 'high', category: 'updates' },
 }
 
 const KIND_TONE = {
   job_request: 'from-amber-500/15 to-orange-50 text-amber-800 ring-amber-200/80',
+  enterprise: 'from-indigo-500/15 to-indigo-50 text-indigo-800 ring-indigo-200/80',
   kyc: 'from-violet-500/15 to-violet-50 text-violet-800 ring-violet-200/80',
   attendance: 'from-sky-500/15 to-sky-50 text-sky-800 ring-sky-200/80',
   earnings: 'from-emerald-500/15 to-emerald-50 text-emerald-800 ring-emerald-200/80',
@@ -176,7 +182,7 @@ function LabourNotificationsPageContent() {
     const model = n.relatedModel || ''
     const relId = n.relatedId || ''
 
-    // 1. Interview Invitations & Full Pass Page
+    // 1. Enterprise Application & Interview Invitations
     if (type === 'INTERVIEW_SCHEDULED' || type === 'INTERVIEW_CANCELLED') {
       if (relId) {
         navigate(`/app/my-applications/${relId}/interview`)
@@ -186,7 +192,6 @@ function LabourNotificationsPageContent() {
       return
     }
 
-    // 2. Job Offer Letter, Shortlist, Selection & Application Updates
     if (
       type === 'OFFER_SENT' ||
       type === 'APPLICATION_STATUS_UPDATED' ||
@@ -198,35 +203,70 @@ function LabourNotificationsPageContent() {
       return
     }
 
-    // 3. KYC Reminders & Verification
+    // 2. Enterprise Jobs (Company Roles)
+    if (
+      type === 'ENTERPRISE_JOB_ALERT' ||
+      type === 'ENTERPRISE_JOB_POSTED' ||
+      type === 'NEW_JOB_POSTED' ||
+      model === 'EnterpriseJob' ||
+      n.kind === 'enterprise'
+    ) {
+      navigate('/app/enterprise-jobs')
+      return
+    }
+
+    // 3. Regular Daily Jobs (Worker assignments & bookings)
+    if (
+      type === 'NEW_ORDER' ||
+      type === 'BOOKING_CREATED' ||
+      type === 'BOOKING_UPDATED' ||
+      type === 'BOOKING_CANCELLED' ||
+      type === 'LABOUR_ASSIGNED' ||
+      type === 'LABOUR_REPLACED' ||
+      type === 'ASSIGNMENT_CREATED' ||
+      type === 'ASSIGNMENT_ASSIGNED' ||
+      model === 'Assignment' ||
+      model === 'WorkforceRequest' ||
+      model === 'Booking' ||
+      n.kind === 'assignment' ||
+      n.kind === 'job_request'
+    ) {
+      navigate('/app/jobs')
+      return
+    }
+
+    // 4. KYC Reminders & Verification
     if (type === 'KYC_REMINDER' || type === 'KYC_APPROVED' || type === 'KYC_REJECTED' || n.kind === 'kyc') {
       navigate('/app/kyc')
       return
     }
 
-    // 4. Job Alerts & Requirements
-    if (type === 'ENTERPRISE_JOB_ALERT' || type === 'NEW_JOB_POSTED' || model === 'EnterpriseJob') {
-      navigate('/app/enterprise-jobs')
-      return
-    }
-
     // 5. Earnings, Salary & Wallet
-    if (type === 'SALARY_CREDITED' || type === 'PAYROLL_RELEASED' || n.kind === 'earnings') {
+    if (
+      type === 'SALARY_CREDITED' ||
+      type === 'PAYROLL_RELEASED' ||
+      type === 'WITHDRAWAL_COMPLETED' ||
+      type === 'WITHDRAWAL_APPROVED' ||
+      type === 'PAYMENT_RECEIVED' ||
+      type === 'WALLET_CREDIT' ||
+      type === 'WALLET_DEBIT' ||
+      n.kind === 'earnings'
+    ) {
       navigate('/app/earnings')
       return
     }
 
     // 6. Attendance & Shift Check-ins
-    if (type === 'ATTENDANCE_LOGGED' || n.kind === 'attendance') {
+    if (type === 'ATTENDANCE_LOGGED' || type === 'LABOUR_CHECK_IN' || type === 'LABOUR_CHECK_OUT' || n.kind === 'attendance') {
       navigate('/app/attendance')
       return
     }
 
-    // Default Fallbacks
-    if (n.kind === 'assignment' || n.kind === 'job_request') {
+    // Default Fallback
+    if (isLabour) {
       navigate('/app/jobs')
     } else {
-      navigate('/app/my-applications')
+      navigate('/app/bookings')
     }
   }
 
