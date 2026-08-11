@@ -466,7 +466,7 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
           createdAssignments.forEach((newAss) => {
             emitToUser('labour', newAss.labourId.toString(), 'assignment_assigned', {
               assignmentId: newAss._id.toString(),
-              type: 'NEW_ORDER',
+              type: 'new_order',
               requestId: request._id.toString(),
               clientName: clientUser?.fullName || 'Customer',
               locationText: request.locationText || '',
@@ -481,7 +481,7 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
               userId: newAss.labourId,
               title: 'New Job Available!',
               body: `A customer needs a ${category?.name || 'worker'} near ${request.locationText || 'your area'}. Tap to view.`,
-              type: 'NEW_ORDER',
+              type: 'new_order',
               relatedId: newAss._id,
               relatedModel: 'Assignment'
             }).catch(err => console.error('[Notification Error]:', err.message));

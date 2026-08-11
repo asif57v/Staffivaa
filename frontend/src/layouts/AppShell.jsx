@@ -148,7 +148,7 @@ export function AppShell() {
       console.log('[Socket] assignment_assigned event received:', data);
       
       // Handle the rich popup payload
-      if (data.requestId && data.type === 'NEW_ORDER') {
+      if (data.requestId && (data.type === 'new_order' || data.type === 'NEW_ORDER')) {
         setIncomingJob(data);
         incomingJobRef.current = data;
       }

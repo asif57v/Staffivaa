@@ -38,6 +38,7 @@ const notificationSchema = new mongoose.Schema(
         'BOOKING_CANCELLED',
         'LABOUR_ASSIGNED',
         'NEW_ORDER',
+        'new_order',
         'LABOUR_CHECK_IN',
         'LABOUR_CHECK_OUT',
         'ATTENDANCE_EXCEPTION',

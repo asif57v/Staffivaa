@@ -44,6 +44,7 @@ const TYPE_MAPPING = {
   'BOOKING_UPDATED': { icon: Flame, kind: 'job_request', priority: 'normal', category: 'jobs' },
   'BOOKING_CANCELLED': { icon: Flame, kind: 'job_request', priority: 'high', category: 'jobs' },
   'NEW_ORDER': { icon: HardHat, kind: 'job_request', priority: 'high', category: 'jobs' },
+  'new_order': { icon: HardHat, kind: 'job_request', priority: 'high', category: 'jobs' },
   'ASSIGNMENT_CREATED': { icon: HardHat, kind: 'job_request', priority: 'high', category: 'jobs' },
   'ASSIGNMENT_ASSIGNED': { icon: HardHat, kind: 'job_request', priority: 'high', category: 'jobs' },
   'LABOUR_ASSIGNED': { icon: HardHat, kind: 'assignment', priority: 'high', category: 'jobs' },
@@ -218,6 +219,7 @@ function LabourNotificationsPageContent() {
     // 3. Regular Daily Jobs (Worker assignments & bookings)
     if (
       type === 'NEW_ORDER' ||
+      type === 'new_order' ||
       type === 'BOOKING_CREATED' ||
       type === 'BOOKING_UPDATED' ||
       type === 'BOOKING_CANCELLED' ||
