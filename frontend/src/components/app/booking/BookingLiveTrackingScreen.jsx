@@ -26,12 +26,17 @@ import { enrichDiscoverLabourUi, hashSeed } from '../../../lib/discoverLabourDum
 import { loadRazorpayScript } from '../../../lib/razorpay.js'
 import { ExtraWorkModal } from './ExtraWorkModal.jsx'
 import { PlusCircle } from 'lucide-react'
+import {
+  markLocalBookingCancelled,
+  notifyWorkerCancelledBooking,
+} from '../../../lib/individualBookings.js'
 
 export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCancel }) {
   const requestId = booking?.requestId || booking?._id
 
   const { data: requestData, isLoading, error, refetch } = useGetRequestQuery(requestId, {
     skip: !requestId,
+    pollingInterval: 8000,
   })
 
   const [createOrder, { isLoading: isCreatingOrder }] = useCreateRazorpayOrderMutation()
@@ -81,6 +86,11 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
       }
 
       const order = await createOrder(requestId).unwrap()
+
+      if (order?.bypassPayment) {
+        await refetch()
+        return
+      }
       
       const options = {
         key: order.keyId,
@@ -97,6 +107,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature
             }).unwrap()
+            await refetch()
           } catch (err) {
             console.error('Payment verification failed', err)
             alert('Payment verification failed. Please contact support.')
@@ -162,9 +173,46 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     socket.on('booking_cancelled', (payload) => {
       if (!hasCancelledRef.current) {
         hasCancelledRef.current = true
-        alert(`Booking Cancelled:\n${payload.message}\n\nNote: If you paid the platform fee, the refund process has been initiated. You can check your Wallet for updates.`)
+        markLocalBookingCancelled({
+          requestId: requestId || booking?.requestId,
+          ref: booking?.ref,
+          reason: payload?.reason || 'cancelled',
+        })
+        if (payload?.fullCancel || payload?.reason === 'labour_cancelled_unpaid') {
+          notifyWorkerCancelledBooking({
+            message: payload?.message || 'Worker cancelled the booking.',
+            requestId: requestId || booking?.requestId,
+            ref: booking?.ref,
+          })
+        } else {
+          alert(
+            `Booking Cancelled:\n${payload?.message || 'This booking was cancelled.'}\n\nNote: If you paid the platform fee, the refund process has been initiated. You can check your Wallet for updates.`,
+          )
+        }
         onBack()
       }
+    })
+
+    socket.on('bookingCancelledByLabour', (payload) => {
+      if (payload?.fullCancel || payload?.reason === 'labour_cancelled_unpaid') {
+        if (!hasCancelledRef.current) {
+          hasCancelledRef.current = true
+          markLocalBookingCancelled({
+            requestId: requestId || booking?.requestId,
+            ref: booking?.ref,
+            reason: 'labour_cancelled_unpaid',
+          })
+          notifyWorkerCancelledBooking({
+            message: payload?.message || 'Worker cancelled the booking.',
+            requestId: requestId || booking?.requestId,
+            ref: booking?.ref,
+          })
+          onBack()
+        }
+        return
+      }
+      alert(payload?.message || 'The assigned worker had to cancel. We are finding a new worker for you immediately.')
+      refetch()
     })
 
     socket.on('disconnect', (reason) => {
@@ -179,6 +227,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
       socket.off('bookingAccepted')
       socket.off('extra_work_updated')
       socket.off('booking_cancelled')
+      socket.off('bookingCancelledByLabour')
       socket.off('disconnect')
       socket.emit('leave_request', requestId)
       socket.disconnect()
@@ -243,11 +292,26 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     if (['cancelled', 'expired'].includes(currentStatus)) {
       if (!hasCancelledRef.current) {
         hasCancelledRef.current = true
-        alert("This booking has been cancelled or expired.")
+        markLocalBookingCancelled({
+          requestId: requestId || booking?.requestId,
+          ref: booking?.ref,
+          reason: request?.cancelReason || 'cancelled',
+        })
+        if (request?.cancelReason === 'labour_cancelled_unpaid') {
+          notifyWorkerCancelledBooking({
+            message: 'Worker cancelled the booking.',
+            requestId: requestId || booking?.requestId,
+            ref: booking?.ref,
+          })
+        } else {
+          alert('This booking has been cancelled or expired.')
+        }
         onBack()
       }
+    } else if (currentStatus === 'searching') {
+      onBack()
     }
-  }, [currentStatus, onBack])
+  }, [currentStatus, onBack, request?.cancelReason, requestId, booking?.requestId, booking?.ref])
 
   // Only fallback to demo/draft workers if the booking has actually been accepted or pending payment
   const isAcceptedOrBeyond = ['accepted', 'in_progress', 'on_site', 'completed', 'platform_fee_pending'].includes(currentStatus)
@@ -427,11 +491,25 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
                   </>
                 ) : (
                   <>
-                    <CreditCard className="h-5 w-5" /> Pay Platform Fee (₹{request.userPlatformFee ?? 0})
+                    <CreditCard className="h-5 w-5" />{' '}
+                    {Number(request.userPlatformFee ?? 0) === 0
+                      ? 'Confirm Booking (Free)'
+                      : `Pay Platform Fee (₹${request.userPlatformFee ?? 0})`}
                   </>
                 )}
               </button>
             )}
+
+            <button
+              onClick={() => {
+                if (window.confirm('Are you sure you want to cancel this booking?')) {
+                  onCancel()
+                }
+              }}
+              className="w-full mt-3 flex items-center justify-center gap-2 py-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-600 font-extrabold text-xs transition hover:bg-rose-100 active:scale-95 shadow-xs"
+            >
+              Cancel Booking
+            </button>
           </div>
         </div>
       </div>,
@@ -687,17 +765,18 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {assignedLabour && (
-              <button onClick={() => window.location.href = `tel:${workerPhone}`} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-brand text-sm font-bold text-slate-900 transition active:scale-95 shadow-md shadow-brand/20">
+              <button onClick={() => window.location.href = `tel:${workerPhone}`} className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-brand text-xs font-black text-slate-900 transition active:scale-95 shadow-md shadow-brand/20">
                 <Phone className="h-4 w-4" /> Call Worker
               </button>
             )}
-            <button onClick={onCancel} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-slate-100 text-sm font-bold text-slate-900 transition active:scale-95">
-              Reschedule
-            </button>
-            <button onClick={onCancel} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-red-600 transition active:scale-95" aria-label="Cancel booking">
-              <X className="h-5 w-5" />
+            <button onClick={() => {
+              if (window.confirm('Are you sure you want to cancel this booking?')) {
+                onCancel()
+              }
+            }} className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs font-black text-rose-600 transition active:scale-95">
+              Cancel Booking
             </button>
           </div>
         )}

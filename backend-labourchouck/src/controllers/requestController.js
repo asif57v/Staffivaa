@@ -16,7 +16,7 @@ import { Offer } from '../models/Offer.js'
 import { Quotation } from '../models/Quotation.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
-import { emitToUser, emitToRole, emitToCorporate, emitToVendor } from '../utils/socket.js'
+import { emitToUser, emitToRole, emitToCorporate, emitToVendor, emitRequestStatusUpdate, getIO } from '../utils/socket.js'
 import { sendNotificationToUser } from '../services/notificationService.js'
 import { logAudit } from '../utils/auditLogger.js'
 import CommissionService from '../services/CommissionService.js'
@@ -113,42 +113,27 @@ export const createRequest = asyncHandler(async (req, res) => {
   })
   const estimatedTotalLabourCost = estimatedLabourCostPerDay * totalDurationInDays
 
-  let userPlatformFee = 20
+  let userPlatformFee = 0
   let userGstRate = 18
   let convFee = 0
   let platformFeeType = 'fixed'
-  let platformFeeValue = 20
+  let platformFeeValue = 0
 
   if (sourceType === REQUEST_SOURCE.INDIVIDUAL) {
     const pfConfig = pricing.userBooking.platformFee
-    platformFeeType = pfConfig.type || 'percentage'
-    platformFeeValue = pfConfig.value || 10
-    
-    if (pfConfig.status === 'disabled') {
-      userPlatformFee = 0
-    } else {
-      if (platformFeeType === 'percentage') {
-        userPlatformFee = (estimatedTotalLabourCost * platformFeeValue) / 100
-      } else {
-        userPlatformFee = platformFeeValue
-      }
-      // Bounding
-      if (pfConfig.minFee !== undefined && userPlatformFee < pfConfig.minFee) {
-        userPlatformFee = pfConfig.minFee
-      }
-      if (pfConfig.maxFee !== undefined && pfConfig.maxFee > 0 && userPlatformFee > pfConfig.maxFee) {
-        userPlatformFee = pfConfig.maxFee
-      }
-    }
+    platformFeeType = pfConfig.type || 'fixed'
+    platformFeeValue = pfConfig.value ?? 0
+    const { computeUserBookingPlatformFee } = await import('../utils/platformFeePricing.js')
+    userPlatformFee = computeUserBookingPlatformFee(pricing, { estimatedTotalLabourCost })
 
     if (pricing.userBooking.gst?.enabled) {
-      userGstRate = pricing.userBooking.gst.rate || 18
+      userGstRate = pricing.userBooking.gst.rate ?? 18
     } else {
       userGstRate = 0
     }
 
     if (pricing.userBooking.convenienceFee?.enabled) {
-      convFee = pricing.userBooking.convenienceFee.amount || 20
+      convFee = pricing.userBooking.convenienceFee.amount ?? 0
     }
 
 
@@ -156,7 +141,7 @@ export const createRequest = asyncHandler(async (req, res) => {
     // Corporate
     const pfConfig = pricing.corporate.platformFee
     platformFeeType = pfConfig.type || 'perWorkerPerDay'
-    platformFeeValue = pfConfig.value || 25
+    platformFeeValue = pfConfig.value ?? 0
 
     if (platformFeeType === 'percentage') {
       userPlatformFee = (estimatedTotalLabourCost * platformFeeValue) / 100
@@ -177,13 +162,13 @@ export const createRequest = asyncHandler(async (req, res) => {
     }
 
     if (pricing.corporate.gst?.enabled) {
-      userGstRate = pricing.corporate.gst.rate || 18
+      userGstRate = pricing.corporate.gst.rate ?? 18
     } else {
       userGstRate = 0
     }
-    
+
     if (pricing.corporate.convenienceFee?.enabled) {
-      convFee = pricing.corporate.convenienceFee.amount || 20
+      convFee = pricing.corporate.convenienceFee.amount ?? 0
     }
   }
 
@@ -390,6 +375,116 @@ export const listMyRequests = asyncHandler(async (req, res) => {
   sendSuccess(res, { data: { requests } })
 })
 
+/**
+ * Client cancels a booking (searching / accepted / fee pending).
+ * Cancels the request + all assignments and notifies every related worker.
+ */
+export const cancelRequestByClient = asyncHandler(async (req, res) => {
+  const request = await WorkforceRequest.findById(req.params.id)
+  if (!request) return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
+
+  const isOwner = String(request.clientId) === String(req.user._id)
+  if (!isOwner && req.user.role !== USER_ROLES.ADMIN) {
+    return sendError(res, { message: 'Forbidden', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  const terminal = [REQUEST_STATUS.CANCELLED, REQUEST_STATUS.COMPLETED, REQUEST_STATUS.REJECTED]
+  if (terminal.includes(request.status)) {
+    return sendError(res, { message: 'Booking is already closed.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const previousStatus = request.status
+  const previousLabourId = request.labourId ? request.labourId.toString() : null
+
+  request.status = REQUEST_STATUS.CANCELLED
+  request.cancelReason = 'client_cancelled'
+  request.cancelledAt = new Date()
+  request.labourId = null
+  request.labourName = null
+  request.labourPhone = null
+  request.acceptedAt = null
+  request.acceptedBy = null
+  request.platformFeePendingAt = null
+  await request.save()
+
+  const assignments = await Assignment.find({ requestId: request._id })
+  const labourIds = new Set()
+  for (const a of assignments) {
+    if (a.labourId) labourIds.add(a.labourId.toString())
+    if (![ASSIGNMENT_STATUS.CANCELLED, ASSIGNMENT_STATUS.COMPLETED, ASSIGNMENT_STATUS.DECLINED].includes(a.status)) {
+      a.status = ASSIGNMENT_STATUS.CANCELLED
+      a.cancelledAt = new Date()
+      await a.save()
+    }
+  }
+  if (previousLabourId) labourIds.add(previousLabourId)
+
+  const cancelPayload = {
+    requestId: request._id.toString(),
+    reference: request.reference || null,
+    fullCancel: true,
+    reason: 'client_cancelled',
+    previousStatus,
+    message: 'Customer cancelled the booking.',
+  }
+
+  try {
+    const io = getIO()
+    io.to(`request_${request._id.toString()}`).emit('booking_cancelled', cancelPayload)
+    io.to(`request_${request._id.toString()}`).emit('request_cancelled', cancelPayload)
+
+    for (const labourId of labourIds) {
+      emitToUser('labour', labourId, 'booking_cancelled', cancelPayload)
+      emitToUser('labour', labourId, 'request_cancelled', cancelPayload)
+      emitToUser('labour', labourId, 'assignment_cancelled', {
+        requestId: request._id.toString(),
+        ...cancelPayload,
+      })
+      sendNotificationToUser(
+        labourId,
+        'Booking Cancelled',
+        'The customer cancelled this booking.',
+        { url: '/app/jobs' },
+      )
+      triggerNotification({
+        userId: labourId,
+        title: 'Booking Cancelled',
+        body: 'The customer cancelled this booking.',
+        type: 'BOOKING_UPDATED',
+        relatedId: request._id,
+        relatedModel: 'WorkforceRequest',
+      }).catch(() => {})
+    }
+
+    emitRequestStatusUpdate(request._id.toString(), {
+      requestStatus: REQUEST_STATUS.CANCELLED,
+      event: 'status_changed',
+      fullCancel: true,
+      reason: 'client_cancelled',
+      updatedAt: new Date(),
+    })
+  } catch (err) {
+    console.error('Socket emit error on client cancel:', err)
+  }
+
+  try {
+    await logAudit({
+      adminId: req.user._id,
+      action: 'CLIENT_CANCEL_BOOKING',
+      module: 'workforce',
+      reason: 'client_cancelled',
+      previousValue: previousStatus,
+      newValue: REQUEST_STATUS.CANCELLED,
+      req,
+    })
+  } catch (_) {}
+
+  sendSuccess(res, {
+    data: { request: request.toObject() },
+    message: 'Booking cancelled successfully.',
+  })
+})
+
 export const getRequest = asyncHandler(async (req, res) => {
   const request = await WorkforceRequest.findById(req.params.id)
     .populate('projectId', 'name')
@@ -439,11 +534,55 @@ export const getRequest = asyncHandler(async (req, res) => {
     totalDurationInDays = Math.max(1, diffDays + 1)
   }
 
-  let platformFee = 20;
-  if (totalDurationInDays === 1) platformFee = 20;
-  else if (totalDurationInDays <= 3) platformFee = 30;
-  else if (totalDurationInDays <= 7) platformFee = 50;
-  else platformFee = 100;
+  const { SystemPricing } = await import('../models/SystemPricing.js')
+  const {
+    computeUserBookingPlatformFee,
+    computeLabourPlatformFee,
+    estimateRequestLabourCost,
+  } = await import('../utils/platformFeePricing.js')
+  const pricingDoc = await SystemPricing.findOne().lean()
+
+  // For unpaid fees, always use live admin pricing so panel changes apply immediately
+  const userUnpaid = request.userPaymentStatus !== 'paid'
+  const labourUnpaid = request.labourPaymentStatus !== 'paid'
+  if (userUnpaid || labourUnpaid) {
+    const categoryRateMap = {}
+    request.lines?.forEach((line) => {
+      const id = String(line.categoryId?._id || line.categoryId || '')
+      if (id) categoryRateMap[id] = line.categoryId?.baseRate || 800
+    })
+    const estimatedTotalLabourCost = estimateRequestLabourCost(request, categoryRateMap)
+    const patch = {}
+
+    if (userUnpaid && request.sourceType === 'individual') {
+      const liveUserFee = computeUserBookingPlatformFee(pricingDoc, { estimatedTotalLabourCost })
+      if (Number(request.userPlatformFee) !== liveUserFee) {
+        patch.userPlatformFee = liveUserFee
+        request.userPlatformFee = liveUserFee
+      }
+    }
+
+    if (labourUnpaid) {
+      const liveLabourFee = computeLabourPlatformFee(pricingDoc, {
+        distanceKm: request.distanceKm || 0,
+        estimatedTotalLabourCost,
+      })
+      if (Number(request.labourPlatformFee) !== liveLabourFee) {
+        patch.labourPlatformFee = liveLabourFee
+        request.labourPlatformFee = liveLabourFee
+      }
+    }
+
+    if (Object.keys(patch).length > 0) {
+      await WorkforceRequest.updateOne({ _id: request._id }, { $set: patch })
+    }
+  }
+
+  const userPlatformFee = request.userPlatformFee !== undefined ? request.userPlatformFee : 0;
+  const labourPlatformFee = request.labourPlatformFee !== undefined ? request.labourPlatformFee : 0;
+  const convenienceFee = request.convenienceFee !== undefined ? request.convenienceFee : 0;
+  const gstRate = request.sourceType === 'individual' ? 0 : (request.userGstRate !== undefined ? request.userGstRate : 18);
+  const gstAmount = Math.round((userPlatformFee * gstRate) / 100);
 
   // Use quotation's grand total as the totalLabourCost if quotation is approved
   let totalLabourCost = allocation?.totalLabourCost || 0;
@@ -451,15 +590,7 @@ export const getRequest = asyncHandler(async (req, res) => {
     totalLabourCost = quotation.grandTotal;
   }
 
-  const userPlatformFee = request.userPlatformFee !== undefined ? request.userPlatformFee : platformFee;
-  const labourPlatformFee = request.labourPlatformFee !== undefined ? request.labourPlatformFee : 0;
-  const convenienceFee = request.convenienceFee !== undefined ? request.convenienceFee : 0;
-  const gstRate = request.sourceType === 'individual' ? 0 : (request.userGstRate !== undefined ? request.userGstRate : 18);
-  const gstAmount = Math.round((userPlatformFee * gstRate) / 100);
   const grandTotal = totalLabourCost + userPlatformFee + gstAmount + convenienceFee + extraCost;
-  
-  const { SystemPricing } = await import('../models/SystemPricing.js')
-  const pricingDoc = await SystemPricing.findOne().lean()
   
   if (request.vendorPlatformFeeStatus !== 'paid') {
     request.vendorPlatformFeeAmount = pricingDoc?.vendor?.platformCommission?.value ?? 0;
@@ -468,7 +599,7 @@ export const getRequest = asyncHandler(async (req, res) => {
     request.corporatePlatformFeeAmount = pricingDoc?.corporate?.platformFee?.value ?? 0;
   }
 
-  const advancePercentage = pricingDoc?.corporate?.advancePercentage || 30
+  const advancePercentage = pricingDoc?.corporate?.advancePercentage ?? 30
   const advanceAmount = Math.round((grandTotal * advancePercentage) / 100)
   const remainingAmount = grandTotal - advanceAmount
 
@@ -482,7 +613,7 @@ export const getRequest = asyncHandler(async (req, res) => {
     gstAmount,
     totalDurationInDays,
     totalLabourCost,
-    platformFee,
+    platformFee: userPlatformFee,
     grandTotal,
     advancePercentage,
     advanceAmount,

@@ -40,8 +40,16 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDetail, onComplete, onCancelBooking, onPayFee }) {
   const status = job?.status || 'accepted'
   const requestStatus = job?.requestStatus || 'searching'
-  const isPlatformFeePending = requestStatus === 'platform_fee_pending' && job?.labourPaymentStatus !== 'paid'
-  const isCustomerPaymentPending = requestStatus === 'platform_fee_pending' && job?.labourPaymentStatus === 'paid'
+  const labourFeeWaived = job?.labourPlatformFee !== undefined && Number(job.labourPlatformFee) === 0
+  const labourUnpaid = !labourFeeWaived && String(job?.labourPaymentStatus || '').toLowerCase() !== 'paid'
+  // Stay locked until worker pays — even if request was wrongly marked confirmed after user-only payment
+  const isPlatformFeePending =
+    labourUnpaid &&
+    ['platform_fee_pending', 'accepted', 'confirmed'].includes(String(requestStatus).toLowerCase())
+  const isCustomerPaymentPending =
+    String(requestStatus).toLowerCase() === 'platform_fee_pending' &&
+    !labourUnpaid &&
+    String(job?.userPaymentStatus || '').toLowerCase() !== 'paid'
   const isCompleted = status === 'completed'
   const isCheckedIn = ['on_site', 'in_progress', 'completed'].includes(status)
   const onSite = status === 'on_site' || status === 'in_progress'
@@ -138,7 +146,11 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
     socket.on('extra_work_updated', () => refetchEw())
     
     socket.on('booking_cancelled', (payload) => {
-      alert(`Booking Cancelled:\n${payload.message}\n\nNote: If you paid the platform fee, the refund process has been initiated. You can check your Wallet for updates.`)
+      const msg =
+        payload?.reason === 'client_cancelled'
+          ? 'Customer cancelled the booking.'
+          : payload?.message || 'This booking was cancelled.'
+      alert(`Booking Cancelled:\n${msg}`)
       navigate('/app/jobs', { replace: true })
     })
     
@@ -234,12 +246,25 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
           </div>
         </div>
 
-        <AppPrimaryButton 
-          className="w-full py-4 text-sm font-black bg-slate-900 text-white hover:bg-slate-800"
-          onClick={() => onPayFee(job)}
-        >
-          Pay Now
-        </AppPrimaryButton>
+        <div className="flex gap-2.5 w-full">
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm('Are you sure you want to cancel this booking?')) {
+                onCancelBooking(job.id)
+              }
+            }}
+            className="flex-1 py-3.5 text-xs font-extrabold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 transition active:scale-95"
+          >
+            Cancel Booking
+          </button>
+          <AppPrimaryButton 
+            className="flex-1 py-3.5 text-sm font-black bg-slate-900 text-white hover:bg-slate-800"
+            onClick={() => onPayFee(job)}
+          >
+            Pay Now
+          </AppPrimaryButton>
+        </div>
       </article>
     )
   }
@@ -282,9 +307,21 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
           </div>
         </div>
 
-        <p className="text-xs font-medium text-slate-500 leading-relaxed px-2">
+        <p className="text-xs font-medium text-slate-500 leading-relaxed px-2 mb-4">
           The booking will automatically cancel and your fee will be refunded to your wallet if the customer payment is not completed within 2.5 minutes.
         </p>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (window.confirm('Are you sure you want to cancel this booking?')) {
+              onCancelBooking(job.id)
+            }
+          }}
+          className="w-full py-3 text-xs font-extrabold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 transition active:scale-95"
+        >
+          Cancel Booking
+        </button>
       </article>
     )
   }

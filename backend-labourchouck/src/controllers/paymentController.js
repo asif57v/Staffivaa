@@ -47,7 +47,26 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
   let isCorporateFee = false;
 
   const { SystemPricing } = await import('../models/SystemPricing.js')
+  const {
+    computeUserBookingPlatformFee,
+    computeLabourPlatformFee,
+    estimateRequestLabourCost,
+  } = await import('../utils/platformFeePricing.js')
   const pricingDoc = await SystemPricing.findOne().lean()
+
+  // Refresh unpaid fees from live admin pricing before charging
+  if (request.userPaymentStatus !== 'paid' || request.labourPaymentStatus !== 'paid') {
+    const estimatedTotalLabourCost = estimateRequestLabourCost(request)
+    if (request.userPaymentStatus !== 'paid' && request.sourceType !== 'corporate') {
+      request.userPlatformFee = computeUserBookingPlatformFee(pricingDoc, { estimatedTotalLabourCost })
+    }
+    if (request.labourPaymentStatus !== 'paid') {
+      request.labourPlatformFee = computeLabourPlatformFee(pricingDoc, {
+        distanceKm: request.distanceKm || 0,
+        estimatedTotalLabourCost,
+      })
+    }
+  }
   
   if (request.vendorPlatformFeeStatus !== 'paid') {
     request.vendorPlatformFeeAmount = pricingDoc?.vendor?.platformCommission?.value ?? 0;
@@ -63,7 +82,7 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
       isVendorFee = true;
     } else {
       if (request.labourPaymentStatus === 'paid') return sendError(res, { message: 'Already paid by labour', statusCode: HTTP_STATUS.BAD_REQUEST });
-      totalAmount = request.labourPlatformFee !== undefined ? request.labourPlatformFee : 20;
+      totalAmount = request.labourPlatformFee !== undefined ? request.labourPlatformFee : 0;
       
       // Bypass Razorpay if fee is exactly 0
       if (totalAmount === 0) {
@@ -105,6 +124,29 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
       
       let platformFee = request.userPlatformFee ?? 0;
       totalAmount = platformFee;
+
+      // Bypass Razorpay if admin set fee to ₹0
+      if (totalAmount === 0) {
+        request.userPaymentStatus = 'paid';
+        const isLabourPaidOrWaived =
+          request.labourPaymentStatus === 'paid' ||
+          (request.labourPlatformFee !== undefined && request.labourPlatformFee === 0)
+        if (isLabourPaidOrWaived) {
+          request.platformFeePaymentLifecycle = 'completed'
+          request.status = 'confirmed'
+        } else {
+          request.platformFeePaymentLifecycle = 'partial'
+          request.status = 'platform_fee_pending'
+        }
+        await request.save()
+        emitRequestStatusUpdate(request._id.toString(), {
+          requestId: request._id.toString(),
+          requestStatus: request.status,
+          userPaymentStatus: request.userPaymentStatus,
+          labourPaymentStatus: request.labourPaymentStatus,
+        })
+        return sendSuccess(res, { data: { bypassPayment: true } })
+      }
     }
   }
 
@@ -123,6 +165,8 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
   } else {
     request.userRazorpayOrderId = order.id;
   }
+  // Refresh platform fee pending timestamp on payment creation attempt
+  request.platformFeePendingAt = new Date();
   await request.save()
 
   sendSuccess(res, { data: { keyId: process.env.RAZORPAY_KEY_ID, orderId: order.id, amount: options.amount, currency: options.currency } })
@@ -265,15 +309,34 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
     request.paymentStatus = 'paid';
   }
   
-  // Overall status check for older flow
-  if (request.userPaymentStatus === 'paid' && request.labourPaymentStatus === 'paid') {
+  // Overall status check for lifecycle and status update
+  // Both parties must settle platform fee before booking unlocks (unless labour fee is ₹0).
+  const isLabourPaidOrWaived = request.labourPaymentStatus === 'paid' || (request.labourPlatformFee !== undefined && request.labourPlatformFee === 0);
+
+  if (request.userPaymentStatus === 'paid' && isLabourPaidOrWaived) {
     request.platformFeePaymentLifecycle = 'completed';
     if (request.status !== 'quotation_unlocked') {
-      request.status = request.sourceType === 'corporate' ? 'project_active' : 'confirmed'; 
-      emitRequestStatusUpdate(request._id.toString(), { requestStatus: request.status })
+      request.status = request.sourceType === 'corporate' ? 'project_active' : 'confirmed';
     }
+    request.cancelReason = null;
+
+    // Reinstate any cancelled assignment for this booking back to accepted
+    import('../models/Assignment.js').then(({ Assignment }) => {
+      Assignment.updateMany({ requestId: request._id, status: 'cancelled' }, { status: 'accepted' }).catch(e => console.error(e));
+    }).catch(e => console.error(e));
+
+    // Clean up any pending timeout refund requests
+    import('../models/RefundRequest.js').then(({ RefundRequest }) => {
+      RefundRequest.deleteMany({ bookingId: request._id, status: 'ELIGIBLE' }).catch(e => console.error(e));
+    }).catch(e => console.error(e));
+
+    emitRequestStatusUpdate(request._id.toString(), { requestStatus: request.status });
   } else if (request.userPaymentStatus === 'paid' || request.labourPaymentStatus === 'paid') {
-    request.platformFeePaymentLifecycle = 'partial';
+    request.platformFeePaymentLifecycle = 'partial'
+    // Individual bookings must stay locked until labour also pays (do not unlock on user-only payment).
+    if (request.sourceType !== 'corporate' && !['on_site', 'in_progress', 'completed'].includes(request.status)) {
+      request.status = 'platform_fee_pending'
+    }
   }
 
   request.razorpayPaymentId = razorpay_payment_id

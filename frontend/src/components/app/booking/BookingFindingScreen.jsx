@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { Loader2, MapPin, Radio, Sparkles } from 'lucide-react'
+import { AppButton } from '../../app-ui/buttons/AppButton.jsx'
 
 const MESSAGES = [
   'Request sent to nearby workers…',
@@ -9,7 +10,7 @@ const MESSAGES = [
   'Almost there — confirming response…',
 ]
 
-export function BookingFindingScreen({ categoryLabel, onComplete, onNoMatch }) {
+export function BookingFindingScreen({ categoryLabel, onComplete, onNoMatch, onCancel, cancelling = false }) {
   const reduce = useReducedMotion()
   const [msgIndex, setMsgIndex] = useState(0)
   const [progress, setProgress] = useState(0)
@@ -19,7 +20,7 @@ export function BookingFindingScreen({ categoryLabel, onComplete, onNoMatch }) {
       setMsgIndex((i) => (i + 1) % MESSAGES.length)
     }, 2200)
     const progTimer = window.setInterval(() => {
-      setProgress((p) => p >= 100 ? 0 : p + 4)
+      setProgress((p) => (p >= 100 ? 0 : p + 4))
     }, 180)
 
     const timeoutTimer = window.setTimeout(() => {
@@ -101,6 +102,24 @@ export function BookingFindingScreen({ categoryLabel, onComplete, onNoMatch }) {
           Searching nearby
         </span>
       </div>
+
+      {onCancel ? (
+        <div className="mt-10 w-full max-w-xs">
+          <AppButton
+            type="button"
+            variant="secondary"
+            className="w-full border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+            disabled={cancelling}
+            loading={cancelling}
+            onClick={onCancel}
+          >
+            {cancelling ? 'Cancelling…' : 'Cancel booking'}
+          </AppButton>
+          <p className="mt-2 text-[11px] font-medium text-slate-500">
+            This stops the search and cancels the booking for everyone.
+          </p>
+        </div>
+      ) : null}
     </motion.div>
   )
 }

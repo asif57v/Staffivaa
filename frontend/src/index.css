@@ -155,3 +155,17 @@ body.admin-mode {
   }
 }
 .pac-container { z-index: 99999 !important; }
+
+/* Elevate Razorpay payment checkout frame so bottom Continue & Cancel buttons clear mobile system back/home navigation bar */
+iframe.razorpay-checkout-frame,
+iframe[src*="razorpay"],
+iframe[name*="razorpay"],
+.razorpay-container,
+#razorpay-container,
+.razorpay-checkout-container {
+  top: 0 !important;
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
+  height: calc(100% - 64px - env(safe-area-inset-bottom, 0px)) !important;
+  height: calc(100dvh - 64px - env(safe-area-inset-bottom, 0px)) !important;
+  max-height: calc(100dvh - 64px - env(safe-area-inset-bottom, 0px)) !important;
+}

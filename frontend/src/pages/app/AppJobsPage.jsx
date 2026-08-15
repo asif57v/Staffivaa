@@ -44,7 +44,9 @@ export function AppJobsPage() {
   const reduce = useReducedMotion()
   const [tab, setTab] = useState('offers')
   const [localDemo, setLocalDemo] = useState(() => loadJobDemoState())
-  const { data: apiData, error: apiError, refetch } = useGetLabourAssignmentsQuery(undefined)
+  const { data: apiData, error: apiError, refetch } = useGetLabourAssignmentsQuery(undefined, {
+    pollingInterval: 8000,
+  })
   const [respondAssignment] = useRespondAssignmentMutation()
   const [checkIn] = useCheckInMutation()
   const [startWork] = useStartWorkMutation()

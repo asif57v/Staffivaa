@@ -1,5 +1,6 @@
 import express from 'express'
 import { protect } from '../middleware/auth.js'
+import { paymentLimiter } from '../middleware/rateLimiters.js'
 import {
   getEnterpriseWalletSummary,
   createRechargeOrder,
@@ -14,8 +15,8 @@ const router = express.Router()
 router.use(protect)
 
 router.get('/summary', getEnterpriseWalletSummary)
-router.post('/recharge/init', createRechargeOrder)
-router.post('/recharge/verify', verifyRechargePayment)
+router.post('/recharge/init', paymentLimiter, createRechargeOrder)
+router.post('/recharge/verify', paymentLimiter, verifyRechargePayment)
 router.get('/transactions', getEnterpriseWalletTransactions)
 router.get('/transactions/:id', getTransactionDetails)
 router.get('/statement', downloadWalletStatement)

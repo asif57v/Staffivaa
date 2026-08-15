@@ -205,7 +205,7 @@ export function CategoryPickBottomSheet({ open, onClose, tradeGroups, groupsLoad
 
               <motion.div
                 layout
-                className="shrink-0 border-t border-slate-100 bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3"
+                className="shrink-0 border-t border-slate-100 bg-white px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,1.5rem))] pt-3"
               >
                 <button
                   type="button"

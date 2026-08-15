@@ -6,7 +6,7 @@ import { WalletTransaction } from '../models/WalletTransaction.js'
 import { Wallet } from '../models/Wallet.js'
 import { RefundRequest } from '../models/RefundRequest.js'
 import { REQUEST_STATUS } from '../constants/workforceConstants.js'
-import { getIO } from './socket.js'
+import { getIO, emitToUser } from './socket.js'
 
 export function startBookingExpirationJob() {
   // Check every 1 minute
@@ -21,14 +21,24 @@ export function startBookingExpirationJob() {
       })
 
       for (const booking of expiredBookings) {
+        const payload = {
+          requestId: booking._id.toString(),
+          reference: booking.reference || null,
+          status: 'expired',
+          fullCancel: true,
+          reason: 'search_expired',
+          message: 'Booking expired due to inactivity',
+        }
         // Emit socket event before deletion so clients can update UI
         try {
           const io = getIO()
-          io.to(`request_${booking._id.toString()}`).emit('bookingExpired', {
-            requestId: booking._id,
-            status: 'expired',
-            message: 'Booking expired due to inactivity'
-          })
+          io.to(`request_${booking._id.toString()}`).emit('bookingExpired', payload)
+          io.to(`request_${booking._id.toString()}`).emit('booking_cancelled', payload)
+          const clientId = booking.clientId?.toString()
+          if (clientId) {
+            emitToUser('individual', clientId, 'bookingExpired', payload)
+            emitToUser('individual', clientId, 'booking_cancelled', payload)
+          }
         } catch (socketErr) {
           console.error('Socket emit error on booking expiration:', socketErr)
         }
@@ -43,7 +53,8 @@ export function startBookingExpirationJob() {
         console.log(`Expired and deleted searching booking: ${booking.reference || booking._id}`)
       }
 
-      // 2. Find bookings stuck in platform_fee_pending for > 2.5 minutes
+      // 2. Find bookings stuck in platform_fee_pending for > 15 minutes (give users time for UPI app switch)
+      const pendingPaymentTimeoutThreshold = new Date(Date.now() - 15 * 60 * 1000)
       const expiredPendingBookings = await WorkforceRequest.find({
         status: { 
           $in: [
@@ -52,7 +63,10 @@ export function startBookingExpirationJob() {
             REQUEST_STATUS.CORPORATE_PLATFORM_FEE_PENDING
           ]
         },
-        platformFeePendingAt: { $lt: timeoutThreshold }
+        $or: [
+          { platformFeePendingAt: { $lt: pendingPaymentTimeoutThreshold } },
+          { platformFeePendingAt: { $exists: false }, createdAt: { $lt: pendingPaymentTimeoutThreshold } }
+        ]
       })
 
       for (const booking of expiredPendingBookings) {

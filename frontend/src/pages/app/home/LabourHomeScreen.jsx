@@ -785,6 +785,26 @@ export function LabourHomeScreen({ user }) {
                   >
                     Details
                   </AppSecondaryButton>
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      if (window.confirm('Are you sure you want to cancel this booking?')) {
+                        try {
+                          if (isApiAssignment(todayJob)) {
+                            await respondAssignment({ id: todayJob.id, action: 'cancel' }).unwrap()
+                            refetch()
+                          }
+                          showToast('Booking cancelled.')
+                        } catch (err) {
+                          showToast(err?.data?.message || 'Failed to cancel booking')
+                        }
+                      }
+                    }}
+                    className="flex-[0.6] py-2.5 text-xs font-extrabold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 transition active:scale-95"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
             </motion.div>

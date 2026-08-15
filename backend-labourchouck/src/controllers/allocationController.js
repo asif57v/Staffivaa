@@ -169,6 +169,31 @@ export const listLabourAssignments = asyncHandler(async (req, res) => {
     return true
   })
 
+  // Refresh unpaid labour platform fees from live admin pricing
+  try {
+    const pricing = await SystemPricing.findOne().lean()
+    const { computeLabourPlatformFee, estimateRequestLabourCost } = await import('../utils/platformFeePricing.js')
+    const updates = []
+    for (const a of validAssignments) {
+      const req = a.requestId
+      if (!req || typeof req !== 'object') continue
+      if (req.labourPaymentStatus === 'paid') continue
+      if (!['platform_fee_pending', 'accepted', 'confirmed'].includes(req.status)) continue
+
+      const liveFee = computeLabourPlatformFee(pricing, {
+        distanceKm: req.distanceKm || 0,
+        estimatedTotalLabourCost: estimateRequestLabourCost(req),
+      })
+      if (Number(req.labourPlatformFee) !== liveFee) {
+        req.labourPlatformFee = liveFee
+        updates.push(WorkforceRequest.updateOne({ _id: req._id }, { $set: { labourPlatformFee: liveFee } }))
+      }
+    }
+    if (updates.length) await Promise.all(updates)
+  } catch (err) {
+    console.error('Failed to refresh live labour platform fees:', err.message)
+  }
+
   sendSuccess(res, { data: { assignments: validAssignments } })
 })
 
@@ -279,57 +304,12 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       distanceKm = Math.round(distanceKm * 10) / 10;
       
       const pricing = await SystemPricing.findOne().lean()
-      let labourFee = 20
-      const pf = pricing?.labour?.platformFee
-      if (pf) {
-        if (pf.type === 'distance') {
-          const slabs = pf.slabs || []
-          const sortedSlabs = [...slabs].sort((a, b) => Number(a.minDistance || 0) - Number(b.minDistance || 0))
-          let matchedFee = null
-          for (const slab of sortedSlabs) {
-            const min = Number(slab.minDistance || 0)
-            const max = slab.maxDistance !== null && slab.maxDistance !== undefined && slab.maxDistance !== '' ? Number(slab.maxDistance) : Infinity
-            if (distanceKm >= min && distanceKm < max) {
-              matchedFee = Number(slab.fee || 0)
-              break
-            }
-          }
-          if (matchedFee !== null) {
-            labourFee = matchedFee
-          } else {
-            labourFee = 0
-          }
-        } else if (pf.type === 'percentage') {
-          let estimatedTotalLabourCost = 800
-          if (request.lines && request.lines.length > 0) {
-            try {
-              const { LabourCategory } = await import('../models/LabourCategory.js')
-              const categories = await LabourCategory.find({ _id: { $in: request.lines.map(l => l.categoryId) } }).lean()
-              const categoryMap = {}
-              categories.forEach(c => {
-                categoryMap[c._id.toString()] = c.pricePerDay || c.pricePerHour * 8 || 800
-              })
-              let estimatedLabourCostPerDay = 0
-              request.lines.forEach((l) => {
-                const qty = l.quantity || 1
-                const rate = categoryMap[l.categoryId.toString()] || 800
-                estimatedLabourCostPerDay += qty * rate
-              })
-              let totalDurationInDays = 1
-              if (request.startDate && request.endDate) {
-                const diffTime = Math.abs(new Date(request.endDate) - new Date(request.startDate))
-                totalDurationInDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)))
-              }
-              estimatedTotalLabourCost = estimatedLabourCostPerDay * totalDurationInDays
-            } catch (err) {
-              console.error('Error calculating request cost for percentage fee:', err.message)
-            }
-          }
-          labourFee = Math.round((estimatedTotalLabourCost * (pf.value ?? 10)) / 100)
-        } else {
-          labourFee = pf.value ?? 20
-        }
-      }
+      const { computeLabourPlatformFee, estimateRequestLabourCost } = await import('../utils/platformFeePricing.js')
+      const estimatedTotalLabourCost = estimateRequestLabourCost(request)
+      const labourFee = computeLabourPlatformFee(pricing, {
+        distanceKm,
+        estimatedTotalLabourCost,
+      })
 
       request.distanceKm = distanceKm;
       request.labourPlatformFee = labourFee;
@@ -373,6 +353,67 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
 
     const request = await WorkforceRequest.findById(assignment.requestId)
     if (request) {
+      const isUserPaid = request.userPaymentStatus === 'paid' || request.paymentStatus === 'paid'
+      const isLabourPaid = request.labourPaymentStatus === 'paid'
+
+      // Neither party paid → cancel the whole booking (no re-search)
+      if (!isUserPaid && !isLabourPaid) {
+        request.status = REQUEST_STATUS.CANCELLED
+        request.cancelReason = 'labour_cancelled_unpaid'
+        request.labourId = null
+        request.labourName = null
+        request.labourPhone = null
+        request.acceptedAt = null
+        request.acceptedBy = null
+        request.platformFeePendingAt = null
+        request.platformFeePaymentLifecycle = 'none'
+        await request.save()
+
+        await Assignment.updateMany(
+          { requestId: request._id, _id: { $ne: assignment._id } },
+          { $set: { status: ASSIGNMENT_STATUS.CANCELLED } },
+        )
+
+        const cancelPayload = {
+          requestId: request._id.toString(),
+          reference: request.reference || null,
+          fullCancel: true,
+          reason: 'labour_cancelled_unpaid',
+          message: 'Worker cancelled the booking.',
+        }
+
+        try {
+          const io = getIO()
+          const clientId = request.clientId?.toString()
+          io.to(`request_${request._id.toString()}`).emit('booking_cancelled', cancelPayload)
+          io.to(`request_${request._id.toString()}`).emit('bookingCancelledByLabour', cancelPayload)
+          if (clientId) {
+            emitToUser('individual', clientId, 'booking_cancelled', cancelPayload)
+            emitToUser('individual', clientId, 'bookingCancelledByLabour', cancelPayload)
+            emitToUser('individual', clientId, 'request_cancelled', cancelPayload)
+            sendNotificationToUser(
+              clientId,
+              'Worker Cancelled Booking',
+              'The worker cancelled your booking.',
+              { url: '/app/bookings' },
+            )
+          }
+          emitRequestStatusUpdate(request._id.toString(), {
+            requestStatus: REQUEST_STATUS.CANCELLED,
+            event: 'status_changed',
+            assignmentStatus: assignment.status,
+            fullCancel: true,
+            updatedAt: new Date(),
+          })
+        } catch (err) {
+          console.error('Socket emit error on unpaid labour cancel:', err)
+        }
+
+        await assignment.save()
+        const updatedRequest = await WorkforceRequest.findById(assignment.requestId).lean()
+        return sendSuccess(res, { data: { assignment: assignment.toObject(), request: updatedRequest } })
+      }
+
       request.status = REQUEST_STATUS.SEARCHING
       request.labourId = null
       request.labourName = null
@@ -386,7 +427,6 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       // Extend expiration timer by 10 minutes so listLabourAssignments does not filter it out
       request.expiresAt = new Date(Date.now() + 10 * 60 * 1000)
       
-      const isUserPaid = request.userPaymentStatus === 'paid' || request.paymentStatus === 'paid'
       if (isUserPaid) {
         request.platformFeePaymentLifecycle = 'partial'
       } else {
@@ -397,101 +437,117 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       // --- RE-BROADCAST REAL-TIME SEARCH TO ALL NEARBY WORKERS ---
       const categoryId = request.lines?.[0]?.categoryId
       const clientUser = await User.findById(request.clientId).select('fullName').lean()
-      if (categoryId) {
-        // Fetch candidate workers (excluding cancelling worker)
-        let candidates = await User.find({
+      
+      // Fetch candidate workers (excluding cancelling worker initially)
+      let candidates = await User.find({
+        role: USER_ROLES.LABOUR,
+        _id: { $ne: req.user._id },
+        $or: [
+          ...(categoryId ? [{ 'labourProfile.categoryIds': categoryId }, { 'labourProfile.categoryIds': categoryId.toString() }] : []),
+          { 'labourProfile.categoryIds': { $size: 0 } },
+          { 'labourProfile.categoryIds': { $exists: false } }
+        ]
+      }).limit(50)
+
+      // Fallback 1: If no candidate matched skill query, grab all other labour workers
+      if (!candidates || candidates.length === 0) {
+        candidates = await User.find({
           role: USER_ROLES.LABOUR,
-          _id: { $ne: req.user._id },
-          $or: [
-            { 'labourProfile.categoryIds': categoryId },
-            { 'labourProfile.categoryIds': categoryId.toString() },
-            { 'labourProfile.categoryIds': { $size: 0 } },
-            { 'labourProfile.categoryIds': { $exists: false } }
-          ]
+          _id: { $ne: req.user._id }
         }).limit(50)
+      }
 
-        // Fallback: If no candidate matched the skill query, grab all labour workers except cancelling one
-        if (!candidates || candidates.length === 0) {
-          candidates = await User.find({
-            role: USER_ROLES.LABOUR,
-            _id: { $ne: req.user._id }
-          }).limit(50)
+      // Fallback 2: If STILL no candidate (e.g. single worker testing environment), include all labour workers
+      if (!candidates || candidates.length === 0) {
+        candidates = await User.find({
+          role: USER_ROLES.LABOUR
+        }).limit(50)
+      }
+
+      let matchingWorkers = candidates
+      if (request.locationLat && request.locationLng) {
+        const filteredByDistance = candidates.filter(w => {
+          if (!w.labourProfile || !w.labourProfile.locationLat || !w.labourProfile.locationLng) {
+            return false
+          }
+          const radius = w.labourProfile.workRadius || 15
+          const R = 6371
+          const dLat = (w.labourProfile.locationLat - request.locationLat) * (Math.PI / 180)
+          const dLon = (w.labourProfile.locationLng - request.locationLng) * (Math.PI / 180)
+          const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(request.locationLat * (Math.PI / 180)) * Math.cos(w.labourProfile.locationLat * (Math.PI / 180)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2)
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+          return (R * c) <= radius
+        })
+        if (filteredByDistance.length > 0) {
+          matchingWorkers = filteredByDistance
+        }
+      }
+
+      if (matchingWorkers.length > 0) {
+        await Assignment.deleteMany({ requestId: request._id, status: { $ne: ASSIGNMENT_STATUS.CANCELLED } })
+
+        let allocation = await Allocation.findOne({ requestId: request._id })
+        if (!allocation) {
+          allocation = await Allocation.create({ requestId: request._id, notes: 'Re-allocated on worker cancellation' })
         }
 
-        let matchingWorkers = candidates
-        if (request.locationLat && request.locationLng) {
-          const filteredByDistance = candidates.filter(w => {
-            if (!w.labourProfile || !w.labourProfile.locationLat || !w.labourProfile.locationLng) {
-              return false
-            }
-            const radius = w.labourProfile.workRadius || 15
-            const R = 6371
-            const dLat = (w.labourProfile.locationLat - request.locationLat) * (Math.PI / 180)
-            const dLon = (w.labourProfile.locationLng - request.locationLng) * (Math.PI / 180)
-            const a =
-              Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos(request.locationLat * (Math.PI / 180)) * Math.cos(w.labourProfile.locationLat * (Math.PI / 180)) *
-              Math.sin(dLon / 2) * Math.sin(dLon / 2)
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-            return (R * c) <= radius
-          })
-          if (filteredByDistance.length > 0) {
-            matchingWorkers = filteredByDistance
-          }
-        }
+        const LabourCategory = mongoose.model('LabourCategory')
+        const category = categoryId ? await LabourCategory.findById(categoryId) : null
+        const baseRate = category?.baseRate || 800
 
-        if (matchingWorkers.length > 0) {
-          await Assignment.deleteMany({ requestId: request._id, status: { $ne: ASSIGNMENT_STATUS.CANCELLED } })
+        const assignmentsToCreate = matchingWorkers.map((w) => ({
+          allocationId: allocation._id,
+          requestId: request._id,
+          labourId: w._id,
+          categoryId: categoryId || undefined,
+          status: ASSIGNMENT_STATUS.OFFERED,
+          perDayRate: baseRate,
+        }))
 
-          let allocation = await Allocation.findOne({ requestId: request._id })
-          if (!allocation) {
-            allocation = await Allocation.create({ requestId: request._id, notes: 'Re-allocated on worker cancellation' })
-          }
+        const createdAssignments = await Assignment.insertMany(assignmentsToCreate)
 
-          const LabourCategory = mongoose.model('LabourCategory')
-          const category = await LabourCategory.findById(categoryId)
-          const baseRate = category?.baseRate || 800
-
-          const assignmentsToCreate = matchingWorkers.map((w) => ({
-            allocationId: allocation._id,
-            requestId: request._id,
-            labourId: w._id,
-            categoryId,
-            status: ASSIGNMENT_STATUS.OFFERED,
+        createdAssignments.forEach((newAss) => {
+          emitToUser('labour', newAss.labourId.toString(), 'assignment_assigned', {
+            assignmentId: newAss._id.toString(),
+            type: 'new_order',
+            requestId: request._id.toString(),
+            clientName: clientUser?.fullName || 'Customer',
+            locationText: request.locationText || '',
+            categoryName: category?.name || 'Worker',
             perDayRate: baseRate,
-          }))
-
-          const createdAssignments = await Assignment.insertMany(assignmentsToCreate)
-
-          createdAssignments.forEach((newAss) => {
-            emitToUser('labour', newAss.labourId.toString(), 'assignment_assigned', {
-              assignmentId: newAss._id.toString(),
-              type: 'new_order',
-              requestId: request._id.toString(),
-              clientName: clientUser?.fullName || 'Customer',
-              locationText: request.locationText || '',
-              categoryName: category?.name || 'Worker',
-              perDayRate: baseRate,
-              startDate: request.startDate,
-              shiftStart: request.shiftStart || '',
-              shiftEnd: request.shiftEnd || '',
-              timeoutSeconds: 90
-            })
-            triggerNotification({
-              userId: newAss.labourId,
-              title: 'New Job Available!',
-              body: `A customer needs a ${category?.name || 'worker'} near ${request.locationText || 'your area'}. Tap to view.`,
-              type: 'new_order',
-              relatedId: newAss._id,
-              relatedModel: 'Assignment'
-            }).catch(err => console.error('[Notification Error]:', err.message));
+            startDate: request.startDate,
+            shiftStart: request.shiftStart || '',
+            shiftEnd: request.shiftEnd || '',
+            timeoutSeconds: 90
           })
-        }
+          triggerNotification({
+            userId: newAss.labourId,
+            title: 'New Job Available!',
+            body: `A customer needs a ${category?.name || 'worker'} near ${request.locationText || 'your area'}. Tap to view.`,
+            type: 'new_order',
+            relatedId: newAss._id,
+            relatedModel: 'Assignment'
+          }).catch(err => console.error('[Notification Error]:', err.message));
+        })
+
+        try {
+          const io = getIO()
+          io.emit('bookingAcceptedGlobal', { requestId: request._id.toString() })
+        } catch (err) {}
       }
 
       try {
         const io = getIO()
-        io.to(`request_${request._id.toString()}`).emit('bookingCancelledByLabour', { message: 'The assigned worker had to cancel. We are finding a new worker for you immediately.' })
+        const reSearchPayload = {
+          requestId: request._id.toString(),
+          fullCancel: false,
+          message: 'The assigned worker had to cancel. We are finding a new worker for you immediately.',
+        }
+        io.to(`request_${request._id.toString()}`).emit('bookingCancelledByLabour', reSearchPayload)
+        emitToUser('individual', request.clientId?.toString(), 'bookingCancelledByLabour', reSearchPayload)
         emitToUser('individual', request.clientId?.toString(), 'request_updated', { requestId: request._id.toString() })
         emitRequestStatusUpdate(request._id.toString(), {
           requestStatus: REQUEST_STATUS.SEARCHING,

@@ -21,6 +21,12 @@ export const PAYMENT_METHODS = [
 
 export const INDIVIDUAL_BOOKING_STORAGE_KEY = 'lc_homeowner_bookings_v1'
 
+/** Fired after local booking list is written — keeps home + mini-widget in sync. */
+export const INDIVIDUAL_BOOKINGS_UPDATED_EVENT = 'lc-individual-bookings-updated'
+
+/** Statuses that should surface a Swiggy-style floating live job widget. */
+export const LIVE_BOOKING_STATUSES = ['searching', 'accepted', 'assigned', 'in_progress', 'on_site']
+
 export const INDIVIDUAL_BOOKING_WORKFLOW = [
   { id: 'submitted', label: 'Request raised', short: 'Submitted' },
   { id: 'review', label: 'Admin review', short: 'Review' },
@@ -106,6 +112,189 @@ export function loadIndividualBookings() {
 
 export function saveIndividualBookings(items) {
   localStorage.setItem(INDIVIDUAL_BOOKING_STORAGE_KEY, JSON.stringify(items))
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(INDIVIDUAL_BOOKINGS_UPDATED_EVENT))
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Most recent non-demo booking that is still live (searching / en route / on site).
+ * @param {object[]} [bookings]
+ */
+export function getActiveLiveBooking(bookings) {
+  const list = Array.isArray(bookings) ? bookings : loadIndividualBookings()
+  const live = list
+    .filter((b) => !isDemoBooking(b) && LIVE_BOOKING_STATUSES.includes(String(b?.status || '').toLowerCase()))
+    .sort((a, b) => String(b?.createdAt || '').localeCompare(String(a?.createdAt || '')))
+  return live[0] || null
+}
+
+/**
+ * Booking-flow step to reopen for a live booking.
+ * @param {object | null | undefined} booking
+ * @returns {'searching' | 'active' | null}
+ */
+export function resolveLiveBookingFlowStep(booking) {
+  const status = String(booking?.status || '').toLowerCase()
+  if (status === 'searching') return 'searching'
+  if (['accepted', 'assigned', 'in_progress', 'on_site'].includes(status)) return 'active'
+  return null
+}
+
+/**
+ * Short label + subtitle for the floating live-job widget.
+ * @param {object | null | undefined} booking
+ */
+/**
+ * Short label + subtitle for the floating live-job widget.
+ * @param {object | null | undefined} booking
+ */
+export function liveBookingWidgetCopy(booking) {
+  const status = String(booking?.status || '').toLowerCase()
+  const category =
+    booking?.lines?.[0]?.categoryName ||
+    booking?.categoryName ||
+    'Labour'
+  const workerName = booking?.assignedWorker?.displayName || booking?.assignedWorker?.fullName || null
+
+  if (status === 'searching') {
+    return {
+      title: 'Finding labour',
+      subtitle: category,
+      tone: 'searching',
+      live: true,
+    }
+  }
+  if (status === 'accepted' || status === 'assigned') {
+    return {
+      title: workerName ? `${workerName} accepted` : 'Worker found',
+      subtitle: category,
+      tone: 'accepted',
+      live: true,
+    }
+  }
+  if (status === 'on_site') {
+    return {
+      title: 'Worker on site',
+      subtitle: category,
+      tone: 'active',
+      live: true,
+    }
+  }
+  if (status === 'in_progress') {
+    return {
+      title: 'Work in progress',
+      subtitle: category,
+      tone: 'active',
+      live: true,
+    }
+  }
+  return {
+    title: 'Live booking',
+    subtitle: category,
+    tone: 'active',
+    live: true,
+  }
+}
+
+/** Fired when labour fully cancels an unpaid booking — show user-facing popup. */
+export const WORKER_CANCELLED_BOOKING_EVENT = 'lc-worker-cancelled-booking'
+
+/**
+ * Mark a local homeowner booking cancelled (by requestId and/or ref).
+ * Falls back to cancelling any live booking so the home chip always clears.
+ * @param {{ requestId?: string, ref?: string, reason?: string }} match
+ * @returns {object | null} updated booking if found
+ */
+export function markLocalBookingCancelled(match = {}) {
+  const requestId = match.requestId ? String(match.requestId) : ''
+  const ref = match.ref ? String(match.ref).trim() : ''
+  const reason = match.reason || 'cancelled'
+
+  const stored = loadIndividualBookings()
+  let updated = null
+  const next = stored.map((b) => {
+    const sameRequest = requestId && String(b.requestId || '') === requestId
+    const sameRef = ref && (String(b.ref || '') === ref || String(b.reference || '') === ref)
+    if (!sameRequest && !sameRef) return b
+    if (String(b.status || '').toLowerCase() === 'cancelled') {
+      updated = b
+      return b
+    }
+    updated = {
+      ...b,
+      status: 'cancelled',
+      jobTimelineStep: 'cancelled',
+      assignedWorker: null,
+      cancelReason: reason,
+      cancelledAt: new Date().toISOString(),
+    }
+    return updated
+  })
+
+  if (updated) {
+    saveIndividualBookings(next)
+    return updated
+  }
+
+  // No id/ref match (or missing ids) — still clear the live chip
+  if (!requestId && !ref) {
+    return cancelActiveLiveBookings(reason)
+  }
+  return cancelActiveLiveBookings(reason)
+}
+
+/**
+ * Force-cancel every local live booking (searching / accepted / on site…).
+ * Used so the floating "Finding labour" chip always disappears after cancel.
+ * @param {string} [reason]
+ * @returns {object | null} last cancelled booking
+ */
+export function cancelActiveLiveBookings(reason = 'cancelled') {
+  const stored = loadIndividualBookings()
+  let last = null
+  let changed = false
+  const next = stored.map((b) => {
+    const status = String(b?.status || '').toLowerCase()
+    if (!LIVE_BOOKING_STATUSES.includes(status)) return b
+    changed = true
+    last = {
+      ...b,
+      status: 'cancelled',
+      jobTimelineStep: 'cancelled',
+      assignedWorker: null,
+      cancelReason: reason,
+      cancelledAt: new Date().toISOString(),
+    }
+    return last
+  })
+  if (changed) saveIndividualBookings(next)
+  return last
+}
+
+/**
+ * Notify UI layers (home widget, shell popup) that a worker cancelled.
+ * @param {{ message?: string, requestId?: string, ref?: string }} detail
+ */
+export function notifyWorkerCancelledBooking(detail = {}) {
+  try {
+    if (typeof window === 'undefined') return
+    window.dispatchEvent(
+      new CustomEvent(WORKER_CANCELLED_BOOKING_EVENT, {
+        detail: {
+          message: detail.message || 'Worker cancelled the booking.',
+          requestId: detail.requestId || null,
+          ref: detail.ref || null,
+        },
+      }),
+    )
+  } catch {
+    /* ignore */
+  }
 }
 
 export function todayISODate() {

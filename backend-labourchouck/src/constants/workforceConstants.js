@@ -56,6 +56,7 @@ export const ASSIGNMENT_STATUS = {
   IN_PROGRESS: 'in_progress',
   COMPLETED: 'completed',
   REPLACED: 'replaced',
+  CANCELLED: 'cancelled',
 }
 
 export const ATTENDANCE_STATUS = {

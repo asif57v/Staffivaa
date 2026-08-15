@@ -40,6 +40,9 @@ import {
   findBookingByRef,
   formatInr,
   loadIndividualBookings,
+  markLocalBookingCancelled,
+  cancelActiveLiveBookings,
+  notifyWorkerCancelledBooking,
   saveIndividualBookings,
   todayISODate,
 } from '../../../lib/individualBookings.js'
@@ -50,7 +53,7 @@ import {
   writeBookingDraft,
 } from '../../../lib/individualBookingDraft.js'
 import { readAppUserLocation, writeAppUserLocation } from '../../../lib/appUserLocationStorage.js'
-import { useCreateRequestMutation, useGetPublicSystemPricingQuery } from '../../../store/api/workforceApi.js'
+import { useCreateRequestMutation, useCancelWorkforceRequestMutation, useGetPublicSystemPricingQuery } from '../../../store/api/workforceApi.js'
 import { enrichDiscoverLabourUi } from '../../../lib/discoverLabourDummyUi.js'
 import { store } from '../../../store/index.js'
 import {
@@ -108,6 +111,7 @@ function FieldLabel({ children, optional }) {
 export function IndividualBookingFlowPage() {
   const navigate = useNavigate()
   const [createRequest] = useCreateRequestMutation()
+  const [cancelRequest, { isLoading: cancellingBooking }] = useCancelWorkforceRequestMutation()
   const { data: pricingData } = useGetPublicSystemPricingQuery()
   const location = useLocation()
   const reduce = useReducedMotion()
@@ -391,6 +395,38 @@ export function IndividualBookingFlowPage() {
         transitionToActive(workerInfo)
       })
 
+      socket.on('bookingCancelledByLabour', (data) => {
+        console.log('[Homeowner] bookingCancelledByLabour socket event received:', data)
+        if (data?.fullCancel || data?.reason === 'labour_cancelled_unpaid') {
+          handleCancellationOrTimeout()
+          markLocalBookingCancelled({
+            requestId: activeBooking?.requestId || data?.requestId,
+            ref: activeBooking?.ref || data?.reference,
+            reason: 'labour_cancelled_unpaid',
+          })
+          notifyWorkerCancelledBooking({
+            message: data?.message || 'Worker cancelled the booking.',
+            requestId: activeBooking?.requestId || data?.requestId,
+            ref: activeBooking?.ref || data?.reference,
+          })
+          leaveFlow()
+          return
+        }
+        setNoMatch(false)
+        if (activeBooking) {
+          const updated = {
+            ...activeBooking,
+            status: 'searching',
+            assignedWorker: null,
+            jobTimelineStep: 'created'
+          }
+          setActiveBooking(updated)
+          const stored = loadIndividualBookings().map((b) => (b.id === updated.id || b.ref === updated.ref ? updated : b))
+          saveIndividualBookings(stored)
+        }
+        goStep('searching')
+      })
+
       socket.on('bookingExpired', (data) => {
         console.log('[Homeowner] bookingExpired socket event received:', data)
         handleCancellationOrTimeout()
@@ -399,6 +435,14 @@ export function IndividualBookingFlowPage() {
       socket.on('booking_cancelled', (data) => {
         console.log('[Homeowner] booking_cancelled socket event received:', data)
         handleCancellationOrTimeout()
+        if (data?.fullCancel || data?.reason === 'labour_cancelled_unpaid') {
+          notifyWorkerCancelledBooking({
+            message: data?.message || 'Worker cancelled the booking.',
+            requestId: activeBooking?.requestId || data?.requestId,
+            ref: activeBooking?.ref || data?.reference,
+          })
+          leaveFlow()
+        }
       })
     } catch (err) {
       console.error('Socket init error:', err)
@@ -412,6 +456,7 @@ export function IndividualBookingFlowPage() {
         socket.off('connect_error')
         socket.off('reconnect')
         socket.off('bookingAccepted')
+        socket.off('bookingCancelledByLabour')
         socket.off('bookingExpired')
         socket.off('booking_cancelled')
         if (activeBooking?.requestId) socket.emit('leave_request', activeBooking.requestId)
@@ -668,16 +713,46 @@ export function IndividualBookingFlowPage() {
     setNoMatch(true)
   }
 
+  const handleCancelBooking = useCallback(async () => {
+    const booking = activeBooking || findBookingByRef(loadIndividualBookings(), refParam)
+    const requestId = booking?.requestId
+    const confirmed = window.confirm(
+      'Cancel this booking? The search will stop and any accepted worker will also be notified.',
+    )
+    if (!confirmed) return
+
+    try {
+      if (requestId) {
+        await cancelRequest(requestId).unwrap()
+      }
+    } catch (err) {
+      console.error('[Homeowner] cancel booking failed:', err)
+      // Still clear local state so the user isn't stuck on matching UI
+    }
+
+    markLocalBookingCancelled({
+      requestId,
+      ref: booking?.ref || refParam,
+      reason: 'client_cancelled',
+    })
+    cancelActiveLiveBookings('client_cancelled')
+    setActiveBooking(null)
+    setNoMatch(false)
+    leaveFlow()
+  }, [activeBooking, cancelRequest, leaveFlow, refParam])
+
   const wizardIndex = step === 'type' ? 0 : step === 'details' ? 1 : step === 'summary' ? 2 : 3
 
   if (step === 'searching' && !noMatch) {
     return (
       <div className="pb-8">
-        <FlowHeader title="Matching labour" subtitle="Hang tight — this usually takes a few seconds" onBack={() => goStep('summary')} />
+        <FlowHeader title="Matching labour" subtitle="Hang tight — this usually takes a few seconds" onBack={leaveFlow} />
         <BookingFindingScreen
           categoryLabel={draft.categoryName}
           onComplete={handleFindingComplete}
           onNoMatch={handleNoMatch}
+          onCancel={handleCancelBooking}
+          cancelling={cancellingBooking}
         />
       </div>
     )
@@ -714,8 +789,8 @@ export function IndividualBookingFlowPage() {
         booking={booking}
         worker={worker}
         draft={draft}
-        onBack={() => navigate('/app/bookings', { replace: true })}
-        onCancel={() => navigate('/app/bookings', { replace: true })}
+        onBack={leaveFlow}
+        onCancel={handleCancelBooking}
       />
     )
   }

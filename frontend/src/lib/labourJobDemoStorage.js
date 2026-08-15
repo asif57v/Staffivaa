@@ -125,6 +125,7 @@ export function assignmentToJobCard(assignment) {
     paymentStatus: typeof req === 'object' ? req?.paymentStatus : 'pending',
     requestStatus: typeof req === 'object' ? req?.status : assignment.status,
     labourPaymentStatus: typeof req === 'object' ? req?.labourPaymentStatus : 'pending',
+    userPaymentStatus: typeof req === 'object' ? req?.userPaymentStatus : 'pending',
     labourPlatformFee: typeof req === 'object' ? req?.labourPlatformFee : undefined,
     distanceKm: typeof req === 'object' ? req?.distanceKm : undefined,
     platformFeePendingAt: typeof req === 'object' ? req?.platformFeePendingAt : undefined,

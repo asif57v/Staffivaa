@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { protect } from '../middleware/auth.js'
+import { paymentLimiter, withdrawalLimiter } from '../middleware/rateLimiters.js'
 import { 
   createAddMoneyOrder, 
   verifyAddMoneyPayment, 
@@ -13,8 +14,8 @@ const router = Router()
 router.use(protect)
 
 router.get('/', getWalletBalance)
-router.post('/razorpay/create-order', createAddMoneyOrder)
-router.post('/razorpay/verify', verifyAddMoneyPayment)
-router.post('/withdraw', requestWithdrawal)
+router.post('/razorpay/create-order', paymentLimiter, createAddMoneyOrder)
+router.post('/razorpay/verify', paymentLimiter, verifyAddMoneyPayment)
+router.post('/withdraw', withdrawalLimiter, requestWithdrawal)
 
 export default router

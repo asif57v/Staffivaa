@@ -51,13 +51,25 @@ export const razorpayWebhook = async (req, res) => {
         request.userPaymentStatus = 'paid'
       }
 
-      if (request.userPaymentStatus === 'paid' && request.labourPaymentStatus === 'paid') {
+      const isLabourPaidOrWaived = request.labourPaymentStatus === 'paid' || (request.labourPlatformFee !== undefined && request.labourPlatformFee === 0);
+
+      // Both parties must settle platform fee before booking unlocks (unless labour fee is ₹0).
+      if (request.userPaymentStatus === 'paid' && isLabourPaidOrWaived) {
         request.platformFeePaymentLifecycle = 'completed'
         if (request.status !== 'quotation_unlocked') {
           request.status = request.sourceType === 'corporate' ? 'project_active' : 'confirmed'
         }
+        request.cancelReason = null
+
+        import('../models/Assignment.js').then(({ Assignment }) => {
+          Assignment.updateMany({ requestId: request._id, status: 'cancelled' }, { status: 'accepted' }).catch(e => console.error(e));
+        }).catch(e => console.error(e));
       } else if (request.userPaymentStatus === 'paid' || request.labourPaymentStatus === 'paid') {
         request.platformFeePaymentLifecycle = 'partial'
+        // Individual bookings must stay locked until labour also pays
+        if (request.sourceType !== 'corporate' && !['on_site', 'in_progress', 'completed'].includes(request.status)) {
+          request.status = 'platform_fee_pending'
+        }
       }
 
       await request.save()

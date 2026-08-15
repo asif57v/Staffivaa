@@ -38,7 +38,7 @@ import { PopularServicesSection } from '../../../components/app/individual/Popul
 import { flattenTradeSubcategories } from '../../../lib/labourCategoryDisplay.js'
 import { CategoryPickBottomSheet } from '../../../components/app/booking/CategoryPickBottomSheet.jsx'
 import { BookingTypeSheet } from '../../../components/app/booking/BookingTypeSheet.jsx'
-import { writeBookingDraft, readBookingDraft } from '../../../lib/individualBookingDraft.js'
+import { writeBookingDraft, patchBookingDraft, readBookingDraft } from '../../../lib/individualBookingDraft.js'
 import { fetchDiscoverLabour, fetchDiscoverLabours } from '../../../api/discoverLaboursApi.js'
 import { ApiError } from '../../../api/http.js'
 import { LabourPublicDetailSheet } from '../labour/LabourPublicDetailSheet.jsx'
@@ -47,7 +47,9 @@ import { enrichDiscoverLabourUi, hashSeed } from '../../../lib/discoverLabourDum
 import {
   bookingStatusToUi,
   displayBookingsList,
+  INDIVIDUAL_BOOKINGS_UPDATED_EVENT,
   loadIndividualBookings,
+  resolveLiveBookingFlowStep,
 } from '../../../lib/individualBookings.js'
 import { buildBookingFlowPath } from '../../../lib/bookingFlowNavigation.js'
 
@@ -477,18 +479,56 @@ function formatBannerPrice(rawPrice) {
 
   useEffect(() => {
     let cancelled = false
-    const t = window.setTimeout(() => {
+    const syncBookings = () => {
       if (cancelled) return
       const stored = loadIndividualBookings()
       setBookings(displayBookingsList(stored))
       setBookingsLoading(false)
-    }, 420)
+    }
+    const t = window.setTimeout(syncBookings, 420)
+    window.addEventListener(INDIVIDUAL_BOOKINGS_UPDATED_EVENT, syncBookings)
+    window.addEventListener('focus', syncBookings)
 
     return () => {
       cancelled = true
       window.clearTimeout(t)
+      window.removeEventListener(INDIVIDUAL_BOOKINGS_UPDATED_EVENT, syncBookings)
+      window.removeEventListener('focus', syncBookings)
     }
   }, [])
+
+  const openLiveBooking = useCallback(
+    (b) => {
+      if (!b?.ref) {
+        navigate('/app/bookings')
+        return
+      }
+      const step = resolveLiveBookingFlowStep(b)
+      if (!step) {
+        navigate(`/app/bookings?ref=${encodeURIComponent(b.ref)}`)
+        return
+      }
+      const categoryId = b.lines?.[0]?.categoryId || ''
+      const groupId = b.lines?.[0]?.groupId || ''
+      const prev = readBookingDraft() || {}
+      patchBookingDraft({
+        ...prev,
+        lastRef: b.ref,
+        categoryId: categoryId || prev.categoryId || '',
+        groupId: groupId || prev.groupId || '',
+        categoryName: b.lines?.[0]?.categoryName || prev.categoryName || '',
+        groupName: b.lines?.[0]?.groupName || prev.groupName || '',
+      })
+      navigate(
+        buildBookingFlowPath(step, {
+          ref: b.ref,
+          categoryId: categoryId || undefined,
+          groupId: groupId || undefined,
+        }),
+      )
+    },
+    [navigate],
+  )
 
   const openDetail = useCallback((id) => {
     setDetailId(id)
@@ -907,7 +947,7 @@ function formatBannerPrice(rawPrice) {
                     <div className="mt-3 flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => navigate(`/app/bookings?ref=${encodeURIComponent(b.ref || '')}`)}
+                        onClick={() => openLiveBooking(b)}
                         className="flex-1 rounded-[10px] bg-[#F4CC34] px-3 py-2 text-[12px] font-bold text-slate-900 shadow-sm transition hover:brightness-[1.05] active:scale-[0.98]"
                       >
                         Track

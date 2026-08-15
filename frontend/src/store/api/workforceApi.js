@@ -51,6 +51,11 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       invalidatesTags: ['Requests', 'CorporateDashboard', 'AdminRequests'],
     }),
+    cancelWorkforceRequest: build.mutation({
+      query: (id) => ({ url: `/workforce/requests/${id}/cancel`, method: 'POST' }),
+      transformResponse: unwrap,
+      invalidatesTags: (_r, _e, id) => [{ type: 'Requests', id }, 'Requests', 'Assignments'],
+    }),
     createRazorpayOrder: build.mutation({
       query: (id) => ({ url: `/workforce/requests/${id}/payment/order`, method: 'POST' }),
       transformResponse: unwrap,
@@ -583,6 +588,7 @@ export const {
   useGetMyRequestsQuery,
   useGetRequestQuery,
   useCreateRequestMutation,
+  useCancelWorkforceRequestMutation,
   useCreateRazorpayOrderMutation,
   useVerifyRazorpayPaymentMutation,
   usePayPlatformFeeMutation,

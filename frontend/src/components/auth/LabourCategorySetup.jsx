@@ -439,7 +439,7 @@ export function LabourCategorySetup({ variant = 'app', onComplete }) {
         </AnimatePresence>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200/80 bg-white/90 px-4 pt-3 shadow-[0_-12px_40px_-12px_rgba(15,23,42,0.12)] backdrop-blur-xl pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200/80 bg-white/90 px-4 pt-3 shadow-[0_-12px_40px_-12px_rgba(15,23,42,0.12)] backdrop-blur-xl pb-[max(1.5rem,env(safe-area-inset-bottom,1.5rem))]">
         <div className="mx-auto w-full max-w-lg">
           {error ? <p className="mb-2 text-center text-xs font-semibold text-rose-700">{error}</p> : null}
           {step === 'areas' ? (

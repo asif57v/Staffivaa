@@ -31,7 +31,15 @@ import { loadJobDemoState, subscribeJobDemo } from '../lib/labourJobDemoStorage.
 import { enterpriseApi } from '../store/api/enterpriseApi.js'
 import { walletApi } from '../store/api/walletApi.js'
 import { IncomingJobPopup } from '../components/labour/jobs/IncomingJobPopup.jsx'
+import { ActiveBookingMiniWidget } from '../components/app/booking/ActiveBookingMiniWidget.jsx'
+import { WorkerCancelledBookingModal } from '../components/app/booking/WorkerCancelledBookingModal.jsx'
 import { useRespondAssignmentMutation } from '../store/api/workforceApi.js'
+import {
+  markLocalBookingCancelled,
+  notifyWorkerCancelledBooking,
+  cancelActiveLiveBookings,
+  WORKER_CANCELLED_BOOKING_EVENT,
+} from '../lib/individualBookings.js'
 
 export function AppShell() {
   const { pathname, search } = useLocation()
@@ -52,6 +60,8 @@ export function AppShell() {
   const [localDemo, setLocalDemo] = useState(() => loadJobDemoState())
   const [incomingJob, setIncomingJob] = useState(null)
   const [isAcceptingPopup, setIsAcceptingPopup] = useState(false)
+  const [workerCancelPopup, setWorkerCancelPopup] = useState({ open: false, message: '' })
+  const workerCancelHandledRef = useRef('')
   const incomingJobRef = useRef(null)
   const globalAudioRef = useRef(null)
   const [respondAssignment] = useRespondAssignmentMutation()
@@ -224,6 +234,68 @@ export function AppShell() {
     socket.on('kyc:updated', handleKycUpdate);
     socket.on('dashboard:updated', invalidateCache);
 
+    const handleWorkerFullCancel = (payload = {}) => {
+      if (user?.role !== USER_ROLES.INDIVIDUAL) return
+      const key = String(payload.requestId || payload.reference || '')
+      if (key && workerCancelHandledRef.current === key) return
+      if (key) workerCancelHandledRef.current = key
+
+      const cleared = markLocalBookingCancelled({
+        requestId: payload.requestId,
+        ref: payload.reference,
+        reason: payload.reason || 'labour_cancelled_unpaid',
+      })
+      if (!cleared) cancelActiveLiveBookings(payload.reason || 'labour_cancelled_unpaid')
+
+      notifyWorkerCancelledBooking({
+        message: payload.message || 'Worker cancelled the booking.',
+        requestId: payload.requestId,
+        ref: payload.reference,
+      })
+      invalidateCache()
+    }
+
+    const handleBookingCancelled = (payload = {}) => {
+      if (user?.role !== USER_ROLES.INDIVIDUAL) return
+      if (payload.reason === 'labour_cancelled_unpaid') {
+        handleWorkerFullCancel(payload)
+        return
+      }
+      // Expired / unpaid cancel / other — clear Finding labour chip, no worker popup
+      markLocalBookingCancelled({
+        requestId: payload.requestId,
+        ref: payload.reference,
+        reason: payload.cancelReason || payload.reason || 'cancelled',
+      })
+      cancelActiveLiveBookings(payload.cancelReason || payload.reason || 'cancelled')
+      invalidateCache()
+    }
+
+    const handleLabourCancelled = (payload = {}) => {
+      if (user?.role !== USER_ROLES.INDIVIDUAL) return
+      if (payload.fullCancel === true || payload.reason === 'labour_cancelled_unpaid') {
+        handleWorkerFullCancel(payload)
+        return
+      }
+      // Paid re-search path — keep booking alive; tracking screen handles UX
+      invalidateCache()
+    }
+
+    const handleBookingExpired = (payload = {}) => {
+      if (user?.role !== USER_ROLES.INDIVIDUAL) return
+      markLocalBookingCancelled({
+        requestId: payload.requestId,
+        ref: payload.reference,
+        reason: 'search_expired',
+      })
+      cancelActiveLiveBookings('search_expired')
+      invalidateCache()
+    }
+
+    socket.on('booking_cancelled', handleBookingCancelled)
+    socket.on('bookingCancelledByLabour', handleLabourCancelled)
+    socket.on('bookingExpired', handleBookingExpired)
+
     return () => {
       stopGlobalRingSound();
       socket.off('assignment_created', invalidateCache);
@@ -240,10 +312,22 @@ export function AppShell() {
       socket.off('kyc:updated', handleKycUpdate);
       socket.off('dashboard:updated', invalidateCache);
       socket.off('bookingAcceptedGlobal');
+      socket.off('booking_cancelled', handleBookingCancelled);
+      socket.off('bookingCancelledByLabour', handleLabourCancelled);
+      socket.off('bookingExpired', handleBookingExpired);
     };
   }, [user, token, dispatch]);
   // ------------------------------------------
 
+  useEffect(() => {
+    if (user?.role !== USER_ROLES.INDIVIDUAL) return undefined
+    const onWorkerCancelled = (event) => {
+      const message = event?.detail?.message || 'Worker cancelled the booking.'
+      setWorkerCancelPopup({ open: true, message })
+    }
+    window.addEventListener(WORKER_CANCELLED_BOOKING_EVENT, onWorkerCancelled)
+    return () => window.removeEventListener(WORKER_CANCELLED_BOOKING_EVENT, onWorkerCancelled)
+  }, [user?.role])
   // --- Incoming Job Popup Handlers ---
   const handlePopupAccept = useCallback(async () => {
     stopGlobalRingSound();
@@ -922,6 +1006,9 @@ export function AppShell() {
 
       {!hideBottomNav ? <AppBottomNav items={finalBottomNav} /> : null}
 
+      {/* Swiggy-style live booking chip — individual only, hidden on booking flow */}
+      {user?.role === USER_ROLES.INDIVIDUAL && !hideBottomNav ? <ActiveBookingMiniWidget /> : null}
+
       {isIndividualAppHome ? (
         <AppUserLocationModal
           open={locationModalOpen}
@@ -940,6 +1027,14 @@ export function AppShell() {
           isAccepting={isAcceptingPopup}
         />
       )}
+
+      {user?.role === USER_ROLES.INDIVIDUAL ? (
+        <WorkerCancelledBookingModal
+          open={workerCancelPopup.open}
+          message={workerCancelPopup.message}
+          onClose={() => setWorkerCancelPopup({ open: false, message: '' })}
+        />
+      ) : null}
     </div>
   )
 }

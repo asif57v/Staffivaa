@@ -6,6 +6,7 @@ import {
   listMyRequests,
   getRequest,
   payPlatformFee,
+  cancelRequestByClient,
 } from '../controllers/requestController.js'
 import {
   listLabourAssignments,
@@ -42,6 +43,12 @@ router.post('/requests', bookingLimiter, requireActiveAccount(), restrictTo(USER
 router.get('/requests', restrictTo(...APP_ROLES), listMyRequests)
 router.get('/requests/:id', restrictTo(...APP_ROLES, USER_ROLES.ADMIN), getRequest)
 router.get('/bookings/:id', restrictTo(...APP_ROLES, USER_ROLES.ADMIN), getRequest)
+router.post(
+  '/requests/:id/cancel',
+  bookingLimiter,
+  restrictTo(USER_ROLES.INDIVIDUAL, USER_ROLES.CORPORATE, USER_ROLES.ADMIN),
+  cancelRequestByClient,
+)
 
 router.post('/requests/:id/payment/order', paymentLimiter, restrictTo(...APP_ROLES), createRazorpayOrder)
 router.post('/requests/:id/payment/verify', paymentLimiter, restrictTo(...APP_ROLES), verifyRazorpayPayment)
