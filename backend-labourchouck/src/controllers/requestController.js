@@ -408,16 +408,31 @@ export const cancelRequestByClient = asyncHandler(async (req, res) => {
   await request.save()
 
   const assignments = await Assignment.find({ requestId: request._id })
-  const labourIds = new Set()
+  const acceptedLabourIds = new Set()
+  const offeredLabourIds = new Set()
+
+  if (previousLabourId) {
+    acceptedLabourIds.add(previousLabourId)
+  }
+
   for (const a of assignments) {
-    if (a.labourId) labourIds.add(a.labourId.toString())
+    if (!a.labourId) continue
+    const lId = a.labourId.toString()
+
+    if ([ASSIGNMENT_STATUS.ACCEPTED, ASSIGNMENT_STATUS.ON_SITE, ASSIGNMENT_STATUS.IN_PROGRESS].includes(a.status)) {
+      acceptedLabourIds.add(lId)
+    } else if (a.status === ASSIGNMENT_STATUS.OFFERED) {
+      if (!acceptedLabourIds.has(lId)) {
+        offeredLabourIds.add(lId)
+      }
+    }
+
     if (![ASSIGNMENT_STATUS.CANCELLED, ASSIGNMENT_STATUS.COMPLETED, ASSIGNMENT_STATUS.DECLINED].includes(a.status)) {
       a.status = ASSIGNMENT_STATUS.CANCELLED
       a.cancelledAt = new Date()
       await a.save()
     }
   }
-  if (previousLabourId) labourIds.add(previousLabourId)
 
   const cancelPayload = {
     requestId: request._id.toString(),
@@ -433,7 +448,8 @@ export const cancelRequestByClient = asyncHandler(async (req, res) => {
     io.to(`request_${request._id.toString()}`).emit('booking_cancelled', cancelPayload)
     io.to(`request_${request._id.toString()}`).emit('request_cancelled', cancelPayload)
 
-    for (const labourId of labourIds) {
+    // Send push notification + sound alert ONLY to workers who ACCEPTED the booking
+    for (const labourId of acceptedLabourIds) {
       emitToUser('labour', labourId, 'booking_cancelled', cancelPayload)
       emitToUser('labour', labourId, 'request_cancelled', cancelPayload)
       emitToUser('labour', labourId, 'assignment_cancelled', {
@@ -454,6 +470,14 @@ export const cancelRequestByClient = asyncHandler(async (req, res) => {
         relatedId: request._id,
         relatedModel: 'WorkforceRequest',
       }).catch(() => {})
+    }
+
+    // For workers with unresponded open offers, send silent socket update so card closes without notification/sound
+    for (const labourId of offeredLabourIds) {
+      emitToUser('labour', labourId, 'assignment_cancelled', {
+        requestId: request._id.toString(),
+        ...cancelPayload,
+      })
     }
 
     emitRequestStatusUpdate(request._id.toString(), {

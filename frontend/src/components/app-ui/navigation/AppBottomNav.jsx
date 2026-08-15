@@ -18,11 +18,11 @@ export function AppBottomNav({ items }) {
 
   return (
     <nav
-      className="pointer-events-auto fixed bottom-0 left-1/2 z-30 flex w-full max-w-[430px] -translate-x-1/2 justify-center bg-white border-t border-[#ECECEC] rounded-t-[20px] shadow-[0_-4px_24px_rgba(0,0,0,0.04)]"
-      style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)', paddingTop: '4px' }}
+      className="pointer-events-auto fixed bottom-0 left-1/2 z-30 flex w-full max-w-[430px] -translate-x-1/2 justify-center bg-white border-t border-slate-200/80 shadow-[0_-2px_12px_rgba(0,0,0,0.04)]"
+      style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 2px)', paddingTop: '2px' }}
       aria-label="Bottom navigation"
     >
-      <div className="flex h-[60px] w-full max-w-[430px] items-center justify-around px-4 overflow-visible">
+      <div className="flex h-[50px] w-full max-w-[430px] items-center justify-around px-2 overflow-visible">
         {items.map(({ id, to, end, label, icon: Icon, premium, badge }) => (
           <NavLink
             key={`${id}-${to}`}
@@ -35,7 +35,7 @@ export function AppBottomNav({ items }) {
               }
             }}
             className={`flex min-w-0 flex-col items-center justify-center outline-none transition-all ${
-              premium ? 'relative -mt-2.5 flex-[1.15]' : 'flex-1 h-full'
+              premium ? 'relative -mt-1 flex-[1.15]' : 'flex-1 h-full'
             }`}
           >
             {({ isActive }) =>
@@ -47,7 +47,7 @@ export function AppBottomNav({ items }) {
                       reduce
                         ? undefined
                         : isActive
-                          ? { scale: [1, 1.06, 1], y: [0, -2, 0] }
+                          ? { scale: [1, 1.05, 1], y: [0, -1, 0] }
                           : { scale: 1, y: 0 }
                     }
                     transition={
@@ -70,11 +70,11 @@ export function AppBottomNav({ items }) {
                       <span className="absolute -inset-0.5 rounded-2xl bg-white ring-1 ring-orange-200/80 shadow-md" />
                     ) : null}
                     <span
-                      className={`relative z-10 flex h-9 w-9 items-center justify-center rounded-xl ${
+                      className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-xl ${
                         isActive ? 'text-white' : 'text-bm-terracotta'
                       }`}
                     >
-                      <Icon className="h-[18px] w-[18px]" aria-hidden />
+                      <Icon className="h-[16px] w-[16px]" aria-hidden />
                     </span>
                   </motion.span>
                   <span
@@ -86,24 +86,24 @@ export function AppBottomNav({ items }) {
                   </span>
                 </>
               ) : (
-                <div className="relative flex flex-col items-center justify-center w-full h-full text-center z-10 group pt-1">
-                  <div className="relative flex items-center justify-center h-[32px] w-[32px]">
+                <div className="relative flex flex-col items-center justify-center w-full h-full text-center z-10 group pt-0.5">
+                  <div className="relative flex items-center justify-center h-[26px] w-[26px]">
                     <div
-                      className={`absolute inset-0 rounded-full bg-[#FFC107] shadow-[0_2px_8px_rgba(255,193,7,0.25)] transition-all duration-[250ms] ease-in-out origin-center ${
+                      className={`absolute inset-0 rounded-full bg-[#FFC107] shadow-[0_2px_6px_rgba(255,193,7,0.2)] transition-all duration-[200ms] ease-in-out origin-center ${
                         isActive ? 'scale-100 opacity-100' : 'scale-50 opacity-0'
                       }`}
                     />
 
                     <div
-                      className={`relative z-10 flex items-center justify-center transition-transform duration-[250ms] ease-in-out ${
-                        isActive ? 'scale-[1.08]' : 'scale-100'
+                      className={`relative z-10 flex items-center justify-center transition-transform duration-[200ms] ease-in-out ${
+                        isActive ? 'scale-[1.05]' : 'scale-100'
                       }`}
                     >
                       <Icon
-                        size={20}
+                        size={18}
                         color={isActive ? '#000000' : '#98A2B3'}
                         strokeWidth={1.5}
-                        className="transition-colors duration-[250ms] ease-in-out"
+                        className="transition-colors duration-[200ms] ease-in-out"
                         aria-hidden
                       />
                     </div>
@@ -116,7 +116,7 @@ export function AppBottomNav({ items }) {
                   </div>
 
                   <span
-                    className={`mt-1 truncate px-0.5 text-[10px] transition-colors duration-[250ms] ease-in-out ${
+                    className={`mt-0.5 truncate px-0.5 text-[9px] transition-colors duration-[200ms] ease-in-out ${
                       isActive ? 'font-bold text-[#000000]' : 'font-medium text-[#98A2B3]'
                     }`}
                   >
