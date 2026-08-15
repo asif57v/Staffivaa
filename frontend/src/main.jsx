@@ -27,6 +27,20 @@ if (typeof window !== 'undefined') {
   }
 }
 
+// Auto-reload app when a new deployment invalidates old JS asset chunks
+if (typeof window !== 'undefined') {
+  window.addEventListener('vite:preload-error', (event) => {
+    console.warn('New deployment detected! Reloading page to fetch updated assets...', event)
+    const key = 'vite_preload_reload_ts'
+    const now = Date.now()
+    const last = Number(sessionStorage.getItem(key) || 0)
+    if (now - last > 10000) {
+      sessionStorage.setItem(key, String(now))
+      window.location.reload()
+    }
+  })
+}
+
 class GlobalErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -38,14 +52,36 @@ class GlobalErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     this.setState({ errorInfo });
     console.error("Global React Crash:", error, errorInfo);
+
+    const msg = error?.toString() || ''
+    if (
+      msg.includes('Failed to fetch dynamically imported module') ||
+      msg.includes('Importing a module script failed') ||
+      msg.includes('error loading dynamically imported module')
+    ) {
+      const key = 'chunk_reload_ts'
+      const now = Date.now()
+      const last = Number(sessionStorage.getItem(key) || 0)
+      if (now - last > 10000) {
+        sessionStorage.setItem(key, String(now))
+        window.location.reload()
+      }
+    }
   }
   render() {
     if (this.state.hasError) {
+      const isChunkError = (this.state.error?.toString() || '').includes('dynamically imported module')
       return (
         <div style={{ padding: '40px', fontFamily: 'sans-serif', background: '#F8FAFC', color: '#0F172A', minHeight: '100vh' }}>
           <div style={{ maxWidth: '800px', margin: '0 auto', background: '#ffffff', padding: '32px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-            <h1 style={{ color: '#EF4444', fontSize: '24px', margin: '0 0 16px 0', fontWeight: 'bold' }}>⚠️ Application Runtime Error</h1>
-            <p style={{ fontSize: '16px', marginBottom: '24px', color: '#475569' }}>An unexpected error occurred while rendering the application. See exact details below:</p>
+            <h1 style={{ color: '#EF4444', fontSize: '24px', margin: '0 0 16px 0', fontWeight: 'bold' }}>
+              {isChunkError ? '🔄 New Version Deployed' : '⚠️ Application Runtime Error'}
+            </h1>
+            <p style={{ fontSize: '16px', marginBottom: '24px', color: '#475569' }}>
+              {isChunkError
+                ? 'A new version of Staffivaa was deployed on the server. Please reload the page to load the latest update.'
+                : 'An unexpected error occurred while rendering the application. See exact details below:'}
+            </p>
             <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', padding: '16px', borderRadius: '8px', overflow: 'auto', marginBottom: '24px' }}>
               <strong style={{ color: '#991B1B', fontSize: '15px' }}>{this.state.error?.toString()}</strong>
               {this.state.errorInfo && (
