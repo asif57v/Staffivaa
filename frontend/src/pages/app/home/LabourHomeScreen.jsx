@@ -1156,7 +1156,7 @@ export function LabourHomeScreen({ user }) {
 
         {/* 12. Safety / training carousel */}
         <FadeInSection>
-        <section aria-label="Safety tips">
+        <section aria-label="Safety tips" className="pb-8">
           <AppSectionHeader title="Safety & training" className="mb-2 px-0.5" />
           <AnimatePresence mode="wait">
             <motion.div

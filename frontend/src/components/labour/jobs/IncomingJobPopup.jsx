@@ -18,18 +18,8 @@ export function IncomingJobPopup({
   const audioRef = useRef(null)
   const timerRef = useRef(null)
 
-  // Play looping alert sound on mount, stop automatically on unmount
+  // Audio playback removed as requested
   useEffect(() => {
-    try {
-      const audio = new Audio('/new_job_order.mp3')
-      audio.loop = true
-      audio.volume = 1.0
-      audioRef.current = audio
-      audio.play().catch((e) => console.warn('[Audio] Autoplay blocked:', e))
-    } catch (e) {
-      console.error('[Audio] Creation error:', e)
-    }
-
     return () => {
       if (audioRef.current) {
         try {

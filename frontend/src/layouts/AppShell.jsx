@@ -131,21 +131,8 @@ export function AppShell() {
     const socket = connectSocket(user, token);
 
     const playNewJobRingSound = () => {
-      try {
-        stopGlobalRingSound();
-        const audio = new Audio('/new_job_order.mp3');
-        audio.volume = 1.0;
-        audio.loop = true;
-        globalAudioRef.current = audio;
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-          playPromise.catch((err) => {
-            console.warn('[Audio] Autoplay error in AppShell:', err);
-          });
-        }
-      } catch (err) {
-        console.error('[Audio] Sound error:', err);
-      }
+      // Ring sound removed as requested
+      stopGlobalRingSound();
     };
 
     const invalidateCache = () => {
@@ -987,7 +974,7 @@ export function AppShell() {
 
         <main
           className={`relative z-10 flex-1 px-4 ${
-            hideBottomNav ? 'pb-8' : 'pb-16'
+            hideBottomNav ? 'pb-8' : 'pb-24'
           } ${
             hideShellHeader
               ? isLabourAppHome || isNotificationsPage

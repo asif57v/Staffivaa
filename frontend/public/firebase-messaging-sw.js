@@ -22,7 +22,6 @@ messaging.onBackgroundMessage(function(payload) {
     body: payload.notification.body,
     icon: '/logo.png',
     badge: '/favicon.svg',
-    sound: '/new_job_order.mp3',
     data: payload.data
   };
 
