@@ -332,6 +332,9 @@ export const createRequest = asyncHandler(async (req, res) => {
       const createdAssignments = await Assignment.insertMany(assignmentsToCreate)
 
       // Notify all matching workers instantly with rich payload for popup card + FCM Push Notification
+      console.log(
+        `[createRequest] Notifying ${createdAssignments.length} worker(s) with NEW_ORDER for request ${request._id}`,
+      )
       await Promise.all(
         createdAssignments.map(async (assignment) => {
           try {

@@ -41,10 +41,13 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
       ? 'NEW_ORDER'
       : String(data?.type || 'GENERAL');
 
-    const isNewOrder = notifType === 'NEW_ORDER' || notifType === 'new_order';
-    const soundName = data.sound || (isNewOrder ? 'new_job_order' : 'default');
-    const rawSoundName = String(soundName).replace(/\.(mp3|wav|caf|ogg)$/i, '');
-    const channelId = isNewOrder ? 'new_job_order' : 'default';
+    // IMPORTANT: do NOT use a custom Android channel/sound for NEW_ORDER.
+    // Other pushes (KYC, cancel, expire) use "default" and arrive fine.
+    // Custom channel "new_job_order" often doesn't exist on the device → tray stays silent
+    // while FCM still reports "sent". Keep type=NEW_ORDER in data for app routing/ring.
+    const soundName = data.sound && data.sound !== 'new_job_order' ? data.sound : 'default';
+    const rawSoundName = String(soundName).replace(/\.(mp3|wav|caf|ogg)$/i, '') || 'default';
+    const channelId = 'default';
 
     console.log(
       `[NotificationService] Dispatching FCM push to user ${userId} (${user.role || 'user'}) ` +
@@ -71,15 +74,25 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
     if (data && typeof data === 'object') {
       Object.keys(data).forEach((key) => {
         if (data[key] !== undefined && data[key] !== null && key !== 'type') {
+          // Never let callers force a missing custom channel for new jobs
+          if ((key === 'sound' || key === 'sound_name' || key === 'soundName' || key === 'channel_id' || key === 'channelId')
+            && String(data[key]).includes('new_job_order')) {
+            return;
+          }
           stringifiedData[key] = typeof data[key] === 'string' ? data[key] : String(data[key]);
         }
       });
     }
-    // Always keep the resolved type (do not let caller overwrite with empty)
+    // Always keep the resolved type/title/body/channel
     stringifiedData.type = notifType;
     stringifiedData.title = String(title);
     stringifiedData.body = String(body);
     stringifiedData.message = String(body);
+    stringifiedData.sound = rawSoundName;
+    stringifiedData.sound_name = rawSoundName;
+    stringifiedData.soundName = rawSoundName;
+    stringifiedData.channel_id = channelId;
+    stringifiedData.channelId = channelId;
 
     const message = {
       notification: {
@@ -92,6 +105,8 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
         notification: {
           title: String(title),
           body: String(body),
+          sound: 'default',
+          channelId: 'default',
           defaultSound: true,
           defaultVibrateTimings: true,
           priority: 'max',
@@ -123,6 +138,22 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
     };
 
     const response = await getMessaging().sendEachForMulticast(message);
+
+    console.log(
+      `[NotificationService] FCM result user=${userId} type=${notifType} ` +
+        `success=${response.successCount} fail=${response.failureCount}`,
+    );
+    if (response.failureCount > 0) {
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          console.warn(
+            `[NotificationService] FCM fail token#${idx} type=${notifType}:`,
+            resp.error?.code,
+            resp.error?.message,
+          );
+        }
+      });
+    }
 
     // Check for failed tokens to clean them up from DB
     const failedTokens = [];

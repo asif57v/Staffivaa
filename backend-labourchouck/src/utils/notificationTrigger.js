@@ -139,15 +139,19 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
       io.emit('dashboard:updated');
     }
 
-    // 3. Trigger FCM Push Notification (for specific user)
+    // 3. Trigger FCM Push Notification (for specific user) — await so NEW_ORDER isn't dropped mid-request
     if (userId) {
-      sendNotificationToUser(userId, title, body, {
-        type: resolvedType,
-        relatedId: relatedId ? relatedId.toString() : '',
-        relatedModel: relatedModel || '',
-        url: resolvedUrl || '',
-        recipientRole: resolvedRole || '',
-      }).catch((err) => console.error('[FCM Push Error]:', err.message));
+      try {
+        await sendNotificationToUser(userId, title, body, {
+          type: resolvedType,
+          relatedId: relatedId ? relatedId.toString() : '',
+          relatedModel: relatedModel || '',
+          url: resolvedUrl || '',
+          recipientRole: resolvedRole || '',
+        });
+      } catch (err) {
+        console.error('[FCM Push Error]:', err.message);
+      }
     }
 
     return notification;
