@@ -23,9 +23,11 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
     ];
 
     if (tokens.length === 0) {
-      console.log(`[NotificationService] No FCM tokens for user ${userId}`);
+      console.log(`[NotificationService] No FCM tokens found in DB for user ${userId} (${user.role || 'user'})`);
       return { success: false, sentCount: 0, failedTokens: [] };
     }
+
+    console.log(`[NotificationService] Dispatching FCM push to user ${userId} (${user.role || 'user'}) with ${tokens.length} token(s). Title: "${title}"`);
 
     const soundName = data.sound || 'default';
     const rawSoundName = String(soundName).replace(/\.(mp3|wav|caf|ogg)$/i, '');

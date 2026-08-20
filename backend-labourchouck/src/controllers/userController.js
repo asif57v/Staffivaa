@@ -680,17 +680,6 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
     targetField = isApp ? 'fcmTokensMobile' : 'fcmTokensWeb';
   }
 
-  // Remove this token from all other users first to prevent wrong device routing
-  await User.updateMany(
-    { _id: { $ne: req.user._id } },
-    { 
-      $pull: { 
-        fcmTokensWeb: token, 
-        fcmTokensMobile: token 
-      } 
-    }
-  )
-
   // Retrieve user document to mutate token array safely (using lean to bypass version tracking)
   const user = await User.findById(req.user._id).lean()
   if (!user) {
