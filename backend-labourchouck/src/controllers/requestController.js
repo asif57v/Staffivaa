@@ -332,32 +332,39 @@ export const createRequest = asyncHandler(async (req, res) => {
       const createdAssignments = await Assignment.insertMany(assignmentsToCreate)
 
       // Notify all matching workers instantly with rich payload for popup card + FCM Push Notification
-      createdAssignments.forEach((assignment) => {
-        emitToUser('labour', assignment.labourId.toString(), 'assignment_assigned', {
-          assignmentId: assignment._id.toString(),
-          type: 'new_order',
-          requestId: request._id.toString(),
-          clientName: user.fullName || 'Customer',
-          locationText: request.locationText || '',
-          categoryName: category?.name || 'Worker',
-          perDayRate: baseRate,
-          startDate: request.startDate,
-          shiftStart: request.shiftStart || '',
-          shiftEnd: request.shiftEnd || '',
-          timeoutSeconds: 90,
+      await Promise.all(
+        createdAssignments.map(async (assignment) => {
+          try {
+            emitToUser('labour', assignment.labourId.toString(), 'assignment_assigned', {
+              assignmentId: assignment._id.toString(),
+              type: 'new_order',
+              requestId: request._id.toString(),
+              clientName: user.fullName || 'Customer',
+              locationText: request.locationText || '',
+              categoryName: category?.name || 'Worker',
+              perDayRate: baseRate,
+              startDate: request.startDate,
+              shiftStart: request.shiftStart || '',
+              shiftEnd: request.shiftEnd || '',
+              timeoutSeconds: 90,
+            })
+
+            await triggerBookingNotif({
+              userId: assignment.labourId,
+              copy: newJobOfferNotif({
+                customerName: user.fullName,
+                categoryName: category?.name,
+                locationText: request.locationText,
+              }),
+              relatedId: assignment._id,
+              relatedModel: 'Assignment',
+              requestId: request._id,
+            })
+          } catch (err) {
+            console.error('[Notification Error for worker]:', assignment.labourId, err.message)
+          }
         })
-        triggerBookingNotif({
-          userId: assignment.labourId,
-          copy: newJobOfferNotif({
-            customerName: user.fullName,
-            categoryName: category?.name,
-            locationText: request.locationText,
-          }),
-          relatedId: assignment._id,
-          relatedModel: 'Assignment',
-          requestId: request._id,
-        }).catch((err) => console.error('[Notification Error]:', err.message))
-      })
+      )
     }
   }
 

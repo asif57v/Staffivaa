@@ -705,16 +705,27 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
     { $set: { [targetField]: tokens } }
   )
 
+  // Role-based device ownership: same FCM token can belong to only one account.
+  // labour login → labour owns token; individual login → individual owns token.
+  const exclusivity = await User.updateMany(
+    { _id: { $ne: req.user._id } },
+    { $pull: { fcmTokensWeb: token, fcmTokensMobile: token } },
+  )
+
   console.log(
-    `[FCM] Saved token for ${req.user.role} ${req.user._id} → ${targetField}`
+    `[FCM] Role=${req.user.role} user=${req.user._id} → ${targetField}` +
+      (exclusivity?.modifiedCount
+        ? ` | claimed from ${exclusivity.modifiedCount} other account(s)`
+        : ''),
   )
 
   const isMobileField = targetField === 'fcmTokensMobile'
   return sendSuccess(res, { 
-    message: `FCM Token saved successfully for ${isMobileField ? 'app' : 'web'} platform`,
+    message: `FCM Token saved for role ${req.user.role}`,
     data: {
       role: req.user.role,
-      platform: isMobileField ? 'app' : 'web'
+      platform: isMobileField ? 'app' : 'web',
+      claimedFromOthers: exclusivity?.modifiedCount || 0,
     }
   })
 })

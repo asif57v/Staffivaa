@@ -482,10 +482,15 @@ export function AppShell() {
           const fcmToken = await requestForToken();
           if (fcmToken) {
             localStorage.setItem('staffivaa_fcm_token', fcmToken);
+            // Track which role currently owns this device token
+            if (user?.role) localStorage.setItem('staffivaa_fcm_role', user.role);
             const { apiClient } = await import('../api/http.js');
-            // Claim this device token for the currently logged-in account (worker or user)
-            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
-              .catch(err => console.error('Failed to sync FCM token:', err));
+            // Claim token for current role (labour vs individual)
+            await apiClient.post('/users/me/fcm-token', {
+              token: fcmToken,
+              deviceType: 'web',
+              role: user?.role,
+            }).catch(err => console.error('Failed to sync FCM token:', err));
           }
         }
       } catch (err) {
@@ -494,7 +499,7 @@ export function AppShell() {
     };
 
     syncFcmToken();
-    // Re-claim token when returning to the app (important if customer + worker share one device)
+    // Re-claim for current role when app becomes visible again
     const onVisible = () => {
       if (document.visibilityState === 'visible') syncFcmToken();
     };
@@ -507,8 +512,16 @@ export function AppShell() {
         ? String(payload.data.targetUserId)
         : '';
       const currentUserId = user?._id ? String(user._id) : '';
-      // Only drop pushes clearly meant for another account (same device / shared SW)
+      const targetRole = String(
+        payload?.data?.recipientRole || payload?.data?.role || '',
+      ).toLowerCase();
+      const currentRole = String(user?.role || '').toLowerCase();
+
+      // Role-based filter: labour session must not show individual pushes (and vice versa)
       if (targetUserId && currentUserId && targetUserId !== currentUserId) {
+        return;
+      }
+      if (targetRole && currentRole && targetRole !== currentRole) {
         return;
       }
 

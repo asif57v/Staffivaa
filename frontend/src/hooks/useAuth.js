@@ -60,6 +60,7 @@ export function useAuth() {
       } finally {
         if (typeof window !== 'undefined') {
           localStorage.removeItem('staffivaa_fcm_token')
+          localStorage.removeItem('staffivaa_fcm_role')
         }
         toast.dismiss()
         dispatch(baseApi.util.resetApiState())
