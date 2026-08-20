@@ -125,16 +125,24 @@ export function AppShell() {
     }
   }, []);
 
+  const playNewJobRingSound = useCallback(() => {
+    // Ring sound removed as requested
+    stopGlobalRingSound();
+  }, [stopGlobalRingSound]);
+
+  const refreshAppUser = useCallback(() => {
+    fetchMe()
+      .then((res) => {
+        if (res?.data?.user) dispatch(setUser(res.data.user));
+      })
+      .catch(() => {});
+  }, [dispatch]);
+
   // --- Socket.IO Real-time Implementation ---
   useEffect(() => {
     if (!user || !token) return;
 
     const socket = connectSocket(user, token);
-
-    const playNewJobRingSound = () => {
-      // Ring sound removed as requested
-      stopGlobalRingSound();
-    };
 
     const invalidateCache = () => {
       console.log('[Socket] Invalidating Assignments, Requests, Notifications, and Enterprise Jobs cache');
@@ -198,12 +206,6 @@ export function AppShell() {
     socket.on('request_created', invalidateCache);
     socket.on('request_updated', invalidateCache);
     socket.on('request_cancelled', handleAssignmentEnded);
-
-    const refreshAppUser = () => {
-      fetchMe().then((res) => {
-        if (res?.data?.user) dispatch(setUser(res.data.user));
-      }).catch(() => {});
-    };
 
     const handleNewNotif = (notification) => {
       // Ring sound is handled exclusively by assignment_assigned and incomingJob popup state.
@@ -506,8 +508,30 @@ export function AppShell() {
     window.addEventListener('focus', syncFcmToken);
     document.addEventListener('visibilitychange', onVisible);
 
+    // Use service worker showNotification so it appears as native OS popup
+    // even when the app tab is currently focused (Chrome blocks new Notification() in foreground)
+    const showOsNotification = (title, body, data) => {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+      if (!('serviceWorker' in navigator)) return;
+
+      navigator.serviceWorker.ready.then((registration) => {
+        registration.showNotification(title, {
+          body,
+          icon: '/logo.png',
+          badge: '/favicon.svg',
+          requireInteraction: true,
+          // Every open tab receives the same push, so a content-derived tag collapses
+          // them into one tray entry instead of stacking duplicates.
+          tag: 'staffivaa-notif-' + String(data?.relatedId || data?.type || title),
+          data: data || {},
+        });
+      }).catch((err) => console.warn('Foreground showNotification error:', err));
+    };
+
     const handleFcmMessage = (event) => {
       const payload = event.detail;
+      if (!payload?.notification && !payload?.data?.title) return;
+
       const targetUserId = payload?.data?.targetUserId
         ? String(payload.data.targetUserId)
         : '';
@@ -516,14 +540,6 @@ export function AppShell() {
         payload?.data?.recipientRole || payload?.data?.role || '',
       ).toLowerCase();
       const currentRole = String(user?.role || '').toLowerCase();
-
-      // Role-based filter: labour session must not show individual pushes (and vice versa)
-      if (targetUserId && currentUserId && targetUserId !== currentUserId) {
-        return;
-      }
-      if (targetRole && currentRole && targetRole !== currentRole) {
-        return;
-      }
 
       const displayTitle =
         payload?.data?.title ||
@@ -535,50 +551,35 @@ export function AppShell() {
         payload?.notification?.body ||
         '';
 
-      if (payload?.notification || payload?.data?.title) {
-        // Ring only for real new-job offers (not every push that mentions a job)
-        const pushType = String(payload?.data?.type || '').toUpperCase()
-        if (pushType === 'NEW_ORDER' || payload?.data?.sound === 'new_job_order') {
-          playNewJobRingSound();
-        }
+      // FCM skips the service worker's background handler while any tab is visible,
+      // so the tray notification must be raised here even when another account owns
+      // the push — otherwise it is lost entirely on a shared browser.
+      showOsNotification(displayTitle, displayBody, payload.data);
 
-        if (Notification.permission === 'granted') {
-          // Also show a toast so the user definitely sees it inside the app
-          if (typeof window !== 'undefined') {
-            dispatchAlert(displayTitle, displayBody, false);
-          }
+      const isOtherAccount =
+        (targetUserId && currentUserId && targetUserId !== currentUserId) ||
+        (targetRole && currentRole && targetRole !== currentRole);
+      if (isOtherAccount) return;
 
-          // Refresh wallet cache if salary/withdrawal push notification
-          const notifType = payload?.data?.type;
-          if (
-            notifType === 'SALARY_RELEASED' ||
-            notifType === 'WITHDRAWAL_APPROVED' ||
-            notifType === 'WITHDRAWAL_ON_HOLD' ||
-            notifType === 'WITHDRAWAL_REJECTED'
-          ) {
-            dispatch(walletApi.util.invalidateTags(['Wallet']));
-            refreshAppUser();
-          }
-
-          // Also always refresh notification bell count
-          dispatch(workforceApi.util.invalidateTags(['Notifications']));
-        
-          // Use service worker showNotification so it appears as native OS popup
-          // even when the app tab is currently focused (Chrome blocks new Notification() in foreground)
-          if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.ready.then((registration) => {
-              registration.showNotification(displayTitle, {
-                body: displayBody,
-                icon: '/logo.png',
-                badge: '/favicon.svg',
-                requireInteraction: true,
-                tag: 'staffivaa-notif-' + Date.now(),
-                data: payload.data || {},
-              });
-            }).catch((err) => console.warn('Foreground showNotification error:', err));
-          }
-        }
+      // Ring only for real new-job offers (not every push that mentions a job)
+      const notifType = payload?.data?.type;
+      if (String(notifType || '').toUpperCase() === 'NEW_ORDER' || payload?.data?.sound === 'new_job_order') {
+        playNewJobRingSound();
       }
+
+      dispatchAlert(displayTitle, displayBody, false);
+
+      if (
+        notifType === 'SALARY_RELEASED' ||
+        notifType === 'WITHDRAWAL_APPROVED' ||
+        notifType === 'WITHDRAWAL_ON_HOLD' ||
+        notifType === 'WITHDRAWAL_REJECTED'
+      ) {
+        dispatch(walletApi.util.invalidateTags(['Wallet']));
+        refreshAppUser();
+      }
+
+      dispatch(workforceApi.util.invalidateTags(['Notifications']));
     };
 
     window.addEventListener('fcm-foreground-message', handleFcmMessage);
