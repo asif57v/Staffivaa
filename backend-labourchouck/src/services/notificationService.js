@@ -27,31 +27,40 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
       return { success: false, sentCount: 0, failedTokens: [] };
     }
 
-    const soundName = data.sound || 'new_job_order';
+    const soundName = data.sound || 'default';
     const rawSoundName = String(soundName).replace(/\.(mp3|wav|caf|ogg)$/i, '');
+
+    // Ensure all data values are strings for Firebase Admin SDK multicast
+    const stringifiedData = {
+      type: 'NEW_ORDER',
+      sound: rawSoundName,
+      sound_name: rawSoundName,
+      soundName: rawSoundName,
+      channel_id: 'default',
+      channelId: 'default',
+      targetUserId: userId.toString(),
+      click_action: 'FLUTTER_NOTIFICATION_CLICK'
+    };
+
+    if (data && typeof data === 'object') {
+      Object.keys(data).forEach((key) => {
+        if (data[key] !== undefined && data[key] !== null) {
+          stringifiedData[key] = typeof data[key] === 'string' ? data[key] : String(data[key]);
+        }
+      });
+    }
 
     const message = {
       notification: {
         title,
         body
       },
-      data: {
-        type: 'NEW_ORDER',
-        sound: rawSoundName,
-        sound_name: rawSoundName,
-        soundName: rawSoundName,
-        channel_id: 'new_job_ring_v2',
-        channelId: 'new_job_ring_v2',
-        ...data,
-        targetUserId: userId.toString(),
-        click_action: 'FLUTTER_NOTIFICATION_CLICK'
-      },
+      data: stringifiedData,
       android: {
         priority: 'high',
         notification: {
-          sound: rawSoundName,
-          channelId: 'new_job_ring_v2',
-          defaultSound: false,
+          sound: 'default',
+          defaultSound: true,
           defaultVibrateTimings: true,
           priority: 'max',
           visibility: 'public',
@@ -62,7 +71,7 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
         headers: { 'apns-priority': '10' },
         payload: {
           aps: {
-            sound: `${rawSoundName}.mp3`,
+            sound: 'default',
             'content-available': 1
           }
         }
