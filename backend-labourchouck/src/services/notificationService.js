@@ -92,8 +92,6 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
         notification: {
           title: String(title),
           body: String(body),
-          sound: 'default',
-          channelId: 'default',
           defaultSound: true,
           defaultVibrateTimings: true,
           priority: 'max',
