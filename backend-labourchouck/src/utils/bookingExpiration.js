@@ -7,6 +7,13 @@ import { Wallet } from '../models/Wallet.js'
 import { RefundRequest } from '../models/RefundRequest.js'
 import { REQUEST_STATUS } from '../constants/workforceConstants.js'
 import { getIO, emitToUser } from './socket.js'
+import { triggerNotification } from './notificationTrigger.js'
+import {
+  searchExpiredUserNotif,
+  searchExpiredLabourNotif,
+  feeTimeoutUserNotif,
+  feeTimeoutLabourNotif,
+} from './bookingNotificationCopy.js'
 
 export function startBookingExpirationJob() {
   // Check every 1 minute
@@ -29,6 +36,20 @@ export function startBookingExpirationJob() {
           reason: 'search_expired',
           message: 'Booking expired due to inactivity',
         }
+
+        // Capture offered labour IDs before deleting assignments (for expiry push)
+        const openAssignments = await Assignment.find({
+          requestId: booking._id,
+          status: { $in: ['offered', 'assigned'] },
+        }).select('labourId').lean()
+        const labourIds = [
+          ...new Set(
+            openAssignments
+              .map((a) => a.labourId?.toString())
+              .filter(Boolean),
+          ),
+        ]
+
         // Emit socket event before deletion so clients can update UI
         try {
           const io = getIO()
@@ -41,6 +62,34 @@ export function startBookingExpirationJob() {
           }
         } catch (socketErr) {
           console.error('Socket emit error on booking expiration:', socketErr)
+        }
+
+        // Dedicated mobile push for customer
+        if (booking.clientId) {
+          const copy = searchExpiredUserNotif(booking.reference)
+          triggerNotification({
+            userId: booking.clientId,
+            title: copy.title,
+            body: copy.body,
+            type: copy.type,
+            relatedId: booking._id,
+            relatedModel: 'WorkforceRequest',
+            url: '/app/bookings',
+          }).catch(() => {})
+        }
+
+        // Soft expiry notice to workers who still had an open offer
+        for (const labourId of labourIds) {
+          const copy = searchExpiredLabourNotif()
+          triggerNotification({
+            userId: labourId,
+            title: copy.title,
+            body: copy.body,
+            type: copy.type,
+            relatedId: booking._id,
+            relatedModel: 'WorkforceRequest',
+            url: '/app/jobs',
+          }).catch(() => {})
         }
 
         // Delete associated assignments and allocations
@@ -156,13 +205,39 @@ export function startBookingExpirationJob() {
           io.to(`request_${booking._id.toString()}`).emit('booking_cancelled', payload)
           
           if (booking.labourId) {
-            io.to(booking.labourId.toString()).emit('booking_cancelled', payload)
+            emitToUser('labour', booking.labourId.toString(), 'booking_cancelled', payload)
           }
           if (booking.clientId) {
-            io.to(booking.clientId.toString()).emit('booking_cancelled', payload)
+            emitToUser('individual', booking.clientId.toString(), 'booking_cancelled', payload)
           }
         } catch (socketErr) {
           console.error('Socket emit error on pending booking cancellation:', socketErr)
+        }
+
+        // Dedicated fee-timeout push for customer + worker
+        if (booking.clientId) {
+          const copy = feeTimeoutUserNotif()
+          triggerNotification({
+            userId: booking.clientId,
+            title: copy.title,
+            body: copy.body,
+            type: copy.type,
+            relatedId: booking._id,
+            relatedModel: 'WorkforceRequest',
+            url: '/app/bookings',
+          }).catch(() => {})
+        }
+        if (booking.labourId) {
+          const copy = feeTimeoutLabourNotif()
+          triggerNotification({
+            userId: booking.labourId,
+            title: copy.title,
+            body: copy.body,
+            type: copy.type,
+            relatedId: booking._id,
+            relatedModel: 'WorkforceRequest',
+            url: '/app/jobs',
+          }).catch(() => {})
         }
 
         console.log(`Cancelled platform_fee_pending booking: ${booking.reference || booking._id} due to timeout`)

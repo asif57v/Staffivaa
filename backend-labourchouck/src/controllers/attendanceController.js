@@ -205,7 +205,10 @@ export const checkIn = asyncHandler(async (req, res) => {
       request.clientId.toString(),
       'Check-In Verification Required',
       `${workerName} has arrived at site for "${projectName}". Use OTP ${otp} to verify check-in.`,
-      { url: `/corporate/attendance/${request.projectId || request._id}` }
+      {
+        type: 'LABOUR_CHECK_IN',
+        url: `/corporate/attendance/${request.projectId || request._id}`,
+      }
     ).catch(err => console.error('FCM check-in initiation notify error:', err))
 
     // Emit Socket Event: attendance:otpGenerated
@@ -498,6 +501,28 @@ export const checkOut = asyncHandler(async (req, res) => {
         console.error('Socket emit error:', err)
       }
     })
+
+    const workerName = req.user.fullName || 'Your worker'
+    if (request.clientId) {
+      triggerNotification({
+        userId: request.clientId,
+        title: 'Job Completed',
+        body: `${workerName} has completed the job. Thank you for using Staffivaa.`,
+        type: 'JOB_COMPLETED',
+        relatedId: request._id,
+        relatedModel: 'WorkforceRequest',
+        url: '/app/bookings',
+      }).catch((err) => console.error('[Notification Error]:', err.message))
+    }
+    triggerNotification({
+      userId: req.user._id,
+      title: 'Job Completed',
+      body: 'You have successfully completed this job. Great work!',
+      type: 'JOB_COMPLETED',
+      relatedId: request._id,
+      relatedModel: 'WorkforceRequest',
+      url: '/app/jobs',
+    }).catch((err) => console.error('[Notification Error]:', err.message))
   } else if (request && request.sourceType === 'corporate') {
     if (request.clientId) emitToCorporate(request.clientId.toString(), 'work_completed', { requestId: request._id.toString(), assignmentId: assignment._id.toString() });
     if (assignment.vendorId) emitToVendor(assignment.vendorId.toString(), 'work_completed', { requestId: request._id.toString(), assignmentId: assignment._id.toString() });
@@ -1016,7 +1041,7 @@ export const verifyCheckInOtp = asyncHandler(async (req, res) => {
     record.workerId.toString(),
     'Check-In Verified',
     `Your check-in for "${projectName}" has been verified. Have a safe shift!`,
-    { url: '/app' }
+    { type: 'LABOUR_CHECK_IN', url: '/app' }
   ).catch(err => console.error('FCM check-in verification notify error (worker):', err))
 
   if (record.vendorId) {
@@ -1025,7 +1050,7 @@ export const verifyCheckInOtp = asyncHandler(async (req, res) => {
       record.vendorId.toString(),
       'Worker Checked In',
       `${workerName} has checked in successfully at "${projectName}".`,
-      { url: '/vendor/attendance' }
+      { type: 'LABOUR_CHECK_IN', url: '/vendor/attendance' }
     ).catch(err => console.error('FCM check-in verification notify error (vendor):', err))
   }
 

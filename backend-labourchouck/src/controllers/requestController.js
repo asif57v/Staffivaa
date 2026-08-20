@@ -343,9 +343,10 @@ export const createRequest = asyncHandler(async (req, res) => {
           userId: assignment.labourId,
           title: 'New Job Available!',
           body: `${user.fullName || 'A customer'} needs a ${category?.name || 'worker'} near ${request.locationText || 'your area'}. Tap to view.`,
-          type: 'new_order',
+          type: 'NEW_ORDER',
           relatedId: assignment._id,
           relatedModel: 'Assignment',
+          url: '/app/jobs',
         }).catch((err) => console.error('[Notification Error]:', err.message))
       })
     }
@@ -359,6 +360,7 @@ export const createRequest = asyncHandler(async (req, res) => {
     type: 'BOOKING_CREATED',
     relatedId: request._id,
     relatedModel: 'WorkforceRequest',
+    url: '/app/bookings',
   }).catch((err) => console.error('[Notification Error]:', err.message))
 
   emitToUser('individual', user._id.toString(), 'request_created', { requestId: request._id.toString() })
@@ -477,19 +479,14 @@ export const cancelRequestByClient = asyncHandler(async (req, res) => {
         requestId: request._id.toString(),
         ...cancelPayload,
       })
-      sendNotificationToUser(
-        labourId,
-        'Booking Cancelled',
-        'The customer cancelled this booking.',
-        { url: '/app/jobs' },
-      )
       triggerNotification({
         userId: labourId,
         title: 'Booking Cancelled',
         body: 'The customer cancelled this booking.',
-        type: 'BOOKING_UPDATED',
+        type: 'BOOKING_CANCELLED',
         relatedId: request._id,
         relatedModel: 'WorkforceRequest',
+        url: '/app/jobs',
       }).catch(() => {})
     }
 
@@ -499,6 +496,19 @@ export const cancelRequestByClient = asyncHandler(async (req, res) => {
         requestId: request._id.toString(),
         ...cancelPayload,
       })
+    }
+
+    // Confirm cancellation to the customer
+    if (request.clientId) {
+      triggerNotification({
+        userId: request.clientId,
+        title: 'Booking Cancelled',
+        body: `Your booking${request.reference ? ` #${request.reference}` : ''} has been cancelled successfully.`,
+        type: 'BOOKING_CANCELLED',
+        relatedId: request._id,
+        relatedModel: 'WorkforceRequest',
+        url: '/app/bookings',
+      }).catch(() => {})
     }
 
     emitRequestStatusUpdate(request._id.toString(), {

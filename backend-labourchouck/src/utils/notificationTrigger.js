@@ -3,16 +3,31 @@ import { User } from '../models/User.js';
 import { getIO } from './socket.js';
 import { sendNotificationToUser } from '../services/notificationService.js';
 
-export const triggerNotification = async ({ userId, title, body, type, relatedId, relatedModel }) => {
+function normalizeNotifType(type) {
+  if (!type) return 'GENERAL'
+  if (type === 'new_order') return 'NEW_ORDER'
+  return String(type)
+}
+
+/**
+ * Create in-app notification + socket + FCM with dedicated title/body/type.
+ * @param {{ userId?: string, title: string, body: string, type?: string, relatedId?: any, relatedModel?: string, url?: string }} args
+ */
+export const triggerNotification = async ({ userId, title, body, type, relatedId, relatedModel, url }) => {
   try {
+    const resolvedType = normalizeNotifType(type)
+    const resolvedUrl =
+      url ||
+      (resolvedType === 'NEW_ORDER' ? '/app/jobs' : undefined)
+
     // 1. Create in MongoDB
     const notification = await Notification.create({
       userId,
       title,
       body,
-      type,
+      type: resolvedType,
       relatedId,
-      relatedModel
+      relatedModel,
     });
 
     // 2. Broadcast via Socket.IO
@@ -40,24 +55,30 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
             .to(`enterprise-${uId}`)
             .to(`labour_${uId}`)
             .to(`labour-${uId}`)
+            .to(`individual_${uId}`)
             .to(`user_${uId}`)
             .to(uId)
             .emit('notification:new', notification);
 
           if (
-            type === 'KYC_APPROVED' || 
-            type === 'KYC_REJECTED' ||
-            type === 'ACCOUNT_ON_HOLD' ||
-            type === 'ACCOUNT_SUSPENDED' ||
-            type === 'ACCOUNT_BLOCKED' ||
-            type === 'ACCOUNT_REACTIVATED' ||
-            type === 'ACCOUNT_STATUS_UPDATE'
+            resolvedType === 'KYC_APPROVED' ||
+            resolvedType === 'KYC_REJECTED' ||
+            resolvedType === 'ACCOUNT_ON_HOLD' ||
+            resolvedType === 'ACCOUNT_SUSPENDED' ||
+            resolvedType === 'ACCOUNT_BLOCKED' ||
+            resolvedType === 'ACCOUNT_REACTIVATED' ||
+            resolvedType === 'ACCOUNT_STATUS_UPDATE'
           ) {
-            const statusStr = 
-              type === 'KYC_APPROVED' || type === 'ACCOUNT_REACTIVATED' ? 'approved' :
-              type === 'ACCOUNT_ON_HOLD' ? 'on_hold' :
-              type === 'ACCOUNT_SUSPENDED' ? 'suspended' :
-              type === 'ACCOUNT_BLOCKED' ? 'blocked' : 'updated';
+            const statusStr =
+              resolvedType === 'KYC_APPROVED' || resolvedType === 'ACCOUNT_REACTIVATED'
+                ? 'approved'
+                : resolvedType === 'ACCOUNT_ON_HOLD'
+                  ? 'on_hold'
+                  : resolvedType === 'ACCOUNT_SUSPENDED'
+                    ? 'suspended'
+                    : resolvedType === 'ACCOUNT_BLOCKED'
+                      ? 'blocked'
+                      : 'updated';
 
             io.to(`${uRole}_${uId}`)
               .to(`vendor_${uId}`)
@@ -91,20 +112,20 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
             userId: admin._id,
             title,
             body,
-            type,
+            type: resolvedType,
             relatedId,
-            relatedModel
-          }).catch(e => console.error('[Admin Notification Save Error]:', e.message));
-          
-          // Trigger Admin FCM Push Notification
+            relatedModel,
+          }).catch((e) => console.error('[Admin Notification Save Error]:', e.message));
+
           sendNotificationToUser(admin._id, title, body, {
-            type,
+            type: resolvedType,
             relatedId: relatedId ? relatedId.toString() : '',
-            relatedModel: relatedModel || ''
-          }).catch(err => console.error('[Admin FCM Push Error]:', err.message));
+            relatedModel: relatedModel || '',
+            url: resolvedUrl || '/admin',
+          }).catch((err) => console.error('[Admin FCM Push Error]:', err.message));
         }
       }
-      
+
       // Notify dashboard listeners
       io.emit('dashboard:updated');
     }
@@ -112,15 +133,28 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
     // 3. Trigger FCM Push Notification (for specific user)
     if (userId) {
       sendNotificationToUser(userId, title, body, {
-        type,
+        type: resolvedType,
         relatedId: relatedId ? relatedId.toString() : '',
         relatedModel: relatedModel || '',
-        url: type === 'new_order' ? '/app/jobs' : undefined
-      }).catch(err => console.error('[FCM Push Error]:', err.message));
+        url: resolvedUrl || '',
+      }).catch((err) => console.error('[FCM Push Error]:', err.message));
     }
 
     return notification;
   } catch (err) {
     console.error('[NotificationTrigger] Failed to trigger notification:', err.message);
+    // Still attempt FCM so mobile gets the dedicated message even if DB write fails
+    if (userId && title && body) {
+      try {
+        await sendNotificationToUser(userId, title, body, {
+          type: normalizeNotifType(type),
+          relatedId: relatedId ? String(relatedId) : '',
+          relatedModel: relatedModel || '',
+          url: url || '',
+        });
+      } catch (fcmErr) {
+        console.error('[NotificationTrigger] FCM fallback also failed:', fcmErr.message);
+      }
+    }
   }
 };

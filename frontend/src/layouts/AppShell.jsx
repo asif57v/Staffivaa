@@ -504,12 +504,9 @@ export function AppShell() {
       }
 
       if (payload?.notification) {
-        // Play ring sound for new job / order notifications
-        if (
-          payload?.data?.type === 'NEW_ORDER' ||
-          payload?.data?.sound === 'new_job_order' ||
-          payload?.notification?.title?.toLowerCase().includes('new job')
-        ) {
+        // Ring only for real new-job offers (not every push that mentions a job)
+        const pushType = String(payload?.data?.type || '').toUpperCase()
+        if (pushType === 'NEW_ORDER' || payload?.data?.sound === 'new_job_order') {
           playNewJobRingSound();
         }
 

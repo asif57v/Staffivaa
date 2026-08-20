@@ -9,7 +9,6 @@ import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { USER_ROLES } from '../constants/roles.js'
 import { emitRequestStatusUpdate, emitToVendor, emitToUser, emitToCorporate } from '../utils/socket.js'
-import { sendNotificationToUser } from '../services/notificationService.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
 
 // Cache the instance
@@ -220,7 +219,15 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
     }
 
     await request.save()
-    sendNotificationToUser(req.user._id.toString(), 'Payment Failed', 'Your recent payment transaction failed. Please try again.', { url: '/app/wallet' })
+    triggerNotification({
+      userId: req.user._id,
+      title: 'Payment Failed',
+      body: 'Your recent payment transaction failed. Please try again.',
+      type: 'PAYMENT_FAILED',
+      relatedId: request._id,
+      relatedModel: 'WorkforceRequest',
+      url: '/app/wallet',
+    }).catch(() => {})
     return sendError(res, { message: 'Payment verification failed', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
 
@@ -359,8 +366,114 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
     requestId: request._id.toString(), 
     requestStatus: request.status 
   })
-  
-  sendNotificationToUser(req.user._id.toString(), 'Payment Successful', 'Your payment was successfully processed.', { url: '/corporate/requests' })
+
+  const reqRef = request.reference || request._id.toString().slice(-6)
+  const bothPaid =
+    request.userPaymentStatus === 'paid' &&
+    (request.labourPaymentStatus === 'paid' ||
+      (request.labourPlatformFee !== undefined && request.labourPlatformFee === 0))
+
+  // Dedicated payment / confirmation messages for the payer + counterpart
+  if (isUserOrder && request.sourceType !== 'corporate') {
+    if (bothPaid) {
+      triggerNotification({
+        userId: request.clientId,
+        title: 'Booking Confirmed!',
+        body: `Both payments are done for #${reqRef}. Your worker is confirmed and can proceed to the site.`,
+        type: 'BOOKING_CONFIRMED',
+        relatedId: request._id,
+        relatedModel: 'WorkforceRequest',
+        url: '/app/bookings',
+      }).catch(() => {})
+      if (request.labourId) {
+        triggerNotification({
+          userId: request.labourId,
+          title: 'Booking Unlocked!',
+          body: `Both payments are complete for #${reqRef}. You can now proceed to the job site.`,
+          type: 'BOOKING_CONFIRMED',
+          relatedId: request._id,
+          relatedModel: 'WorkforceRequest',
+          url: '/app/jobs',
+        }).catch(() => {})
+      }
+    } else {
+      triggerNotification({
+        userId: req.user._id,
+        title: 'Payment Successful',
+        body: 'Your platform fee payment was successful. Waiting for the worker to complete their payment.',
+        type: 'PAYMENT_RECEIVED',
+        relatedId: request._id,
+        relatedModel: 'WorkforceRequest',
+        url: '/app/bookings',
+      }).catch(() => {})
+      if (request.labourId && request.labourPaymentStatus !== 'paid') {
+        triggerNotification({
+          userId: request.labourId,
+          title: 'Customer Paid Platform Fee',
+          body: 'The customer has paid their platform fee. Please pay yours to unlock the booking.',
+          type: 'PAYMENT_RECEIVED',
+          relatedId: request._id,
+          relatedModel: 'WorkforceRequest',
+          url: '/app/jobs',
+        }).catch(() => {})
+      }
+    }
+  } else if (isLabourOrder && request.sourceType !== 'corporate') {
+    if (bothPaid) {
+      if (request.clientId) {
+        triggerNotification({
+          userId: request.clientId,
+          title: 'Booking Confirmed!',
+          body: `Both payments are done for #${reqRef}. Your worker is confirmed and can proceed to the site.`,
+          type: 'BOOKING_CONFIRMED',
+          relatedId: request._id,
+          relatedModel: 'WorkforceRequest',
+          url: '/app/bookings',
+        }).catch(() => {})
+      }
+      triggerNotification({
+        userId: req.user._id,
+        title: 'Booking Unlocked!',
+        body: `Both payments are complete for #${reqRef}. You can now proceed to the job site.`,
+        type: 'BOOKING_CONFIRMED',
+        relatedId: request._id,
+        relatedModel: 'WorkforceRequest',
+        url: '/app/jobs',
+      }).catch(() => {})
+    } else {
+      triggerNotification({
+        userId: req.user._id,
+        title: 'Payment Successful',
+        body: 'Your platform fee payment was successful. Waiting for the customer to complete their payment.',
+        type: 'PAYMENT_RECEIVED',
+        relatedId: request._id,
+        relatedModel: 'WorkforceRequest',
+        url: '/app/jobs',
+      }).catch(() => {})
+      if (request.clientId && request.userPaymentStatus !== 'paid') {
+        triggerNotification({
+          userId: request.clientId,
+          title: 'Worker Paid Platform Fee',
+          body: 'The worker has paid their platform fee. Please pay yours to unlock the booking.',
+          type: 'PAYMENT_RECEIVED',
+          relatedId: request._id,
+          relatedModel: 'WorkforceRequest',
+          url: '/app/bookings',
+        }).catch(() => {})
+      }
+    }
+  } else {
+    // Corporate / other flows — keep a generic success push with correct type
+    triggerNotification({
+      userId: req.user._id,
+      title: 'Payment Successful',
+      body: 'Your payment was successfully processed.',
+      type: 'PAYMENT_RECEIVED',
+      relatedId: request._id,
+      relatedModel: 'WorkforceRequest',
+      url: request.sourceType === 'corporate' ? '/corporate/requests' : '/app',
+    }).catch(() => {})
+  }
 
   if (isUserOrder) {
     import('../models/Allocation.js').then(({ Allocation }) => {

@@ -9,7 +9,6 @@ import { SystemPricing } from '../models/SystemPricing.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { emitRequestStatusUpdate, getIO, emitToUser } from '../utils/socket.js'
-import { sendNotificationToUser } from '../services/notificationService.js'
 import { logAudit } from '../utils/auditLogger.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
 
@@ -113,9 +112,25 @@ export const replaceAssignmentAdmin = asyncHandler(async (req, res) => {
   })
   
   emitToUser('labour', newLabourId.toString(), 'assignment_assigned', { assignmentId: assignment._id.toString() })
-  sendNotificationToUser(newLabourId.toString(), 'New Job Assigned', 'You have been reassigned to a new job.', { url: '/app/jobs' })
+  triggerNotification({
+    userId: newLabourId,
+    title: 'New Job Assigned',
+    body: 'You have been reassigned to a new job. Please check your Active jobs.',
+    type: 'LABOUR_ASSIGNED',
+    relatedId: assignment._id,
+    relatedModel: 'Assignment',
+    url: '/app/jobs',
+  }).catch(() => {})
   emitToUser('labour', old.labourId.toString(), 'assignment_cancelled', { assignmentId: old._id.toString() })
-  sendNotificationToUser(old.labourId.toString(), 'Job Cancelled', 'Your previous assignment has been cancelled.', { url: '/app/jobs' })
+  triggerNotification({
+    userId: old.labourId,
+    title: 'Job Cancelled',
+    body: 'Your previous assignment has been cancelled.',
+    type: 'BOOKING_CANCELLED',
+    relatedId: old._id,
+    relatedModel: 'Assignment',
+    url: '/app/jobs',
+  }).catch(() => {})
   
   sendSuccess(res, { data: { assignment, replaced: old } })
 })
@@ -320,7 +335,15 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
         const io = getIO()
         io.emit('bookingAcceptedGlobal', { requestId: request._id.toString() })
         emitToUser('individual', request.clientId?.toString(), 'request_updated', { requestId: request._id.toString() })
-        sendNotificationToUser(request.clientId?.toString(), 'Worker Found!', `${req.user.fullName} has accepted your job request.`, { url: `/app/booking/${request._id}` })
+        triggerNotification({
+          userId: request.clientId,
+          title: 'Worker Found!',
+          body: `${req.user.fullName || 'A verified worker'} has accepted your job request. Please complete payment to confirm.`,
+          type: 'WORKER_FOUND',
+          relatedId: request._id,
+          relatedModel: 'WorkforceRequest',
+          url: '/app/bookings',
+        }).catch((err) => console.error('[Notification Error]:', err.message))
         emitToUser('labour', req.user._id.toString(), 'assignment_accepted', { assignmentId: assignment._id.toString() })
         io.to(`request_${request._id.toString()}`).emit('bookingAccepted', {
           status: request.status,
@@ -391,12 +414,15 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
             emitToUser('individual', clientId, 'booking_cancelled', cancelPayload)
             emitToUser('individual', clientId, 'bookingCancelledByLabour', cancelPayload)
             emitToUser('individual', clientId, 'request_cancelled', cancelPayload)
-            sendNotificationToUser(
-              clientId,
-              'Worker Cancelled Booking',
-              'The worker cancelled your booking.',
-              { url: '/app/bookings' },
-            )
+            triggerNotification({
+              userId: clientId,
+              title: 'Worker Cancelled Booking',
+              body: 'The worker cancelled your booking. You can book again anytime.',
+              type: 'BOOKING_CANCELLED',
+              relatedId: request._id,
+              relatedModel: 'WorkforceRequest',
+              url: '/app/bookings',
+            }).catch(() => {})
           }
           emitRequestStatusUpdate(request._id.toString(), {
             requestStatus: REQUEST_STATUS.CANCELLED,
@@ -527,9 +553,10 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
             userId: newAss.labourId,
             title: 'New Job Available!',
             body: `A customer needs a ${category?.name || 'worker'} near ${request.locationText || 'your area'}. Tap to view.`,
-            type: 'new_order',
+            type: 'NEW_ORDER',
             relatedId: newAss._id,
-            relatedModel: 'Assignment'
+            relatedModel: 'Assignment',
+            url: '/app/jobs',
           }).catch(err => console.error('[Notification Error]:', err.message));
         })
 
@@ -549,6 +576,17 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
         io.to(`request_${request._id.toString()}`).emit('bookingCancelledByLabour', reSearchPayload)
         emitToUser('individual', request.clientId?.toString(), 'bookingCancelledByLabour', reSearchPayload)
         emitToUser('individual', request.clientId?.toString(), 'request_updated', { requestId: request._id.toString() })
+        if (request.clientId) {
+          triggerNotification({
+            userId: request.clientId,
+            title: 'Finding a New Worker',
+            body: 'Your assigned worker cancelled. We are searching for another nearby worker for you.',
+            type: 'BOOKING_UPDATED',
+            relatedId: request._id,
+            relatedModel: 'WorkforceRequest',
+            url: '/app/bookings',
+          }).catch(() => {})
+        }
         emitRequestStatusUpdate(request._id.toString(), {
           requestStatus: REQUEST_STATUS.SEARCHING,
           event: 'status_changed',

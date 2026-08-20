@@ -1,7 +1,15 @@
 import crypto from 'crypto'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { emitRequestStatusUpdate } from '../utils/socket.js'
-import { Wallet } from '../models/Wallet.js'
+import { triggerNotification } from '../utils/notificationTrigger.js'
+import {
+  paymentSuccessUserNotif,
+  paymentSuccessLabourNotif,
+  counterpartPaidUserNotif,
+  counterpartPaidLabourNotif,
+  bookingConfirmedUserNotif,
+  bookingConfirmedLabourNotif,
+} from '../utils/bookingNotificationCopy.js'
 
 export const razorpayWebhook = async (req, res) => {
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET
@@ -44,6 +52,9 @@ export const razorpayWebhook = async (req, res) => {
     if (request) {
       const isLabourOrder = request.labourRazorpayOrderId === orderId
       const isUserOrder = request.userRazorpayOrderId === orderId
+      const wasAlreadyPaid =
+        (isLabourOrder && request.labourPaymentStatus === 'paid') ||
+        (isUserOrder && request.userPaymentStatus === 'paid')
 
       if (isLabourOrder) {
         request.labourPaymentStatus = 'paid'
@@ -77,6 +88,92 @@ export const razorpayWebhook = async (req, res) => {
         requestId: request._id.toString(),
         requestStatus: request.status
       })
+
+      // Dedicated push for individual dual-payment flow (skip if this order was already marked paid)
+      if (!wasAlreadyPaid && request.sourceType !== 'corporate') {
+        const reqRef = request.reference || request._id.toString().slice(-6)
+        const bothPaid =
+          request.userPaymentStatus === 'paid' &&
+          (request.labourPaymentStatus === 'paid' ||
+            (request.labourPlatformFee !== undefined && request.labourPlatformFee === 0))
+
+        if (bothPaid) {
+          if (request.clientId) {
+            const copy = bookingConfirmedUserNotif(reqRef)
+            triggerNotification({
+              userId: request.clientId,
+              title: copy.title,
+              body: copy.body,
+              type: copy.type,
+              relatedId: request._id,
+              relatedModel: 'WorkforceRequest',
+              url: '/app/bookings',
+            }).catch(() => {})
+          }
+          if (request.labourId) {
+            const copy = bookingConfirmedLabourNotif(reqRef)
+            triggerNotification({
+              userId: request.labourId,
+              title: copy.title,
+              body: copy.body,
+              type: copy.type,
+              relatedId: request._id,
+              relatedModel: 'WorkforceRequest',
+              url: '/app/jobs',
+            }).catch(() => {})
+          }
+        } else if (isUserOrder) {
+          if (request.clientId) {
+            const copy = paymentSuccessUserNotif()
+            triggerNotification({
+              userId: request.clientId,
+              title: copy.title,
+              body: copy.body,
+              type: copy.type,
+              relatedId: request._id,
+              relatedModel: 'WorkforceRequest',
+              url: '/app/bookings',
+            }).catch(() => {})
+          }
+          if (request.labourId && request.labourPaymentStatus !== 'paid') {
+            const copy = counterpartPaidLabourNotif()
+            triggerNotification({
+              userId: request.labourId,
+              title: copy.title,
+              body: copy.body,
+              type: copy.type,
+              relatedId: request._id,
+              relatedModel: 'WorkforceRequest',
+              url: '/app/jobs',
+            }).catch(() => {})
+          }
+        } else if (isLabourOrder) {
+          if (request.labourId) {
+            const copy = paymentSuccessLabourNotif()
+            triggerNotification({
+              userId: request.labourId,
+              title: copy.title,
+              body: copy.body,
+              type: copy.type,
+              relatedId: request._id,
+              relatedModel: 'WorkforceRequest',
+              url: '/app/jobs',
+            }).catch(() => {})
+          }
+          if (request.clientId && request.userPaymentStatus !== 'paid') {
+            const copy = counterpartPaidUserNotif()
+            triggerNotification({
+              userId: request.clientId,
+              title: copy.title,
+              body: copy.body,
+              type: copy.type,
+              relatedId: request._id,
+              relatedModel: 'WorkforceRequest',
+              url: '/app/bookings',
+            }).catch(() => {})
+          }
+        }
+      }
     }
   }
 
