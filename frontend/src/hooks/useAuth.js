@@ -16,6 +16,21 @@ export function useAuth() {
     applySession: (accessToken, nextUser) => {
       dispatch(baseApi.util.resetApiState())
       dispatch(setCredentials({ accessToken, user: nextUser }))
+
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        import('../lib/firebase.js').then(({ requestForToken }) => {
+          requestForToken().then((fcmToken) => {
+            if (fcmToken) {
+              localStorage.setItem('staffivaa_fcm_token', fcmToken);
+              import('../api/http.js').then(({ apiClient }) => {
+                apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' }, {
+                  headers: { Authorization: `Bearer ${accessToken}` }
+                }).catch(err => console.error('Failed to sync FCM token on login:', err));
+              });
+            }
+          }).catch(err => console.error('Failed to request token on login:', err));
+        }).catch(err => console.error('Failed to load firebase lib on login:', err));
+      }
     },
     logout: async () => {
       const activeToken = token || store.getState()?.auth?.token

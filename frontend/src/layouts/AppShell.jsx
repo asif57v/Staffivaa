@@ -556,13 +556,13 @@ export function AppShell() {
             navigator.serviceWorker.ready.then((registration) => {
               registration.showNotification(displayTitle, {
                 body: displayBody,
-                icon: '/favicon.svg',
+                icon: '/logo.png',
                 badge: '/favicon.svg',
-                requireInteraction: false,
-                tag: 'staffivaa-fcm-notification', // Collapse duplicates if multiple tabs are open
+                requireInteraction: true,
+                tag: 'staffivaa-notif-' + Date.now(),
                 data: payload.data || {},
               });
-            });
+            }).catch((err) => console.warn('Foreground showNotification error:', err));
           }
         }
       }

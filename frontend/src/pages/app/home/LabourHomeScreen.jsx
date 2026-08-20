@@ -316,6 +316,33 @@ export function LabourHomeScreen({ user }) {
   useEffect(() => subscribeLabourNotifications(() => setNotifTick((t) => t + 1)), [])
 
   useEffect(() => {
+    if (!user?._id) return
+    const syncToken = async () => {
+      try {
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+          let permission = window.Notification.permission
+          if (permission === 'default') {
+            permission = await window.Notification.requestPermission()
+          }
+          if (permission === 'granted') {
+            const { requestForToken } = await import('../../../lib/firebase.js')
+            const fcmToken = await requestForToken()
+            if (fcmToken) {
+              localStorage.setItem('staffivaa_fcm_token', fcmToken)
+              const { apiClient } = await import('../../../api/http.js')
+              await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
+                .catch(err => console.error('[LabourHome] Failed to sync FCM token:', err))
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[LabourHome] FCM sync error:', err)
+      }
+    }
+    syncToken()
+  }, [user?._id])
+
+  useEffect(() => {
     const onLoc = async () => {
       const newLoc = readAppUserLocation()
       setAppLocation(newLoc)
