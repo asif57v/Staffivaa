@@ -118,9 +118,19 @@ export function ActiveBookingMiniWidget() {
     const requestId = booking.requestId
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
     let cancelled = false
+    let stopPolling = false
+    let intervalId = null
+
+    const stop = () => {
+      stopPolling = true
+      if (intervalId != null) {
+        window.clearInterval(intervalId)
+        intervalId = null
+      }
+    }
 
     const markAccepted = (workerInfo) => {
-      if (cancelled || !booking) return
+      if (cancelled || stopPolling || !booking) return
       const worker = workerInfo
         ? {
             id: workerInfo._id || workerInfo.id,
@@ -145,13 +155,17 @@ export function ActiveBookingMiniWidget() {
     }
 
     const poll = async () => {
+      if (cancelled || stopPolling) return
       try {
         const token = store.getState().auth.token
         if (!token) return
 
         // No server id — cannot verify; drop searching chip if stale
         if (!requestId) {
-          if (status === 'searching') clearChip('search_expired', { notifyWorker: false })
+          if (status === 'searching') {
+            stop()
+            clearChip('search_expired', { notifyWorker: false })
+          }
           return
         }
 
@@ -167,6 +181,7 @@ export function ActiveBookingMiniWidget() {
         })
         if (!res.ok) {
           if (res.status === 404 || res.status === 410) {
+            stop()
             clearChip('cancelled', {
               notifyWorker: status !== 'searching',
               message: 'Worker cancelled the booking.',
@@ -179,6 +194,7 @@ export function ActiveBookingMiniWidget() {
         const reqStatus = String(request?.status || '').toLowerCase()
 
         if (['cancelled', 'timed_out', 'expired', 'failed', 'completed'].includes(reqStatus)) {
+          stop()
           if (reqStatus === 'completed') {
             const stored = loadIndividualBookings().map((b) =>
               b.id === booking.id || b.ref === booking.ref ? { ...b, status: 'completed' } : b,
@@ -201,6 +217,7 @@ export function ActiveBookingMiniWidget() {
           )
           if (accepted) {
             if (accepted.status === 'completed') {
+              stop()
               const stored = loadIndividualBookings().map((b) =>
                 b.id === booking.id || b.ref === booking.ref ? { ...b, status: 'completed' } : b,
               )
@@ -217,6 +234,7 @@ export function ActiveBookingMiniWidget() {
           ['accepted', 'on_site', 'in_progress', 'completed'].includes(a.status),
         )
         if (active?.status === 'completed') {
+          stop()
           const stored = loadIndividualBookings().map((b) =>
             b.id === booking.id || b.ref === booking.ref ? { ...b, status: 'completed' } : b,
           )
@@ -245,10 +263,10 @@ export function ActiveBookingMiniWidget() {
     }
 
     poll()
-    const id = window.setInterval(poll, 3000)
+    intervalId = window.setInterval(poll, 3000)
     return () => {
       cancelled = true
-      window.clearInterval(id)
+      stop()
     }
   }, [booking, clearChip])
 

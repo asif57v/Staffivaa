@@ -202,14 +202,26 @@ export function IndividualBookingFlowPage() {
   }, [])
 
   // ── Raw fetch polling — detects when a labour accepts the booking ──
+  // IMPORTANT: do NOT put the whole `activeBooking` object in deps.
+  // Updating it on 404 while step stays "searching" caused an infinite
+  // GET /workforce/requests/:id loop (server log flood).
   useEffect(() => {
     if (step !== 'searching') return
 
+    const requestId = activeBooking?.requestId || null
+    const bookingRef = activeBooking?.ref || null
+    const bookingId = activeBooking?.id || null
+    const localStatus = String(activeBooking?.status || '').toLowerCase()
+    if (['cancelled', 'completed', 'expired', 'timed_out', 'failed'].includes(localStatus)) {
+      return undefined
+    }
+
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
     let cancelled = false
+    let stopPolling = false
 
     const transitionToActive = (workerInfo) => {
-      if (cancelled) return
+      if (cancelled || stopPolling) return
       const worker = workerInfo ? {
         id: workerInfo._id || workerInfo.id,
         displayName: workerInfo.fullName || workerInfo.displayName || workerInfo.name || 'Verified Worker',
@@ -232,24 +244,30 @@ export function IndividualBookingFlowPage() {
     }
 
     const handleCancellationOrTimeout = () => {
-      if (cancelled) return
+      if (cancelled || stopPolling) return
+      stopPolling = true
       setNoMatch(true)
-      if (activeBooking) {
-        const updated = {
-          ...activeBooking,
-          status: 'cancelled',
-          jobTimelineStep: 'cancelled',
-        }
-        setActiveBooking(updated)
-        const stored = loadIndividualBookings().map((b) => (b.id === updated.id || b.ref === updated.ref ? updated : b))
-        saveIndividualBookings(stored)
-      }
+      markLocalBookingCancelled({
+        requestId,
+        ref: bookingRef,
+        reason: 'search_expired',
+      })
+      setActiveBooking((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'cancelled',
+              jobTimelineStep: 'cancelled',
+            }
+          : prev,
+      )
     }
 
-    const pollSpecificRequest = async (requestId) => {
+    const pollSpecificRequest = async (id) => {
+      if (cancelled || stopPolling || !id) return
       try {
         const token = store.getState().auth.token
-        const res = await fetch(`${baseUrl}/workforce/requests/${requestId}`, {
+        const res = await fetch(`${baseUrl}/workforce/requests/${id}`, {
           method: 'GET',
           cache: 'no-store',
           headers: {
@@ -260,8 +278,8 @@ export function IndividualBookingFlowPage() {
           },
         })
         if (!res.ok) {
-          if (res.status === 404) {
-            console.warn('[Homeowner] Request 404 / deleted on server')
+          if (res.status === 404 || res.status === 410) {
+            console.warn('[Homeowner] Request 404 / deleted on server — stopping poll')
             handleCancellationOrTimeout()
           }
           return
@@ -276,7 +294,7 @@ export function IndividualBookingFlowPage() {
         }
 
         const acceptedAssignment = assignments?.find(a => ['accepted', 'on_site', 'in_progress', 'completed'].includes(a.status))
-        console.log('[Homeowner] Poll specific request:', requestId, 'status:', request?.status, 'acceptedAssignment:', !!acceptedAssignment)
+        console.log('[Homeowner] Poll specific request:', id, 'status:', request?.status, 'acceptedAssignment:', !!acceptedAssignment)
 
         if (acceptedAssignment) {
           console.log('[Homeowner] ACCEPTED! Transitioning to live tracking')
@@ -286,6 +304,7 @@ export function IndividualBookingFlowPage() {
     }
 
     const pollAllRequests = async () => {
+      if (cancelled || stopPolling) return
       try {
         const token = store.getState().auth.token
         const res = await fetch(`${baseUrl}/workforce/requests`, {
@@ -303,9 +322,9 @@ export function IndividualBookingFlowPage() {
         const requests = json?.data?.requests || json?.requests || []
         console.log('[Homeowner] Poll all requests, count:', requests.length)
 
-        if (!activeBooking?.requestId) return
+        if (!requestId) return
 
-        const activeReq = requests.find(r => r._id === activeBooking.requestId)
+        const activeReq = requests.find(r => String(r._id) === String(requestId))
         if (!activeReq || activeReq.status === 'cancelled' || activeReq.status === 'timed_out' || activeReq.status === 'expired') {
           console.log('[Homeowner] Active request not found or cancelled in pollAllRequests')
           handleCancellationOrTimeout()
@@ -323,33 +342,34 @@ export function IndividualBookingFlowPage() {
             'Pragma': 'no-cache',
           },
         })
-        if (!detailRes.ok) return
+        if (!detailRes.ok) {
+          if (detailRes.status === 404 || detailRes.status === 410) handleCancellationOrTimeout()
+          return
+        }
         const detailJson = await detailRes.json()
         const { assignments } = detailJson?.data || detailJson || {}
         const acceptedAssignment = assignments?.find(a => ['accepted', 'on_site', 'in_progress', 'completed'].includes(a.status))
         console.log('[Homeowner] Poll fallback: request', activeReq._id, 'acceptedAssignment:', !!acceptedAssignment)
 
         if (acceptedAssignment) {
-          // Also save the requestId on activeBooking for future use
-          if (activeBooking && !activeBooking.requestId) {
-            activeBooking.requestId = activeReq._id
-          }
           transitionToActive(acceptedAssignment?.labourId)
         }
       } catch (err) { console.error('[Homeowner] Poll all error:', err) }
     }
 
     const poll = () => {
-      if (activeBooking?.requestId) {
-        pollSpecificRequest(activeBooking.requestId)
+      if (cancelled || stopPolling) return
+      if (requestId) {
+        pollSpecificRequest(requestId)
       } else {
         console.log('[Homeowner] No requestId — falling back to pollAllRequests')
         pollAllRequests()
       }
     }
 
-    // Initial fetch to check status on load
+    // Initial check + gentle interval (socket handles instant accept)
     poll()
+    const pollTimer = window.setInterval(poll, 4000)
 
     // Socket.io for instant updates
     let socket = null
@@ -368,8 +388,8 @@ export function IndividualBookingFlowPage() {
       
       socket.on('connect', () => {
         console.log('[Socket.io] Connected:', socket.id)
-        if (activeBooking?.requestId) {
-          socket.emit('join_request', activeBooking.requestId)
+        if (requestId) {
+          socket.emit('join_request', requestId)
         }
       })
 
@@ -400,30 +420,35 @@ export function IndividualBookingFlowPage() {
         if (data?.fullCancel || data?.reason === 'labour_cancelled_unpaid') {
           handleCancellationOrTimeout()
           markLocalBookingCancelled({
-            requestId: activeBooking?.requestId || data?.requestId,
-            ref: activeBooking?.ref || data?.reference,
+            requestId: requestId || data?.requestId,
+            ref: bookingRef || data?.reference,
             reason: 'labour_cancelled_unpaid',
           })
           notifyWorkerCancelledBooking({
             message: data?.message || 'Worker cancelled the booking.',
-            requestId: activeBooking?.requestId || data?.requestId,
-            ref: activeBooking?.ref || data?.reference,
+            requestId: requestId || data?.requestId,
+            ref: bookingRef || data?.reference,
           })
           leaveFlow()
           return
         }
         setNoMatch(false)
-        if (activeBooking) {
-          const updated = {
-            ...activeBooking,
-            status: 'searching',
-            assignedWorker: null,
-            jobTimelineStep: 'created'
-          }
-          setActiveBooking(updated)
-          const stored = loadIndividualBookings().map((b) => (b.id === updated.id || b.ref === updated.ref ? updated : b))
-          saveIndividualBookings(stored)
-        }
+        setActiveBooking((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: 'searching',
+                assignedWorker: null,
+                jobTimelineStep: 'created',
+              }
+            : prev,
+        )
+        const stored = loadIndividualBookings().map((b) =>
+          (bookingId && b.id === bookingId) || (bookingRef && b.ref === bookingRef)
+            ? { ...b, status: 'searching', assignedWorker: null, jobTimelineStep: 'created' }
+            : b,
+        )
+        saveIndividualBookings(stored)
         goStep('searching')
       })
 
@@ -438,8 +463,8 @@ export function IndividualBookingFlowPage() {
         if (data?.fullCancel || data?.reason === 'labour_cancelled_unpaid') {
           notifyWorkerCancelledBooking({
             message: data?.message || 'Worker cancelled the booking.',
-            requestId: activeBooking?.requestId || data?.requestId,
-            ref: activeBooking?.ref || data?.reference,
+            requestId: requestId || data?.requestId,
+            ref: bookingRef || data?.reference,
           })
           leaveFlow()
         }
@@ -450,6 +475,8 @@ export function IndividualBookingFlowPage() {
 
     return () => {
       cancelled = true
+      stopPolling = true
+      window.clearInterval(pollTimer)
       if (socket) {
         socket.off('connect')
         socket.off('disconnect')
@@ -459,11 +486,12 @@ export function IndividualBookingFlowPage() {
         socket.off('bookingCancelledByLabour')
         socket.off('bookingExpired')
         socket.off('booking_cancelled')
-        if (activeBooking?.requestId) socket.emit('leave_request', activeBooking.requestId)
+        if (requestId) socket.emit('leave_request', requestId)
         socket.disconnect()
       }
     }
-  }, [step, activeBooking, goStep])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: avoid re-poll loop on activeBooking object identity
+  }, [step, activeBooking?.requestId, activeBooking?.status, activeBooking?.ref, activeBooking?.id, goStep, leaveFlow])
 
   useEffect(() => {
     if (!refParam || activeBooking) return

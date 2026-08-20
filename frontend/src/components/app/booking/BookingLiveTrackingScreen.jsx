@@ -33,11 +33,26 @@ import {
 
 export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCancel }) {
   const requestId = booking?.requestId || booking?._id
+  const [stopRequestPoll, setStopRequestPoll] = useState(false)
 
-  const { data: requestData, isLoading, error, refetch } = useGetRequestQuery(requestId, {
-    skip: !requestId,
-    pollingInterval: 8000,
+  const { data: requestData, isLoading, error, isError, refetch } = useGetRequestQuery(requestId, {
+    skip: !requestId || stopRequestPoll,
+    pollingInterval: stopRequestPoll ? 0 : 8000,
   })
+
+  // Expired / deleted bookings return 404 — stop hammering the API
+  useEffect(() => {
+    const status = error?.status || error?.originalStatus || error?.data?.statusCode
+    if (!isError) return
+    if (status === 404 || status === 410) {
+      setStopRequestPoll(true)
+      markLocalBookingCancelled({
+        requestId,
+        ref: booking?.ref || booking?.reference,
+        reason: 'cancelled',
+      })
+    }
+  }, [isError, error, requestId, booking?.ref, booking?.reference])
 
   const [createOrder, { isLoading: isCreatingOrder }] = useCreateRazorpayOrderMutation()
   const [verifyPayment, { isLoading: isVerifying }] = useVerifyRazorpayPaymentMutation()
