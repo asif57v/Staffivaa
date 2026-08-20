@@ -21,7 +21,6 @@ const STATUS_FILTERS = [
 
 const QUICK_ACTIONS = [
   { status: 'confirmed', label: 'Confirm' },
-  { status: 'allocating', label: 'Allocate' },
   { status: 'cancelled', label: 'Cancel' },
 ]
 
