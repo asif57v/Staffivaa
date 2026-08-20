@@ -10,6 +10,17 @@ import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { USER_ROLES } from '../constants/roles.js'
 import { emitRequestStatusUpdate, emitToVendor, emitToUser, emitToCorporate } from '../utils/socket.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
+import { triggerBookingNotif } from '../utils/triggerBookingNotif.js'
+import {
+  paymentFailedNotif,
+  paymentSuccessUserNotif,
+  paymentSuccessLabourNotif,
+  counterpartPaidUserNotif,
+  counterpartPaidLabourNotif,
+  bookingConfirmedUserNotif,
+  bookingConfirmedLabourNotif,
+  labourProceedToSiteNotif,
+} from '../utils/bookingNotificationCopy.js'
 
 // Cache the instance
 let razorpayInstance = null
@@ -219,14 +230,11 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
     }
 
     await request.save()
-    triggerNotification({
+    triggerBookingNotif({
       userId: req.user._id,
-      title: 'Payment Failed',
-      body: 'Your recent payment transaction failed. Please try again.',
-      type: 'PAYMENT_FAILED',
+      copy: paymentFailedNotif(),
       relatedId: request._id,
       relatedModel: 'WorkforceRequest',
-      url: '/app/wallet',
     }).catch(() => {})
     return sendError(res, { message: 'Payment verification failed', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
@@ -376,89 +384,75 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
   // Dedicated payment / confirmation messages for the payer + counterpart
   if (isUserOrder && request.sourceType !== 'corporate') {
     if (bothPaid) {
-      triggerNotification({
-        userId: request.clientId,
-        title: 'Booking Confirmed!',
-        body: `Both payments are done for #${reqRef}. Your worker is confirmed and can proceed to the site.`,
-        type: 'BOOKING_CONFIRMED',
-        relatedId: request._id,
-        relatedModel: 'WorkforceRequest',
-        url: '/app/bookings',
-      }).catch(() => {})
-      if (request.labourId) {
-        triggerNotification({
-          userId: request.labourId,
-          title: 'Booking Unlocked!',
-          body: `Both payments are complete for #${reqRef}. You can now proceed to the job site.`,
-          type: 'BOOKING_CONFIRMED',
+      if (request.clientId) {
+        triggerBookingNotif({
+          userId: request.clientId,
+          copy: bookingConfirmedUserNotif(reqRef),
           relatedId: request._id,
           relatedModel: 'WorkforceRequest',
-          url: '/app/jobs',
+          requestId: request._id,
+        }).catch(() => {})
+      }
+      if (request.labourId) {
+        triggerBookingNotif({
+          userId: request.labourId,
+          copy: labourProceedToSiteNotif(reqRef),
+          relatedId: request._id,
+          relatedModel: 'WorkforceRequest',
+          requestId: request._id,
         }).catch(() => {})
       }
     } else {
-      triggerNotification({
+      triggerBookingNotif({
         userId: req.user._id,
-        title: 'Payment Successful',
-        body: 'Your platform fee payment was successful. Waiting for the worker to complete their payment.',
-        type: 'PAYMENT_RECEIVED',
+        copy: paymentSuccessUserNotif(),
         relatedId: request._id,
         relatedModel: 'WorkforceRequest',
-        url: '/app/bookings',
+        requestId: request._id,
       }).catch(() => {})
       if (request.labourId && request.labourPaymentStatus !== 'paid') {
-        triggerNotification({
+        triggerBookingNotif({
           userId: request.labourId,
-          title: 'Customer Paid Platform Fee',
-          body: 'The customer has paid their platform fee. Please pay yours to unlock the booking.',
-          type: 'PAYMENT_RECEIVED',
+          copy: counterpartPaidLabourNotif(),
           relatedId: request._id,
           relatedModel: 'WorkforceRequest',
-          url: '/app/jobs',
+          requestId: request._id,
         }).catch(() => {})
       }
     }
   } else if (isLabourOrder && request.sourceType !== 'corporate') {
     if (bothPaid) {
       if (request.clientId) {
-        triggerNotification({
+        triggerBookingNotif({
           userId: request.clientId,
-          title: 'Booking Confirmed!',
-          body: `Both payments are done for #${reqRef}. Your worker is confirmed and can proceed to the site.`,
-          type: 'BOOKING_CONFIRMED',
+          copy: bookingConfirmedUserNotif(reqRef),
           relatedId: request._id,
           relatedModel: 'WorkforceRequest',
-          url: '/app/bookings',
+          requestId: request._id,
         }).catch(() => {})
       }
-      triggerNotification({
+      triggerBookingNotif({
         userId: req.user._id,
-        title: 'Booking Unlocked!',
-        body: `Both payments are complete for #${reqRef}. You can now proceed to the job site.`,
-        type: 'BOOKING_CONFIRMED',
+        copy: labourProceedToSiteNotif(reqRef),
         relatedId: request._id,
         relatedModel: 'WorkforceRequest',
-        url: '/app/jobs',
+        requestId: request._id,
       }).catch(() => {})
     } else {
-      triggerNotification({
+      triggerBookingNotif({
         userId: req.user._id,
-        title: 'Payment Successful',
-        body: 'Your platform fee payment was successful. Waiting for the customer to complete their payment.',
-        type: 'PAYMENT_RECEIVED',
+        copy: paymentSuccessLabourNotif(),
         relatedId: request._id,
         relatedModel: 'WorkforceRequest',
-        url: '/app/jobs',
+        requestId: request._id,
       }).catch(() => {})
       if (request.clientId && request.userPaymentStatus !== 'paid') {
-        triggerNotification({
+        triggerBookingNotif({
           userId: request.clientId,
-          title: 'Worker Paid Platform Fee',
-          body: 'The worker has paid their platform fee. Please pay yours to unlock the booking.',
-          type: 'PAYMENT_RECEIVED',
+          copy: counterpartPaidUserNotif(),
           relatedId: request._id,
           relatedModel: 'WorkforceRequest',
-          url: '/app/bookings',
+          requestId: request._id,
         }).catch(() => {})
       }
     }

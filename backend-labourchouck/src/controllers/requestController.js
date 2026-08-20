@@ -21,6 +21,13 @@ import { sendNotificationToUser } from '../services/notificationService.js'
 import { logAudit } from '../utils/auditLogger.js'
 import CommissionService from '../services/CommissionService.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
+import { triggerBookingNotif } from '../utils/triggerBookingNotif.js'
+import {
+  bookingCreatedNotif,
+  newJobOfferNotif,
+  customerCancelledNotif,
+  customerCancelledSelfNotif,
+} from '../utils/bookingNotificationCopy.js'
 import { SystemSettings } from '../models/SystemSettings.js'
 import LocationMatchingService from '../services/LocationMatchingService.js'
 
@@ -339,28 +346,28 @@ export const createRequest = asyncHandler(async (req, res) => {
           shiftEnd: request.shiftEnd || '',
           timeoutSeconds: 90,
         })
-        triggerNotification({
+        triggerBookingNotif({
           userId: assignment.labourId,
-          title: 'New Job Available!',
-          body: `${user.fullName || 'A customer'} needs a ${category?.name || 'worker'} near ${request.locationText || 'your area'}. Tap to view.`,
-          type: 'NEW_ORDER',
+          copy: newJobOfferNotif({
+            customerName: user.fullName,
+            categoryName: category?.name,
+            locationText: request.locationText,
+          }),
           relatedId: assignment._id,
           relatedModel: 'Assignment',
-          url: '/app/jobs',
+          requestId: request._id,
         }).catch((err) => console.error('[Notification Error]:', err.message))
       })
     }
   }
 
   // Notify Customer / User that booking was created successfully
-  triggerNotification({
+  triggerBookingNotif({
     userId: user._id,
-    title: 'Booking Created!',
-    body: `Your job booking #${request.reference || request._id.toString().slice(-6)} has been created and sent to nearby workers.`,
-    type: 'BOOKING_CREATED',
+    copy: bookingCreatedNotif(request.reference || request._id.toString().slice(-6)),
     relatedId: request._id,
     relatedModel: 'WorkforceRequest',
-    url: '/app/bookings',
+    requestId: request._id,
   }).catch((err) => console.error('[Notification Error]:', err.message))
 
   emitToUser('individual', user._id.toString(), 'request_created', { requestId: request._id.toString() })
@@ -479,14 +486,12 @@ export const cancelRequestByClient = asyncHandler(async (req, res) => {
         requestId: request._id.toString(),
         ...cancelPayload,
       })
-      triggerNotification({
+      triggerBookingNotif({
         userId: labourId,
-        title: 'Booking Cancelled',
-        body: 'The customer cancelled this booking.',
-        type: 'BOOKING_CANCELLED',
+        copy: customerCancelledNotif(),
         relatedId: request._id,
         relatedModel: 'WorkforceRequest',
-        url: '/app/jobs',
+        requestId: request._id,
       }).catch(() => {})
     }
 
@@ -500,14 +505,12 @@ export const cancelRequestByClient = asyncHandler(async (req, res) => {
 
     // Confirm cancellation to the customer
     if (request.clientId) {
-      triggerNotification({
+      triggerBookingNotif({
         userId: request.clientId,
-        title: 'Booking Cancelled',
-        body: `Your booking${request.reference ? ` #${request.reference}` : ''} has been cancelled successfully.`,
-        type: 'BOOKING_CANCELLED',
+        copy: customerCancelledSelfNotif(request.reference),
         relatedId: request._id,
         relatedModel: 'WorkforceRequest',
-        url: '/app/bookings',
+        requestId: request._id,
       }).catch(() => {})
     }
 

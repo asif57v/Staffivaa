@@ -230,3 +230,43 @@ export function previousAssignmentCancelledNotif() {
     type: NOTIF_TYPE.BOOKING_CANCELLED,
   }
 }
+
+/** Worker accepted a job — confirm + prompt platform fee payment */
+export function labourJobAcceptedNotif({ categoryName, reference, platformFee }) {
+  const feePart =
+    platformFee != null && Number(platformFee) > 0
+      ? ` Pay ₹${Number(platformFee)} platform fee to unlock the job.`
+      : ' Complete your platform fee payment to unlock the job.'
+  return {
+    title: 'Job Accepted!',
+    body: `You accepted the ${categoryName || 'job'}${reference ? ` (#${reference})` : ''}.${feePart}`,
+    type: NOTIF_TYPE.BOOKING_UPDATED,
+  }
+}
+
+/** Another worker took the job before this worker responded */
+export function labourOfferTakenNotif() {
+  return {
+    title: 'Job Taken',
+    body: 'Another worker accepted this job. Stay online for new offers nearby.',
+    type: NOTIF_TYPE.BOOKING_UPDATED,
+  }
+}
+
+/** Customer is waiting — worker should pay fee */
+export function labourPaymentReminderNotif() {
+  return {
+    title: 'Payment Required',
+    body: 'The customer is waiting. Pay your platform fee now to unlock this booking.',
+    type: NOTIF_TYPE.PAYMENT_RECEIVED,
+  }
+}
+
+/** Worker should head to site after both parties paid */
+export function labourProceedToSiteNotif(reference) {
+  return {
+    title: 'Go to Job Site',
+    body: `Booking${reference ? ` #${reference}` : ''} is unlocked. You can now proceed to the customer location.`,
+    type: NOTIF_TYPE.BOOKING_CONFIRMED,
+  }
+}

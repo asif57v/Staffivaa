@@ -11,14 +11,23 @@ function normalizeNotifType(type) {
 
 /**
  * Create in-app notification + socket + FCM with dedicated title/body/type.
- * @param {{ userId?: string, title: string, body: string, type?: string, relatedId?: any, relatedModel?: string, url?: string }} args
+ * @param {{ userId?: string, title: string, body: string, type?: string, relatedId?: any, relatedModel?: string, url?: string, recipientRole?: string }} args
  */
-export const triggerNotification = async ({ userId, title, body, type, relatedId, relatedModel, url }) => {
+export const triggerNotification = async ({ userId, title, body, type, relatedId, relatedModel, url, recipientRole }) => {
   try {
     const resolvedType = normalizeNotifType(type)
+    let resolvedRole = recipientRole || ''
+
+    if (userId && !resolvedRole) {
+      const roleUser = await User.findById(userId).select('role').lean()
+      resolvedRole = roleUser?.role || ''
+    }
+
     const resolvedUrl =
       url ||
-      (resolvedType === 'NEW_ORDER' ? '/app/jobs' : undefined)
+      (resolvedType === 'NEW_ORDER' || resolvedType === 'LABOUR_ASSIGNED'
+        ? resolvedRole === 'labour' ? '/app/jobs' : '/app/bookings'
+        : undefined)
 
     // 1. Create in MongoDB
     const notification = await Notification.create({
@@ -137,6 +146,7 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
         relatedId: relatedId ? relatedId.toString() : '',
         relatedModel: relatedModel || '',
         url: resolvedUrl || '',
+        recipientRole: resolvedRole || '',
       }).catch((err) => console.error('[FCM Push Error]:', err.message));
     }
 
@@ -151,6 +161,7 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
           relatedId: relatedId ? String(relatedId) : '',
           relatedModel: relatedModel || '',
           url: url || '',
+          recipientRole: recipientRole || '',
         });
       } catch (fcmErr) {
         console.error('[NotificationTrigger] FCM fallback also failed:', fcmErr.message);

@@ -17,12 +17,13 @@ const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(function(payload) {
   console.log('[firebase-messaging-sw.js] Received background message ', payload);
-  const notificationTitle = payload.notification.title;
+  const data = payload.data || {};
+  const notificationTitle = data.title || payload.notification?.title || 'Staffivaa';
   const notificationOptions = {
-    body: payload.notification.body,
+    body: data.body || data.message || payload.notification?.body || '',
     icon: '/logo.png',
     badge: '/favicon.svg',
-    data: payload.data
+    data: { ...data, title: notificationTitle, body: data.body || data.message || payload.notification?.body || '' }
   };
 
   self.registration.showNotification(notificationTitle, notificationOptions);

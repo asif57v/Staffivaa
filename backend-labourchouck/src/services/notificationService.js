@@ -25,6 +25,8 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
       return { success: false, sentCount: 0, failedTokens: [] };
     }
 
+    const recipientRole = String(data?.recipientRole || user.role || '');
+
     const tokens = [
       ...(user.fcmTokensWeb || []),
       ...(user.fcmTokensMobile || [])
@@ -55,6 +57,8 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
       title: String(title),
       body: String(body),
       message: String(body),
+      recipientRole,
+      role: recipientRole,
       sound: rawSoundName,
       sound_name: rawSoundName,
       soundName: rawSoundName,

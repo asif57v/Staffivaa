@@ -497,13 +497,26 @@ export function AppShell() {
     const handleFcmMessage = (event) => {
       const payload = event.detail;
       const targetUserId = payload?.data?.targetUserId;
+      const targetRole = payload?.data?.recipientRole || payload?.data?.role;
       if (targetUserId && user?._id && targetUserId !== user._id) {
-        // This push notification was meant for a different account
-        // (likely due to multiple tabs open for different users)
+        return;
+      }
+      if (targetRole && user?.role && targetRole !== user.role) {
+        // e.g. customer "Booking Created" must not show on worker session
         return;
       }
 
-      if (payload?.notification) {
+      const displayTitle =
+        payload?.data?.title ||
+        payload?.notification?.title ||
+        'New Notification';
+      const displayBody =
+        payload?.data?.body ||
+        payload?.data?.message ||
+        payload?.notification?.body ||
+        '';
+
+      if (payload?.notification || payload?.data?.title) {
         // Ring only for real new-job offers (not every push that mentions a job)
         const pushType = String(payload?.data?.type || '').toUpperCase()
         if (pushType === 'NEW_ORDER' || payload?.data?.sound === 'new_job_order') {
@@ -513,7 +526,7 @@ export function AppShell() {
         if (Notification.permission === 'granted') {
           // Also show a toast so the user definitely sees it inside the app
           if (typeof window !== 'undefined') {
-            dispatchAlert(payload.notification.title || 'New Notification', payload.notification.body || '', false);
+            dispatchAlert(displayTitle, displayBody, false);
           }
 
           // Refresh wallet cache if salary/withdrawal push notification
@@ -535,8 +548,8 @@ export function AppShell() {
           // even when the app tab is currently focused (Chrome blocks new Notification() in foreground)
           if ('serviceWorker' in navigator) {
             navigator.serviceWorker.ready.then((registration) => {
-              registration.showNotification(payload.notification.title || 'Staffivaa', {
-                body: payload.notification.body || '',
+              registration.showNotification(displayTitle, {
+                body: displayBody,
                 icon: '/favicon.svg',
                 badge: '/favicon.svg',
                 requireInteraction: false,

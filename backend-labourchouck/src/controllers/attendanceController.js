@@ -16,6 +16,8 @@ import { Project } from '../models/Project.js'
 import { sendNotificationToUser } from '../services/notificationService.js'
 import { logAudit } from '../utils/auditLogger.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
+import { triggerBookingNotif } from '../utils/triggerBookingNotif.js'
+import { jobCompletedUserNotif, jobCompletedLabourNotif } from '../utils/bookingNotificationCopy.js'
 
 function billableUnitsForStatus(status) {
   if (status === ATTENDANCE_STATUS.PRESENT) return 1
@@ -504,24 +506,20 @@ export const checkOut = asyncHandler(async (req, res) => {
 
     const workerName = req.user.fullName || 'Your worker'
     if (request.clientId) {
-      triggerNotification({
+      triggerBookingNotif({
         userId: request.clientId,
-        title: 'Job Completed',
-        body: `${workerName} has completed the job. Thank you for using Staffivaa.`,
-        type: 'JOB_COMPLETED',
+        copy: jobCompletedUserNotif(workerName),
         relatedId: request._id,
         relatedModel: 'WorkforceRequest',
-        url: '/app/bookings',
+        requestId: request._id,
       }).catch((err) => console.error('[Notification Error]:', err.message))
     }
-    triggerNotification({
+    triggerBookingNotif({
       userId: req.user._id,
-      title: 'Job Completed',
-      body: 'You have successfully completed this job. Great work!',
-      type: 'JOB_COMPLETED',
+      copy: jobCompletedLabourNotif(),
       relatedId: request._id,
       relatedModel: 'WorkforceRequest',
-      url: '/app/jobs',
+      requestId: request._id,
     }).catch((err) => console.error('[Notification Error]:', err.message))
   } else if (request && request.sourceType === 'corporate') {
     if (request.clientId) emitToCorporate(request.clientId.toString(), 'work_completed', { requestId: request._id.toString(), assignmentId: assignment._id.toString() });

@@ -705,6 +705,12 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
     { $set: { [targetField]: tokens } }
   )
 
+  // One device token must belong to only one account — prevents customer pushes on worker login (and vice versa)
+  await User.updateMany(
+    { _id: { $ne: req.user._id } },
+    { $pull: { fcmTokensWeb: token, fcmTokensMobile: token } },
+  )
+
   const isMobileField = targetField === 'fcmTokensMobile'
   return sendSuccess(res, { 
     message: `FCM Token saved successfully for ${isMobileField ? 'app' : 'web'} platform`,
