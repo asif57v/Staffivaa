@@ -259,60 +259,72 @@ export const createRequest = asyncHandler(async (req, res) => {
   // Send offers to matching workers (for INDIVIDUAL requests)
   if (sourceType === REQUEST_SOURCE.INDIVIDUAL && parsedLines?.length > 0) {
     const categoryId = parsedLines[0].categoryId
-    // Assign to workers with matching skills
-    const workers = await User.find({
+
+    // 1. Fetch candidate workers matching skill or general labour role
+    let candidates = await User.find({
       role: USER_ROLES.LABOUR,
-      'labourProfile.categoryIds': categoryId,
-      'labourProfile.availabilityStatus': 'available',
+      $or: [
+        ...(categoryId ? [{ 'labourProfile.categoryIds': categoryId }, { 'labourProfile.categoryIds': categoryId.toString() }] : []),
+        { 'labourProfile.categoryIds': { $size: 0 } },
+        { 'labourProfile.categoryIds': { $exists: false } }
+      ]
     }).limit(50)
 
-    if (workers.length > 0) {
-      // Filter by radius: location MUST be available
-      let matchingWorkers = [];
-      if (request.locationLat && request.locationLng) {
-        matchingWorkers = workers.filter(w => {
-          if (!w.labourProfile || !w.labourProfile.locationLat || !w.labourProfile.locationLng) {
-            return false; // Skip if worker has no location set
-          }
-          const radius = w.labourProfile.workRadius || 15; // default 15km
-          
-          const R = 6371; // Radius of the earth in km
-          const dLat = (w.labourProfile.locationLat - request.locationLat) * (Math.PI/180);
-          const dLon = (w.labourProfile.locationLng - request.locationLng) * (Math.PI/180);
-          const a = 
-            Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(request.locationLat * (Math.PI/180)) * Math.cos(w.labourProfile.locationLat * (Math.PI/180)) * 
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          const distance = R * c;
-          
-          return distance <= radius;
-        });
+    // Fallback 1: If no candidate matched skill query, grab all active labour workers
+    if (!candidates || candidates.length === 0) {
+      candidates = await User.find({
+        role: USER_ROLES.LABOUR,
+        isActive: true
+      }).limit(50)
+    }
+
+    let matchingWorkers = candidates
+    if (request.locationLat && request.locationLng && candidates.length > 0) {
+      const filteredByDistance = candidates.filter((w) => {
+        if (!w.labourProfile || !w.labourProfile.locationLat || !w.labourProfile.locationLng) {
+          return false
+        }
+        const radius = w.labourProfile.workRadius || 15
+        const R = 6371
+        const dLat = (w.labourProfile.locationLat - request.locationLat) * (Math.PI / 180)
+        const dLon = (w.labourProfile.locationLng - request.locationLng) * (Math.PI / 180)
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(request.locationLat * (Math.PI / 180)) *
+            Math.cos(w.labourProfile.locationLat * (Math.PI / 180)) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2)
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        return R * c <= radius
+      })
+
+      if (filteredByDistance.length > 0) {
+        matchingWorkers = filteredByDistance
       }
+    }
 
-      if (matchingWorkers.length > 0) {
-        const allocation = await Allocation.create({
-          requestId: request._id,
-          notes: 'Auto-allocated by skill and distance match for individual booking',
-        })
+    if (matchingWorkers.length > 0) {
+      const allocation = await Allocation.create({
+        requestId: request._id,
+        notes: 'Auto-allocated by skill and distance match for individual booking',
+      })
 
-        const LabourCategory = mongoose.model('LabourCategory')
-        const category = await LabourCategory.findById(categoryId)
-        const baseRate = category?.baseRate || 800
+      const LabourCategory = mongoose.model('LabourCategory')
+      const category = categoryId ? await LabourCategory.findById(categoryId) : null
+      const baseRate = category?.baseRate || 800
 
-        const assignmentsToCreate = matchingWorkers.map((worker) => ({
-          allocationId: allocation._id,
-          requestId: request._id,
-          labourId: worker._id,
-          categoryId,
-          status: ASSIGNMENT_STATUS.OFFERED,
-          perDayRate: baseRate,
-        }))
+      const assignmentsToCreate = matchingWorkers.map((worker) => ({
+        allocationId: allocation._id,
+        requestId: request._id,
+        labourId: worker._id,
+        categoryId,
+        status: ASSIGNMENT_STATUS.OFFERED,
+        perDayRate: baseRate,
+      }))
 
       const createdAssignments = await Assignment.insertMany(assignmentsToCreate)
-      // Keep status as SEARCHING until a worker accepts
 
-      // Notify all matching workers instantly with rich payload for popup card
+      // Notify all matching workers instantly with rich payload for popup card + FCM Push Notification
       createdAssignments.forEach((assignment) => {
         emitToUser('labour', assignment.labourId.toString(), 'assignment_assigned', {
           assignmentId: assignment._id.toString(),
@@ -325,7 +337,7 @@ export const createRequest = asyncHandler(async (req, res) => {
           startDate: request.startDate,
           shiftStart: request.shiftStart || '',
           shiftEnd: request.shiftEnd || '',
-          timeoutSeconds: 90
+          timeoutSeconds: 90,
         })
         triggerNotification({
           userId: assignment.labourId,
@@ -333,12 +345,21 @@ export const createRequest = asyncHandler(async (req, res) => {
           body: `${user.fullName || 'A customer'} needs a ${category?.name || 'worker'} near ${request.locationText || 'your area'}. Tap to view.`,
           type: 'new_order',
           relatedId: assignment._id,
-          relatedModel: 'Assignment'
-        }).catch(err => console.error('[Notification Error]:', err.message));
+          relatedModel: 'Assignment',
+        }).catch((err) => console.error('[Notification Error]:', err.message))
       })
-      }
     }
   }
+
+  // Notify Customer / User that booking was created successfully
+  triggerNotification({
+    userId: user._id,
+    title: 'Booking Created!',
+    body: `Your job booking #${request.reference || request._id.toString().slice(-6)} has been created and sent to nearby workers.`,
+    type: 'BOOKING_CREATED',
+    relatedId: request._id,
+    relatedModel: 'WorkforceRequest',
+  }).catch((err) => console.error('[Notification Error]:', err.message))
 
   emitToUser('individual', user._id.toString(), 'request_created', { requestId: request._id.toString() })
   if (sourceType === REQUEST_SOURCE.CORPORATE) {
