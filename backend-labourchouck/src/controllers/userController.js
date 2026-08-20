@@ -705,10 +705,18 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
     { $set: { [targetField]: tokens } }
   )
 
-  // One device token must belong to only one account — prevents customer pushes on worker login (and vice versa)
-  await User.updateMany(
+  // One device token must belong to only one account — prevents customer pushes
+  // showing on the worker device (and vice versa) when both accounts share a phone/browser.
+  const exclusivity = await User.updateMany(
     { _id: { $ne: req.user._id } },
     { $pull: { fcmTokensWeb: token, fcmTokensMobile: token } },
+  )
+
+  console.log(
+    `[FCM] Saved token for ${req.user.role} ${req.user._id} → ${targetField}` +
+      (exclusivity?.modifiedCount
+        ? ` (removed from ${exclusivity.modifiedCount} other account(s))`
+        : ''),
   )
 
   const isMobileField = targetField === 'fcmTokensMobile'

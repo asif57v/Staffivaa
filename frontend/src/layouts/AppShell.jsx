@@ -483,6 +483,7 @@ export function AppShell() {
           if (fcmToken) {
             localStorage.setItem('staffivaa_fcm_token', fcmToken);
             const { apiClient } = await import('../api/http.js');
+            // Claim this device token for the currently logged-in account (worker or user)
             await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
               .catch(err => console.error('Failed to sync FCM token:', err));
           }
@@ -493,16 +494,21 @@ export function AppShell() {
     };
 
     syncFcmToken();
+    // Re-claim token when returning to the app (important if customer + worker share one device)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') syncFcmToken();
+    };
+    window.addEventListener('focus', syncFcmToken);
+    document.addEventListener('visibilitychange', onVisible);
 
     const handleFcmMessage = (event) => {
       const payload = event.detail;
-      const targetUserId = payload?.data?.targetUserId;
-      const targetRole = payload?.data?.recipientRole || payload?.data?.role;
-      if (targetUserId && user?._id && targetUserId !== user._id) {
-        return;
-      }
-      if (targetRole && user?.role && targetRole !== user.role) {
-        // e.g. customer "Booking Created" must not show on worker session
+      const targetUserId = payload?.data?.targetUserId
+        ? String(payload.data.targetUserId)
+        : '';
+      const currentUserId = user?._id ? String(user._id) : '';
+      // Only drop pushes clearly meant for another account (same device / shared SW)
+      if (targetUserId && currentUserId && targetUserId !== currentUserId) {
         return;
       }
 
@@ -576,6 +582,8 @@ export function AppShell() {
 
     return () => {
       window.removeEventListener('fcm-foreground-message', handleFcmMessage);
+      window.removeEventListener('focus', syncFcmToken);
+      document.removeEventListener('visibilitychange', onVisible);
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
       }
