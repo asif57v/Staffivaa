@@ -114,7 +114,8 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
       sendNotificationToUser(userId, title, body, {
         type,
         relatedId: relatedId ? relatedId.toString() : '',
-        relatedModel: relatedModel || ''
+        relatedModel: relatedModel || '',
+        url: type === 'new_order' ? '/app/jobs' : undefined
       }).catch(err => console.error('[FCM Push Error]:', err.message));
     }
 

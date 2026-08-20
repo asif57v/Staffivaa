@@ -250,8 +250,8 @@ export function AppProfilePage() {
     }
   }, [dispatch])
 
-  const handleSignOut = () => {
-    logout()
+  const handleSignOut = async () => {
+    await logout()
     navigate('/auth', { replace: true })
   }
 
@@ -660,10 +660,13 @@ export function AppProfilePage() {
         Sign out
       </button>
 
-      {import.meta.env.DEV && token ? (
-        <p className="break-all rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 font-mono text-[10px] text-slate-500">
-          dev token: {token.slice(0, 28)}…
-        </p>
+      {import.meta.env.DEV ? (
+        <div className="space-y-1.5 rounded-2xl border border-slate-200/80 bg-slate-50 p-3 font-mono text-[10px] text-slate-600">
+          <p className="break-all"><strong>Auth Token:</strong> {token?.slice(0, 28)}…</p>
+          <p className="break-all text-amber-800">
+            <strong>FCM Push Token:</strong> {typeof window !== 'undefined' && localStorage.getItem('staffivaa_fcm_token') ? localStorage.getItem('staffivaa_fcm_token') : 'Not registered yet'}
+          </p>
+        </div>
       ) : null}
     </motion.div>
   )

@@ -2,6 +2,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import toast from 'react-hot-toast'
 import { clearSession, setCredentials } from '../store/slices/authSlice.js'
 import { baseApi } from '../store/api/baseApi.js'
+import { store } from '../store/index.js'
 
 export function useAuth() {
   const dispatch = useDispatch()
@@ -17,19 +18,34 @@ export function useAuth() {
       dispatch(setCredentials({ accessToken, user: nextUser }))
     },
     logout: async () => {
+      const activeToken = token || store.getState()?.auth?.token
       try {
         toast.dismiss()
-        if (typeof window !== 'undefined' && 'Notification' in window) {
-          const { requestForToken } = await import('../lib/firebase.js')
-          const fcmToken = await requestForToken()
-          if (fcmToken) {
-            const { apiClient } = await import('../api/http.js')
-            await apiClient.post('/users/me/fcm-token/remove', { token: fcmToken })
+        let fcmToken = typeof window !== 'undefined' ? localStorage.getItem('staffivaa_fcm_token') : null
+
+        if (!fcmToken && typeof window !== 'undefined' && 'Notification' in window) {
+          try {
+            const { requestForToken } = await import('../lib/firebase.js')
+            fcmToken = await requestForToken()
+          } catch (e) {
+            console.warn('Could not fetch token during logout', e)
           }
+        }
+
+        if (activeToken) {
+          const { apiClient } = await import('../api/http.js')
+          await apiClient.post(
+            '/users/me/fcm-token/remove',
+            { token: fcmToken || undefined, clearAll: true },
+            { headers: { Authorization: `Bearer ${activeToken}` } }
+          ).catch(err => console.error('Failed to remove FCM token from backend:', err))
         }
       } catch (err) {
         console.error('Failed to remove FCM token on logout', err)
       } finally {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('staffivaa_fcm_token')
+        }
         toast.dismiss()
         dispatch(baseApi.util.resetApiState())
         dispatch(clearSession())

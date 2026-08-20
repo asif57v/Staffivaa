@@ -234,6 +234,7 @@ export function PanelShell({
           const { requestForToken } = await import('../lib/firebase.js');
           const fcmToken = await requestForToken();
           if (fcmToken) {
+            localStorage.setItem('staffivaa_fcm_token', fcmToken);
             const { apiClient } = await import('../api/http.js');
             await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
               .catch(err => console.error('Failed to sync FCM token:', err));
@@ -449,8 +450,8 @@ export function PanelShell({
                 <div className="border-t border-slate-200/70 px-3 pt-3 pb-10">
                   <button
                     type="button"
-                    onClick={() => {
-                      logout()
+                    onClick={async () => {
+                      await logout()
                       navigate('/auth', { replace: true })
                     }}
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200/90 bg-rose-50 py-3 text-sm font-semibold text-rose-800"

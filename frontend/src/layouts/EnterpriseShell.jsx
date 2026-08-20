@@ -122,6 +122,7 @@ export function EnterpriseShell() {
           const { requestForToken } = await import('../lib/firebase.js')
           const fcmToken = await requestForToken()
           if (fcmToken) {
+            localStorage.setItem('staffivaa_fcm_token', fcmToken)
             const { apiClient } = await import('../api/http.js')
             await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
               .catch(err => console.error('Failed to sync FCM token:', err))
@@ -175,8 +176,8 @@ export function EnterpriseShell() {
     return null
   }, [user])
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    await logout()
     navigate('/auth', { replace: true })
   }
 

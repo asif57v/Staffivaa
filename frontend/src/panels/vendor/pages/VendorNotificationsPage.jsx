@@ -92,12 +92,12 @@ export function VendorNotificationsPage() {
     try {
       setIsSendingTest(true)
       await sendSelfTest({
-        title: '⚡ Live Real-time Alert',
-        body: `Test notification received live via Socket.IO at ${new Date().toLocaleTimeString()}!`,
+        title: '⚡ Live Push Alert',
+        body: `FCM push notification delivered successfully via Firebase at ${new Date().toLocaleTimeString()}!`,
         type: 'SYSTEM_ALERT',
       }).unwrap()
       refetch()
-      showToast('Live test notification sent successfully!')
+      showToast('Live FCM test notification sent successfully!')
     } catch (err) {
       showToast('Failed to send test notification.')
     } finally {

@@ -63,6 +63,7 @@ export function AppShell() {
   const [workerCancelPopup, setWorkerCancelPopup] = useState({ open: false, message: '' })
   const workerCancelHandledRef = useRef('')
   const incomingJobRef = useRef(null)
+  const dismissedAssignmentsRef = useRef(new Set())
   const globalAudioRef = useRef(null)
   const [respondAssignment] = useRespondAssignmentMutation()
 
@@ -140,6 +141,24 @@ export function AppShell() {
       dispatch(workforceApi.util.invalidateTags(['Assignments', 'Requests', 'Notifications']));
       dispatch(enterpriseApi.util.invalidateTags(['EnterpriseJobs']));
     };
+
+    socket.on('connect', () => {
+      console.log('[Socket.io] Connected to server:', socket.id);
+      invalidateCache();
+    });
+
+    socket.on('reconnect', () => {
+      console.log('[Socket.io] Reconnected to server');
+      invalidateCache();
+    });
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[AppShell] App became visible, refreshing assignments cache');
+        invalidateCache();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     const handleAssignmentAssigned = (data) => {
       console.log('[Socket] assignment_assigned event received:', data);
@@ -284,7 +303,10 @@ export function AppShell() {
     socket.on('bookingExpired', handleBookingExpired)
 
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       stopGlobalRingSound();
+      socket.off('connect');
+      socket.off('reconnect');
       socket.off('assignment_created', invalidateCache);
       socket.off('assignment_assigned', handleAssignmentAssigned);
       socket.off('assignment_accepted', invalidateCache);
@@ -306,6 +328,64 @@ export function AppShell() {
   }, [user, token, dispatch]);
   // ------------------------------------------
 
+  // --- Auto-resync pending job offer card from API data (handles background kill / app restart) ---
+  useEffect(() => {
+    if (!isLabour || !apiData?.assignments) return
+
+    const pendingOffer = apiData.assignments.find((a) => {
+      if (a.status !== 'offered') return false
+      if (dismissedAssignmentsRef.current.has(String(a._id))) return false
+
+      const req = a.requestId
+      if (!req || typeof req !== 'object') return false
+      if (req.status === 'CANCELLED') return false
+
+      if (req.expiresAt && new Date(req.expiresAt) <= new Date()) return false
+
+      const validOfferStatuses = ['SEARCHING', 'ALLOCATING', 'ASSIGNED', 'CONFIRMED', 'PENDING_REVIEW']
+      if (!validOfferStatuses.includes(req.status)) return false
+
+      return true
+    })
+
+    if (pendingOffer) {
+      const req = pendingOffer.requestId
+      const expiresAt = req?.expiresAt ? new Date(req.expiresAt).getTime() : null
+      const remainingSeconds = expiresAt ? Math.max(5, Math.floor((expiresAt - Date.now()) / 1000)) : 90
+
+      const popupJob = {
+        assignmentId: pendingOffer._id,
+        type: 'new_order',
+        requestId: req?._id || req,
+        clientName: req?.clientId?.fullName || req?.clientId?.companyName || 'Customer',
+        locationText: req?.locationText || req?.siteId?.address || '',
+        categoryName: pendingOffer.categoryId?.name || req?.lines?.[0]?.categoryId?.name || 'Worker',
+        perDayRate: pendingOffer.perDayRate || 800,
+        startDate: req?.startDate,
+        shiftStart: req?.shiftStart || '',
+        shiftEnd: req?.shiftEnd || '',
+        timeoutSeconds: remainingSeconds,
+      }
+
+      if (!incomingJobRef.current || incomingJobRef.current.assignmentId !== pendingOffer._id) {
+        console.log('[AppShell] Resyncing active job offer card from API data:', popupJob)
+        setIncomingJob(popupJob)
+        incomingJobRef.current = popupJob
+      }
+    } else {
+      if (incomingJobRef.current && incomingJobRef.current.assignmentId) {
+        const stillInOffers = apiData.assignments.some(
+          (a) => String(a._id) === String(incomingJobRef.current.assignmentId) && a.status === 'offered'
+        )
+        if (!stillInOffers) {
+          console.log('[AppShell] Pending offer no longer valid or taken. Clearing popup.')
+          setIncomingJob(null)
+          incomingJobRef.current = null
+        }
+      }
+    }
+  }, [isLabour, apiData])
+
   useEffect(() => {
     if (user?.role !== USER_ROLES.INDIVIDUAL) return undefined
     const onWorkerCancelled = (event) => {
@@ -315,6 +395,7 @@ export function AppShell() {
     window.addEventListener(WORKER_CANCELLED_BOOKING_EVENT, onWorkerCancelled)
     return () => window.removeEventListener(WORKER_CANCELLED_BOOKING_EVENT, onWorkerCancelled)
   }, [user?.role])
+
   // --- Incoming Job Popup Handlers ---
   const handlePopupAccept = useCallback(async () => {
     stopGlobalRingSound();
@@ -359,6 +440,7 @@ export function AppShell() {
       incomingJobRef.current = null;
       return;
     }
+    dismissedAssignmentsRef.current.add(String(incomingJob.assignmentId));
     try {
       await respondAssignment({ id: incomingJob.assignmentId, action: 'decline' }).unwrap();
     } catch (e) {
@@ -370,10 +452,13 @@ export function AppShell() {
 
   const handlePopupTimeout = useCallback(() => {
     stopGlobalRingSound();
+    if (incomingJob?.assignmentId) {
+      dismissedAssignmentsRef.current.add(String(incomingJob.assignmentId));
+    }
     setIncomingJob(null);
     incomingJobRef.current = null;
     dispatchAlert('Missed Opportunity', 'Job request timed out.', true);
-  }, [dispatchAlert, stopGlobalRingSound]);
+  }, [incomingJob, dispatchAlert, stopGlobalRingSound]);
   // ------------------------------------------
 
   // ------------------------------------------
@@ -396,6 +481,7 @@ export function AppShell() {
           const { requestForToken } = await import('../lib/firebase.js');
           const fcmToken = await requestForToken();
           if (fcmToken) {
+            localStorage.setItem('staffivaa_fcm_token', fcmToken);
             const { apiClient } = await import('../api/http.js');
             await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
               .catch(err => console.error('Failed to sync FCM token:', err));
@@ -855,8 +941,8 @@ export function AppShell() {
                 <div className="border-t border-slate-200/70 bg-linear-to-t from-slate-50/50 to-white px-3 pt-3 pb-10">
                   <button
                     type="button"
-                    onClick={() => {
-                      logout()
+                    onClick={async () => {
+                      await logout()
                       navigate('/auth', { replace: true })
                     }}
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200/90 bg-rose-50 py-3 text-sm font-semibold text-rose-800 shadow-sm transition hover:bg-rose-50/90"

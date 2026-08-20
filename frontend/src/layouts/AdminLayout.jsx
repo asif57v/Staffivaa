@@ -210,6 +210,7 @@ export function AdminLayout() {
           const { requestForToken } = await import('../lib/firebase.js')
           const fcmToken = await requestForToken()
           if (fcmToken) {
+            localStorage.setItem('staffivaa_fcm_token', fcmToken)
             const { apiClient } = await import('../api/http.js')
             await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
               .catch(err => console.error('Failed to sync FCM token:', err))
@@ -285,9 +286,9 @@ export function AdminLayout() {
 
   const title = getAdminTitle(pathname)
 
-  function handleLogout() {
+  async function handleLogout() {
     setProfileOpen(false)
-    logout()
+    await logout()
     navigate('/admin/login', { replace: true })
   }
 

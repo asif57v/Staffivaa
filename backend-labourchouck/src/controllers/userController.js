@@ -728,26 +728,31 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
 
 /** POST /users/me/fcm-token/remove — remove FCM token on logout */
 export const removeFcmToken = asyncHandler(async (req, res) => {
-  const { token } = req.body
-  
-  if (!token || typeof token !== 'string') {
-    return sendError(res, {
-      message: 'FCM token is required',
-      statusCode: HTTP_STATUS.BAD_REQUEST,
-      code: 'INVALID_TOKEN'
-    })
-  }
+  const { token, clearAll } = req.body
 
-  // Remove the token from both arrays
-  await User.updateOne(
-    { _id: req.user._id },
-    { 
-      $pull: { 
-        fcmTokensWeb: token, 
-        fcmTokensMobile: token 
-      } 
-    }
-  )
+  if (token && typeof token === 'string' && token.trim() && !clearAll) {
+    const cleanToken = token.trim()
+    await User.updateOne(
+      { _id: req.user._id },
+      { 
+        $pull: { 
+          fcmTokensWeb: cleanToken, 
+          fcmTokensMobile: cleanToken 
+        } 
+      }
+    )
+  } else {
+    // Default on logout: clear all FCM push tokens for this user
+    await User.updateOne(
+      { _id: req.user._id },
+      { 
+        $set: { 
+          fcmTokensWeb: [], 
+          fcmTokensMobile: [] 
+        } 
+      }
+    )
+  }
 
   return sendSuccess(res, { 
     message: 'FCM Token removed successfully'
