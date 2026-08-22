@@ -1,18 +1,110 @@
 import { getMessaging } from 'firebase-admin/messaging';
 import { User } from '../models/User.js';
 
+const ANDROID_CHANNEL_ID = 'high_importance_channel';
+const FCM_BATCH_SIZE = 500;
+
+function uniqueTokens(list = []) {
+  return [...new Set((list || []).filter((t) => typeof t === 'string' && t.trim()))];
+}
+
+function stringifyData(title, body, userId, recipientRole, data = {}) {
+  const notifType =
+    String(data?.type || 'GENERAL').toUpperCase() === 'NEW_ORDER' || data?.type === 'new_order'
+      ? 'NEW_ORDER'
+      : String(data?.type || 'GENERAL');
+
+  const stringifiedData = {
+    type: notifType,
+    title: String(title),
+    body: String(body),
+    message: String(body),
+    recipientRole: String(recipientRole || ''),
+    role: String(recipientRole || ''),
+    sound: 'default',
+    sound_name: 'default',
+    soundName: 'default',
+    channel_id: ANDROID_CHANNEL_ID,
+    channelId: ANDROID_CHANNEL_ID,
+    android_channel_id: ANDROID_CHANNEL_ID,
+    targetUserId: userId.toString(),
+    click_action: 'FLUTTER_NOTIFICATION_CLICK',
+  };
+
+  if (data && typeof data === 'object') {
+    Object.keys(data).forEach((key) => {
+      if (data[key] === undefined || data[key] === null || key === 'type') return;
+      // Never let callers force a missing custom sound/channel (silent tray on Android).
+      if (
+        (key === 'sound' || key === 'sound_name' || key === 'soundName' || key === 'channel_id' || key === 'channelId') &&
+        String(data[key]).includes('new_job_order')
+      ) {
+        return;
+      }
+      stringifiedData[key] = typeof data[key] === 'string' ? data[key] : String(data[key]);
+    });
+  }
+
+  stringifiedData.type = notifType;
+  stringifiedData.title = String(title);
+  stringifiedData.body = String(body);
+  stringifiedData.message = String(body);
+  stringifiedData.sound = 'default';
+  stringifiedData.sound_name = 'default';
+  stringifiedData.soundName = 'default';
+  stringifiedData.channel_id = ANDROID_CHANNEL_ID;
+  stringifiedData.channelId = ANDROID_CHANNEL_ID;
+  stringifiedData.android_channel_id = ANDROID_CHANNEL_ID;
+
+  return { notifType, stringifiedData };
+}
+
+async function sendBatches(messageFactory, tokens, userId, notifType) {
+  if (!tokens.length) {
+    return { successCount: 0, failureCount: 0, failedTokens: [] };
+  }
+
+  let successCount = 0;
+  let failureCount = 0;
+  const failedTokens = [];
+
+  for (let i = 0; i < tokens.length; i += FCM_BATCH_SIZE) {
+    const batch = tokens.slice(i, i + FCM_BATCH_SIZE);
+    const response = await getMessaging().sendEachForMulticast(messageFactory(batch));
+
+    successCount += response.successCount;
+    failureCount += response.failureCount;
+
+    response.responses.forEach((resp, idx) => {
+      if (resp.success) return;
+      console.warn(
+        `[NotificationService] FCM fail user=${userId} type=${notifType} token#${i + idx}:`,
+        resp.error?.code,
+        resp.error?.message,
+      );
+      const errorCode = resp.error?.code;
+      if (
+        errorCode === 'messaging/invalid-registration-token' ||
+        errorCode === 'messaging/registration-token-not-registered'
+      ) {
+        failedTokens.push(batch[idx]);
+      }
+    });
+  }
+
+  return { successCount, failureCount, failedTokens };
+}
+
 /**
  * Send a push notification to a specific user.
  *
- * Mobile clients (Flutter/Android/iOS) often read `data.title` / `data.body` / `data.type`
- * when building the tray notification — so we always mirror title/body into `data`
- * and NEVER force type=NEW_ORDER (that caused every activity to look like a new job).
+ * Mobile (Flutter) and web tokens MUST be sent as separate messages:
+ * - Android/iOS need a `notification` payload so the OS tray (slider) shows when the app is
+ *   backgrounded/killed. Data-only messages are dropped on many OEM devices.
+ * - Web needs `webpush.notification`. Mixing both in one multicast makes WebView/Chrome
+ *   swallow or duplicate the tray entry.
  *
- * @param {string} userId - The MongoDB ObjectId of the user.
- * @param {string} title - The notification title.
- * @param {string} body - The notification body/message.
- * @param {Object} [data] - Optional payload data (must be an object of strings).
- * @returns {Promise<{success: boolean, sentCount: number, failedTokens: string[]}>}
+ * Flutter foreground display still reads `data.title` / `data.body` / `data.type`.
  */
 export const sendNotificationToUser = async (userId, title, body, data = {}) => {
   try {
@@ -26,167 +118,119 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
     }
 
     const recipientRole = String(data?.recipientRole || user.role || '');
-
-    const tokens = [
-      ...(user.fcmTokensWeb || []),
-      ...(user.fcmTokensMobile || [])
-    ];
+    const mobileTokens = uniqueTokens(user.fcmTokensMobile);
+    const mobileSet = new Set(mobileTokens);
+    const webTokens = uniqueTokens(user.fcmTokensWeb).filter((t) => !mobileSet.has(t));
+    const tokens = [...mobileTokens, ...webTokens];
 
     if (tokens.length === 0) {
       console.log(`[NotificationService] No FCM tokens found in DB for user ${userId} (${user.role || 'user'})`);
       return { success: false, sentCount: 0, failedTokens: [] };
     }
 
-    const notifType = String(data?.type || 'GENERAL').toUpperCase() === 'NEW_ORDER' || data?.type === 'new_order'
-      ? 'NEW_ORDER'
-      : String(data?.type || 'GENERAL');
-
-    // IMPORTANT: do NOT use a custom Android channel/sound for NEW_ORDER.
-    // Other pushes (KYC, cancel, expire) use "default" and arrive fine.
-    // Custom channel "new_job_order" often doesn't exist on the device → tray stays silent
-    // while FCM still reports "sent". Keep type=NEW_ORDER in data for app routing/ring.
-    const soundName = data.sound && data.sound !== 'new_job_order' ? data.sound : 'default';
-    const rawSoundName = String(soundName).replace(/\.(mp3|wav|caf|ogg)$/i, '') || 'default';
-    const channelId = 'default';
+    const { notifType, stringifiedData } = stringifyData(title, body, userId, recipientRole, data);
+    const safeTitle = String(title);
+    const safeBody = String(body);
 
     console.log(
       `[NotificationService] Dispatching FCM push to user ${userId} (${user.role || 'user'}) ` +
-        `with ${tokens.length} token(s). type=${notifType} Title: "${title}"`
+        `mobile=${mobileTokens.length} web=${webTokens.length} type=${notifType} Title: "${safeTitle}"`,
     );
 
-    // Ensure all data values are strings for Firebase Admin SDK multicast
-    const stringifiedData = {
-      type: notifType,
-      title: String(title),
-      body: String(body),
-      message: String(body),
-      recipientRole,
-      role: recipientRole,
-      sound: rawSoundName,
-      sound_name: rawSoundName,
-      soundName: rawSoundName,
-      channel_id: channelId,
-      channelId,
-      targetUserId: userId.toString(),
-      click_action: 'FLUTTER_NOTIFICATION_CLICK',
-    };
-
-    if (data && typeof data === 'object') {
-      Object.keys(data).forEach((key) => {
-        if (data[key] !== undefined && data[key] !== null && key !== 'type') {
-          // Never let callers force a missing custom channel for new jobs
-          if ((key === 'sound' || key === 'sound_name' || key === 'soundName' || key === 'channel_id' || key === 'channelId')
-            && String(data[key]).includes('new_job_order')) {
-            return;
-          }
-          stringifiedData[key] = typeof data[key] === 'string' ? data[key] : String(data[key]);
-        }
-      });
-    }
-    // Always keep the resolved type/title/body/channel
-    stringifiedData.type = notifType;
-    stringifiedData.title = String(title);
-    stringifiedData.body = String(body);
-    stringifiedData.message = String(body);
-    stringifiedData.sound = rawSoundName;
-    stringifiedData.sound_name = rawSoundName;
-    stringifiedData.soundName = rawSoundName;
-    stringifiedData.channel_id = channelId;
-    stringifiedData.channelId = channelId;
-
-    const message = {
-      notification: {
-        title: String(title),
-        body: String(body),
-      },
-      data: stringifiedData,
-      android: {
-        priority: 'high',
-        notification: {
-          title: String(title),
-          body: String(body),
-          sound: 'default',
-          channelId: 'default',
-          defaultSound: true,
-          defaultVibrateTimings: true,
-          priority: 'max',
-          visibility: 'public',
-          clickAction: 'FLUTTER_NOTIFICATION_CLICK',
-        },
-      },
-      apns: {
-        headers: { 'apns-priority': '10' },
-        payload: {
-          aps: {
-            alert: {
-              title: String(title),
-              body: String(body),
-            },
+    // Native Android/iOS: system tray when backgrounded; Flutter onMessage when foregrounded.
+    // Do NOT set android.notification.channelId. A channel the Flutter app never created
+    // (new_job_order, "default", etc.) makes Android 8+ drop the shade notification while
+    // FCM still reports "sent". Omitting it uses FCM's auto-created fallback channel.
+    // Flutter local-notifications can still read data.android_channel_id / high_importance_channel.
+    const mobileResult = await sendBatches(
+      (batch) => ({
+        notification: { title: safeTitle, body: safeBody },
+        data: stringifiedData,
+        android: {
+          priority: 'high',
+          ttl: 86400000,
+          notification: {
+            title: safeTitle,
+            body: safeBody,
             sound: 'default',
-            'content-available': 1,
+            defaultSound: true,
+            defaultVibrateTimings: true,
+            priority: 'high',
+            visibility: 'public',
+            clickAction: 'FLUTTER_NOTIFICATION_CLICK',
           },
         },
-      },
-      webpush: {
-        headers: { Urgency: 'high' },
-        notification: {
-          title: String(title),
-          body: String(body),
+        apns: {
+          headers: {
+            'apns-priority': '10',
+            'apns-push-type': 'alert',
+          },
+          payload: {
+            aps: {
+              alert: { title: safeTitle, body: safeBody },
+              sound: 'default',
+              'content-available': 1,
+              'mutable-content': 1,
+            },
+          },
         },
-      },
-      tokens,
-    };
+        tokens: batch,
+      }),
+      mobileTokens,
+      userId,
+      notifType,
+    );
 
-    const response = await getMessaging().sendEachForMulticast(message);
+    // Browser / PWA. WebView tokens are a fallback only — native tokens above are what
+    // populate the Android notification slider when the Flutter wrapper is backgrounded.
+    const webResult = await sendBatches(
+      (batch) => ({
+        data: stringifiedData,
+        webpush: {
+          headers: { Urgency: 'high', TTL: '86400' },
+          notification: {
+            title: safeTitle,
+            body: safeBody,
+            icon: '/logo.png',
+            badge: '/favicon.svg',
+            requireInteraction: true,
+          },
+          fcmOptions: {
+            link: stringifiedData.url || '/',
+          },
+        },
+        tokens: batch,
+      }),
+      webTokens,
+      userId,
+      notifType,
+    );
+
+    const successCount = mobileResult.successCount + webResult.successCount;
+    const failureCount = mobileResult.failureCount + webResult.failureCount;
+    const failedTokens = [...mobileResult.failedTokens, ...webResult.failedTokens];
 
     console.log(
       `[NotificationService] FCM result user=${userId} type=${notifType} ` +
-        `success=${response.successCount} fail=${response.failureCount}`,
+        `success=${successCount} fail=${failureCount}`,
     );
-    if (response.failureCount > 0) {
-      response.responses.forEach((resp, idx) => {
-        if (!resp.success) {
-          console.warn(
-            `[NotificationService] FCM fail token#${idx} type=${notifType}:`,
-            resp.error?.code,
-            resp.error?.message,
-          );
-        }
-      });
-    }
 
-    // Check for failed tokens to clean them up from DB
-    const failedTokens = [];
-    if (response.failureCount > 0) {
-      response.responses.forEach((resp, idx) => {
-        if (!resp.success) {
-          const errorCode = resp.error?.code;
-          if (
-            errorCode === 'messaging/invalid-registration-token' ||
-            errorCode === 'messaging/registration-token-not-registered'
-          ) {
-            failedTokens.push(tokens[idx]);
-          }
-        }
-      });
-
-      if (failedTokens.length > 0) {
-        await User.updateOne(
-          { _id: userId },
-          {
-            $pull: {
-              fcmTokensWeb: { $in: failedTokens },
-              fcmTokensMobile: { $in: failedTokens },
-            },
-          }
-        );
-        console.log(`[NotificationService] Removed ${failedTokens.length} stale FCM tokens for user ${userId}`);
-      }
+    if (failedTokens.length > 0) {
+      await User.updateOne(
+        { _id: userId },
+        {
+          $pull: {
+            fcmTokensWeb: { $in: failedTokens },
+            fcmTokensMobile: { $in: failedTokens },
+          },
+        },
+      );
+      console.log(`[NotificationService] Removed ${failedTokens.length} stale FCM tokens for user ${userId}`);
     }
 
     return {
-      success: response.successCount > 0,
-      sentCount: response.successCount,
+      success: successCount > 0,
+      sentCount: successCount,
       failedTokens,
     };
   } catch (error) {
@@ -216,7 +260,7 @@ export const sendNotificationToUsers = async (userIds, title, body, data = {}) =
           return sendNotificationToUser(u._id, title, body, data);
         }
         return Promise.resolve({ success: false, sentCount: 0 });
-      })
+      }),
     );
 
     return results;

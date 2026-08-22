@@ -669,15 +669,16 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
   }
 
   // Determine platform classification by deviceType from client
-  let targetField = 'fcmTokensMobile'; // default to mobile if not specified
-  if (deviceType === 'web') {
-    targetField = 'fcmTokensWeb';
-  } else if (deviceType === 'mobile' || deviceType === 'android' || deviceType === 'ios') {
-    targetField = 'fcmTokensMobile';
+  const type = String(deviceType || '').toLowerCase()
+  let targetField = 'fcmTokensMobile'
+  if (type === 'web') {
+    targetField = 'fcmTokensWeb'
+  } else if (['mobile', 'android', 'ios', 'flutter', 'native', 'app'].includes(type)) {
+    targetField = 'fcmTokensMobile'
   } else {
     // Fallback if client doesn't send deviceType
-    const isApp = req.user.role !== 'admin';
-    targetField = isApp ? 'fcmTokensMobile' : 'fcmTokensWeb';
+    const isApp = req.user.role !== 'admin'
+    targetField = isApp ? 'fcmTokensMobile' : 'fcmTokensWeb'
   }
 
   // Retrieve user document to mutate token array safely (using lean to bypass version tracking)

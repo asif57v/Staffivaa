@@ -88,7 +88,7 @@ export function AppShell() {
     if (isLabour) return subscribeJobDemo(setLocalDemo)
   }, [isLabour])
 
-  const dispatchAlert = useCallback((title, body, isError = false) => {
+    const dispatchAlert = useCallback((title, body, isError = false) => {
     const rawKey = (title || '') + '_' + (body || '');
     const dedupeKey = rawKey.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
     const now = Date.now();
@@ -109,21 +109,9 @@ export function AppShell() {
       }
     });
 
-    try {
-      if (typeof window !== 'undefined' && 'Notification' in window) {
-        if (Notification.permission === 'granted') {
-          new Notification(title || 'Staffivaa Update', { body: body || '', icon: '/vite.svg', badge: '/vite.svg', vibrate: [200, 100, 200], tag: toastId, requireInteraction: true });
-        } else if (Notification.permission !== 'denied') {
-          Notification.requestPermission().then((perm) => {
-            if (perm === 'granted') {
-              new Notification(title || 'Staffivaa Update', { body: body || '', icon: '/vite.svg', badge: '/vite.svg', vibrate: [200, 100, 200], tag: toastId, requireInteraction: true });
-            }
-          });
-        }
-      }
-    } catch (err) {
-      console.error('Push error:', err);
-    }
+    import('../lib/pushNotifications.js')
+      .then(({ presentPushOnDevice }) => presentPushOnDevice(title || 'Staffivaa Update', body || '', { tag: toastId }))
+      .catch(() => {});
   }, []);
 
   const playNewJobRingSound = useCallback(() => {
@@ -529,65 +517,29 @@ export function AppShell() {
   // --- FCM Token Auto-sync & Foreground Listener ---
   useEffect(() => {
     if (!user || !token) return;
-    
+
     const syncFcmToken = async () => {
       try {
-        if (typeof window === 'undefined' || !('Notification' in window)) {
-          console.warn('Notifications not supported in this environment.');
-          return;
-        }
-        let permission = window.Notification.permission;
-        if (permission === 'default') {
-          permission = await window.Notification.requestPermission();
-        }
-        if (permission === 'granted') {
-          const { requestForToken } = await import('../lib/firebase.js');
-          const fcmToken = await requestForToken();
-          if (fcmToken) {
-            localStorage.setItem('staffivaa_fcm_token', fcmToken);
-            // Track which role currently owns this device token
-            if (user?.role) localStorage.setItem('staffivaa_fcm_role', user.role);
-            const { apiClient } = await import('../api/http.js');
-            // Claim token for current role (labour vs individual)
-            await apiClient.post('/users/me/fcm-token', {
-              token: fcmToken,
-              deviceType: 'web',
-              role: user?.role,
-            }).catch(err => console.error('Failed to sync FCM token:', err));
-          }
-        }
+        const { syncPushToken } = await import('../lib/pushNotifications.js');
+        await syncPushToken({ accessToken: token, role: user?.role });
       } catch (err) {
         console.error('Firebase not available in AppShell:', err);
       }
     };
 
     syncFcmToken();
-    // Re-claim for current role when app becomes visible again
     const onVisible = () => {
       if (document.visibilityState === 'visible') syncFcmToken();
     };
     window.addEventListener('focus', syncFcmToken);
     document.addEventListener('visibilitychange', onVisible);
 
-    // Use service worker showNotification so it appears as native OS popup
-    // even when the app tab is currently focused (Chrome blocks new Notification() in foreground)
-    const showOsNotification = (title, body, data) => {
-      if (!('Notification' in window) || Notification.permission !== 'granted') return;
-      if (!('serviceWorker' in navigator)) return;
-
-      navigator.serviceWorker.ready.then((registration) => {
-        registration.showNotification(title, {
-          body,
-          icon: '/logo.png',
-          badge: '/favicon.svg',
-          requireInteraction: true,
-          // Every open tab receives the same push, so a content-derived tag collapses
-          // them into one tray entry instead of stacking duplicates.
-          tag: 'staffivaa-notif-' + String(data?.relatedId || data?.type || title),
-          data: data || {},
-        });
-      }).catch((err) => console.warn('Foreground showNotification error:', err));
-    };
+    let cancelled = false;
+    let stopNativeTokenListener = () => {};
+    import('../lib/pushNotifications.js').then(({ listenForNativeFcmToken }) => {
+      if (cancelled) return;
+      stopNativeTokenListener = listenForNativeFcmToken(() => syncFcmToken());
+    });
 
     const handleFcmMessage = (event) => {
       const payload = event.detail;
@@ -612,17 +564,11 @@ export function AppShell() {
         payload?.notification?.body ||
         '';
 
-      // FCM skips the service worker's background handler while any tab is visible,
-      // so the tray notification must be raised here even when another account owns
-      // the push — otherwise it is lost entirely on a shared browser.
-      showOsNotification(displayTitle, displayBody, payload.data);
-
       const isOtherAccount =
         (targetUserId && currentUserId && targetUserId !== currentUserId) ||
         (targetRole && currentRole && targetRole !== currentRole);
       if (isOtherAccount) return;
 
-      // Ring only for real new-job offers (not every push that mentions a job)
       const notifType = payload?.data?.type;
       if (String(notifType || '').toUpperCase() === 'NEW_ORDER' || payload?.data?.sound === 'new_job_order') {
         playNewJobRingSound();
@@ -647,7 +593,7 @@ export function AppShell() {
     };
 
     window.addEventListener('fcm-foreground-message', handleFcmMessage);
-    
+
     const handleServiceWorkerMessage = (event) => {
       if (event.data && event.data.type === 'NAVIGATE_TO_URL' && event.data.url) {
         navigate(event.data.url);
@@ -659,6 +605,8 @@ export function AppShell() {
     }
 
     return () => {
+      cancelled = true;
+      stopNativeTokenListener();
       window.removeEventListener('fcm-foreground-message', handleFcmMessage);
       window.removeEventListener('focus', syncFcmToken);
       document.removeEventListener('visibilitychange', onVisible);
@@ -666,7 +614,7 @@ export function AppShell() {
         navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
       }
     };
-  }, [user, token, playNewJobRingSound, scheduleIncomingJobFromNotification, dispatchAlert, refreshAppUser, dispatch]);
+  }, [user, token, playNewJobRingSound, scheduleIncomingJobFromNotification, dispatchAlert, refreshAppUser, dispatch, navigate]);
   // ---------------------------
 
   const { data: notifData } = workforceApi.useGetNotificationsQuery(undefined, { skip: !user })

@@ -17,16 +17,29 @@ const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(function(payload) {
   console.log('[firebase-messaging-sw.js] Received background message ', payload);
+
+  // When FCM includes a `notification` / `webpush.notification` payload the
+  // browser already draws the tray entry. Showing another one races and can
+  // drop BOTH from the Android shade (common in WebView wrappers).
+  if (payload?.notification || payload?.webpush?.notification) {
+    return;
+  }
+
   const data = payload.data || {};
-  const notificationTitle = data.title || payload.notification?.title || 'Staffivaa';
+  const notificationTitle = data.title || 'Staffivaa';
+  const notificationBody = data.body || data.message || '';
+  if (!notificationTitle && !notificationBody) return;
+
   const notificationOptions = {
-    body: data.body || data.message || payload.notification?.body || '',
+    body: notificationBody,
     icon: '/logo.png',
     badge: '/favicon.svg',
-    data: { ...data, title: notificationTitle, body: data.body || data.message || payload.notification?.body || '' }
+    tag: 'staffivaa-notif-' + String(data.relatedId || data.type || notificationTitle),
+    renotify: true,
+    data: { ...data, title: notificationTitle, body: notificationBody }
   };
 
-  self.registration.showNotification(notificationTitle, notificationOptions);
+  return self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
 self.addEventListener('notificationclick', function(event) {
@@ -37,7 +50,6 @@ self.addEventListener('notificationclick', function(event) {
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
       for (let i = 0; i < windowClients.length; i++) {
         const client = windowClients[i];
-        // If app is already open, focus it and navigate
         if (client.url.includes(self.registration.scope) && 'focus' in client) {
           client.focus();
           client.postMessage({
@@ -47,7 +59,6 @@ self.addEventListener('notificationclick', function(event) {
           return;
         }
       }
-      // Open new window if not already open
       if (clients.openWindow) {
         return clients.openWindow(targetUrl);
       }
