@@ -369,10 +369,10 @@ export function AppAttendancePage() {
         projectName: currentEmp.jobId?.jobTitle || 'Enterprise Deployment',
         clientId: currentEmp.enterpriseId,
         locationText: currentEmp.joiningDetails?.siteLocation || currentEmp.jobId?.locationText || 'Main Site Location',
-        shiftStart: currentEmp.jobId?.shift?.split('-')?.[0]?.trim() || '09:00 AM',
-        shiftEnd: currentEmp.jobId?.shift?.split('-')?.[1]?.trim() || '06:00 PM',
-        startDate: currentEmp.joiningDetails?.joiningDate || currentEmp.offerDetails?.joiningDate || currentEmp.createdAt,
-        endDate: currentEmp.joiningDetails?.endDate || currentEmp.offerDetails?.endDate || currentEmp.jobId?.timeline?.projectEndDate || currentEmp.jobId?.timeline?.applicationLastDate || null,
+        shiftStart: currentEmp.jobId?.shift?.split(/[-–—]/)?.[0]?.trim() || '09:00 AM',
+        shiftEnd: currentEmp.jobId?.shift?.split(/[-–—]/)?.[1]?.trim() || '06:00 PM',
+        startDate: currentEmp.joiningDetails?.joiningDate || currentEmp.offerDetails?.joiningDate || currentEmp.jobId?.timeline?.expectedJoiningDate || currentEmp.createdAt,
+        endDate: currentEmp.joiningDetails?.endDate || currentEmp.offerDetails?.endDate || currentEmp.jobId?.timeline?.projectEndDate || null,
       },
       categoryId: { name: currentEmp.jobId?.jobTitle || 'Worker' },
       joiningDetails: currentEmp.joiningDetails,
@@ -425,7 +425,7 @@ export function AppAttendancePage() {
       vendorName = displayAssignment.vendorId?.contractorProfile?.businessName || displayAssignment.vendorId?.fullName || 'Staffivaa Partner'
       roleName = displayAssignment.categoryId?.name || req.lines?.[0]?.categoryId?.name || 'Worker'
       locationStr = req.locationText || req.siteId?.address || displayAssignment.location || 'Location not specified'
-      shiftStr = (req.shiftStart && req.shiftEnd) ? `${req.shiftStart} - ${req.shiftEnd}` : '09:00 AM - 06:00 PM'
+      shiftStr = displayAssignment.shiftWindow || ((req.shiftStart && req.shiftEnd) ? `${req.shiftStart} - ${req.shiftEnd}` : '09:00 AM - 06:00 PM')
     }
   }
 
@@ -457,9 +457,11 @@ export function AppAttendancePage() {
         offerDetails.endDate ||
         jobTimeline.projectEndDate
 
+      const isEndValid = eRaw && (!sRaw || new Date(eRaw) >= new Date(sRaw))
+
       startDateFormatted = sRaw ? formatDate(sRaw) : 'Not specified'
-      endDateFormatted = eRaw ? formatDate(eRaw) : (displayAssignment.jobId?.contractDuration ? `${displayAssignment.jobId.contractDuration}` : 'Ongoing / Full-Time')
-      durationStr = eRaw ? `${startDateFormatted} ➔ ${endDateFormatted}` : `${startDateFormatted} (Ongoing)`
+      endDateFormatted = isEndValid ? formatDate(eRaw) : (displayAssignment.jobId?.contractDuration ? `${displayAssignment.jobId.contractDuration}` : 'Ongoing / Full-Time')
+      durationStr = isEndValid ? `${startDateFormatted} ➔ ${endDateFormatted}` : `${startDateFormatted} (Ongoing)`
     }
   }
 

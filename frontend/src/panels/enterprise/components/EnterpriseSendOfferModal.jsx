@@ -13,9 +13,19 @@ export function EnterpriseSendOfferModal({ application, onClose }) {
   const [salary, setSalary] = useState(application?.jobId?.salary || 18000)
   const [salaryType, setSalaryType] = useState(application?.jobId?.salaryType || 'monthly')
   const [location, setLocation] = useState(application?.jobId?.locationText || '')
-  const [joiningDate, setJoiningDate] = useState(
-    new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
-  )
+  const [joiningDate, setJoiningDate] = useState(() => {
+    const jobTimeline = application?.jobId?.timeline || {}
+    if (jobTimeline.expectedJoiningDate) {
+      return new Date(jobTimeline.expectedJoiningDate).toISOString().split('T')[0]
+    }
+    if (jobTimeline.projectStartDate) {
+      return new Date(jobTimeline.projectStartDate).toISOString().split('T')[0]
+    }
+    if (application?.offerDetails?.joiningDate) {
+      return new Date(application.offerDetails.joiningDate).toISOString().split('T')[0]
+    }
+    return new Date().toISOString().split('T')[0]
+  })
   const [workingHours, setWorkingHours] = useState(8)
   const [benefits, setBenefits] = useState(['PF & ESIC', 'Food Provided'])
   const [docsRequired, setDocsRequired] = useState('Aadhaar Card, Bank Passbook, 2 Photos')

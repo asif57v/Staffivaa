@@ -379,11 +379,7 @@ export function AuthEntryPage() {
               <Link
                 to="/home"
                 aria-label="Back to home"
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 4,
-                  fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.5)',
-                  textDecoration: 'none',
-                }}
+                className="hidden sm:flex items-center gap-1 text-[12px] font-semibold text-white/50 hover:text-white/80 no-underline transition-colors"
               >
                 <ArrowLeft style={{ width: 14, height: 14 }} />
                 Home

@@ -84,7 +84,7 @@ function FlowHeader({ title, subtitle, onBack }) {
         <button
           type="button"
           onClick={onBack}
-          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-800 shadow-sm transition hover:border-brand/35 hover:text-brand"
+          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-800 shadow-sm transition hover:border-brand/35 hover:text-brand cursor-pointer active:scale-95"
           aria-label="Go back"
         >
           <ArrowLeft className="h-5 w-5" />
@@ -769,6 +769,20 @@ export function IndividualBookingFlowPage() {
     leaveFlow()
   }, [activeBooking, cancelRequest, leaveFlow, refParam])
 
+  const handleFlowBack = useCallback(() => {
+    if (step === 'review' || step === 'summary') {
+      goStep('details')
+    } else if (step === 'details') {
+      if (draft.entryPoint === 'category' || window.history.length > 1) {
+        navigate(-1)
+      } else {
+        leaveFlow()
+      }
+    } else {
+      leaveFlow()
+    }
+  }, [draft.entryPoint, goStep, leaveFlow, navigate, step])
+
   const wizardIndex = step === 'type' ? 0 : step === 'details' ? 1 : step === 'summary' ? 2 : 3
 
   if (step === 'searching' && !noMatch) {
@@ -839,11 +853,7 @@ export function IndividualBookingFlowPage() {
               : 'Review & confirm'
         }
         subtitle={draft.categoryName || 'Your booking'}
-        onBack={() => {
-          if (step === 'type') leaveFlow()
-          else if (step === 'details') goStep('type')
-          else goStep('details')
-        }}
+        onBack={handleFlowBack}
       />
 
       {step !== 'searching' ? (

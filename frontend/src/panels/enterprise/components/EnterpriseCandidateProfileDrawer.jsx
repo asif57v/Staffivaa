@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import {
-  X, User, Phone, Mail, MapPin, ShieldCheck, Briefcase, Calendar,
+  X, User, Phone, Mail, MapPin, ShieldCheck, ShieldAlert, Briefcase, Calendar,
   Wallet, Award, FileText, CheckCircle2, XCircle, Clock, Star, Video,
   Send, Eye, Sparkles, Building2
 } from 'lucide-react'
@@ -33,7 +33,13 @@ export function EnterpriseCandidateProfileDrawer({ application, onClose, onSched
 
   const handleMarkJoined = async () => {
     try {
-      await markJoined({ applicationId: application._id }).unwrap()
+      await markJoined({
+        applicationId: application._id,
+        joiningDate: application.offerDetails?.joiningDate || application.jobId?.timeline?.expectedJoiningDate || application.jobId?.timeline?.projectStartDate || new Date().toISOString(),
+        siteLocation: application.offerDetails?.location || application.jobId?.locationText || 'Main Site',
+        project: application.jobId?.jobTitle || 'Enterprise Project',
+        department: application.jobId?.department || 'Operations',
+      }).unwrap()
       toast.success(`🎉 Candidate ${worker.fullName || ''} marked as JOINED! Added to Active Workforce.`)
       onClose()
     } catch (err) {

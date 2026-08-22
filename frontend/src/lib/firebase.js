@@ -67,4 +67,14 @@ export const requestForToken = async () => {
   }
 };
 
+/** Invalidate this browser's FCM registration on logout */
+export const revokeFcmToken = async () => {
+  try {
+    if (!messaging) return;
+    await deleteToken(messaging);
+  } catch (err) {
+    console.warn('Could not revoke FCM token locally:', err?.message || err);
+  }
+};
+
 export { messaging, app };

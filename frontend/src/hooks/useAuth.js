@@ -49,11 +49,21 @@ export function useAuth() {
 
         if (activeToken) {
           const { apiClient } = await import('../api/http.js')
+          // Remove only this device's token — do not clearAll (that wipes mobile tokens too)
           await apiClient.post(
             '/users/me/fcm-token/remove',
-            { token: fcmToken || undefined, clearAll: true },
+            fcmToken ? { token: fcmToken } : { clearAll: true },
             { headers: { Authorization: `Bearer ${activeToken}` } }
           ).catch(err => console.error('Failed to remove FCM token from backend:', err))
+        }
+
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+          try {
+            const { revokeFcmToken } = await import('../lib/firebase.js')
+            await revokeFcmToken()
+          } catch (e) {
+            console.warn('Could not revoke local FCM token:', e)
+          }
         }
       } catch (err) {
         console.error('Failed to remove FCM token on logout', err)

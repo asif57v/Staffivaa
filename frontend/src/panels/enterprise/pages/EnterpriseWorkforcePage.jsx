@@ -19,6 +19,10 @@ function MarkJoinedModal({ joining, onClose }) {
   const [joiningDate, setJoiningDate] = useState(
     joining?.offerDetails?.joiningDate
       ? new Date(joining.offerDetails.joiningDate).toISOString().split('T')[0]
+      : joining?.jobId?.timeline?.expectedJoiningDate
+      ? new Date(joining.jobId.timeline.expectedJoiningDate).toISOString().split('T')[0]
+      : joining?.jobId?.timeline?.projectStartDate
+      ? new Date(joining.jobId.timeline.projectStartDate).toISOString().split('T')[0]
       : new Date().toISOString().split('T')[0]
   )
   const [siteLocation, setSiteLocation] = useState(joining?.offerDetails?.location || 'Main Project Site')

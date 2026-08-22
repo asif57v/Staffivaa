@@ -17,6 +17,18 @@ export function IncomingJobPopup({
   const [exiting, setExiting] = useState(false)
   const audioRef = useRef(null)
   const timerRef = useRef(null)
+  const jobIdRef = useRef(job?.assignmentId)
+
+  // Reset timer + animation whenever a new job offer arrives
+  useEffect(() => {
+    const nextId = job?.assignmentId
+    if (!nextId) return
+    if (jobIdRef.current !== nextId) {
+      jobIdRef.current = nextId
+      setExiting(false)
+    }
+    setTimeLeft(job?.timeoutSeconds || 90)
+  }, [job?.assignmentId, job?.timeoutSeconds])
 
   // Audio playback removed as requested
   useEffect(() => {
@@ -33,7 +45,7 @@ export function IncomingJobPopup({
 
   // Countdown timer
   useEffect(() => {
-    setTimeLeft(totalSeconds)
+    if (timerRef.current) clearInterval(timerRef.current)
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -47,7 +59,7 @@ export function IncomingJobPopup({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [totalSeconds])
+  }, [job?.assignmentId, totalSeconds])
 
   // Auto-dismiss on timeout
   useEffect(() => {

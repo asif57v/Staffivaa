@@ -1641,18 +1641,28 @@ export const markWorkerJoined = asyncHandler(async (req, res) => {
   const application = await EnterpriseApplication.findOne({
     _id: req.params.id,
     enterpriseId: req.user._id,
-  })
+  }).populate('jobId')
 
   if (!application) {
     return sendError(res, { message: 'Application not found', statusCode: HTTP_STATUS.NOT_FOUND })
   }
 
+  const effectiveJoiningDate = joiningDate
+    ? new Date(joiningDate)
+    : application.offerDetails?.joiningDate
+    ? new Date(application.offerDetails.joiningDate)
+    : application.jobId?.timeline?.expectedJoiningDate
+    ? new Date(application.jobId.timeline.expectedJoiningDate)
+    : application.jobId?.timeline?.projectStartDate
+    ? new Date(application.jobId.timeline.projectStartDate)
+    : new Date()
+
   application.joiningDetails = {
-    joiningDate: joiningDate ? new Date(joiningDate) : new Date(),
-    siteLocation: siteLocation || application.offerDetails?.location || 'Main Site',
+    joiningDate: effectiveJoiningDate,
+    siteLocation: siteLocation || application.offerDetails?.location || application.jobId?.locationText || 'Main Site',
     reportingManager,
-    project,
-    department,
+    project: project || application.jobId?.jobTitle || 'Enterprise Project',
+    department: department || application.jobId?.department || 'Operations',
     supervisor,
     markedJoinedAt: new Date(),
   }

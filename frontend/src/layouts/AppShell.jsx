@@ -40,6 +40,7 @@ import {
   cancelActiveLiveBookings,
   WORKER_CANCELLED_BOOKING_EVENT,
 } from '../lib/individualBookings.js'
+import { readLabourPresenceOnline } from '../hooks/useLabourPresence.js'
 
 export function AppShell() {
   const { pathname, search } = useLocation()
@@ -138,6 +139,48 @@ export function AppShell() {
       .catch(() => {});
   }, [dispatch]);
 
+  /** Show Accept/Decline popup for a new job offer (socket, push, or API resync). */
+  const presentIncomingJobOffer = useCallback((data) => {
+    if (!data) return;
+    const assignmentId = data.assignmentId || data.relatedId;
+    if (!assignmentId) return;
+
+    const aid = String(assignmentId);
+    dismissedAssignmentsRef.current.delete(aid);
+
+    if (!readLabourPresenceOnline()) {
+      dispatchAlert(
+        'New Job Opportunity',
+        `${data.categoryName || 'Work'} requested nearby. Go ONLINE to accept.`,
+        false,
+      );
+      return;
+    }
+
+    const popup = {
+      assignmentId: aid,
+      type: data.type || 'new_order',
+      requestId: data.requestId ? String(data.requestId) : '',
+      clientName: data.clientName || 'Customer',
+      locationText: data.locationText || '',
+      categoryName: data.categoryName || 'Worker',
+      perDayRate: data.perDayRate || 800,
+      startDate: data.startDate,
+      shiftStart: data.shiftStart || '',
+      shiftEnd: data.shiftEnd || '',
+      timeoutSeconds: data.timeoutSeconds || 90,
+    };
+
+    setIncomingJob(popup);
+    incomingJobRef.current = popup;
+  }, [dispatchAlert]);
+
+  const scheduleIncomingJobFromNotification = useCallback((relatedId) => {
+    if (!relatedId || user?.role !== USER_ROLES.LABOUR) return;
+    dismissedAssignmentsRef.current.delete(String(relatedId));
+    dispatch(workforceApi.util.invalidateTags(['Assignments']));
+  }, [dispatch, user?.role]);
+
   // --- Socket.IO Real-time Implementation ---
   useEffect(() => {
     if (!user || !token) return;
@@ -170,13 +213,11 @@ export function AppShell() {
 
     const handleAssignmentAssigned = (data) => {
       console.log('[Socket] assignment_assigned event received:', data);
-      
-      // Handle the rich popup payload
+
       if (data.requestId && (data.type === 'new_order' || data.type === 'NEW_ORDER')) {
-        setIncomingJob(data);
-        incomingJobRef.current = data;
+        presentIncomingJobOffer(data);
       }
-      
+
       invalidateCache();
     };
 
@@ -208,6 +249,11 @@ export function AppShell() {
     socket.on('request_cancelled', handleAssignmentEnded);
 
     const handleNewNotif = (notification) => {
+      const notifType = String(notification?.type || '').toUpperCase();
+      if (notifType === 'NEW_ORDER') {
+        scheduleIncomingJobFromNotification(notification.relatedId);
+      }
+
       // Ring sound is handled exclusively by assignment_assigned and incomingJob popup state.
       // Show in-app alert toast for all notifications
       dispatchAlert(notification.title || 'New Notification', notification.body || notification.message || '', false);
@@ -327,14 +373,14 @@ export function AppShell() {
       socket.off('bookingCancelledByLabour', handleLabourCancelled);
       socket.off('bookingExpired', handleBookingExpired);
     };
-  }, [user, token, dispatch]);
+  }, [user, token, dispatch, presentIncomingJobOffer, scheduleIncomingJobFromNotification, dispatchAlert, refreshAppUser, stopGlobalRingSound]);
   // ------------------------------------------
 
   // --- Auto-resync pending job offer card from API data (handles background kill / app restart) ---
   useEffect(() => {
     if (!isLabour || !apiData?.assignments) return
 
-    const pendingOffer = apiData.assignments.find((a) => {
+    const pendingOffers = apiData.assignments.filter((a) => {
       if (a.status !== 'offered') return false
       if (dismissedAssignmentsRef.current.has(String(a._id))) return false
 
@@ -349,6 +395,12 @@ export function AppShell() {
 
       return true
     })
+
+    const pendingOffer = pendingOffers.sort((a, b) => {
+      const aTime = new Date(a.offeredAt || a.createdAt || 0).getTime()
+      const bTime = new Date(b.offeredAt || b.createdAt || 0).getTime()
+      return bTime - aTime
+    })[0]
 
     if (pendingOffer) {
       const req = pendingOffer.requestId
@@ -369,10 +421,9 @@ export function AppShell() {
         timeoutSeconds: remainingSeconds,
       }
 
-      if (!incomingJobRef.current || incomingJobRef.current.assignmentId !== pendingOffer._id) {
+      if (readLabourPresenceOnline() && (!incomingJobRef.current || incomingJobRef.current.assignmentId !== String(pendingOffer._id))) {
         console.log('[AppShell] Resyncing active job offer card from API data:', popupJob)
-        setIncomingJob(popupJob)
-        incomingJobRef.current = popupJob
+        presentIncomingJobOffer(popupJob)
       }
     } else {
       if (incomingJobRef.current && incomingJobRef.current.assignmentId) {
@@ -386,7 +437,7 @@ export function AppShell() {
         }
       }
     }
-  }, [isLabour, apiData])
+  }, [isLabour, apiData, presentIncomingJobOffer])
 
   useEffect(() => {
     if (user?.role !== USER_ROLES.INDIVIDUAL) return undefined
@@ -400,8 +451,12 @@ export function AppShell() {
 
   // --- Incoming Job Popup Handlers ---
   const handlePopupAccept = useCallback(async () => {
-    stopGlobalRingSound();
     if (!incomingJob?.assignmentId) return;
+    if (!readLabourPresenceOnline()) {
+      dispatchAlert('You are Offline', 'Please turn ON your status from Home screen to accept this job.', true);
+      return;
+    }
+    stopGlobalRingSound();
     setIsAcceptingPopup(true);
     try {
       const loc = readAppUserLocation();
@@ -452,15 +507,21 @@ export function AppShell() {
     incomingJobRef.current = null;
   }, [incomingJob, respondAssignment, stopGlobalRingSound]);
 
-  const handlePopupTimeout = useCallback(() => {
+  const handlePopupTimeout = useCallback(async () => {
     stopGlobalRingSound();
-    if (incomingJob?.assignmentId) {
-      dismissedAssignmentsRef.current.add(String(incomingJob.assignmentId));
+    const assignmentId = incomingJob?.assignmentId;
+    if (assignmentId) {
+      dismissedAssignmentsRef.current.add(String(assignmentId));
+      try {
+        await respondAssignment({ id: assignmentId, action: 'decline' }).unwrap();
+      } catch (e) {
+        console.error('Popup timeout decline error:', e);
+      }
     }
     setIncomingJob(null);
     incomingJobRef.current = null;
     dispatchAlert('Missed Opportunity', 'Job request timed out.', true);
-  }, [incomingJob, dispatchAlert, stopGlobalRingSound]);
+  }, [incomingJob, respondAssignment, dispatchAlert, stopGlobalRingSound]);
   // ------------------------------------------
 
   // ------------------------------------------
@@ -565,6 +626,9 @@ export function AppShell() {
       const notifType = payload?.data?.type;
       if (String(notifType || '').toUpperCase() === 'NEW_ORDER' || payload?.data?.sound === 'new_job_order') {
         playNewJobRingSound();
+        if (user?.role === USER_ROLES.LABOUR && payload?.data?.relatedId) {
+          scheduleIncomingJobFromNotification(payload.data.relatedId);
+        }
       }
 
       dispatchAlert(displayTitle, displayBody, false);
@@ -602,7 +666,7 @@ export function AppShell() {
         navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
       }
     };
-  }, [user, token]);
+  }, [user, token, playNewJobRingSound, scheduleIncomingJobFromNotification, dispatchAlert, refreshAppUser, dispatch]);
   // ---------------------------
 
   const { data: notifData } = workforceApi.useGetNotificationsQuery(undefined, { skip: !user })
@@ -1125,6 +1189,7 @@ export function AppShell() {
       {/* Rapido-style Incoming Job Popup (Global for Workers) */}
       {incomingJob && isLabour && (
         <IncomingJobPopup
+          key={String(incomingJob.assignmentId)}
           job={incomingJob}
           onAccept={handlePopupAccept}
           onDecline={handlePopupDecline}

@@ -241,6 +241,14 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
   const assignment = await Assignment.findOne({ _id: req.params.id, labourId: req.user._id })
   if (!assignment) return sendError(res, { message: 'Not found', statusCode: HTTP_STATUS.NOT_FOUND })
   if (action === 'accept') {
+    const labourUser = await User.findById(req.user._id)
+    if (labourUser?.labourProfile?.availabilityStatus === 'offline') {
+      return sendError(res, {
+        message: 'You are currently OFFLINE. Please switch to ONLINE status from your Home screen to accept job requests.',
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+      })
+    }
+
     const activeAssignments = await Assignment.find({
       labourId: req.user._id,
       status: { $in: [ASSIGNMENT_STATUS.ACCEPTED, ASSIGNMENT_STATUS.ON_SITE] },

@@ -34,6 +34,7 @@ import {
   subscribeJobDemo,
 } from '../../lib/labourJobDemoStorage.js'
 import { loadRazorpayScript } from '../../lib/razorpay.js'
+import { readLabourPresenceOnline } from '../../hooks/useLabourPresence.js'
 
 function isApiAssignment(job) {
   return Boolean(job?.requestId) && /^[a-f0-9]{24}$/i.test(String(job.id))
@@ -245,6 +246,10 @@ export function AppJobsPage() {
 
   const handleConfirmAccept = async (offer) => {
     if (!kycOk) return
+    if (!readLabourPresenceOnline()) {
+      showToast('You are currently OFFLINE. Please turn ON your status from Home screen to accept this job.')
+      return
+    }
     if (isApiAssignment(offer)) {
       try {
         const loc = readAppUserLocation()

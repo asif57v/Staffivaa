@@ -267,9 +267,10 @@ export const createRequest = asyncHandler(async (req, res) => {
   if (sourceType === REQUEST_SOURCE.INDIVIDUAL && parsedLines?.length > 0) {
     const categoryId = parsedLines[0].categoryId
 
-    // 1. Fetch candidate workers matching skill or general labour role
+    // 1. Fetch candidate workers matching skill or general labour role (including offline for push notifications)
     let candidates = await User.find({
       role: USER_ROLES.LABOUR,
+      isActive: true,
       $or: [
         ...(categoryId ? [{ 'labourProfile.categoryIds': categoryId }, { 'labourProfile.categoryIds': categoryId.toString() }] : []),
         { 'labourProfile.categoryIds': { $size: 0 } },
@@ -281,7 +282,7 @@ export const createRequest = asyncHandler(async (req, res) => {
     if (!candidates || candidates.length === 0) {
       candidates = await User.find({
         role: USER_ROLES.LABOUR,
-        isActive: true
+        isActive: true,
       }).limit(50)
     }
 
