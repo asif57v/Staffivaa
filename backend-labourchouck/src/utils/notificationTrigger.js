@@ -13,7 +13,17 @@ function normalizeNotifType(type) {
  * Create in-app notification + socket + FCM with dedicated title/body/type.
  * @param {{ userId?: string, title: string, body: string, type?: string, relatedId?: any, relatedModel?: string, url?: string, recipientRole?: string }} args
  */
-export const triggerNotification = async ({ userId, title, body, type, relatedId, relatedModel, url, recipientRole }) => {
+export const triggerNotification = async ({
+  userId,
+  title,
+  body,
+  type,
+  relatedId,
+  relatedModel,
+  url,
+  recipientRole,
+  pushData = {},
+}) => {
   try {
     const resolvedType = normalizeNotifType(type)
     let resolvedRole = recipientRole || ''
@@ -148,6 +158,7 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
           relatedModel: relatedModel || '',
           url: resolvedUrl || '',
           recipientRole: resolvedRole || '',
+          ...pushData,
         });
       } catch (err) {
         console.error('[FCM Push Error]:', err.message);
@@ -166,6 +177,7 @@ export const triggerNotification = async ({ userId, title, body, type, relatedId
           relatedModel: relatedModel || '',
           url: url || '',
           recipientRole: recipientRole || '',
+          ...pushData,
         });
       } catch (fcmErr) {
         console.error('[NotificationTrigger] FCM fallback also failed:', fcmErr.message);

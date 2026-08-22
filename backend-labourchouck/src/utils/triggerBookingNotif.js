@@ -11,13 +11,21 @@ export async function triggerBookingNotif({ userId, copy, relatedId, relatedMode
 
   const user = await User.findById(userId).select('role').lean()
   const role = user?.role || 'individual'
+  const resolvedRequestId =
+    requestId || (relatedModel === 'WorkforceRequest' ? relatedId : undefined)
   const resolvedUrl =
     url ||
     notificationUrlFor({
       role,
       type: copy.type,
-      requestId: requestId || (relatedModel === 'WorkforceRequest' ? relatedId : undefined),
+      requestId: resolvedRequestId,
+      assignmentId: relatedModel === 'Assignment' ? relatedId : undefined,
     })
+
+  const pushData = {
+    requestId: resolvedRequestId ? String(resolvedRequestId) : '',
+    assignmentId: relatedModel === 'Assignment' && relatedId ? String(relatedId) : '',
+  }
 
   return triggerNotification({
     userId,
@@ -28,5 +36,6 @@ export async function triggerBookingNotif({ userId, copy, relatedId, relatedMode
     relatedModel,
     url: resolvedUrl,
     recipientRole: role,
+    pushData,
   })
 }

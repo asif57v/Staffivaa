@@ -30,6 +30,7 @@ import {
 } from '../utils/bookingNotificationCopy.js'
 import { SystemSettings } from '../models/SystemSettings.js'
 import LocationMatchingService from '../services/LocationMatchingService.js'
+import { matchWorkersForNewJobOffer } from '../utils/workerMatching.js'
 
 function parseLines(lines) {
   if (!Array.isArray(lines) || !lines.length) return null
@@ -288,27 +289,7 @@ export const createRequest = asyncHandler(async (req, res) => {
 
     let matchingWorkers = candidates
     if (request.locationLat && request.locationLng && candidates.length > 0) {
-      const filteredByDistance = candidates.filter((w) => {
-        if (!w.labourProfile || !w.labourProfile.locationLat || !w.labourProfile.locationLng) {
-          return false
-        }
-        const radius = w.labourProfile.workRadius || 15
-        const R = 6371
-        const dLat = (w.labourProfile.locationLat - request.locationLat) * (Math.PI / 180)
-        const dLon = (w.labourProfile.locationLng - request.locationLng) * (Math.PI / 180)
-        const a =
-          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos(request.locationLat * (Math.PI / 180)) *
-            Math.cos(w.labourProfile.locationLat * (Math.PI / 180)) *
-            Math.sin(dLon / 2) *
-            Math.sin(dLon / 2)
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        return R * c <= radius
-      })
-
-      if (filteredByDistance.length > 0) {
-        matchingWorkers = filteredByDistance
-      }
+      matchingWorkers = matchWorkersForNewJobOffer(candidates, request.locationLat, request.locationLng)
     }
 
     if (matchingWorkers.length > 0) {
@@ -368,6 +349,11 @@ export const createRequest = asyncHandler(async (req, res) => {
             console.error('[Notification Error for worker]:', assignment.labourId, err.message)
           }
         })
+      )
+    } else {
+      console.warn(
+        `[createRequest] No matching workers for NEW_ORDER on request ${request._id} ` +
+          `(candidates=${candidates.length}, hasLocation=${request.locationLat != null})`,
       )
     }
   }
