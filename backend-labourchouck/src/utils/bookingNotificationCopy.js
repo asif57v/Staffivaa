@@ -56,9 +56,12 @@ export function bookingCreatedNotif(reference) {
 }
 
 export function newJobOfferNotif({ customerName, categoryName, locationText }) {
+  const area = String(locationText || 'your area').trim()
+  // Keep tray body short — full address is still sent in FCM data.locationText.
+  const shortArea = area.length > 48 ? `${area.slice(0, 47)}…` : area
   return {
     title: 'New Job Available!',
-    body: `${customerName || 'A customer'} needs a ${categoryName || 'worker'} near ${locationText || 'your area'}. Tap to view.`,
+    body: `${customerName || 'A customer'} needs a ${categoryName || 'worker'} near ${shortArea}. Tap to view.`,
     type: NOTIF_TYPE.NEW_ORDER,
   }
 }

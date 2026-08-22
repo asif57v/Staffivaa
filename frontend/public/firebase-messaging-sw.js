@@ -19,14 +19,26 @@ messaging.onBackgroundMessage(function(payload) {
   console.log('[firebase-messaging-sw.js] Received background message ', payload);
   const data = payload.data || {};
   const notificationTitle = data.title || payload.notification?.title || 'Staffivaa';
-  const notificationOptions = {
-    body: data.body || data.message || payload.notification?.body || '',
+  const notificationBody = data.body || data.message || payload.notification?.body || '';
+  const notifType = String(data.type || '').toUpperCase();
+  const isJobAlert = notifType === 'NEW_ORDER' || notifType === 'BOOKING_CREATED';
+
+  // If FCM already attached a `notification` payload, the browser may display it
+  // automatically. Still call showNotification for data-only / OEM cases so the
+  // tray is never empty on mobile Chrome.
+  return self.registration.showNotification(notificationTitle, {
+    body: notificationBody,
     icon: '/logo.png',
     badge: '/favicon.svg',
-    data: { ...data, title: notificationTitle, body: data.body || data.message || payload.notification?.body || '' }
-  };
-
-  self.registration.showNotification(notificationTitle, notificationOptions);
+    tag: 'staffivaa-notif-' + String(data.relatedId || data.assignmentId || data.type || notificationTitle),
+    renotify: true,
+    requireInteraction: isJobAlert,
+    data: {
+      ...data,
+      title: notificationTitle,
+      body: notificationBody,
+    },
+  });
 });
 
 self.addEventListener('notificationclick', function(event) {
@@ -37,7 +49,6 @@ self.addEventListener('notificationclick', function(event) {
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
       for (let i = 0; i < windowClients.length; i++) {
         const client = windowClients[i];
-        // If app is already open, focus it and navigate
         if (client.url.includes(self.registration.scope) && 'focus' in client) {
           client.focus();
           client.postMessage({
@@ -47,7 +58,6 @@ self.addEventListener('notificationclick', function(event) {
           return;
         }
       }
-      // Open new window if not already open
       if (clients.openWindow) {
         return clients.openWindow(targetUrl);
       }

@@ -20,7 +20,7 @@ import { AppBottomNav } from '../components/app-ui/navigation/AppBottomNav.jsx'
 import { AppBadge } from '../components/app-ui/data-display/AppBadge.jsx'
 import { adminInitials } from '../lib/formatAdminLastLogin.js'
 import { listenForNativeFcmToken, syncPushToken } from '../lib/pushSync.js'
-import { isNativeShell, notifyNativeShell } from '../lib/nativePushBridge.js'
+import { notifyNativeShell } from '../lib/nativePushBridge.js'
 import { readAppUserLocation, parseAppUserLocation, autoFetchLiveLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { APP_HOME_LOCATION, APP_HOME_PATH, hasBookingFlowQuery } from '../lib/bookingFlowNavigation.js'
@@ -601,9 +601,9 @@ export function AppShell() {
       // so the tray notification must be raised here even when another account owns
       // the push — otherwise it is lost entirely on a shared browser.
       notifyNativeShell(displayTitle, displayBody, payload.data || {});
-      if (!isNativeShell()) {
-        showOsNotification(displayTitle, displayBody, payload.data);
-      }
+      // Always try the WebView Notification API too — some OEM WebViews support it
+      // even inside the Flutter shell, and desktop / phone Chrome need it.
+      showOsNotification(displayTitle, displayBody, payload.data);
 
       const isOtherAccount =
         (targetUserId && currentUserId && targetUserId !== currentUserId) ||
