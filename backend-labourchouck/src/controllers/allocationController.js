@@ -22,7 +22,6 @@ import {
   labourReassignedNotif,
   previousAssignmentCancelledNotif,
 } from '../utils/bookingNotificationCopy.js'
-import { matchWorkersForNewJobOffer } from '../utils/workerMatching.js'
 
 export const createAllocationAdmin = asyncHandler(async (req, res) => {
   const { requestId, vendorId, labourIds, notes } = req.body
@@ -562,8 +561,25 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       }
 
       let matchingWorkers = candidates
-      if (request.locationLat && request.locationLng && candidates.length > 0) {
-        matchingWorkers = matchWorkersForNewJobOffer(candidates, request.locationLat, request.locationLng)
+      if (request.locationLat && request.locationLng) {
+        const filteredByDistance = candidates.filter(w => {
+          if (!w.labourProfile || !w.labourProfile.locationLat || !w.labourProfile.locationLng) {
+            return false
+          }
+          const radius = w.labourProfile.workRadius || 15
+          const R = 6371
+          const dLat = (w.labourProfile.locationLat - request.locationLat) * (Math.PI / 180)
+          const dLon = (w.labourProfile.locationLng - request.locationLng) * (Math.PI / 180)
+          const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(request.locationLat * (Math.PI / 180)) * Math.cos(w.labourProfile.locationLat * (Math.PI / 180)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2)
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+          return (R * c) <= radius
+        })
+        if (filteredByDistance.length > 0) {
+          matchingWorkers = filteredByDistance
+        }
       }
 
       if (matchingWorkers.length > 0) {
