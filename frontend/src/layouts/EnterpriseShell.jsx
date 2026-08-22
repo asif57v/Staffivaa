@@ -17,6 +17,7 @@ import {
 import toast from 'react-hot-toast'
 import { scrollToTop } from '../components/navigation/GlobalScrollManager.jsx'
 import { useKeyboardOpen } from '../hooks/useKeyboardOpen.js'
+import { resolvePushDeviceType } from '../lib/pushPlatform.js'
 
 const mobileNavItems = [
   { label: 'Home', icon: LayoutDashboard, path: '/enterprise' },
@@ -124,7 +125,7 @@ export function EnterpriseShell() {
           if (fcmToken) {
             localStorage.setItem('staffivaa_fcm_token', fcmToken)
             const { apiClient } = await import('../api/http.js')
-            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
+            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: resolvePushDeviceType() })
               .catch(err => console.error('Failed to sync FCM token:', err))
           }
         }

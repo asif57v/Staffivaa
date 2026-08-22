@@ -13,6 +13,7 @@ import { GlassPanel } from '../components/ui/GlassPanel.jsx'
 import { AppBottomNav } from '../components/app-ui/navigation/AppBottomNav.jsx'
 import { AppBadge } from '../components/app-ui/data-display/AppBadge.jsx'
 import { adminInitials } from '../lib/formatAdminLastLogin.js'
+import { resolvePushDeviceType } from '../lib/pushPlatform.js'
 import { readAppUserLocation, parseAppUserLocation, autoFetchLiveLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { useVendorNotificationCount } from '../hooks/useVendorNotificationCount.js'
@@ -236,7 +237,7 @@ export function PanelShell({
           if (fcmToken) {
             localStorage.setItem('staffivaa_fcm_token', fcmToken);
             const { apiClient } = await import('../api/http.js');
-            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
+            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: resolvePushDeviceType() })
               .catch(err => console.error('Failed to sync FCM token:', err));
           }
         }

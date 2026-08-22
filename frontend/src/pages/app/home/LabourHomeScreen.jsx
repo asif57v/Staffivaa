@@ -43,6 +43,7 @@ import { LabourProjectEarningsCard } from '../../../components/app/LabourProject
 import { EnterprisePromotionalBanner } from '../../../components/app/EnterprisePromotionalBanner.jsx'
 import { useNow } from '../../../hooks/useNow.js'
 import { formatSecondsAsClock } from '../../../lib/formatDurationClock.js'
+import { resolvePushDeviceType } from '../../../lib/pushPlatform.js'
 import {
   formatAppUserLocationLabel,
   hasAppUserLocation,
@@ -330,7 +331,7 @@ export function LabourHomeScreen({ user }) {
             if (fcmToken) {
               localStorage.setItem('staffivaa_fcm_token', fcmToken)
               const { apiClient } = await import('../../../api/http.js')
-              await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
+              await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: resolvePushDeviceType() })
                 .catch(err => console.error('[LabourHome] Failed to sync FCM token:', err))
             }
           }

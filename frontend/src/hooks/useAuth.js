@@ -3,6 +3,7 @@ import toast from 'react-hot-toast'
 import { clearSession, setCredentials } from '../store/slices/authSlice.js'
 import { baseApi } from '../store/api/baseApi.js'
 import { store } from '../store/index.js'
+import { resolvePushDeviceType } from '../lib/pushPlatform.js'
 
 export function useAuth() {
   const dispatch = useDispatch()
@@ -23,7 +24,7 @@ export function useAuth() {
             if (fcmToken) {
               localStorage.setItem('staffivaa_fcm_token', fcmToken);
               import('../api/http.js').then(({ apiClient }) => {
-                apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' }, {
+                apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: resolvePushDeviceType() }, {
                   headers: { Authorization: `Bearer ${accessToken}` }
                 }).catch(err => console.error('Failed to sync FCM token on login:', err));
               });

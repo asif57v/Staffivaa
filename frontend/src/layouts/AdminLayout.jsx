@@ -22,6 +22,7 @@ import { ADMIN_NAV_SECTIONS, getAdminTitle } from '../config/adminNavigation.js'
 import { appSpring } from '../components/app/appMotion.js'
 import { GlassPanel } from '../components/ui/GlassPanel.jsx'
 import { adminInitials, formatLastLoginDisplay, formatLastLoginRelative } from '../lib/formatAdminLastLogin.js'
+import { resolvePushDeviceType } from '../lib/pushPlatform.js'
 import { useDispatch } from 'react-redux'
 import { connectSocket } from '../services/socket.js'
 import {
@@ -212,7 +213,7 @@ export function AdminLayout() {
           if (fcmToken) {
             localStorage.setItem('staffivaa_fcm_token', fcmToken)
             const { apiClient } = await import('../api/http.js')
-            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
+            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: resolvePushDeviceType() })
               .catch(err => console.error('Failed to sync FCM token:', err))
           }
         }

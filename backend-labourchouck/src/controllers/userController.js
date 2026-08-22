@@ -657,10 +657,32 @@ export const getDiscoverLabour = asyncHandler(async (req, res) => {
   return sendSuccess(res, { data: { labour: detail } })
 })
 
+const MOBILE_DEVICE_TYPES = new Set(['mobile', 'android', 'ios', 'flutter', 'native', 'app'])
+const WEB_DEVICE_TYPES = new Set(['web', 'browser', 'desktop', 'pwa'])
+
+/**
+ * Android WebView tags its user agent with `wv`; iOS WKWebView drops the
+ * `Safari` token that every real iOS browser sends. A phone browser is still
+ * web — only the Flutter wrapper counts as mobile.
+ */
+function isNativeAppUserAgent(ua = '') {
+  const agent = String(ua)
+  if (/\bwv\b|WebView|Flutter|Dart|okhttp/i.test(agent)) return true
+  if (/iPhone|iPad|iPod/i.test(agent)) return !/Safari|CriOS|FxiOS|EdgiOS/i.test(agent)
+  return false
+}
+
+function resolveTokenField(deviceType, userAgent) {
+  const type = String(deviceType || '').trim().toLowerCase()
+  if (MOBILE_DEVICE_TYPES.has(type)) return 'fcmTokensMobile'
+  if (WEB_DEVICE_TYPES.has(type)) return 'fcmTokensWeb'
+  return isNativeAppUserAgent(userAgent) ? 'fcmTokensMobile' : 'fcmTokensWeb'
+}
+
 /** POST /users/me/fcm-token — save FCM token for push notifications */
 export const saveFcmToken = asyncHandler(async (req, res) => {
   const { token, deviceType } = req.body
-  if (!token || typeof token !== 'string') {
+  if (!token || typeof token !== 'string' || !token.trim()) {
     return sendError(res, {
       message: 'FCM token is required',
       statusCode: HTTP_STATUS.BAD_REQUEST,
@@ -668,17 +690,9 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
     })
   }
 
-  // Determine platform classification by deviceType from client
-  let targetField = 'fcmTokensMobile'; // default to mobile if not specified
-  if (deviceType === 'web') {
-    targetField = 'fcmTokensWeb';
-  } else if (deviceType === 'mobile' || deviceType === 'android' || deviceType === 'ios') {
-    targetField = 'fcmTokensMobile';
-  } else {
-    // Fallback if client doesn't send deviceType
-    const isApp = req.user.role !== 'admin';
-    targetField = isApp ? 'fcmTokensMobile' : 'fcmTokensWeb';
-  }
+  const cleanToken = token.trim()
+  const targetField = resolveTokenField(deviceType, req.headers['user-agent'])
+  const oppositeField = targetField === 'fcmTokensMobile' ? 'fcmTokensWeb' : 'fcmTokensMobile'
 
   // Retrieve user document to mutate token array safely (using lean to bypass version tracking)
   const user = await User.findById(req.user._id).lean()
@@ -692,17 +706,23 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
   let tokens = user[targetField] || []
   
   // Prevent duplicate and place at the end (most recent)
-  tokens = tokens.filter(t => t !== token)
-  tokens.push(token)
+  tokens = tokens.filter(t => t !== cleanToken)
+  tokens.push(cleanToken)
 
   // Cap at 5 most recent tokens to prevent database array bloat
   if (tokens.length > 5) {
     tokens.shift()
   }
 
+  // A device that switches shells (mobile browser → app, or vice versa) can
+  // report the same token under a new platform, so drop the stale copy instead
+  // of leaving it in both buckets.
   await User.updateOne(
     { _id: req.user._id },
-    { $set: { [targetField]: tokens } }
+    {
+      $set: { [targetField]: tokens },
+      $pull: { [oppositeField]: cleanToken },
+    }
   )
 
   // A browser exposes one FCM token per device, so a customer and a worker signed in
@@ -710,7 +730,7 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
   // that silently leaves the other role with zero tokens. Recipients are separated by
   // `targetUserId`/`recipientRole` in the payload, and logout clears this user's tokens.
   console.log(
-    `[FCM] Role=${req.user.role} user=${req.user._id} → ${targetField}`
+    `[FCM] Role=${req.user.role} user=${req.user._id} deviceType=${deviceType || 'auto'} → ${targetField}`
   )
 
   const isMobileField = targetField === 'fcmTokensMobile'

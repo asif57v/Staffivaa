@@ -19,6 +19,7 @@ import { GlassPanel } from '../components/ui/GlassPanel.jsx'
 import { AppBottomNav } from '../components/app-ui/navigation/AppBottomNav.jsx'
 import { AppBadge } from '../components/app-ui/data-display/AppBadge.jsx'
 import { adminInitials } from '../lib/formatAdminLastLogin.js'
+import { resolvePushDeviceType } from '../lib/pushPlatform.js'
 import { readAppUserLocation, parseAppUserLocation, autoFetchLiveLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { APP_HOME_LOCATION, APP_HOME_PATH, hasBookingFlowQuery } from '../lib/bookingFlowNavigation.js'
@@ -551,7 +552,7 @@ export function AppShell() {
             // Claim token for current role (labour vs individual)
             await apiClient.post('/users/me/fcm-token', {
               token: fcmToken,
-              deviceType: 'web',
+              deviceType: resolvePushDeviceType(),
               role: user?.role,
             }).catch(err => console.error('Failed to sync FCM token:', err));
           }
