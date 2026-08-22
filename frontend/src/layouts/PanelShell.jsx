@@ -13,7 +13,7 @@ import { GlassPanel } from '../components/ui/GlassPanel.jsx'
 import { AppBottomNav } from '../components/app-ui/navigation/AppBottomNav.jsx'
 import { AppBadge } from '../components/app-ui/data-display/AppBadge.jsx'
 import { adminInitials } from '../lib/formatAdminLastLogin.js'
-import { resolvePushDeviceType } from '../lib/pushPlatform.js'
+import { listenForNativeFcmToken, syncPushToken } from '../lib/pushSync.js'
 import { readAppUserLocation, parseAppUserLocation, autoFetchLiveLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { useVendorNotificationCount } from '../hooks/useVendorNotificationCount.js'
@@ -221,32 +221,18 @@ export function PanelShell({
   useEffect(() => {
     if (!user || !token) return;
 
-    const syncFcmToken = async () => {
-      try {
-        if (typeof window === 'undefined' || !('Notification' in window)) {
-          console.warn('Notifications not supported in this environment.');
-          return;
-        }
-        let permission = window.Notification.permission;
-        if (permission === 'default') {
-          permission = await window.Notification.requestPermission();
-        }
-        if (permission === 'granted') {
-          const { requestForToken } = await import('../lib/firebase.js');
-          const fcmToken = await requestForToken();
-          if (fcmToken) {
-            localStorage.setItem('staffivaa_fcm_token', fcmToken);
-            const { apiClient } = await import('../api/http.js');
-            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: resolvePushDeviceType() })
-              .catch(err => console.error('Failed to sync FCM token:', err));
-          }
-        }
-      } catch (err) {
-        console.error('Firebase not available in PanelShell:', err);
-      }
-    };
+    syncPushToken({ accessToken: token, role: user?.role, userId: user?._id }).catch((err) =>
+      console.error('FCM sync failed in PanelShell:', err),
+    );
 
-    syncFcmToken();
+    const stopNativeListener = listenForNativeFcmToken(() => {
+      syncPushToken({
+        accessToken: token,
+        role: user?.role,
+        userId: user?._id,
+        force: true,
+      }).catch((err) => console.error('FCM native sync failed in PanelShell:', err));
+    });
 
     const handleFcmMessage = (event) => {
       const payload = event.detail;
@@ -295,12 +281,13 @@ export function PanelShell({
     }
 
     return () => {
+      stopNativeListener();
       window.removeEventListener('fcm-foreground-message', handleFcmMessage);
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
       }
     };
-  }, [user, token, navigate]);
+  }, [user?._id, user?.role, token, navigate]);
 
   const title = getTitle(pathname)
   const drawerInitials = adminInitials(user)

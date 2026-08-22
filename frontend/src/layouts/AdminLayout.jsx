@@ -22,7 +22,7 @@ import { ADMIN_NAV_SECTIONS, getAdminTitle } from '../config/adminNavigation.js'
 import { appSpring } from '../components/app/appMotion.js'
 import { GlassPanel } from '../components/ui/GlassPanel.jsx'
 import { adminInitials, formatLastLoginDisplay, formatLastLoginRelative } from '../lib/formatAdminLastLogin.js'
-import { resolvePushDeviceType } from '../lib/pushPlatform.js'
+import { listenForNativeFcmToken, syncPushToken } from '../lib/pushSync.js'
 import { useDispatch } from 'react-redux'
 import { connectSocket } from '../services/socket.js'
 import {
@@ -195,34 +195,20 @@ export function AdminLayout() {
 
   // --- FCM Token Auto-sync & Foreground Listener ---
   useEffect(() => {
-    if (!user) return
+    if (!user || !token) return
 
-    const syncFcmToken = async () => {
-      try {
-        if (typeof window === 'undefined' || !('Notification' in window)) {
-          console.warn('Notifications not supported in this environment.')
-          return
-        }
-        let permission = window.Notification.permission
-        if (permission === 'default') {
-          permission = await window.Notification.requestPermission()
-        }
-        if (permission === 'granted') {
-          const { requestForToken } = await import('../lib/firebase.js')
-          const fcmToken = await requestForToken()
-          if (fcmToken) {
-            localStorage.setItem('staffivaa_fcm_token', fcmToken)
-            const { apiClient } = await import('../api/http.js')
-            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: resolvePushDeviceType() })
-              .catch(err => console.error('Failed to sync FCM token:', err))
-          }
-        }
-      } catch (err) {
-        console.error('Firebase not available in AdminLayout:', err)
-      }
-    }
+    syncPushToken({ accessToken: token, role: user?.role, userId: user?._id }).catch((err) =>
+      console.error('FCM sync failed in AdminLayout:', err),
+    )
 
-    syncFcmToken()
+    const stopNativeListener = listenForNativeFcmToken(() => {
+      syncPushToken({
+        accessToken: token,
+        role: user?.role,
+        userId: user?._id,
+        force: true,
+      }).catch((err) => console.error('FCM native sync failed in AdminLayout:', err))
+    })
 
     const handleFcmMessage = (event) => {
       const payload = event.detail
@@ -260,12 +246,13 @@ export function AdminLayout() {
     }
 
     return () => {
+      stopNativeListener()
       window.removeEventListener('fcm-foreground-message', handleFcmMessage)
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage)
       }
     }
-  }, [user?._id, navigate])
+  }, [user?._id, user?.role, token, navigate])
   useEffect(() => {
     function handlePointerDown(e) {
       if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false)

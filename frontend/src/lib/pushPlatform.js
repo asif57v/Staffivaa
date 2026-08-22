@@ -23,6 +23,14 @@ function persistNativeFlag() {
   }
 }
 
+function clearNativeFlag() {
+  try {
+    localStorage.removeItem(NATIVE_FLAG_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Globals and message channels injected by the Flutter wrapper. */
 function hasNativeBridge() {
   return Boolean(
@@ -46,7 +54,7 @@ function hasNativeUrlMarker() {
  * Android WebView tags its user agent with `wv`; iOS WKWebView drops the
  * `Safari` token that mobile Safari and Chrome/Firefox on iOS always send.
  */
-function isWebViewUserAgent() {
+export function isWebViewUserAgent() {
   const ua = navigator.userAgent || ''
   if (/\bwv\b|WebView|Flutter|Dart|okhttp/i.test(ua)) return true
   if (/iPhone|iPad|iPod/i.test(ua)) {
@@ -63,14 +71,14 @@ export function isNativeAppShell() {
     persistNativeFlag()
     return true
   }
-  // Flutter injects its globals after the first paint, so an early sync could
-  // otherwise classify the wrapper as a browser on subsequent reloads.
-  if (readPersistedNativeFlag()) return true
 
   if (isWebViewUserAgent()) {
     persistNativeFlag()
     return true
   }
+
+  // A flag left over from an old WebView session must not block browser FCM sync.
+  if (readPersistedNativeFlag()) clearNativeFlag()
   return false
 }
 

@@ -694,52 +694,41 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
   const targetField = resolveTokenField(deviceType, req.headers['user-agent'])
   const oppositeField = targetField === 'fcmTokensMobile' ? 'fcmTokensWeb' : 'fcmTokensMobile'
 
-  // Retrieve user document to mutate token array safely (using lean to bypass version tracking)
-  const user = await User.findById(req.user._id).lean()
-  if (!user) {
+  // Atomic update — avoids parallel read-modify-write races that drop tokens.
+  await User.updateOne(
+    { _id: req.user._id },
+    { $pull: { [targetField]: cleanToken, [oppositeField]: cleanToken } },
+  )
+
+  const updated = await User.findByIdAndUpdate(
+    req.user._id,
+    { $push: { [targetField]: { $each: [cleanToken], $slice: -5 } } },
+    { new: true, select: 'fcmTokensWeb fcmTokensMobile role' },
+  )
+
+  if (!updated) {
     return sendError(res, {
       message: 'User not found',
-      statusCode: HTTP_STATUS.NOT_FOUND
+      statusCode: HTTP_STATUS.NOT_FOUND,
     })
   }
 
-  let tokens = user[targetField] || []
-  
-  // Prevent duplicate and place at the end (most recent)
-  tokens = tokens.filter(t => t !== cleanToken)
-  tokens.push(cleanToken)
-
-  // Cap at 5 most recent tokens to prevent database array bloat
-  if (tokens.length > 5) {
-    tokens.shift()
-  }
-
-  // A device that switches shells (mobile browser → app, or vice versa) can
-  // report the same token under a new platform, so drop the stale copy instead
-  // of leaving it in both buckets.
-  await User.updateOne(
-    { _id: req.user._id },
-    {
-      $set: { [targetField]: tokens },
-      $pull: { [oppositeField]: cleanToken },
-    }
-  )
-
-  // A browser exposes one FCM token per device, so a customer and a worker signed in
-  // on the same device legitimately share it. Do not detach it from other accounts —
-  // that silently leaves the other role with zero tokens. Recipients are separated by
-  // `targetUserId`/`recipientRole` in the payload, and logout clears this user's tokens.
   console.log(
-    `[FCM] Role=${req.user.role} user=${req.user._id} deviceType=${deviceType || 'auto'} → ${targetField}`
+    `[FCM] Saved user=${req.user._id} role=${req.user.role} deviceType=${deviceType || 'auto'} ` +
+      `field=${targetField} web=${updated.fcmTokensWeb?.length || 0} mobile=${updated.fcmTokensMobile?.length || 0}`,
   )
 
   const isMobileField = targetField === 'fcmTokensMobile'
-  return sendSuccess(res, { 
+  return sendSuccess(res, {
     message: `FCM Token saved for role ${req.user.role}`,
     data: {
+      userId: String(req.user._id),
       role: req.user.role,
+      field: targetField,
       platform: isMobileField ? 'app' : 'web',
-    }
+      webCount: updated.fcmTokensWeb?.length || 0,
+      mobileCount: updated.fcmTokensMobile?.length || 0,
+    },
   })
 })
 

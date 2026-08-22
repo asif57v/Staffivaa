@@ -17,7 +17,7 @@ import {
 import toast from 'react-hot-toast'
 import { scrollToTop } from '../components/navigation/GlobalScrollManager.jsx'
 import { useKeyboardOpen } from '../hooks/useKeyboardOpen.js'
-import { resolvePushDeviceType } from '../lib/pushPlatform.js'
+import { listenForNativeFcmToken, syncPushToken } from '../lib/pushSync.js'
 
 const mobileNavItems = [
   { label: 'Home', icon: LayoutDashboard, path: '/enterprise' },
@@ -112,29 +112,18 @@ export function EnterpriseShell() {
   useEffect(() => {
     if (!user || !token) return
 
-    const syncFcmToken = async () => {
-      try {
-        if (typeof window === 'undefined' || !('Notification' in window)) return
-        let permission = window.Notification.permission
-        if (permission === 'default') {
-          permission = await window.Notification.requestPermission()
-        }
-        if (permission === 'granted') {
-          const { requestForToken } = await import('../lib/firebase.js')
-          const fcmToken = await requestForToken()
-          if (fcmToken) {
-            localStorage.setItem('staffivaa_fcm_token', fcmToken)
-            const { apiClient } = await import('../api/http.js')
-            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: resolvePushDeviceType() })
-              .catch(err => console.error('Failed to sync FCM token:', err))
-          }
-        }
-      } catch (err) {
-        console.error('Firebase FCM sync error in EnterpriseShell:', err)
-      }
-    }
+    syncPushToken({ accessToken: token, role: user?.role, userId: user?._id }).catch((err) =>
+      console.error('FCM sync failed in EnterpriseShell:', err),
+    )
 
-    syncFcmToken()
+    const stopNativeListener = listenForNativeFcmToken(() => {
+      syncPushToken({
+        accessToken: token,
+        role: user?.role,
+        userId: user?._id,
+        force: true,
+      }).catch((err) => console.error('FCM native sync failed in EnterpriseShell:', err))
+    })
 
     const handleFcmMessage = (event) => {
       const payload = event.detail
@@ -163,9 +152,10 @@ export function EnterpriseShell() {
 
     window.addEventListener('fcm-foreground-message', handleFcmMessage)
     return () => {
+      stopNativeListener()
       window.removeEventListener('fcm-foreground-message', handleFcmMessage)
     }
-  }, [user?._id, token])
+  }, [user?._id, user?.role, token])
 
   const companyName = user?.enterpriseProfile?.companyName || user?.fullName || 'Luminary Corp'
   const companyInitials = companyName.substring(0, 2).toUpperCase()

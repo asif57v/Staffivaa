@@ -19,7 +19,7 @@ import { GlassPanel } from '../components/ui/GlassPanel.jsx'
 import { AppBottomNav } from '../components/app-ui/navigation/AppBottomNav.jsx'
 import { AppBadge } from '../components/app-ui/data-display/AppBadge.jsx'
 import { adminInitials } from '../lib/formatAdminLastLogin.js'
-import { resolvePushDeviceType } from '../lib/pushPlatform.js'
+import { listenForNativeFcmToken, syncPushToken } from '../lib/pushSync.js'
 import { readAppUserLocation, parseAppUserLocation, autoFetchLiveLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { APP_HOME_LOCATION, APP_HOME_PATH, hasBookingFlowQuery } from '../lib/bookingFlowNavigation.js'
@@ -527,48 +527,31 @@ export function AppShell() {
 
   // ------------------------------------------
 
-  // --- FCM Token Auto-sync & Foreground Listener ---
+  // --- FCM token sync (once per login / user change) ---
+  useEffect(() => {
+    if (!user?._id || !token) return;
+
+    syncPushToken({
+      accessToken: token,
+      role: user.role,
+      userId: user._id,
+    }).catch((err) => console.error('FCM sync failed in AppShell:', err));
+
+    const stopNativeListener = listenForNativeFcmToken(() => {
+      syncPushToken({
+        accessToken: token,
+        role: user.role,
+        userId: user._id,
+        force: true,
+      }).catch((err) => console.error('FCM native sync failed in AppShell:', err));
+    });
+
+    return () => stopNativeListener();
+  }, [user?._id, user?.role, token]);
+
+  // --- FCM foreground message listener ---
   useEffect(() => {
     if (!user || !token) return;
-    
-    const syncFcmToken = async () => {
-      try {
-        if (typeof window === 'undefined' || !('Notification' in window)) {
-          console.warn('Notifications not supported in this environment.');
-          return;
-        }
-        let permission = window.Notification.permission;
-        if (permission === 'default') {
-          permission = await window.Notification.requestPermission();
-        }
-        if (permission === 'granted') {
-          const { requestForToken } = await import('../lib/firebase.js');
-          const fcmToken = await requestForToken();
-          if (fcmToken) {
-            localStorage.setItem('staffivaa_fcm_token', fcmToken);
-            // Track which role currently owns this device token
-            if (user?.role) localStorage.setItem('staffivaa_fcm_role', user.role);
-            const { apiClient } = await import('../api/http.js');
-            // Claim token for current role (labour vs individual)
-            await apiClient.post('/users/me/fcm-token', {
-              token: fcmToken,
-              deviceType: resolvePushDeviceType(),
-              role: user?.role,
-            }).catch(err => console.error('Failed to sync FCM token:', err));
-          }
-        }
-      } catch (err) {
-        console.error('Firebase not available in AppShell:', err);
-      }
-    };
-
-    syncFcmToken();
-    // Re-claim for current role when app becomes visible again
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') syncFcmToken();
-    };
-    window.addEventListener('focus', syncFcmToken);
-    document.addEventListener('visibilitychange', onVisible);
 
     // Use service worker showNotification so it appears as native OS popup
     // even when the app tab is currently focused (Chrome blocks new Notification() in foreground)
@@ -661,13 +644,11 @@ export function AppShell() {
 
     return () => {
       window.removeEventListener('fcm-foreground-message', handleFcmMessage);
-      window.removeEventListener('focus', syncFcmToken);
-      document.removeEventListener('visibilitychange', onVisible);
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
       }
     };
-  }, [user, token, playNewJobRingSound, scheduleIncomingJobFromNotification, dispatchAlert, refreshAppUser, dispatch]);
+  }, [user, token, playNewJobRingSound, scheduleIncomingJobFromNotification, dispatchAlert, refreshAppUser, dispatch, navigate]);
   // ---------------------------
 
   const { data: notifData } = workforceApi.useGetNotificationsQuery(undefined, { skip: !user })

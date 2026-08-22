@@ -13,6 +13,11 @@ const firebaseConfig = {
 
 let app;
 let messaging;
+let cachedToken = null;
+let messagingReadyResolve;
+const messagingReady = new Promise((resolve) => {
+  messagingReadyResolve = resolve;
+});
 
 try {
   app = initializeApp(firebaseConfig);
@@ -20,60 +25,93 @@ try {
   console.error("Firebase app initialization failed:", e);
 }
 
-// Only initialize messaging if supported (e.g., supported in browser, secure context)
-isSupported().then((supported) => {
-  if (supported && app) {
-    messaging = getMessaging(app);
-    onMessage(messaging, (payload) => {
-      console.log("Foreground message received:", payload);
-      
-      window.dispatchEvent(new CustomEvent('fcm-foreground-message', { detail: payload }));
-    });
-  } else {
-    console.warn("Firebase Messaging is not supported in this environment.");
-  }
-}).catch(console.error);
+isSupported()
+  .then((supported) => {
+    if (supported && app) {
+      messaging = getMessaging(app);
+      onMessage(messaging, (payload) => {
+        console.log("Foreground message received:", payload);
+        window.dispatchEvent(new CustomEvent('fcm-foreground-message', { detail: payload }));
+      });
+      messagingReadyResolve(messaging);
+    } else {
+      console.warn("Firebase Messaging is not supported in this environment.");
+      messagingReadyResolve(null);
+    }
+  })
+  .catch((err) => {
+    console.error(err);
+    messagingReadyResolve(null);
+  });
 
-export const requestForToken = async () => {
+let swRegistrationPromise = null;
+
+function getMessagingSwRegistration() {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
+    return Promise.resolve(undefined);
+  }
+  if (!swRegistrationPromise) {
+    swRegistrationPromise = (async () => {
+      try {
+        const existing = await navigator.serviceWorker.getRegistration("/firebase-messaging-sw.js");
+        if (existing) return existing;
+        return await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+      } catch (err) {
+        console.warn("FCM service worker registration failed:", err?.message || err);
+        return navigator.serviceWorker.ready.catch(() => undefined);
+      }
+    })();
+  }
+  return swRegistrationPromise;
+}
+
+export const requestForToken = async ({ forceRefresh = false } = {}) => {
   try {
-    if (!messaging) {
-      console.warn('Firebase messaging is not initialized.');
+    if (!forceRefresh) {
+      if (cachedToken) return cachedToken;
+      if (typeof localStorage !== 'undefined') {
+        const stored = localStorage.getItem('staffivaa_fcm_token');
+        if (stored && stored.length > 20) {
+          cachedToken = stored;
+          return stored;
+        }
+      }
+    }
+
+    const readyMessaging = messaging || (await messagingReady);
+    if (!readyMessaging) {
+      console.warn("Firebase messaging is not initialized.");
       return null;
     }
-    
-    // We do not delete the old token anymore, so the browser can cache it efficiently
-    // This stops the extra API calls to Firebase and makes it instant.
 
-    let serviceWorkerRegistration = undefined;
-    if ('serviceWorker' in navigator) {
-      serviceWorkerRegistration = await navigator.serviceWorker.ready.catch(() => undefined);
-    }
+    const serviceWorkerRegistration = await getMessagingSwRegistration();
 
-    const currentToken = await getToken(messaging, { 
+    const currentToken = await getToken(readyMessaging, {
       vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
-      serviceWorkerRegistration
+      serviceWorkerRegistration,
     });
     if (currentToken) {
-      console.log('FCM Token:', currentToken);
+      cachedToken = currentToken;
+      console.log('[Push] FCM token ready:', currentToken.slice(0, 8) + '…' + currentToken.slice(-6));
       return currentToken;
-    } else {
-      console.log('No registration token available. Request permission to generate one.');
-      return null;
     }
+    console.log('[Push] No FCM token — notification permission may be missing.');
+    return null;
   } catch (err) {
-    console.warn('An error occurred while retrieving token: ', err?.message || err);
-    // Returning null allows the app to continue working without push notifications
+    console.warn("An error occurred while retrieving token: ", err?.message || err);
     return null;
   }
 };
 
 /** Invalidate this browser's FCM registration on logout */
 export const revokeFcmToken = async () => {
+  cachedToken = null;
   try {
-    if (!messaging) return;
-    await deleteToken(messaging);
+    const readyMessaging = messaging || (await messagingReady);
+    if (!readyMessaging) return;
+    await deleteToken(readyMessaging);
   } catch (err) {
-    console.warn('Could not revoke FCM token locally:', err?.message || err);
+    console.warn("Could not revoke FCM token locally:", err?.message || err);
   }
 };
 
