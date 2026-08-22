@@ -48,25 +48,6 @@ export function isEmbeddedWebView() {
   return /\bwv\b/.test(ua) || /WebView/i.test(ua);
 }
 
-/** Phone/tablet browser (Chrome/Safari on mobile) — not desktop laptop. */
-export function isMobileBrowserDevice() {
-  if (typeof navigator === 'undefined') return false;
-  const ua = navigator.userAgent || '';
-  if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua)) {
-    return true;
-  }
-  // iPadOS desktop UA
-  return navigator.maxTouchPoints > 1 && /MacIntel|Macintosh/i.test(ua);
-}
-
-/** Where the backend should store this device's FCM token. */
-export function resolvePushDeviceType() {
-  if (isNativeShell() || isEmbeddedWebView() || isMobileBrowserDevice()) {
-    return 'mobile';
-  }
-  return 'web';
-}
-
 export function readNativeFcmToken() {
   const token = readGlobalToken();
   return typeof token === 'string' && token.trim() ? token.trim() : null;

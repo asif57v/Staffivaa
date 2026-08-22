@@ -137,8 +137,11 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
         `mobile=${mobileTokens.length} web=${webTokens.length} type=${notifType} Title: "${safeTitle}"`,
     );
 
-    // fcmTokensMobile: Flutter native + mobile browser (phone Chrome/Safari).
-    // Include webpush so mobile-browser web FCM tokens still receive tray notifications.
+    // Native Android/iOS: system tray when backgrounded; Flutter onMessage when foregrounded.
+    // Do NOT set android.notification.channelId. A channel the Flutter app never created
+    // (new_job_order, "default", etc.) makes Android 8+ drop the shade notification while
+    // FCM still reports "sent". Omitting it uses FCM's auto-created fallback channel.
+    // Flutter local-notifications can still read data.android_channel_id / high_importance_channel.
     const mobileResult = await sendBatches(
       (batch) => ({
         notification: { title: safeTitle, body: safeBody },
@@ -171,19 +174,6 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
             },
           },
         },
-        webpush: {
-          headers: { Urgency: 'high', TTL: '86400' },
-          notification: {
-            title: safeTitle,
-            body: safeBody,
-            icon: '/logo.png',
-            badge: '/favicon.svg',
-            requireInteraction: true,
-          },
-          fcmOptions: {
-            link: stringifiedData.url || '/',
-          },
-        },
         tokens: batch,
       }),
       mobileTokens,
@@ -191,7 +181,8 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
       notifType,
     );
 
-    // Desktop browser / laptop only
+    // Browser / PWA. WebView tokens are a fallback only — native tokens above are what
+    // populate the Android notification slider when the Flutter wrapper is backgrounded.
     const webResult = await sendBatches(
       (batch) => ({
         data: stringifiedData,

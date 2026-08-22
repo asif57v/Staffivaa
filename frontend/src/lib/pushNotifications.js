@@ -4,7 +4,6 @@ import {
   isNativeShell,
   notifyNativeShell,
   readNativeFcmToken,
-  resolvePushDeviceType,
 } from './nativePushBridge.js';
 
 function withTimeout(promise, ms) {
@@ -119,8 +118,7 @@ export async function syncPushToken({ accessToken, role } = {}) {
 
     localStorage.setItem('staffivaa_fcm_token', webToken);
     if (role) localStorage.setItem('staffivaa_fcm_role', role);
-    const deviceType = resolvePushDeviceType();
-    await saveToken(webToken, deviceType, accessToken);
+    await saveToken(webToken, 'web', accessToken);
     return webToken;
   } catch (err) {
     console.error('Failed to sync web FCM token:', err);
