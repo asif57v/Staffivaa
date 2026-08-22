@@ -363,6 +363,13 @@ export const createRequest = asyncHandler(async (req, res) => {
               relatedId: assignment._id,
               relatedModel: 'Assignment',
               requestId: request._id,
+              fcmExtra: {
+                clientName: user.fullName || 'Customer',
+                locationText: request.locationText || '',
+                categoryName: category?.name || 'Worker',
+                perDayRate: String(baseRate),
+                timeoutSeconds: '90',
+              },
             })
           } catch (err) {
             console.error('[Notification Error for worker]:', assignment.labourId, err.message)

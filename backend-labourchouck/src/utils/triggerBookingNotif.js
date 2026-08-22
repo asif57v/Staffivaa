@@ -4,9 +4,9 @@ import { notificationUrlFor } from './bookingNotificationCopy.js'
 
 /**
  * Send a role-aware booking push (labour vs individual get different URLs + copy).
- * @param {{ userId: string, copy: { title: string, body: string, type: string }, relatedId?: any, relatedModel?: string, url?: string, requestId?: string }} args
+ * @param {{ userId: string, copy: { title: string, body: string, type: string }, relatedId?: any, relatedModel?: string, url?: string, requestId?: string, fcmExtra?: Record<string, string|number> }} args
  */
-export async function triggerBookingNotif({ userId, copy, relatedId, relatedModel, url, requestId }) {
+export async function triggerBookingNotif({ userId, copy, relatedId, relatedModel, url, requestId, fcmExtra = {} }) {
   if (!userId || !copy?.title || !copy?.body) return null
 
   const user = await User.findById(userId).select('role').lean()
@@ -19,6 +19,9 @@ export async function triggerBookingNotif({ userId, copy, relatedId, relatedMode
       requestId: requestId || (relatedModel === 'WorkforceRequest' ? relatedId : undefined),
     })
 
+  const assignmentId =
+    relatedModel === 'Assignment' && relatedId ? String(relatedId) : String(fcmExtra.assignmentId || '')
+
   return triggerNotification({
     userId,
     title: copy.title,
@@ -28,5 +31,10 @@ export async function triggerBookingNotif({ userId, copy, relatedId, relatedMode
     relatedModel,
     url: resolvedUrl,
     recipientRole: role,
+    fcmExtra: {
+      assignmentId,
+      requestId: requestId ? String(requestId) : String(fcmExtra.requestId || ''),
+      ...fcmExtra,
+    },
   })
 }

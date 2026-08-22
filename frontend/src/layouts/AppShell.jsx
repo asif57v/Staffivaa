@@ -20,6 +20,7 @@ import { AppBottomNav } from '../components/app-ui/navigation/AppBottomNav.jsx'
 import { AppBadge } from '../components/app-ui/data-display/AppBadge.jsx'
 import { adminInitials } from '../lib/formatAdminLastLogin.js'
 import { listenForNativeFcmToken, syncPushToken } from '../lib/pushSync.js'
+import { isNativeShell, notifyNativeShell } from '../lib/nativePushBridge.js'
 import { readAppUserLocation, parseAppUserLocation, autoFetchLiveLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { APP_HOME_LOCATION, APP_HOME_PATH, hasBookingFlowQuery } from '../lib/bookingFlowNavigation.js'
@@ -599,19 +600,40 @@ export function AppShell() {
       // FCM skips the service worker's background handler while any tab is visible,
       // so the tray notification must be raised here even when another account owns
       // the push — otherwise it is lost entirely on a shared browser.
-      showOsNotification(displayTitle, displayBody, payload.data);
+      notifyNativeShell(displayTitle, displayBody, payload.data || {});
+      if (!isNativeShell()) {
+        showOsNotification(displayTitle, displayBody, payload.data);
+      }
 
       const isOtherAccount =
         (targetUserId && currentUserId && targetUserId !== currentUserId) ||
         (targetRole && currentRole && targetRole !== currentRole);
       if (isOtherAccount) return;
 
-      // Ring only for real new-job offers (not every push that mentions a job)
       const notifType = payload?.data?.type;
-      if (String(notifType || '').toUpperCase() === 'NEW_ORDER' || payload?.data?.sound === 'new_job_order') {
+      const isNewOrder =
+        String(notifType || '').toUpperCase() === 'NEW_ORDER' ||
+        payload?.data?.sound === 'new_job_order';
+
+      if (isNewOrder) {
         playNewJobRingSound();
-        if (user?.role === USER_ROLES.LABOUR && payload?.data?.relatedId) {
-          scheduleIncomingJobFromNotification(payload.data.relatedId);
+        if (user?.role === USER_ROLES.LABOUR) {
+          const d = payload.data || {};
+          const assignmentId = d.assignmentId || d.relatedId;
+          if (assignmentId) {
+            presentIncomingJobOffer({
+              assignmentId: String(assignmentId),
+              type: 'new_order',
+              requestId: d.requestId ? String(d.requestId) : '',
+              clientName: d.clientName || 'Customer',
+              locationText: d.locationText || '',
+              categoryName: d.categoryName || 'Worker',
+              perDayRate: Number(d.perDayRate) || 800,
+              timeoutSeconds: Number(d.timeoutSeconds) || 90,
+            });
+          } else {
+            scheduleIncomingJobFromNotification(d.relatedId);
+          }
         }
       }
 
@@ -648,7 +670,7 @@ export function AppShell() {
         navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
       }
     };
-  }, [user, token, playNewJobRingSound, scheduleIncomingJobFromNotification, dispatchAlert, refreshAppUser, dispatch, navigate]);
+  }, [user, token, playNewJobRingSound, scheduleIncomingJobFromNotification, presentIncomingJobOffer, dispatchAlert, refreshAppUser, dispatch, navigate]);
   // ---------------------------
 
   const { data: notifData } = workforceApi.useGetNotificationsQuery(undefined, { skip: !user })
