@@ -2,7 +2,6 @@ import { Notification } from '../models/Notification.js';
 import { User } from '../models/User.js';
 import { getIO } from './socket.js';
 import { sendNotificationToUser } from '../services/notificationService.js';
-import { pushLog, pushWarn } from './pushLogger.js';
 
 function normalizeNotifType(type) {
   if (!type) return 'GENERAL'
@@ -39,15 +38,6 @@ export const triggerNotification = async ({
       (resolvedType === 'NEW_ORDER' || resolvedType === 'LABOUR_ASSIGNED'
         ? resolvedRole === 'labour' ? '/app/jobs' : '/app/bookings'
         : undefined)
-
-    pushLog('TRIGGER_START', {
-      userId: userId || 'broadcast',
-      role: resolvedRole || 'n/a',
-      type: resolvedType,
-      title,
-      relatedId: relatedId ? String(relatedId) : '',
-      relatedModel: relatedModel || '',
-    });
 
     // 1. Create in MongoDB
     const notification = await Notification.create({
@@ -162,7 +152,7 @@ export const triggerNotification = async ({
     // 3. Trigger FCM Push Notification (for specific user) — await so NEW_ORDER isn't dropped mid-request
     if (userId) {
       try {
-        const fcmResult = await sendNotificationToUser(userId, title, body, {
+        await sendNotificationToUser(userId, title, body, {
           type: resolvedType,
           relatedId: relatedId ? relatedId.toString() : '',
           relatedModel: relatedModel || '',
@@ -170,20 +160,14 @@ export const triggerNotification = async ({
           recipientRole: resolvedRole || '',
           ...pushData,
         });
-        pushLog('TRIGGER_FCM_DONE', {
-          userId,
-          type: resolvedType,
-          sent: fcmResult?.sentCount ?? 0,
-          ok: fcmResult?.success ? 'yes' : 'no',
-        });
       } catch (err) {
-        pushWarn('TRIGGER_FCM_ERROR', { userId, type: resolvedType, error: err.message });
+        console.error('[FCM Push Error]:', err.message);
       }
     }
 
     return notification;
   } catch (err) {
-    pushWarn('TRIGGER_DB_ERROR', { userId, type, error: err.message });
+    console.error('[NotificationTrigger] Failed to trigger notification:', err.message);
     // Still attempt FCM so mobile gets the dedicated message even if DB write fails
     if (userId && title && body) {
       try {

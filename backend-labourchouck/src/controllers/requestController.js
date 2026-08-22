@@ -31,7 +31,6 @@ import {
 import { SystemSettings } from '../models/SystemSettings.js'
 import LocationMatchingService from '../services/LocationMatchingService.js'
 import { matchWorkersForNewJobOffer } from '../utils/workerMatching.js'
-import { pushLog, pushWarn } from '../utils/pushLogger.js'
 
 function parseLines(lines) {
   if (!Array.isArray(lines) || !lines.length) return null
@@ -315,11 +314,9 @@ export const createRequest = asyncHandler(async (req, res) => {
       const createdAssignments = await Assignment.insertMany(assignmentsToCreate)
 
       // Notify all matching workers instantly with rich payload for popup card + FCM Push Notification
-      pushLog('NEW_JOB_OFFERS', {
-        requestId: request._id,
-        workers: createdAssignments.length,
-        workerIds: createdAssignments.map((a) => a.labourId).join(','),
-      })
+      console.log(
+        `[createRequest] Notifying ${createdAssignments.length} worker(s) with NEW_ORDER for request ${request._id}`,
+      )
       await Promise.all(
         createdAssignments.map(async (assignment) => {
           try {
@@ -354,11 +351,10 @@ export const createRequest = asyncHandler(async (req, res) => {
         })
       )
     } else {
-      pushWarn('NEW_JOB_NO_WORKERS', {
-        requestId: request._id,
-        candidates: candidates.length,
-        hasLocation: request.locationLat != null,
-      })
+      console.warn(
+        `[createRequest] No matching workers for NEW_ORDER on request ${request._id} ` +
+          `(candidates=${candidates.length}, hasLocation=${request.locationLat != null})`,
+      )
     }
   }
 
