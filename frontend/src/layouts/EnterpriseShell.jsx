@@ -113,8 +113,21 @@ export function EnterpriseShell() {
 
     const syncFcmToken = async () => {
       try {
-        const { syncPushToken } = await import('../lib/pushNotifications.js')
-        await syncPushToken({ accessToken: token, role: user?.role })
+        if (typeof window === 'undefined' || !('Notification' in window)) return
+        let permission = window.Notification.permission
+        if (permission === 'default') {
+          permission = await window.Notification.requestPermission()
+        }
+        if (permission === 'granted') {
+          const { requestForToken } = await import('../lib/firebase.js')
+          const fcmToken = await requestForToken()
+          if (fcmToken) {
+            localStorage.setItem('staffivaa_fcm_token', fcmToken)
+            const { apiClient } = await import('../api/http.js')
+            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
+              .catch(err => console.error('Failed to sync FCM token:', err))
+          }
+        }
       } catch (err) {
         console.error('Firebase FCM sync error in EnterpriseShell:', err)
       }
@@ -125,12 +138,25 @@ export function EnterpriseShell() {
     const handleFcmMessage = (event) => {
       const payload = event.detail
       const targetUserId = payload?.data?.targetUserId
-      if (targetUserId && user?._id && String(targetUserId) !== String(user._id)) return
+      if (targetUserId && user?._id && targetUserId !== user._id) return
 
-      const title = payload?.data?.title || payload?.notification?.title
-      const body = payload?.data?.body || payload?.data?.message || payload?.notification?.body || ''
-      if (title) {
+      if (payload?.notification && Notification.permission === 'granted') {
+        const title = payload.notification.title || 'New Job Application Received! 💼'
+        const body = payload.notification.body || ''
         toast.success(`${title}\n${body}`, { id: 'fcm-ent-toast-' + Date.now(), duration: 6000 })
+
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.showNotification(title, {
+              body,
+              icon: '/favicon.svg',
+              badge: '/favicon.svg',
+              requireInteraction: true,
+              tag: 'enterprise-app-notification',
+              data: payload.data || {},
+            })
+          })
+        }
       }
     }
 

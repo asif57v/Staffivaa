@@ -38,37 +38,19 @@ export const sendTestNotification = async (req, res, next) => {
         body: 'If you are seeing this, your push notifications are working perfectly!'
       },
       data: {
-        type: 'SYSTEM_ALERT',
-        title: 'Staffivaa Test Notification',
-        body: 'If you are seeing this, your push notifications are working perfectly!',
-        click_action: 'FLUTTER_NOTIFICATION_CLICK',
-        channel_id: 'high_importance_channel',
-        android_channel_id: 'high_importance_channel',
+        testId: '12345',
+        click_action: 'FLUTTER_NOTIFICATION_CLICK'
       },
       android: {
         priority: 'high',
-        ttl: 86400000,
-        notification: {
-          title: 'Staffivaa Test Notification',
-          body: 'If you are seeing this, your push notifications are working perfectly!',
-          sound: 'default',
-          defaultSound: true,
-          defaultVibrateTimings: true,
-          priority: 'high',
-          visibility: 'public',
-          clickAction: 'FLUTTER_NOTIFICATION_CLICK',
-        }
+        notification: { sound: 'default' }
       },
       apns: {
-        headers: { 'apns-priority': '10', 'apns-push-type': 'alert' },
-        payload: { aps: { alert: { title: 'Staffivaa Test Notification', body: 'If you are seeing this, your push notifications are working perfectly!' }, sound: 'default' } }
+        headers: { 'apns-priority': '10' },
+        payload: { aps: { sound: 'default' } }
       },
       webpush: {
-        headers: { Urgency: 'high' },
-        notification: {
-          title: 'Staffivaa Test Notification',
-          body: 'If you are seeing this, your push notifications are working perfectly!'
-        }
+        headers: { Urgency: 'high' }
       }
     };
 

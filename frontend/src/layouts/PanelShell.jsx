@@ -87,9 +87,21 @@ export function PanelShell({
       }
     });
 
-    import('../lib/pushNotifications.js')
-      .then(({ presentPushOnDevice }) => presentPushOnDevice(title || 'Staffivaa Update', body || '', { tag: toastId }))
-      .catch(() => {});
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission === 'granted') {
+          new Notification(title || 'Staffivaa Update', { body: body || '', icon: '/vite.svg', badge: '/vite.svg', vibrate: [200, 100, 200], tag: toastId, requireInteraction: true });
+        } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission().then((perm) => {
+            if (perm === 'granted') {
+              new Notification(title || 'Staffivaa Update', { body: body || '', icon: '/vite.svg', badge: '/vite.svg', vibrate: [200, 100, 200], tag: toastId, requireInteraction: true });
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to trigger system push:', err);
+    }
   }, []);
 
   const [scrollData, setScrollData] = useState({ y: 0, direction: 'up' })
@@ -210,8 +222,24 @@ export function PanelShell({
 
     const syncFcmToken = async () => {
       try {
-        const { syncPushToken } = await import('../lib/pushNotifications.js');
-        await syncPushToken({ accessToken: token, role: user?.role });
+        if (typeof window === 'undefined' || !('Notification' in window)) {
+          console.warn('Notifications not supported in this environment.');
+          return;
+        }
+        let permission = window.Notification.permission;
+        if (permission === 'default') {
+          permission = await window.Notification.requestPermission();
+        }
+        if (permission === 'granted') {
+          const { requestForToken } = await import('../lib/firebase.js');
+          const fcmToken = await requestForToken();
+          if (fcmToken) {
+            localStorage.setItem('staffivaa_fcm_token', fcmToken);
+            const { apiClient } = await import('../api/http.js');
+            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
+              .catch(err => console.error('Failed to sync FCM token:', err));
+          }
+        }
       } catch (err) {
         console.error('Firebase not available in PanelShell:', err);
       }
@@ -222,14 +250,34 @@ export function PanelShell({
     const handleFcmMessage = (event) => {
       const payload = event.detail;
       const targetUserId = payload?.data?.targetUserId;
-      if (targetUserId && user?._id && String(targetUserId) !== String(user._id)) {
+      if (targetUserId && user?._id && targetUserId !== user._id) {
+        // This push notification was meant for a different account
         return;
       }
+      
+      if (payload?.notification) {
+        // Audio sound removed as requested
+      }
 
-      const title = payload?.data?.title || payload?.notification?.title;
-      const body = payload?.data?.body || payload?.data?.message || payload?.notification?.body || '';
-      if (title) {
-        dispatchAlert(title, body, false);
+      // Also show a toast so the user definitely sees it inside the app
+      if (typeof window !== 'undefined' && payload?.notification) {
+        dispatchAlert(payload.notification.title || 'New Notification', payload.notification.body || '', false);
+      }
+
+      // Use service worker showNotification so it appears as native OS popup
+      if (payload?.notification && Notification.permission === 'granted') {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.showNotification(payload.notification.title || 'Staffivaa', {
+              body: payload.notification.body || '',
+              icon: '/favicon.svg',
+              badge: '/favicon.svg',
+              requireInteraction: false,
+              tag: 'staffivaa-fcm-notification', // Collapse duplicates if multiple tabs are open
+              data: payload.data || {},
+            });
+          });
+        }
       }
     };
 

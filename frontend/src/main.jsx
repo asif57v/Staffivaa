@@ -116,12 +116,6 @@ createRoot(document.getElementById('root')).render(
   </StrictMode>,
 )
 
-if (typeof window !== 'undefined') {
-  import('./lib/pushNotifications.js').then(({ listenForNativeFcmToken }) => {
-    listenForNativeFcmToken(() => {})
-  }).catch(() => {})
-}
-
 // Register Firebase service worker for mobile background notification support
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

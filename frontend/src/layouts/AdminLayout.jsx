@@ -198,14 +198,55 @@ export function AdminLayout() {
 
     const syncFcmToken = async () => {
       try {
-        const { syncPushToken } = await import('../lib/pushNotifications.js')
-        await syncPushToken({ accessToken: token, role: user?.role })
+        if (typeof window === 'undefined' || !('Notification' in window)) {
+          console.warn('Notifications not supported in this environment.')
+          return
+        }
+        let permission = window.Notification.permission
+        if (permission === 'default') {
+          permission = await window.Notification.requestPermission()
+        }
+        if (permission === 'granted') {
+          const { requestForToken } = await import('../lib/firebase.js')
+          const fcmToken = await requestForToken()
+          if (fcmToken) {
+            localStorage.setItem('staffivaa_fcm_token', fcmToken)
+            const { apiClient } = await import('../api/http.js')
+            await apiClient.post('/users/me/fcm-token', { token: fcmToken, deviceType: 'web' })
+              .catch(err => console.error('Failed to sync FCM token:', err))
+          }
+        }
       } catch (err) {
         console.error('Firebase not available in AdminLayout:', err)
       }
     }
 
     syncFcmToken()
+
+    const handleFcmMessage = (event) => {
+      const payload = event.detail
+      const targetUserId = payload?.data?.targetUserId;
+      if (targetUserId && user?._id && targetUserId !== user._id) {
+        // This push notification was meant for a different account
+        return;
+      }
+      if (payload?.notification && Notification.permission === 'granted') {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.showNotification(payload.notification.title || 'Staffivaa Admin', {
+              body: payload.notification.body || '',
+              icon: '/favicon.svg',
+              badge: '/favicon.svg',
+              requireInteraction: false,
+              tag: 'staffivaa-fcm-notification', // Collapse duplicates if multiple tabs are open
+              data: payload.data || {},
+            })
+          })
+        }
+      }
+    }
+
+    window.addEventListener('fcm-foreground-message', handleFcmMessage)
 
     const handleServiceWorkerMessage = (event) => {
       if (event.data && event.data.type === 'NAVIGATE_TO_URL' && event.data.url) {
@@ -218,11 +259,12 @@ export function AdminLayout() {
     }
 
     return () => {
+      window.removeEventListener('fcm-foreground-message', handleFcmMessage)
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage)
       }
     }
-  }, [user?._id, token, navigate])
+  }, [user?._id, navigate])
   useEffect(() => {
     function handlePointerDown(e) {
       if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false)
