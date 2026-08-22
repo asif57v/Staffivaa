@@ -3,6 +3,7 @@ import { Notification } from '../models/Notification.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendSuccess, sendError, HTTP_STATUS } from '../utils/apiResponse.js';
 import { triggerNotification } from '../utils/notificationTrigger.js';
+import { pushLog } from '../utils/pushLogger.js';
 
 export const createSelfTestNotification = asyncHandler(async (req, res) => {
   const { title, body, type } = req.body || {};
@@ -13,6 +14,8 @@ export const createSelfTestNotification = asyncHandler(async (req, res) => {
     body: body || `Live notification generated at ${new Date().toLocaleTimeString()}`,
     type: type || 'SYSTEM_ALERT',
   });
+
+  pushLog('TEST_SELF', { userId: req.user._id, role: req.user.role, type: type || 'SYSTEM_ALERT' });
 
   return sendSuccess(res, {
     message: 'Test notification triggered successfully',
@@ -73,7 +76,8 @@ export const sendTestNotification = async (req, res, next) => {
     };
 
     const response = await getMessaging().send(payload);
-    
+
+    pushLog('TEST_DIRECT', { token: token.slice(0, 8) + '…', messageId: response });
     res.status(200).json({
       success: true,
       message: 'Test notification sent successfully',

@@ -32,15 +32,18 @@ function extractPushCopy(payload) {
 }
 
 function handleForegroundPayload(payload) {
-  console.log("Foreground message received:", payload);
+  const { title, body, data } = extractPushCopy(payload);
+  console.log('[Push/Client] FOREGROUND_RX | type=' + (data?.type || 'GENERAL') + ' | title=' + String(title).slice(0, 40));
   window.dispatchEvent(new CustomEvent("fcm-foreground-message", { detail: payload }));
 
-  const { title, body, data } = extractPushCopy(payload);
-  if (!title) return;
+  if (!title) {
+    console.warn('[Push/Client] FOREGROUND_SKIP | reason=no title');
+    return;
+  }
 
   import("./pushNotifications.js")
     .then(({ presentPushOnDevice }) => presentPushOnDevice(title, body, data))
-    .catch((err) => console.warn("presentPushOnDevice failed:", err?.message || err));
+    .catch((err) => console.warn('[Push/Client] PRESENT_IMPORT_FAIL |', err?.message || err));
 }
 
 isSupported()
@@ -86,10 +89,10 @@ export const requestForToken = async () => {
       serviceWorkerRegistration,
     });
     if (currentToken) {
-      console.log("FCM Token:", currentToken);
+      console.log('[Push/Client] FCM_TOKEN_OK | token=' + currentToken.slice(0, 8) + '…' + currentToken.slice(-6));
       return currentToken;
     }
-    console.log("No registration token available. Request permission to generate one.");
+    console.log('[Push/Client] FCM_TOKEN_NONE | Request permission to generate one.');
     return null;
   } catch (err) {
     console.warn("An error occurred while retrieving token: ", err?.message || err);

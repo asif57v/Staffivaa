@@ -7,6 +7,21 @@ import {
   resolvePushDeviceType,
 } from './nativePushBridge.js';
 
+function clientPushLog(step, details = {}) {
+  const extra = Object.entries(details)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => `${k}=${v}`)
+    .join(' | ');
+  console.log(`[Push/Client] ${step}${extra ? ` | ${extra}` : ''}`);
+}
+
+function tokenPreview(token) {
+  if (!token || typeof token !== 'string') return 'none';
+  const t = token.trim();
+  if (t.length <= 12) return t;
+  return `${t.slice(0, 8)}…${t.slice(-6)}`;
+}
+
 function withTimeout(promise, ms) {
   return Promise.race([
     promise,
@@ -30,12 +45,27 @@ async function saveToken(token, deviceType, accessToken) {
 export async function presentPushOnDevice(title, body, data = {}) {
   if (!title) return;
 
+  const notifType = String(data?.type || '').toUpperCase();
+  clientPushLog('PRESENT_START', { type: notifType || 'GENERAL', title: String(title).slice(0, 40) });
+
   if (typeof window !== 'undefined') {
     const rawKey = String(title) + '_' + String(body || '');
     const dedupeKey = rawKey.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const isJobAlert =
+      notifType === 'NEW_ORDER' ||
+      notifType === 'BOOKING_CANCELLED' ||
+      notifType === 'BOOKING_UPDATED' ||
+      notifType === 'BOOKING_CREATED' ||
+      notifType === 'SYSTEM_ALERT';
+
     window._lastPushShown = window._lastPushShown || {};
     const now = Date.now();
-    if (window._lastPushShown[dedupeKey] && now - window._lastPushShown[dedupeKey] < 8000) {
+    if (
+      !isJobAlert &&
+      window._lastPushShown[dedupeKey] &&
+      now - window._lastPushShown[dedupeKey] < 8000
+    ) {
+      clientPushLog('PRESENT_SKIP_DEDUPE', { type: notifType });
       return;
     }
     window._lastPushShown[dedupeKey] = now;
@@ -64,8 +94,9 @@ export async function presentPushOnDevice(title, body, data = {}) {
       const registration = await withTimeout(navigator.serviceWorker.ready, 1500);
       await registration.showNotification(title, options);
       shown = true;
+      clientPushLog('PRESENT_OK', { via: 'serviceWorker', type: notifType });
     } catch (err) {
-      console.warn('Foreground SW showNotification failed:', err?.message || err);
+      console.warn('[Push/Client] PRESENT_SW_FAIL |', err?.message || err);
     }
   }
 
@@ -74,8 +105,9 @@ export async function presentPushOnDevice(title, body, data = {}) {
   if (!shown) {
     try {
       new Notification(title, options);
+      clientPushLog('PRESENT_OK', { via: 'constructor', type: notifType });
     } catch (err) {
-      console.warn('Foreground Notification constructor failed:', err?.message || err);
+      console.warn('[Push/Client] PRESENT_CONSTRUCTOR_FAIL |', err?.message || err);
     }
   }
 }
@@ -86,6 +118,8 @@ export async function presentPushOnDevice(title, body, data = {}) {
 export async function syncPushToken({ accessToken, role } = {}) {
   if (typeof window === 'undefined') return null;
 
+  clientPushLog('SYNC_START', { role: role || 'unknown' });
+
   const nativeToken = readNativeFcmToken();
   if (nativeToken) {
     try {
@@ -93,37 +127,54 @@ export async function syncPushToken({ accessToken, role } = {}) {
       localStorage.setItem('staffivaa_fcm_token', nativeToken);
       if (role) localStorage.setItem('staffivaa_fcm_role', role);
       await saveToken(nativeToken, 'mobile', accessToken);
+      clientPushLog('SYNC_NATIVE_OK', { token: tokenPreview(nativeToken), field: 'fcmTokensMobile' });
     } catch (err) {
-      console.error('Failed to sync native FCM token:', err);
+      console.error('[Push/Client] SYNC_NATIVE_FAIL |', err);
     }
   }
 
   // Inside the Flutter WebView, web FCM tokens do not populate the Android
   // notification slider once the WebView is paused. Prefer the native token.
   if ((isNativeShell() || isEmbeddedWebView()) && nativeToken) {
+    clientPushLog('SYNC_DONE', { source: 'native-webview', token: tokenPreview(nativeToken) });
     return nativeToken;
   }
 
-  if (!('Notification' in window)) return nativeToken;
+  if (!('Notification' in window)) {
+    clientPushLog('SYNC_SKIP', { reason: 'Notification API unavailable' });
+    return nativeToken;
+  }
 
   try {
     let permission = Notification.permission;
     if (permission === 'default') {
       permission = await Notification.requestPermission();
     }
-    if (permission !== 'granted') return nativeToken;
+    if (permission !== 'granted') {
+      clientPushLog('SYNC_SKIP', { reason: 'permission denied', permission });
+      return nativeToken;
+    }
 
     const { requestForToken } = await import('./firebase.js');
     const webToken = await requestForToken();
-    if (!webToken) return nativeToken;
+    if (!webToken) {
+      clientPushLog('SYNC_SKIP', { reason: 'no web token from Firebase' });
+      return nativeToken;
+    }
 
     localStorage.setItem('staffivaa_fcm_token', webToken);
     if (role) localStorage.setItem('staffivaa_fcm_role', role);
     const deviceType = resolvePushDeviceType();
     await saveToken(webToken, deviceType, accessToken);
+    clientPushLog('SYNC_WEB_OK', {
+      token: tokenPreview(webToken),
+      deviceType,
+      field: deviceType === 'mobile' ? 'fcmTokensMobile' : 'fcmTokensWeb',
+    });
+    clientPushLog('SYNC_DONE', { source: 'web', deviceType });
     return webToken;
   } catch (err) {
-    console.error('Failed to sync web FCM token:', err);
+    console.error('[Push/Client] SYNC_FAIL |', err);
     return nativeToken;
   }
 }

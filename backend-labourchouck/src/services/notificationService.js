@@ -1,5 +1,6 @@
 import { getMessaging } from 'firebase-admin/messaging';
 import { User } from '../models/User.js';
+import { pushLog, pushWarn, tokenPreview } from '../utils/pushLogger.js';
 
 const ANDROID_CHANNEL_ID = 'high_importance_channel';
 const FCM_BATCH_SIZE = 500;
@@ -59,10 +60,18 @@ function stringifyData(title, body, userId, recipientRole, data = {}) {
   return { notifType, stringifiedData };
 }
 
-async function sendBatches(messageFactory, tokens, userId, notifType) {
+async function sendBatches(messageFactory, tokens, userId, notifType, channel) {
   if (!tokens.length) {
     return { successCount: 0, failureCount: 0, failedTokens: [] };
   }
+
+  pushLog(`FCM_BATCH_START`, {
+    channel,
+    userId,
+    type: notifType,
+    count: tokens.length,
+    tokens: tokens.map(tokenPreview).join(','),
+  });
 
   let successCount = 0;
   let failureCount = 0;
@@ -76,12 +85,19 @@ async function sendBatches(messageFactory, tokens, userId, notifType) {
     failureCount += response.failureCount;
 
     response.responses.forEach((resp, idx) => {
-      if (resp.success) return;
-      console.warn(
-        `[NotificationService] FCM fail user=${userId} type=${notifType} token#${i + idx}:`,
-        resp.error?.code,
-        resp.error?.message,
-      );
+      const tokenHint = tokenPreview(batch[idx]);
+      if (resp.success) {
+        pushLog('FCM_TOKEN_OK', { channel, userId, type: notifType, token: tokenHint });
+        return;
+      }
+      pushWarn('FCM_TOKEN_FAIL', {
+        channel,
+        userId,
+        type: notifType,
+        token: tokenHint,
+        code: resp.error?.code,
+        msg: resp.error?.message,
+      });
       const errorCode = resp.error?.code;
       if (
         errorCode === 'messaging/invalid-registration-token' ||
@@ -91,6 +107,14 @@ async function sendBatches(messageFactory, tokens, userId, notifType) {
       }
     });
   }
+
+  pushLog('FCM_BATCH_DONE', {
+    channel,
+    userId,
+    type: notifType,
+    success: successCount,
+    fail: failureCount,
+  });
 
   return { successCount, failureCount, failedTokens };
 }
@@ -124,7 +148,7 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
     const tokens = [...mobileTokens, ...webTokens];
 
     if (tokens.length === 0) {
-      console.log(`[NotificationService] No FCM tokens found in DB for user ${userId} (${user.role || 'user'})`);
+      pushWarn('SEND_SKIP_NO_TOKENS', { userId, role: user.role || 'user', type: data?.type || 'GENERAL' });
       return { success: false, sentCount: 0, failedTokens: [] };
     }
 
@@ -132,10 +156,16 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
     const safeTitle = String(title);
     const safeBody = String(body);
 
-    console.log(
-      `[NotificationService] Dispatching FCM push to user ${userId} (${user.role || 'user'}) ` +
-        `mobile=${mobileTokens.length} web=${webTokens.length} type=${notifType} Title: "${safeTitle}"`,
-    );
+    pushLog('SEND_START', {
+      userId,
+      role: user.role || 'user',
+      type: notifType,
+      mobileTokens: mobileTokens.length,
+      webTokens: webTokens.length,
+      title: safeTitle,
+      requestId: stringifiedData.requestId || '',
+      assignmentId: stringifiedData.assignmentId || '',
+    });
 
     // fcmTokensMobile: Flutter native + mobile browser (phone Chrome/Safari).
     // Include webpush so mobile-browser web FCM tokens still receive tray notifications.
@@ -189,11 +219,13 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
       mobileTokens,
       userId,
       notifType,
+      'mobile',
     );
 
-    // Desktop browser / laptop only
+    // Desktop browser / laptop only — include top-level notification (same as test push)
     const webResult = await sendBatches(
       (batch) => ({
+        notification: { title: safeTitle, body: safeBody },
         data: stringifiedData,
         webpush: {
           headers: { Urgency: 'high', TTL: '86400' },
@@ -213,16 +245,21 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
       webTokens,
       userId,
       notifType,
+      'web',
     );
 
     const successCount = mobileResult.successCount + webResult.successCount;
     const failureCount = mobileResult.failureCount + webResult.failureCount;
     const failedTokens = [...mobileResult.failedTokens, ...webResult.failedTokens];
 
-    console.log(
-      `[NotificationService] FCM result user=${userId} type=${notifType} ` +
-        `success=${successCount} fail=${failureCount}`,
-    );
+    pushLog('SEND_DONE', {
+      userId,
+      type: notifType,
+      success: successCount,
+      fail: failureCount,
+      mobileOk: mobileResult.successCount,
+      webOk: webResult.successCount,
+    });
 
     if (failedTokens.length > 0) {
       await User.updateOne(
@@ -234,7 +271,7 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
           },
         },
       );
-      console.log(`[NotificationService] Removed ${failedTokens.length} stale FCM tokens for user ${userId}`);
+      pushWarn('STALE_TOKENS_REMOVED', { userId, count: failedTokens.length });
     }
 
     return {
@@ -243,7 +280,7 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
       failedTokens,
     };
   } catch (error) {
-    console.error(`[NotificationService] Failed to send to user ${userId}:`, error.message);
+    pushWarn('SEND_ERROR', { userId, error: error.message });
     return { success: false, sentCount: 0, failedTokens: [] };
   }
 };

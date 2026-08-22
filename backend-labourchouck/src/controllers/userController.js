@@ -11,6 +11,7 @@ import { normalizeStoredMediaUrl } from '../utils/mediaUrl.js'
 import { sendNotificationToUser } from '../services/notificationService.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
 import { logAudit } from '../utils/auditLogger.js'
+import { pushLog, tokenPreview } from '../utils/pushLogger.js'
 
 const MAX_KYC_IMAGE_CHARS = 750_000
 
@@ -723,16 +724,23 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
   // on the same device legitimately share it. Do not detach it from other accounts —
   // that silently leaves the other role with zero tokens. Recipients are separated by
   // `targetUserId`/`recipientRole` in the payload, and logout clears this user's tokens.
-  console.log(
-    `[FCM] Role=${req.user.role} user=${req.user._id} → ${targetField}` +
-      (type === 'web' && targetField === 'fcmTokensMobile' ? ' (mobile browser detected)' : '')
-  )
-
   const isMobileField = targetField === 'fcmTokensMobile'
   const platformLabel = isMobileField
     ? (type === 'web' || isMobileUserAgent(req.headers['user-agent']) ? 'mobile-browser' : 'app')
     : 'web'
-  return sendSuccess(res, { 
+
+  pushLog('TOKEN_SAVED', {
+    userId: req.user._id,
+    role: req.user.role,
+    field: targetField,
+    platform: platformLabel,
+    deviceType: type || 'auto',
+    mobileBrowser: type === 'web' && targetField === 'fcmTokensMobile' ? 'yes' : 'no',
+    token: tokenPreview(cleanToken),
+    totalInField: tokens.length,
+  })
+
+  return sendSuccess(res, {
     message: `FCM Token saved for role ${req.user.role}`,
     data: {
       role: req.user.role,
@@ -757,6 +765,12 @@ export const removeFcmToken = asyncHandler(async (req, res) => {
         } 
       }
     )
+    pushLog('TOKEN_REMOVED', {
+      userId: req.user._id,
+      role: req.user.role,
+      mode: 'single',
+      token: tokenPreview(cleanToken),
+    })
   } else {
     // Default on logout: clear all FCM push tokens for this user
     await User.updateOne(
@@ -768,6 +782,11 @@ export const removeFcmToken = asyncHandler(async (req, res) => {
         } 
       }
     )
+    pushLog('TOKEN_REMOVED', {
+      userId: req.user._id,
+      role: req.user.role,
+      mode: 'clearAll',
+    })
   }
 
   return sendSuccess(res, { 

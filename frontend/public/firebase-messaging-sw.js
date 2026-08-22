@@ -15,31 +15,54 @@ firebase.initializeApp(firebaseConfig);
 
 const messaging = firebase.messaging();
 
-messaging.onBackgroundMessage(function(payload) {
-  console.log('[firebase-messaging-sw.js] Received background message ', payload);
+function readPushCopy(payload) {
+  const data = payload.data || {};
+  const title =
+    data.title ||
+    payload.notification?.title ||
+    payload.webpush?.notification?.title ||
+    'Staffivaa';
+  const body =
+    data.body ||
+    data.message ||
+    payload.notification?.body ||
+    payload.webpush?.notification?.body ||
+    '';
+  return { title, body, data };
+}
 
-  // When FCM includes a `notification` / `webpush.notification` payload the
-  // browser already draws the tray entry. Showing another one races and can
-  // drop BOTH from the Android shade (common in WebView wrappers).
-  if (payload?.notification || payload?.webpush?.notification) {
+messaging.onBackgroundMessage(function(payload) {
+  const { title, body, data } = readPushCopy(payload);
+  console.log('[Push/SW] BACKGROUND_RX | type=' + (data.type || 'GENERAL') + ' | title=' + String(title).slice(0, 40));
+
+  if (!title && !body) {
+    console.warn('[Push/SW] BACKGROUND_SKIP | reason=empty title and body');
     return;
   }
 
-  const data = payload.data || {};
-  const notificationTitle = data.title || 'Staffivaa';
-  const notificationBody = data.body || data.message || '';
-  if (!notificationTitle && !notificationBody) return;
+  const notifType = String(data.type || '').toUpperCase();
+  const isJobAlert =
+    notifType === 'NEW_ORDER' ||
+    notifType === 'BOOKING_CANCELLED' ||
+    notifType === 'BOOKING_UPDATED' ||
+    notifType === 'BOOKING_CREATED';
 
   const notificationOptions = {
-    body: notificationBody,
+    body: body,
     icon: '/logo.png',
     badge: '/favicon.svg',
-    tag: 'staffivaa-notif-' + String(data.relatedId || data.type || notificationTitle),
+    tag: 'staffivaa-notif-' + String(data.relatedId || data.type || title),
     renotify: true,
-    data: { ...data, title: notificationTitle, body: notificationBody }
+    requireInteraction: isJobAlert,
+    data: { ...data, title, body },
   };
 
-  return self.registration.showNotification(notificationTitle, notificationOptions);
+  // Always show from service worker — data.title/data.body are always set by backend.
+  // Relying only on FCM auto-display fails for some mobile-browser payloads (NEW_ORDER etc.)
+  // while SYSTEM_ALERT test appears to work.
+  return self.registration.showNotification(title, notificationOptions).then(function() {
+    console.log('[Push/SW] BACKGROUND_SHOWN | type=' + (data.type || 'GENERAL'));
+  });
 });
 
 self.addEventListener('notificationclick', function(event) {

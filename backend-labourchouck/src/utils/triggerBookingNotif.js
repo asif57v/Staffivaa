@@ -1,6 +1,7 @@
 import { User } from '../models/User.js'
 import { triggerNotification } from './notificationTrigger.js'
 import { notificationUrlFor } from './bookingNotificationCopy.js'
+import { pushLog } from './pushLogger.js'
 
 /**
  * Send a role-aware booking push (labour vs individual get different URLs + copy).
@@ -26,6 +27,15 @@ export async function triggerBookingNotif({ userId, copy, relatedId, relatedMode
     requestId: resolvedRequestId ? String(resolvedRequestId) : '',
     assignmentId: relatedModel === 'Assignment' && relatedId ? String(relatedId) : '',
   }
+
+  pushLog('BOOKING_NOTIF', {
+    userId,
+    role,
+    type: copy.type,
+    title: copy.title,
+    requestId: pushData.requestId,
+    assignmentId: pushData.assignmentId,
+  })
 
   return triggerNotification({
     userId,
