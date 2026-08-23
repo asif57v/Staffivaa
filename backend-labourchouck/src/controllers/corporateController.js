@@ -326,7 +326,8 @@ export const reviewCorporateAdmin = asyncHandler(async (req, res) => {
       body: 'Your corporate account has been verified!',
       type: 'KYC_APPROVED',
       relatedId: user._id,
-      relatedModel: 'User'
+      relatedModel: 'User',
+      recipientRole: 'corporate',
     })
   } else if (resolved === CORPORATE_STATUS.REJECTED) {
     await triggerNotification({
@@ -335,7 +336,8 @@ export const reviewCorporateAdmin = asyncHandler(async (req, res) => {
       body: 'Your corporate verification was rejected. Please review your documents.',
       type: 'KYC_REJECTED',
       relatedId: user._id,
-      relatedModel: 'User'
+      relatedModel: 'User',
+      recipientRole: 'corporate',
     })
   }
 
@@ -397,7 +399,8 @@ export const reviewContractorAdmin = asyncHandler(async (req, res) => {
       body: 'Your vendor account has been verified!',
       type: 'KYC_APPROVED',
       relatedId: user._id,
-      relatedModel: 'User'
+      relatedModel: 'User',
+      recipientRole: 'contractor',
     })
   } else if (resolved === 'rejected') {
     await triggerNotification({
@@ -406,7 +409,8 @@ export const reviewContractorAdmin = asyncHandler(async (req, res) => {
       body: 'Your vendor verification was rejected. Please review your documents.',
       type: 'KYC_REJECTED',
       relatedId: user._id,
-      relatedModel: 'User'
+      relatedModel: 'User',
+      recipientRole: 'contractor',
     })
   }
 

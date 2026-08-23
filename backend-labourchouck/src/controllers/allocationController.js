@@ -560,13 +560,13 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
         }).limit(50)
       }
 
-      let matchingWorkers = candidates
-      if (request.locationLat && request.locationLng) {
-        const filteredByDistance = candidates.filter(w => {
-          if (!w.labourProfile || !w.labourProfile.locationLat || !w.labourProfile.locationLng) {
+      let matchingWorkers = []
+      if (request.locationLat && request.locationLng && candidates.length > 0) {
+        matchingWorkers = candidates.filter(w => {
+          if (!w.labourProfile || w.labourProfile.locationLat == null || w.labourProfile.locationLng == null) {
             return false
           }
-          const radius = w.labourProfile.workRadius || 15
+          const radius = Number(w.labourProfile.workRadius) || 15
           const R = 6371
           const dLat = (w.labourProfile.locationLat - request.locationLat) * (Math.PI / 180)
           const dLon = (w.labourProfile.locationLng - request.locationLng) * (Math.PI / 180)
@@ -575,11 +575,15 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
             Math.cos(request.locationLat * (Math.PI / 180)) * Math.cos(w.labourProfile.locationLat * (Math.PI / 180)) *
             Math.sin(dLon / 2) * Math.sin(dLon / 2)
           const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-          return (R * c) <= radius
+          const distanceKm = R * c
+          const isWithinRadius = distanceKm <= radius
+          console.log(
+            `[ReallocationMatching] Worker ${w._id} distance: ${distanceKm.toFixed(2)} km, workRadius: ${radius} km -> ${isWithinRadius ? 'MATCHED' : 'OUT_OF_RADIUS'}`
+          )
+          return isWithinRadius
         })
-        if (filteredByDistance.length > 0) {
-          matchingWorkers = filteredByDistance
-        }
+      } else {
+        matchingWorkers = candidates
       }
 
       if (matchingWorkers.length > 0) {

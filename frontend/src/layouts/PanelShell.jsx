@@ -14,6 +14,7 @@ import { AppBottomNav } from '../components/app-ui/navigation/AppBottomNav.jsx'
 import { AppBadge } from '../components/app-ui/data-display/AppBadge.jsx'
 import { adminInitials } from '../lib/formatAdminLastLogin.js'
 import { listenForNativeFcmToken, syncPushToken } from '../lib/pushSync.js'
+import { isRoleMatch } from '../lib/roleUtils.js'
 import { readAppUserLocation, parseAppUserLocation, autoFetchLiveLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
 import { useVendorNotificationCount } from '../hooks/useVendorNotificationCount.js'
@@ -236,9 +237,16 @@ export function PanelShell({
 
     const handleFcmMessage = (event) => {
       const payload = event.detail;
-      const targetUserId = payload?.data?.targetUserId;
-      if (targetUserId && user?._id && targetUserId !== user._id) {
-        // This push notification was meant for a different account
+      const targetUserId = payload?.data?.targetUserId ? String(payload.data.targetUserId) : '';
+      const currentUserId = user?._id ? String(user._id) : '';
+      const targetRole = payload?.data?.recipientRole || payload?.data?.role || '';
+      const currentRole = user?.role || '';
+
+      const isOtherUser = Boolean(targetUserId && currentUserId && targetUserId !== currentUserId);
+      const isWrongRole = Boolean(targetRole && currentRole && !isRoleMatch(targetRole, currentRole));
+
+      if (isOtherUser || isWrongRole) {
+        console.log(`[PanelShell Push] Dropped cross-role / cross-user push: targetRole=${targetRole}, currentRole=${currentRole}`);
         return;
       }
       

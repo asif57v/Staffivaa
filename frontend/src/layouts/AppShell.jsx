@@ -20,6 +20,7 @@ import { AppBottomNav } from '../components/app-ui/navigation/AppBottomNav.jsx'
 import { AppBadge } from '../components/app-ui/data-display/AppBadge.jsx'
 import { adminInitials } from '../lib/formatAdminLastLogin.js'
 import { listenForNativeFcmToken, syncPushToken } from '../lib/pushSync.js'
+import { isRoleMatch } from '../lib/roleUtils.js'
 import { notifyNativeShell } from '../lib/nativePushBridge.js'
 import { readAppUserLocation, parseAppUserLocation, autoFetchLiveLocation } from '../lib/appUserLocationStorage.js'
 import { AppUserLocationModal } from '../components/app/AppUserLocationModal.jsx'
@@ -582,10 +583,17 @@ export function AppShell() {
         ? String(payload.data.targetUserId)
         : '';
       const currentUserId = user?._id ? String(user._id) : '';
-      const targetRole = String(
-        payload?.data?.recipientRole || payload?.data?.role || '',
-      ).toLowerCase();
-      const currentRole = String(user?.role || '').toLowerCase();
+      const targetRole = payload?.data?.recipientRole || payload?.data?.role || '';
+      const currentRole = user?.role || '';
+
+      const isOtherUser = Boolean(targetUserId && currentUserId && targetUserId !== currentUserId);
+      const isWrongRole = Boolean(targetRole && currentRole && !isRoleMatch(targetRole, currentRole));
+
+      // Strictly drop notifications targeted for a different user or role
+      if (isOtherUser || isWrongRole) {
+        console.log(`[AppShell Push] Ignored push for other role/user: targetRole=${targetRole}, currentRole=${currentRole}, targetUserId=${targetUserId}, currentUserId=${currentUserId}`);
+        return;
+      }
 
       const displayTitle =
         payload?.data?.title ||
@@ -597,18 +605,9 @@ export function AppShell() {
         payload?.notification?.body ||
         '';
 
-      // FCM skips the service worker's background handler while any tab is visible,
-      // so the tray notification must be raised here even when another account owns
-      // the push — otherwise it is lost entirely on a shared browser.
+      // Show notification to the active recipient
       notifyNativeShell(displayTitle, displayBody, payload.data || {});
-      // Always try the WebView Notification API too — some OEM WebViews support it
-      // even inside the Flutter shell, and desktop / phone Chrome need it.
       showOsNotification(displayTitle, displayBody, payload.data);
-
-      const isOtherAccount =
-        (targetUserId && currentUserId && targetUserId !== currentUserId) ||
-        (targetRole && currentRole && targetRole !== currentRole);
-      if (isOtherAccount) return;
 
       const notifType = payload?.data?.type;
       const isNewOrder =

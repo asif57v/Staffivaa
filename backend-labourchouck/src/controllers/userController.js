@@ -11,6 +11,7 @@ import { normalizeStoredMediaUrl } from '../utils/mediaUrl.js'
 import { sendNotificationToUser } from '../services/notificationService.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
 import { logAudit } from '../utils/auditLogger.js'
+import { normalizeRole, isRoleMatch } from '../utils/roleUtils.js'
 
 const MAX_KYC_IMAGE_CHARS = 750_000
 
@@ -681,7 +682,7 @@ function resolveTokenField(deviceType, userAgent) {
 
 /** POST /users/me/fcm-token — save FCM token for push notifications */
 export const saveFcmToken = asyncHandler(async (req, res) => {
-  const { token, deviceType } = req.body
+  const { token, deviceType, role } = req.body
   if (!token || typeof token !== 'string' || !token.trim()) {
     return sendError(res, {
       message: 'FCM token is required',
@@ -690,16 +691,31 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
     })
   }
 
+  if (role && !isRoleMatch(role, req.user.role)) {
+    return sendError(res, {
+      message: `Role mismatch: cannot register device token for role '${role}' on user account with role '${req.user.role}'.`,
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+      code: 'ROLE_MISMATCH',
+    })
+  }
+
   const cleanToken = token.trim()
   const targetField = resolveTokenField(deviceType, req.headers['user-agent'])
   const oppositeField = targetField === 'fcmTokensMobile' ? 'fcmTokensWeb' : 'fcmTokensMobile'
 
-  // Atomic update — avoids parallel read-modify-write races that drop tokens.
+  // 1. Disassociate this device token from ANY other user account in the system (prevents cross-role push leakage)
+  await User.updateMany(
+    { _id: { $ne: req.user._id }, $or: [{ fcmTokensWeb: cleanToken }, { fcmTokensMobile: cleanToken }] },
+    { $pull: { fcmTokensWeb: cleanToken, fcmTokensMobile: cleanToken } },
+  )
+
+  // 2. Remove from opposite bucket or existing position on current user
   await User.updateOne(
     { _id: req.user._id },
     { $pull: { [targetField]: cleanToken, [oppositeField]: cleanToken } },
   )
 
+  // 3. Attach token to current user's active bucket (capped at 5 recent tokens)
   const updated = await User.findByIdAndUpdate(
     req.user._id,
     { $push: { [targetField]: { $each: [cleanToken], $slice: -5 } } },
@@ -746,6 +762,11 @@ export const removeFcmToken = asyncHandler(async (req, res) => {
           fcmTokensMobile: cleanToken 
         } 
       }
+    )
+    // Also pull globally from any other user record to guarantee no ghost subscriptions
+    await User.updateMany(
+      { $or: [{ fcmTokensWeb: cleanToken }, { fcmTokensMobile: cleanToken }] },
+      { $pull: { fcmTokensWeb: cleanToken, fcmTokensMobile: cleanToken } }
     )
   } else {
     // Default on logout: clear all FCM push tokens for this user
@@ -981,7 +1002,7 @@ export const updateVendorRadius = asyncHandler(async (req, res) => {
     user._id.toString(),
     'Service Area Updated',
     `Your service area and location have been successfully updated.`,
-    { url: '/vendor/profile' }
+    { url: '/vendor/profile', recipientRole: 'contractor' }
   )
 
   const safeUser = user.toSafeObject()

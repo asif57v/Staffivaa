@@ -286,13 +286,13 @@ export const createRequest = asyncHandler(async (req, res) => {
       }).limit(50)
     }
 
-    let matchingWorkers = candidates
+    let matchingWorkers = []
     if (request.locationLat && request.locationLng && candidates.length > 0) {
-      const filteredByDistance = candidates.filter((w) => {
-        if (!w.labourProfile || !w.labourProfile.locationLat || !w.labourProfile.locationLng) {
+      matchingWorkers = candidates.filter((w) => {
+        if (!w.labourProfile || w.labourProfile.locationLat == null || w.labourProfile.locationLng == null) {
           return false
         }
-        const radius = w.labourProfile.workRadius || 15
+        const radius = Number(w.labourProfile.workRadius) || 15
         const R = 6371
         const dLat = (w.labourProfile.locationLat - request.locationLat) * (Math.PI / 180)
         const dLon = (w.labourProfile.locationLng - request.locationLng) * (Math.PI / 180)
@@ -303,12 +303,15 @@ export const createRequest = asyncHandler(async (req, res) => {
             Math.sin(dLon / 2) *
             Math.sin(dLon / 2)
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        return R * c <= radius
+        const distanceKm = R * c
+        const isWithinRadius = distanceKm <= radius
+        console.log(
+          `[WorkerMatching] Worker ${w._id} (${w.fullName || 'Labour'}) distance: ${distanceKm.toFixed(2)} km, workRadius: ${radius} km -> ${isWithinRadius ? 'MATCHED' : 'OUT_OF_RADIUS'}`
+        )
+        return isWithinRadius
       })
-
-      if (filteredByDistance.length > 0) {
-        matchingWorkers = filteredByDistance
-      }
+    } else {
+      matchingWorkers = candidates
     }
 
     if (matchingWorkers.length > 0) {
@@ -782,12 +785,13 @@ export const sendPaymentReminderAdmin = asyncHandler(async (req, res) => {
   const request = await WorkforceRequest.findById(req.params.id)
   if (!request) return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
 
-  // Send notification to corporate client
+  // Send notification to client
+  const clientRole = request.sourceType === 'individual' ? 'individual' : 'corporate'
   sendNotificationToUser(
     request.clientId.toString(),
     'Payment Reminder',
     `This is a reminder to complete your pending payment for project "${request.projectId?.name || request.reference}".`,
-    { url: `/corporate/requests/${request._id}` }
+    { url: clientRole === 'corporate' ? `/corporate/requests/${request._id}` : `/app/bookings/${request._id}`, recipientRole: clientRole }
   )
 
   sendSuccess(res, { message: 'Payment reminder sent successfully' })

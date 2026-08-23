@@ -1,4 +1,5 @@
 import { Server } from 'socket.io'
+import { normalizeRole } from './roleUtils.js'
 
 let io
 
@@ -23,29 +24,28 @@ export const initSocket = () => {
     socket.on('authenticate', (userData) => {
       if (!userData || !userData._id || !userData.role) return;
       
-      const { _id, role } = userData;
+      const { _id } = userData;
+      const role = normalizeRole(userData.role);
       const personalRoom = `${role}_${_id}`;
       const roleRoom = role;
 
       socket.join(personalRoom);
       socket.join(roleRoom);
-      socket.join(String(_id));
-      socket.join(`user_${_id}`);
 
-      if (role === 'vendor' || role === 'contractor') {
-        socket.join(`vendor-${_id}`);
-        socket.join(`contractor-${_id}`);
+      if (role === 'contractor') {
         socket.join(`vendor_${_id}`);
         socket.join(`contractor_${_id}`);
+      } else if (role === 'individual') {
+        socket.join(`user_${_id}`);
+      } else if (role === 'labour') {
+        socket.join(`worker_${_id}`);
       } else if (role === 'corporate') {
-        socket.join(`corporate-${_id}`);
         socket.join(`corporate_${_id}`);
       } else if (role === 'enterprise') {
-        socket.join(`enterprise-${_id}`);
         socket.join(`enterprise_${_id}`);
       }
 
-      console.log(`[Socket.io] Socket ${socket.id} joined rooms for user ${_id} (${role})`);
+      console.log(`[Socket.io] Socket ${socket.id} joined role-scoped rooms for user ${_id} (${role})`);
     })
 
     // Client can join a room based on the requestId to receive updates for that specific request

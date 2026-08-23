@@ -18,6 +18,7 @@ import toast from 'react-hot-toast'
 import { scrollToTop } from '../components/navigation/GlobalScrollManager.jsx'
 import { useKeyboardOpen } from '../hooks/useKeyboardOpen.js'
 import { listenForNativeFcmToken, syncPushToken } from '../lib/pushSync.js'
+import { isRoleMatch } from '../lib/roleUtils.js'
 
 const mobileNavItems = [
   { label: 'Home', icon: LayoutDashboard, path: '/enterprise' },
@@ -127,8 +128,18 @@ export function EnterpriseShell() {
 
     const handleFcmMessage = (event) => {
       const payload = event.detail
-      const targetUserId = payload?.data?.targetUserId
-      if (targetUserId && user?._id && targetUserId !== user._id) return
+      const targetUserId = payload?.data?.targetUserId ? String(payload.data.targetUserId) : ''
+      const currentUserId = user?._id ? String(user._id) : ''
+      const targetRole = payload?.data?.recipientRole || payload?.data?.role || ''
+      const currentRole = user?.role || ''
+
+      const isOtherUser = Boolean(targetUserId && currentUserId && targetUserId !== currentUserId)
+      const isWrongRole = Boolean(targetRole && currentRole && !isRoleMatch(targetRole, currentRole))
+
+      if (isOtherUser || isWrongRole) {
+        console.log(`[EnterpriseShell Push] Dropped cross-role / cross-user push: targetRole=${targetRole}, currentRole=${currentRole}`)
+        return
+      }
 
       if (payload?.notification && Notification.permission === 'granted') {
         const title = payload.notification.title || 'New Job Application Received! 💼'

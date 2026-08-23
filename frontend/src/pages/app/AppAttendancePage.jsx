@@ -45,7 +45,15 @@ function LiveDuration({ checkInAt }) {
   useEffect(() => {
     if (!checkInAt) return
     const update = () => {
-      const diffMs = new Date() - new Date(checkInAt)
+      const now = new Date()
+      const inDate = new Date(checkInAt)
+      
+      // If check-in was from a previous date, cap duration at midnight of that date
+      const endOfShiftDay = new Date(inDate)
+      endOfShiftDay.setHours(23, 59, 59, 999)
+      
+      const effectiveEnd = now > endOfShiftDay ? endOfShiftDay : now
+      const diffMs = effectiveEnd - inDate
       if (diffMs < 0) return setElapsedStr('00h 00m')
       const totalMins = Math.floor(diffMs / 60000)
       const h = Math.floor(totalMins / 60)
@@ -568,8 +576,12 @@ export function AppAttendancePage() {
 
   const avgHours = daysWithHours > 0 ? (totalHoursSum / daysWithHours).toFixed(1) : 0
 
-  // Find if there's any ongoing shift (even if it started yesterday)
-  const activeOngoingRecord = records.find(r => r.checkInAt && !r.checkOutAt)
+  // Find if there's any ongoing shift for TODAY
+  const activeOngoingRecord = records.find(r => {
+    if (!r.checkInAt || r.checkOutAt) return false
+    const rDateStr = getLocalDateStr(r.shiftDate)
+    return rDateStr === todayStr
+  })
   
   // Today's Check In Status
   const todayRecord = activeOngoingRecord || recordMap[now.getDate()] || (isDemo && primaryAssignment?.status === 'on_site' ? { checkInAt: primaryAssignment.onSiteAt || nowIso(), projectStatus: 'working' } : null)

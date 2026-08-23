@@ -1,5 +1,6 @@
 import { getMessaging } from 'firebase-admin/messaging';
 import { User } from '../models/User.js';
+import { normalizeRole, isRoleMatch } from '../utils/roleUtils.js';
 
 /**
  * Use the stock Android "default" channel — same as the working test push and
@@ -44,13 +45,15 @@ function stringifyData(title, body, userId, recipientRole, data = {}) {
       ? 'NEW_ORDER'
       : String(data?.type || 'GENERAL');
 
+  const normRole = normalizeRole(recipientRole);
+
   const stringifiedData = {
     type: notifType,
     title: String(title),
     body: String(body),
     message: String(body),
-    recipientRole: String(recipientRole || ''),
-    role: String(recipientRole || ''),
+    recipientRole: normRole,
+    role: normRole,
     sound: 'default',
     sound_name: 'default',
     soundName: 'default',
@@ -79,6 +82,8 @@ function stringifyData(title, body, userId, recipientRole, data = {}) {
   stringifiedData.title = String(title);
   stringifiedData.body = String(body);
   stringifiedData.message = String(body);
+  stringifiedData.recipientRole = normRole;
+  stringifiedData.role = normRole;
   stringifiedData.sound = 'default';
   stringifiedData.sound_name = 'default';
   stringifiedData.soundName = 'default';
@@ -107,7 +112,7 @@ function webPushBlock(safeTitle, safeBody, stringifiedData) {
 
 /** Match the proven sendTestNotification android shape. */
 function androidBlock(safeTitle, safeBody, notifType, stringifiedData = {}) {
-  const jobKey = stringifiedData.assignmentId || stringifiedData.relatedId || String(Date.now())
+  const jobKey = stringifiedData.assignmentId || stringifiedData.relatedId || String(Date.now());
   return {
     priority: 'high',
     ttl: 86400000,
@@ -205,7 +210,19 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
       return { success: false, sentCount: 0, failedTokens: [] };
     }
 
-    const recipientRole = String(data?.recipientRole || user.role || '');
+    // Role scoping safeguard: if recipientRole is passed, ensure it strictly matches user.role
+    const targetRole = data?.recipientRole || data?.role;
+    if (targetRole) {
+      const isMatch = isRoleMatch(targetRole, user.role);
+      if (!isMatch) {
+        console.warn(
+          `[NotificationService] Role mismatch! Target userId=${userId} has role="${user.role}" but notification is scoped for role="${targetRole}". Skipping send.`,
+        );
+        return { success: false, sentCount: 0, failedTokens: [], skippedRoleMismatch: true };
+      }
+    }
+
+    const recipientRole = normalizeRole(targetRole || user.role);
     const mobileTokens = uniqueTokens(user.fcmTokensMobile);
     const mobileSet = new Set(mobileTokens);
     const webTokens = uniqueTokens(user.fcmTokensWeb).filter((t) => !mobileSet.has(t));
@@ -221,7 +238,7 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
     const safeBody = truncate(body, 160);
 
     console.log(
-      `[NotificationService] Sending type=${notifType} to user=${userId} mobile=${mobileTokens.length} web=${webTokens.length} title="${safeTitle}"`,
+      `[NotificationService] Sending type=${notifType} to user=${userId} role=${recipientRole} mobile=${mobileTokens.length} web=${webTokens.length} title="${safeTitle}"`,
     );
 
     const mobileResult = await sendBatches(
@@ -257,8 +274,8 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
     const failedTokens = [...mobileResult.failedTokens, ...webResult.failedTokens];
 
     if (failedTokens.length > 0) {
-      await User.updateOne(
-        { _id: userId },
+      await User.updateMany(
+        { $or: [{ fcmTokensWeb: { $in: failedTokens } }, { fcmTokensMobile: { $in: failedTokens } }] },
         {
           $pull: {
             fcmTokensWeb: { $in: failedTokens },
@@ -266,7 +283,7 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
           },
         },
       );
-      console.log(`[NotificationService] Removed ${failedTokens.length} stale tokens for user ${userId}`);
+      console.log(`[NotificationService] Globally removed ${failedTokens.length} stale/invalid tokens`);
     }
 
     return {
@@ -282,7 +299,12 @@ export const sendNotificationToUser = async (userId, title, body, data = {}) => 
 
 export const sendNotificationToUsers = async (userIds, title, body, data = {}) => {
   try {
-    const users = await User.find({ _id: { $in: userIds } }).select('_id fcmTokensWeb fcmTokensMobile');
+    const query = { _id: { $in: userIds } };
+    const targetRole = data?.recipientRole || data?.role;
+    if (targetRole) {
+      query.role = normalizeRole(targetRole);
+    }
+    const users = await User.find(query).select('_id fcmTokensWeb fcmTokensMobile role');
 
     const results = await Promise.all(
       users.map((u) => {
@@ -302,3 +324,4 @@ export const sendNotificationToUsers = async (userIds, title, body, data = {}) =
     return [];
   }
 };
+

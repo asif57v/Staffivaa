@@ -81,11 +81,12 @@ export const approveRefundRequest = asyncHandler(async (req, res) => {
   )
 
   // 5. Notify User
+  const refundUser = await User.findById(refundReq.userId).select('role').lean()
   sendNotificationToUser(
     refundReq.userId.toString(),
     'Refund Approved',
     `Your refund of ₹${amount} has been approved and credited to your wallet.`,
-    { url: '/app/wallet' }
+    { url: '/app/wallet', recipientRole: refundUser?.role || 'individual' }
   )
 
   sendSuccess(res, { message: 'Refund approved successfully', data: { refundReq } })
@@ -130,11 +131,12 @@ export const rejectRefundRequest = asyncHandler(async (req, res) => {
   )
 
   // 4. Notify User
+  const rejectUser = await User.findById(refundReq.userId).select('role').lean()
   sendNotificationToUser(
     refundReq.userId.toString(),
     'Refund Rejected',
     `Your refund of ₹${amount} was rejected. Reason: ${refundReq.adminNote}`,
-    { url: '/app/wallet' }
+    { url: '/app/wallet', recipientRole: rejectUser?.role || 'individual' }
   )
 
   sendSuccess(res, { message: 'Refund rejected successfully', data: { refundReq } })

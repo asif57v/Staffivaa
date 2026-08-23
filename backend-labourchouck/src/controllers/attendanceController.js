@@ -40,13 +40,77 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   return R * c
 }
 
+/**
+ * Automatically closes any past attendance records that were not checked out before 12:00 AM (midnight).
+ * Calculates worked hours up to shift end or 23:59:59 of that shift date, marks completed, and saves.
+ */
+export async function autoClosePastAttendanceRecords(workerId = null) {
+  try {
+    const todayMidnight = new Date()
+    todayMidnight.setHours(0, 0, 0, 0)
+
+    const query = {
+      checkInAt: { $ne: null },
+      checkOutAt: null,
+      shiftDate: { $lt: todayMidnight },
+    }
+    if (workerId) {
+      query.workerId = workerId
+    }
+
+    const unclosedRecords = await AttendanceRecord.find(query)
+    if (!unclosedRecords || unclosedRecords.length === 0) return
+
+    for (const record of unclosedRecords) {
+      const checkInTime = record.checkInAt ? record.checkInAt.getTime() : record.shiftDate.getTime()
+      
+      const shiftEndOfDay = new Date(record.shiftDate)
+      shiftEndOfDay.setHours(23, 59, 59, 999)
+      
+      let autoCheckOutTime = new Date(checkInTime + 8 * 60 * 60 * 1000)
+      if (autoCheckOutTime > shiftEndOfDay) {
+        autoCheckOutTime = shiftEndOfDay
+      }
+      if (autoCheckOutTime.getTime() <= checkInTime) {
+        autoCheckOutTime = new Date(checkInTime + 4 * 60 * 60 * 1000)
+      }
+
+      record.checkOutAt = autoCheckOutTime
+      const hours = Math.min(24, Math.max(0.5, (record.checkOutAt.getTime() - checkInTime) / (1000 * 60 * 60)))
+      record.totalHours = parseFloat(hours.toFixed(2))
+      record.overtimeHours = Math.max(0, parseFloat((record.totalHours - 8).toFixed(2)))
+      record.projectStatus = 'completed'
+      record.status = 'completed'
+      record.workingHoursEndedAt = autoCheckOutTime
+      record.totalWorkingMinutes = Math.round(record.totalHours * 60)
+      record.billableUnits = billableUnitsForStatus(record.attendanceStatus)
+      record.notes = record.notes ? `${record.notes} (Auto-closed at 12 AM)` : 'Auto-closed at 12 AM'
+
+      await record.save()
+      console.log(
+        `[Attendance] Auto-closed past shift for worker ${record.workerId} on ${record.shiftDate.toISOString().slice(0, 10)} -> ${record.totalHours} hrs`
+      )
+    }
+  } catch (err) {
+    console.error('[Attendance] Error auto-closing past shifts:', err.message)
+  }
+}
+
 export const checkIn = asyncHandler(async (req, res) => {
+  // Auto-close any past unclosed shifts from previous days first
+  await autoClosePastAttendanceRecords(req.user._id)
+
   const { assignmentId, lat, lng } = req.body
   let assignment = await Assignment.findOne({ _id: assignmentId, labourId: req.user._id })
   let enterpriseApp = null
 
   if (!assignment) {
-    enterpriseApp = await EnterpriseApplication.findOne({ _id: assignmentId, workerId: req.user._id, status: 'joined' })
+    enterpriseApp = await EnterpriseApplication.findOne({
+      $or: [
+        { _id: assignmentId, workerId: req.user._id },
+        { workerId: req.user._id, status: { $in: ['joining_activated', 'joined', 'waiting_for_joining_payment', 'joining_pending', 'offer_accepted'] } }
+      ]
+    }).populate('jobId').populate('enterpriseId', 'fullName enterpriseProfile')
   }
 
   if (!assignment && !enterpriseApp) {
@@ -92,10 +156,12 @@ export const checkIn = asyncHandler(async (req, res) => {
       })
     } else {
       record.checkInAt = new Date()
+      record.checkOutAt = null
       record.attendanceStatus = ATTENDANCE_STATUS.PRESENT
       record.projectStatus = 'working'
       record.status = 'checked_in'
       record.workingHoursStartedAt = new Date()
+      record.workingHoursEndedAt = null
       await record.save()
     }
 
@@ -210,6 +276,7 @@ export const checkIn = asyncHandler(async (req, res) => {
       {
         type: 'LABOUR_CHECK_IN',
         url: `/corporate/attendance/${request.projectId || request._id}`,
+        recipientRole: 'corporate',
       }
     ).catch(err => console.error('FCM check-in initiation notify error:', err))
 
@@ -345,53 +412,96 @@ export const startWork = asyncHandler(async (req, res) => {
 })
 
 export const checkOut = asyncHandler(async (req, res) => {
+  // Auto-close any past unclosed shifts from previous days first
+  await autoClosePastAttendanceRecords(req.user._id)
+
   const { assignmentId } = req.body
-  let assignment = await Assignment.findOne({ _id: assignmentId, labourId: req.user._id })
+  let assignment = null
   let enterpriseApp = null
 
-  if (!assignment) {
-    enterpriseApp = await EnterpriseApplication.findOne({ _id: assignmentId, workerId: req.user._id, status: 'joined' })
-      .populate('jobId')
-      .populate('enterpriseId', 'fullName enterpriseProfile')
+  if (assignmentId) {
+    assignment = await Assignment.findOne({ _id: assignmentId, labourId: req.user._id })
+    if (!assignment) {
+      enterpriseApp = await EnterpriseApplication.findOne({
+        $or: [
+          { _id: assignmentId, workerId: req.user._id },
+          { workerId: req.user._id, status: { $in: ['joining_activated', 'joined', 'waiting_for_joining_payment', 'joining_pending', 'offer_accepted'] } }
+        ]
+      })
+        .populate('jobId')
+        .populate('enterpriseId', 'fullName enterpriseProfile')
+    }
+  } else {
+    assignment = await Assignment.findOne({ labourId: req.user._id, status: { $in: ['accepted', 'on_site'] } })
+    if (!assignment) {
+      enterpriseApp = await EnterpriseApplication.findOne({
+        workerId: req.user._id,
+        status: { $in: ['joining_activated', 'joined', 'waiting_for_joining_payment', 'joining_pending', 'offer_accepted'] }
+      })
+        .populate('jobId')
+        .populate('enterpriseId', 'fullName enterpriseProfile')
+    }
   }
 
-  if (!assignment && !enterpriseApp) {
-    return sendError(res, { message: 'Assignment not found', statusCode: HTTP_STATUS.NOT_FOUND })
-  }
+  const shiftDateToday = new Date()
+  shiftDateToday.setHours(0, 0, 0, 0)
 
-  // First, find the active shift that is missing a checkOutAt
+  // 1. First, find any active open shift for today
   let record = await AttendanceRecord.findOne({
     workerId: req.user._id,
-    ...(assignment ? { assignmentId } : { enterpriseApplicationId: enterpriseApp._id }),
+    shiftDate: shiftDateToday,
     checkInAt: { $ne: null },
     checkOutAt: null
-  }).sort({ shiftDate: -1, createdAt: -1 })
+  }).sort({ createdAt: -1 })
 
-  // Fallback if somehow missing
+  // 2. If not found by today's shiftDate, find any active open record for this worker
   if (!record) {
-    const shiftDate = new Date()
-    shiftDate.setHours(0, 0, 0, 0)
     record = await AttendanceRecord.findOne({
       workerId: req.user._id,
-      shiftDate,
-      ...(assignment ? { assignmentId } : { enterpriseApplicationId: enterpriseApp._id })
-    }).sort({ createdAt: -1 })
+      checkInAt: { $ne: null },
+      checkOutAt: null
+    }).sort({ shiftDate: -1, createdAt: -1 })
   }
 
-  if (!record && assignment) {
-    record = await AttendanceRecord.findOne({ assignmentId }).sort({ shiftDate: -1 })
+  // 3. If still not found, check if already checked out today
+  if (!record) {
+    const alreadyCompleted = await AttendanceRecord.findOne({
+      workerId: req.user._id,
+      shiftDate: shiftDateToday,
+      checkInAt: { $ne: null },
+      checkOutAt: { $ne: null }
+    }).sort({ updatedAt: -1 })
+
+    if (alreadyCompleted) {
+      return sendSuccess(res, {
+        message: 'Shift already checked out for today',
+        data: { record: alreadyCompleted }
+      })
+    }
+
+    return sendError(res, { message: 'No active check-in found to check out', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
 
-  if (!record) return sendError(res, { message: 'No active check-in found to check out', statusCode: HTTP_STATUS.BAD_REQUEST })
+  const isPastDay = record.shiftDate && record.shiftDate.getTime() < shiftDateToday.getTime()
+  if (isPastDay) {
+    // If it's from a past day, cap at 8h / midnight of that past day
+    const checkInTime = record.checkInAt ? record.checkInAt.getTime() : record.shiftDate.getTime()
+    const shiftEndOfDay = new Date(record.shiftDate)
+    shiftEndOfDay.setHours(23, 59, 59, 999)
+    let autoOut = new Date(checkInTime + 8 * 60 * 60 * 1000)
+    if (autoOut > shiftEndOfDay) autoOut = shiftEndOfDay
+    record.checkOutAt = autoOut
+  } else {
+    record.checkOutAt = new Date()
+  }
 
-  record.checkOutAt = new Date()
   const checkInTime = record.checkInAt ? record.checkInAt.getTime() : record.shiftDate.getTime()
   const hours = (record.checkOutAt.getTime() - checkInTime) / (1000 * 60 * 60)
-  record.totalHours = parseFloat(hours.toFixed(2))
+  record.totalHours = parseFloat(Math.min(24, Math.max(0.1, hours)).toFixed(2))
   record.overtimeHours = Math.max(0, parseFloat((record.totalHours - 8).toFixed(2)))
   record.projectStatus = 'completed'
   record.status = 'completed'
-  record.workingHoursEndedAt = new Date()
+  record.workingHoursEndedAt = record.checkOutAt
 
   const workingStartedTime = record.workingHoursStartedAt ? record.workingHoursStartedAt.getTime() : checkInTime
   const diffMinutes = Math.max(0, Math.floor((record.workingHoursEndedAt.getTime() - workingStartedTime) / 60000))
@@ -530,6 +640,9 @@ export const checkOut = asyncHandler(async (req, res) => {
 })
 
 export const listAttendance = asyncHandler(async (req, res) => {
+  // Auto-close any past unclosed shifts from previous days
+  await autoClosePastAttendanceRecords(req.user.role === USER_ROLES.LABOUR ? req.user._id : null)
+
   const filter = {}
   if (req.user.role === USER_ROLES.LABOUR) {
     filter.workerId = req.user._id
@@ -1039,7 +1152,7 @@ export const verifyCheckInOtp = asyncHandler(async (req, res) => {
     record.workerId.toString(),
     'Check-In Verified',
     `Your check-in for "${projectName}" has been verified. Have a safe shift!`,
-    { type: 'LABOUR_CHECK_IN', url: '/app' }
+    { type: 'LABOUR_CHECK_IN', url: '/app', recipientRole: 'labour' }
   ).catch(err => console.error('FCM check-in verification notify error (worker):', err))
 
   if (record.vendorId) {
@@ -1048,7 +1161,7 @@ export const verifyCheckInOtp = asyncHandler(async (req, res) => {
       record.vendorId.toString(),
       'Worker Checked In',
       `${workerName} has checked in successfully at "${projectName}".`,
-      { type: 'LABOUR_CHECK_IN', url: '/vendor/attendance' }
+      { type: 'LABOUR_CHECK_IN', url: '/vendor/attendance', recipientRole: 'contractor' }
     ).catch(err => console.error('FCM check-in verification notify error (vendor):', err))
   }
 
@@ -1121,7 +1234,7 @@ export const regenerateCheckInOtp = asyncHandler(async (req, res) => {
     record.workerId.toString(),
     'New Check-In OTP Generated',
     'Your supervisor has generated a new check-in OTP. Please request it from them to check in.',
-    { url: '/app' }
+    { url: '/app', recipientRole: 'labour' }
   ).catch(err => console.error('FCM check-in OTP regeneration notify error:', err))
 
   const payload = {

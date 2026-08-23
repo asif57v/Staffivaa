@@ -23,6 +23,7 @@ import { appSpring } from '../components/app/appMotion.js'
 import { GlassPanel } from '../components/ui/GlassPanel.jsx'
 import { adminInitials, formatLastLoginDisplay, formatLastLoginRelative } from '../lib/formatAdminLastLogin.js'
 import { listenForNativeFcmToken, syncPushToken } from '../lib/pushSync.js'
+import { isRoleMatch } from '../lib/roleUtils.js'
 import { useDispatch } from 'react-redux'
 import { connectSocket } from '../services/socket.js'
 import {
@@ -212,9 +213,16 @@ export function AdminLayout() {
 
     const handleFcmMessage = (event) => {
       const payload = event.detail
-      const targetUserId = payload?.data?.targetUserId;
-      if (targetUserId && user?._id && targetUserId !== user._id) {
-        // This push notification was meant for a different account
+      const targetUserId = payload?.data?.targetUserId ? String(payload.data.targetUserId) : '';
+      const currentUserId = user?._id ? String(user._id) : '';
+      const targetRole = payload?.data?.recipientRole || payload?.data?.role || '';
+      const currentRole = user?.role || '';
+
+      const isOtherUser = Boolean(targetUserId && currentUserId && targetUserId !== currentUserId);
+      const isWrongRole = Boolean(targetRole && currentRole && !isRoleMatch(targetRole, currentRole));
+
+      if (isOtherUser || isWrongRole) {
+        console.log(`[AdminLayout Push] Dropped cross-role / cross-user push: targetRole=${targetRole}, currentRole=${currentRole}`);
         return;
       }
       if (payload?.notification && Notification.permission === 'granted') {

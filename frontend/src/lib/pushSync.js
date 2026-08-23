@@ -2,6 +2,7 @@ import { apiClient } from '../api/http.js'
 import { store } from '../store/index.js'
 import { requestForToken } from './firebase.js'
 import { isNativeAppShell } from './pushPlatform.js'
+import { normalizeRole } from './roleUtils.js'
 
 export const FCM_TOKEN_KEY = 'staffivaa_fcm_token'
 export const FCM_NATIVE_TOKEN_KEY = 'staffivaa_native_fcm_token'
@@ -21,6 +22,7 @@ export function readNativeFcmToken() {
     window.__STAFFIVAA_FCM_TOKEN__ ||
     window.StaffivaaNativeFcmToken ||
     localStorage.getItem(FCM_NATIVE_TOKEN_KEY) ||
+    localStorage.getItem(FCM_TOKEN_KEY) ||
     null
   return typeof token === 'string' && token.trim() ? token.trim() : null
 }
@@ -42,7 +44,7 @@ async function waitForNativeFcmToken({ timeoutMs = 12000, intervalMs = 500 } = {
 function persistLocalToken(token, { role, native } = {}) {
   localStorage.setItem(FCM_TOKEN_KEY, token)
   if (native) localStorage.setItem(FCM_NATIVE_TOKEN_KEY, token)
-  if (role) localStorage.setItem(FCM_ROLE_KEY, role)
+  if (role) localStorage.setItem(FCM_ROLE_KEY, normalizeRole(role))
 }
 
 function readLastSync() {
@@ -54,10 +56,15 @@ function readLastSync() {
   }
 }
 
-function markSynced(token, deviceType, userId) {
+function markSynced(token, deviceType, userId, role) {
   localStorage.setItem(
     FCM_LAST_SYNC_KEY,
-    JSON.stringify({ token, deviceType, userId: userId ? String(userId) : null }),
+    JSON.stringify({
+      token,
+      deviceType,
+      userId: userId ? String(userId) : null,
+      role: normalizeRole(role),
+    }),
   )
 }
 
@@ -65,25 +72,33 @@ function resolveAuthToken(explicitToken) {
   return explicitToken || store.getState()?.auth?.token || null
 }
 
-function shouldUpload(token, deviceType, userId, force) {
+function shouldUpload(token, deviceType, userId, role, force) {
   if (force) return true
   const last = readLastSync()
   if (!last) return true
   const uid = userId ? String(userId) : null
-  return last.token !== token || last.deviceType !== deviceType || last.userId !== uid
+  const normRole = normalizeRole(role)
+  return (
+    last.token !== token ||
+    last.deviceType !== deviceType ||
+    last.userId !== uid ||
+    last.role !== normRole
+  )
 }
 
-async function uploadToken(token, deviceType, accessToken, userId) {
+async function uploadToken(token, deviceType, accessToken, userId, role) {
   const authToken = resolveAuthToken(accessToken)
   if (!authToken) {
     console.warn('[Push] Backend sync skipped — auth token not ready yet')
     return false
   }
 
+  const normRole = normalizeRole(role)
+
   try {
     const res = await apiClient.post(
       '/users/me/fcm-token',
-      { token, deviceType },
+      { token, deviceType, role: normRole },
       { headers: { Authorization: `Bearer ${authToken}` } },
     )
     const body = res.data
@@ -92,9 +107,10 @@ async function uploadToken(token, deviceType, accessToken, userId) {
     }
 
     const saved = body?.data || {}
-    markSynced(token, deviceType, userId)
+    markSynced(token, deviceType, userId, normRole)
     console.log(
-      '[Push] Token saved to backend | field=' + (saved.field || deviceType) +
+      '[Push] Token saved to backend | role=' + (saved.role || normRole) +
+      ' | field=' + (saved.field || deviceType) +
       ' | userId=' + (saved.userId || userId || '?') +
       ' | webCount=' + (saved.webCount ?? '?') +
       ' | mobileCount=' + (saved.mobileCount ?? '?'),
@@ -117,8 +133,8 @@ async function syncNativeToken({ accessToken, role, userId, force = false } = {}
   // Native Flutter tokens always belong in the mobile bucket.
   const deviceType = 'mobile'
   persistLocalToken(nativeToken, { role, native: true })
-  if (shouldUpload(nativeToken, deviceType, userId, force)) {
-    await uploadToken(nativeToken, deviceType, accessToken, userId)
+  if (shouldUpload(nativeToken, deviceType, userId, role, force)) {
+    await uploadToken(nativeToken, deviceType, accessToken, userId, role)
   }
   return nativeToken
 }
@@ -148,8 +164,8 @@ async function syncWebToken({ accessToken, role, userId, force = false, deviceTy
   // even inside a WebView fallback (native Flutter tokens use syncNativeToken).
   const resolvedDeviceType = deviceType || 'web'
   persistLocalToken(webToken, { role, native: false })
-  if (shouldUpload(webToken, resolvedDeviceType, userId, force)) {
-    await uploadToken(webToken, resolvedDeviceType, accessToken, userId)
+  if (shouldUpload(webToken, resolvedDeviceType, userId, role, force)) {
+    await uploadToken(webToken, resolvedDeviceType, accessToken, userId, role)
   }
   return webToken
 }
@@ -158,12 +174,13 @@ async function runSyncPushToken({ accessToken, role, userId, force = false } = {
   if (typeof window === 'undefined') return null
 
   const resolvedUserId = userId ?? store.getState()?.auth?.user?._id ?? null
+  const resolvedRole = role ?? store.getState()?.auth?.user?.role ?? null
   const inNativeShell = isNativeAppShell()
 
   // Prefer Flutter native token (shows in Android/iOS shade when app is backgrounded).
   const nativeToken = await syncNativeToken({
     accessToken,
-    role,
+    role: resolvedRole,
     userId: resolvedUserId,
     force,
   })
@@ -178,7 +195,7 @@ async function runSyncPushToken({ accessToken, role, userId, force = false } = {
 
   return syncWebToken({
     accessToken,
-    role,
+    role: resolvedRole,
     userId: resolvedUserId,
     force,
     // Phone Chrome / desktop browser / WebView fallback → always web bucket
@@ -223,3 +240,4 @@ export function clearPushSyncState() {
   localStorage.removeItem(FCM_ROLE_KEY)
   localStorage.removeItem(FCM_LAST_SYNC_KEY)
 }
+

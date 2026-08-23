@@ -79,7 +79,7 @@ export function startCorporatePaymentCheckJob() {
             req.clientId.toString(),
             'Advance Payment Request',
             `Your project starts on ${startDate.toLocaleDateString()}. Please complete the ${advancePercent}% advance payment of your booking to start.`,
-            { url: `/corporate/requests/${req._id}` }
+            { url: `/corporate/requests/${req._id}`, recipientRole: 'corporate' }
           )
 
           const allocation = await Allocation.findOne({ requestId: req._id })
@@ -88,7 +88,7 @@ export function startCorporatePaymentCheckJob() {
               allocation.vendorId.toString(),
               'Project Payment Pending',
               `Corporate advance payment is pending for project ${req.reference || req._id}. Check-in is locked until payment is made.`,
-              { url: `/vendor/jobs` }
+              { url: `/vendor/jobs`, recipientRole: 'contractor' }
             )
           }
         }
@@ -128,7 +128,7 @@ export function startCorporatePaymentCheckJob() {
             req.clientId.toString(),
             'Project Active',
             `Your project ${req.reference} is now Active! Workers are allowed to check-in.`,
-            { url: `/corporate/requests/${req._id}` }
+            { url: `/corporate/requests/${req._id}`, recipientRole: 'corporate' }
           )
         }
       }
@@ -168,7 +168,7 @@ export function startCorporatePaymentCheckJob() {
               req.clientId.toString(),
               'Final Settlement Payment Request',
               `Your project has ended. Please complete the remaining payment for project ${req.reference || req._id} to settle the invoice.`,
-              { url: `/corporate/requests/${req._id}` }
+              { url: `/corporate/requests/${req._id}`, recipientRole: 'corporate' }
             )
           }
         }
@@ -189,7 +189,7 @@ export function startCorporatePaymentCheckJob() {
             req.clientId.toString(),
             'Reminder: Payment Due',
             `Please pay the advance payment for booking ${req.reference} to avoid check-in lock.`,
-            { url: `/corporate/requests/${req._id}` }
+            { url: `/corporate/requests/${req._id}`, recipientRole: 'corporate' }
           )
         }
       }

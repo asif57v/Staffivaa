@@ -37,6 +37,11 @@ const notificationSchema = new mongoose.Schema(
     relatedModel: {
       type: String,
     },
+    recipientRole: {
+      type: String,
+      trim: true,
+      index: true,
+    },
   },
   { timestamps: true }
 )

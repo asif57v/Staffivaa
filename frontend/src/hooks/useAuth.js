@@ -3,7 +3,8 @@ import toast from 'react-hot-toast'
 import { clearSession, setCredentials } from '../store/slices/authSlice.js'
 import { baseApi } from '../store/api/baseApi.js'
 import { store } from '../store/index.js'
-import { clearPushSyncState, FCM_TOKEN_KEY, syncPushToken } from '../lib/pushSync.js'
+import { clearPushSyncState, FCM_NATIVE_TOKEN_KEY, FCM_TOKEN_KEY, readNativeFcmToken, syncPushToken } from '../lib/pushSync.js'
+import { normalizeRole } from '../lib/roleUtils.js'
 
 export function useAuth() {
   const dispatch = useDispatch()
@@ -27,9 +28,10 @@ export function useAuth() {
     },
     logout: async () => {
       const activeToken = token || store.getState()?.auth?.token
+      const currentUser = user || store.getState()?.auth?.user
       try {
         toast.dismiss()
-        let fcmToken = typeof window !== 'undefined' ? localStorage.getItem(FCM_TOKEN_KEY) : null
+        let fcmToken = typeof window !== 'undefined' ? (readNativeFcmToken() || localStorage.getItem(FCM_TOKEN_KEY)) : null
 
         if (!fcmToken && typeof window !== 'undefined' && 'Notification' in window) {
           try {
@@ -44,7 +46,11 @@ export function useAuth() {
           const { apiClient } = await import('../api/http.js')
           await apiClient.post(
             '/users/me/fcm-token/remove',
-            fcmToken ? { token: fcmToken } : { clearAll: true },
+            { 
+              token: fcmToken || undefined, 
+              clearAll: true,
+              role: normalizeRole(currentUser?.role)
+            },
             { headers: { Authorization: `Bearer ${activeToken}` } },
           ).catch(err => console.error('Failed to remove FCM token from backend:', err))
         }

@@ -41,7 +41,7 @@ class CommissionService {
       quotation.vendorId.toString(),
       'Commission Generated',
       `Success Commission of ₹${commissionAmount.toLocaleString()} has been generated for project ${request.reference}. Please pay by ${dueDate.toLocaleDateString()}.`,
-      { url: '/vendor/commission' }
+      { url: '/vendor/commission', recipientRole: 'contractor' }
     )
 
     return commission
@@ -66,7 +66,7 @@ class CommissionService {
       commission.vendorId.toString(),
       'Commission Paid',
       `Payment of ₹${commission.commissionAmount.toLocaleString()} for Success Commission received successfully.`,
-      { url: '/vendor/commission' }
+      { url: '/vendor/commission', recipientRole: 'contractor' }
     )
 
     return commission
@@ -90,7 +90,7 @@ class CommissionService {
         commission.vendorId.toString(),
         'Commission Overdue',
         `Success Commission of ₹${commission.commissionAmount.toLocaleString()} for project ${commission.requestId?.reference || 'Unknown'} is overdue. Please pay immediately to avoid service interruption.`,
-        { url: '/vendor/commission' }
+        { url: '/vendor/commission', recipientRole: 'contractor' }
       )
     }
 
