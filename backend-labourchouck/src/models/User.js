@@ -207,6 +207,9 @@ const userSchema = new mongoose.Schema(
     isPhoneVerified: { type: Boolean, default: false },
     fcmTokensWeb: { type: [String], default: [] },
     fcmTokensMobile: { type: [String], default: [] },
+    activeSessionId: { type: String, default: null, index: true },
+    lastLoginDevice: { type: String, default: null },
+    lastLoginIp: { type: String, default: null },
     lastLoginAt: Date,
     /** When labour is onboarded under a vendor/contractor */
     vendorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },

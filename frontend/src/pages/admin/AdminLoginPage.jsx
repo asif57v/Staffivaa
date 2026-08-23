@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { adminEmailLogin } from '../../api/authApi.js'
 import { useAuth } from '../../hooks/useAuth.js'
@@ -27,6 +27,16 @@ export function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const reason = sessionStorage.getItem('staffivaa_logout_reason')
+      if (reason) {
+        setMessage(reason)
+        sessionStorage.removeItem('staffivaa_logout_reason')
+      }
+    }
+  }, [])
 
   async function handleSubmit(e) {
     e.preventDefault()

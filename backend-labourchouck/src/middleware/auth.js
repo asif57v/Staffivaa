@@ -33,6 +33,20 @@ export const protect = asyncHandler(async (req, res, next) => {
     })
   }
 
+  // Single active session enforcement:
+  // If token has a session ID (`payload.sid`), the user's activeSessionId in DB must match it.
+  // If user has logged out (activeSessionId is null/cleared) or logged in on another device (different activeSessionId), reject.
+  if (payload.sid && user.activeSessionId !== payload.sid) {
+    return sendError(res, {
+      message: 'You have been logged in from another device. Your session has ended.',
+      statusCode: HTTP_STATUS.UNAUTHORIZED,
+      code: 'SESSION_TERMINATED',
+      data: {
+        reason: 'logged_in_elsewhere',
+      },
+    })
+  }
+
   req.user = user
   req.tokenPayload = payload
   next()
@@ -48,8 +62,10 @@ export const optionalAuth = asyncHandler(async (req, res, next) => {
     const payload = verifyAccessToken(token)
     const user = await User.findById(payload.sub)
     if (user && user.isActive) {
-      req.user = user
-      req.tokenPayload = payload
+      if (!payload.sid || user.activeSessionId === payload.sid) {
+        req.user = user
+        req.tokenPayload = payload
+      }
     }
   } catch {
     // Ignore invalid tokens for optional auth

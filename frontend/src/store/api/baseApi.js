@@ -1,5 +1,7 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
+import toast from 'react-hot-toast'
 import { clearSession } from '../slices/authSlice.js'
+import { clearPushSyncState } from '../../lib/pushSync.js'
 
 const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
 
@@ -17,6 +19,21 @@ export const baseApi = createApi({
     })(args, api, extraOptions)
 
     if (result.error?.status === 401) {
+      const errorData = result.error.data
+      const isSessionTerminated = errorData?.code === 'SESSION_TERMINATED'
+      const message = errorData?.message || 'Your session has ended. Please log in again.'
+
+      if (typeof window !== 'undefined') {
+        clearPushSyncState()
+        if (isSessionTerminated) {
+          sessionStorage.setItem('staffivaa_logout_reason', message)
+          toast.error(message, {
+            id: 'staffivaa-session-terminated-toast',
+            duration: 8000,
+          })
+        }
+      }
+
       const token = api.getState().auth.token
       if (token) api.dispatch(clearSession())
     }

@@ -1,6 +1,8 @@
 import axios from 'axios'
+import toast from 'react-hot-toast'
 import { clearSession } from '../store/slices/authSlice.js'
 import { store } from '../store/index.js'
+import { clearPushSyncState } from '../lib/pushSync.js'
 
 let baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
 
@@ -51,10 +53,27 @@ apiClient.interceptors.response.use(
   (error) => {
     if (axios.isAxiosError(error)) {
       const status = error.response?.status
+      const data = error.response?.data
       const cfg = error.config
       if (status === 401 && cfg && !cfg.skipAuth) {
         const token = store.getState().auth.token
-        if (token) store.dispatch(clearSession())
+        const isSessionTerminated = data?.code === 'SESSION_TERMINATED'
+        const message = data?.message || 'Your session has ended. Please log in again.'
+
+        if (typeof window !== 'undefined') {
+          clearPushSyncState()
+          if (isSessionTerminated) {
+            sessionStorage.setItem('staffivaa_logout_reason', message)
+            toast.error(message, {
+              id: 'staffivaa-session-terminated-toast',
+              duration: 8000,
+            })
+          }
+        }
+
+        if (token) {
+          store.dispatch(clearSession())
+        }
       }
     }
     return Promise.reject(error)

@@ -760,7 +760,8 @@ export const removeFcmToken = asyncHandler(async (req, res) => {
         $pull: { 
           fcmTokensWeb: cleanToken, 
           fcmTokensMobile: cleanToken 
-        } 
+        },
+        $set: { activeSessionId: null },
       }
     )
     // Also pull globally from any other user record to guarantee no ghost subscriptions
@@ -769,20 +770,21 @@ export const removeFcmToken = asyncHandler(async (req, res) => {
       { $pull: { fcmTokensWeb: cleanToken, fcmTokensMobile: cleanToken } }
     )
   } else {
-    // Default on logout: clear all FCM push tokens for this user
+    // Default on logout: clear all FCM push tokens and active session for this user
     await User.updateOne(
       { _id: req.user._id },
       { 
         $set: { 
           fcmTokensWeb: [], 
-          fcmTokensMobile: [] 
+          fcmTokensMobile: [],
+          activeSessionId: null,
         } 
       }
     )
   }
 
   return sendSuccess(res, { 
-    message: 'FCM Token removed successfully'
+    message: 'Session and FCM Token removed successfully'
   })
 })
 

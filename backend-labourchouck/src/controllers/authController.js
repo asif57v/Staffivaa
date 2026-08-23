@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { User } from '../models/User.js'
 import { logAudit } from '../utils/auditLogger.js'
@@ -8,6 +9,8 @@ import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { populateLabourCategories } from '../utils/populateLabourCategories.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
+import { getIO } from '../utils/socket.js'
+import { normalizeRole } from '../utils/roleUtils.js'
 
 function buildAuthPayload(user, token) {
   const safe = user.toSafeObject()
@@ -32,27 +35,51 @@ function buildAuthPayload(user, token) {
   }
 }
 
+/** Helper to notify previous device/browser sessions on socket */
+function broadcastSessionTermination(user) {
+  try {
+    const io = getIO()
+    if (io && user?._id && user?.role) {
+      const uId = user._id.toString()
+      const canonicalRole = normalizeRole(user.role)
+      io.to(`${canonicalRole}_${uId}`).emit('session:terminated', {
+        message: 'You have been logged in from another device. Your session has ended.',
+        reason: 'logged_in_elsewhere',
+        timestamp: new Date().toISOString(),
+      })
+      console.log(`[Auth] Broadcasted session:terminated to ${canonicalRole}_${uId}`)
+    }
+  } catch (err) {
+    // Socket server may not be initialized yet
+  }
+}
+
 /** POST /auth/register/request-otp */
 export const registerRequestOtp = asyncHandler(async (req, res) => {
   const { phone, role } = req.body
   const existing = await User.findOne({ phone })
   if (existing) {
     return sendError(res, {
-      message: 'An account with this phone already exists. Please login.',
+      message: 'An account with this phone number already exists. Please log in.',
       statusCode: HTTP_STATUS.CONFLICT,
       code: 'USER_EXISTS',
     })
   }
-  const { challengeId } = await createOtpChallenge(phone, 'register')
+  const { challengeId, expiresAt } = await createOtpChallenge(phone, 'register')
   return sendSuccess(res, {
-    message: 'OTP sent to your mobile number',
-    data: { phone, role, challengeId },
+    message: 'OTP sent for registration',
+    data: {
+      phone,
+      role,
+      challengeId,
+      expiresAt,
+    },
   })
 })
 
 /** POST /auth/register/verify */
 export const registerVerify = asyncHandler(async (req, res) => {
-  const { phone, code, role, fullName, companyName, gstNumber, businessName, challengeId } = req.body
+  const { phone, code, role, fullName, companyName, businessName, businessCategory, gstNumber, challengeId } = req.body
 
   const existing = await User.findOne({ phone })
   if (existing) {
@@ -79,17 +106,23 @@ export const registerVerify = asyncHandler(async (req, res) => {
     })
   }
 
+  const sessionId = crypto.randomUUID()
+
   const doc = {
     phone,
     role,
-    fullName,
+    fullName: fullName || undefined,
     isPhoneVerified: true,
+    activeSessionId: sessionId,
     lastLoginAt: new Date(),
+    lastLoginDevice: req.headers['user-agent'] || 'Unknown',
+    lastLoginIp: req.ip || req.connection?.remoteAddress || null,
   }
 
   if (role === USER_ROLES.CORPORATE) {
     doc.corporateProfile = {
       companyName,
+      businessCategory: businessCategory || undefined,
       gstNumber: gstNumber || undefined,
       status: CORPORATE_STATUS.PENDING,
     }
@@ -97,6 +130,7 @@ export const registerVerify = asyncHandler(async (req, res) => {
   if (role === USER_ROLES.ENTERPRISE) {
     doc.enterpriseProfile = {
       companyName,
+      businessCategory: businessCategory || undefined,
       gstNumber: gstNumber || undefined,
       status: ENTERPRISE_STATUS.PENDING,
     }
@@ -126,7 +160,7 @@ export const registerVerify = asyncHandler(async (req, res) => {
     })
   }
   await deleteOtpChallengeDoc(otp.doc)
-  const token = signAccessToken(user)
+  const token = signAccessToken(user, sessionId)
 
   if (role === USER_ROLES.LABOUR) {
     triggerNotification({
@@ -136,6 +170,7 @@ export const registerVerify = asyncHandler(async (req, res) => {
       type: 'KYC_REMINDER',
       relatedId: user._id,
       relatedModel: 'User',
+      recipientRole: 'labour',
     }).catch((err) => console.error('[Notification Error]:', err.message))
   }
 
@@ -152,14 +187,14 @@ export const loginRequestOtp = asyncHandler(async (req, res) => {
   const user = await User.findOne({ phone })
   if (!user) {
     return sendError(res, {
-      message: 'No account found for this number. Please register.',
+      message: 'No account found with this phone number. Please register first.',
       statusCode: HTTP_STATUS.NOT_FOUND,
       code: 'USER_NOT_FOUND',
     })
   }
   if (!user.isActive) {
     return sendError(res, {
-      message: 'Account is disabled',
+      message: 'Your account is disabled. Contact support.',
       statusCode: HTTP_STATUS.FORBIDDEN,
       code: 'ACCOUNT_DISABLED',
     })
@@ -172,13 +207,20 @@ export const loginRequestOtp = asyncHandler(async (req, res) => {
     })
   }
   
+  const { challengeId, expiresAt } = await createOtpChallenge(phone, 'login')
+  
   // Platform is strictly based on role
   const platform = user.role === USER_ROLES.ADMIN ? 'web' : 'app'
 
-  const { challengeId } = await createOtpChallenge(phone, 'login')
   return sendSuccess(res, {
-    message: 'OTP sent to your mobile number',
-    data: { phone, role: user.role, platform, challengeId },
+    message: 'OTP sent',
+    data: { 
+      phone, 
+      role: user.role, 
+      platform, 
+      challengeId,
+      expiresAt,
+    },
   })
 })
 
@@ -188,9 +230,16 @@ export const loginVerify = asyncHandler(async (req, res) => {
   const user = await User.findOne({ phone })
   if (!user) {
     return sendError(res, {
-      message: 'User not found',
+      message: 'Account not found',
       statusCode: HTTP_STATUS.NOT_FOUND,
       code: 'USER_NOT_FOUND',
+    })
+  }
+  if (!user.isActive) {
+    return sendError(res, {
+      message: 'Account disabled',
+      statusCode: HTTP_STATUS.FORBIDDEN,
+      code: 'ACCOUNT_DISABLED',
     })
   }
 
@@ -210,8 +259,21 @@ export const loginVerify = asyncHandler(async (req, res) => {
     })
   }
 
+  // Terminate any previous active session across other devices/browsers
+  broadcastSessionTermination(user)
+
+  // Generate new unique activeSessionId
+  const sessionId = crypto.randomUUID()
+  user.activeSessionId = sessionId
   user.isPhoneVerified = true
   user.lastLoginAt = new Date()
+  user.lastLoginDevice = req.headers['user-agent'] || 'Unknown'
+  user.lastLoginIp = req.ip || req.connection?.remoteAddress || null
+
+  // Reset push tokens so old device stops receiving notifications until new device syncs
+  user.fcmTokensWeb = []
+  user.fcmTokensMobile = []
+
   await user.save()
   await deleteOtpChallengeDoc(otp.doc)
   
@@ -223,10 +285,11 @@ export const loginVerify = asyncHandler(async (req, res) => {
       type: 'KYC_REMINDER',
       relatedId: user._id,
       relatedModel: 'User',
+      recipientRole: 'labour',
     }).catch((err) => console.error('[Notification Error]:', err.message))
   }
 
-  const token = signAccessToken(user)
+  const token = signAccessToken(user, sessionId)
   const payload = buildAuthPayload(user, token)
 
   return sendSuccess(res, {
@@ -261,9 +324,18 @@ export const adminLogin = asyncHandler(async (req, res) => {
       code: 'ACCOUNT_DISABLED',
     })
   }
+
+  // Terminate any previous active admin session
+  broadcastSessionTermination(user)
+
+  const sessionId = crypto.randomUUID()
+  user.activeSessionId = sessionId
   user.lastLoginAt = new Date()
+  user.lastLoginDevice = req.headers['user-agent'] || 'Unknown'
+  user.lastLoginIp = req.ip || req.connection?.remoteAddress || null
   await user.save()
-  const token = signAccessToken(user)
+  
+  const token = signAccessToken(user, sessionId)
   
   // Log Admin Login
   await logAudit({

@@ -133,6 +133,16 @@ export function AuthEntryPage() {
   const [busy, setBusy] = useState(false)
   const [banner, setBanner] = useState(null)
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const reason = sessionStorage.getItem('staffivaa_logout_reason')
+      if (reason) {
+        setBanner({ variant: 'error', text: reason })
+        sessionStorage.removeItem('staffivaa_logout_reason')
+      }
+    }
+  }, [])
+
   const p = isValidIndianMobile(phone) ? phone : null
   const code = otpCells.join('')
   const phoneComplete = phone.length === 10
