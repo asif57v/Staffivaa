@@ -43,7 +43,12 @@ messaging.onBackgroundMessage(function(payload) {
 
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-  const targetUrl = event.notification.data && event.notification.data.url ? event.notification.data.url : '/';
+  const notifData = (event.notification && event.notification.data) || {};
+  let targetUrl = notifData.url || '/app/jobs';
+  const aid = notifData.assignmentId || notifData.relatedId;
+  if (aid && !targetUrl.includes('assignmentId=')) {
+    targetUrl += (targetUrl.includes('?') ? '&' : '?') + `assignmentId=${aid}`;
+  }
   
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
@@ -53,7 +58,8 @@ self.addEventListener('notificationclick', function(event) {
           client.focus();
           client.postMessage({
             type: 'NAVIGATE_TO_URL',
-            url: targetUrl
+            url: targetUrl,
+            data: notifData,
           });
           return;
         }

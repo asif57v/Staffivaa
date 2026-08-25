@@ -166,10 +166,11 @@ export const listLabourAssignments = asyncHandler(async (req, res) => {
     
     // If the assignment is merely an open OFFER, we must strictly check request validity
     if (a.status === ASSIGNMENT_STATUS.OFFERED) {
-      if (a.requestId.status === REQUEST_STATUS.CANCELLED) return false
+      const reqStatus = String(a.requestId.status || '').toLowerCase()
+      if (reqStatus === 'cancelled' || reqStatus === 'rejected') return false
       
       // If it's an individual request searching for labour, it must not be expired
-      if (a.requestId.status === REQUEST_STATUS.SEARCHING) {
+      if (reqStatus === 'searching') {
         if (a.requestId.expiresAt && new Date(a.requestId.expiresAt) <= now) {
           return false
         }
@@ -177,13 +178,14 @@ export const listLabourAssignments = asyncHandler(async (req, res) => {
       
       // If the request has already been accepted by someone else or moved forward
       const validOfferStatuses = [
-        REQUEST_STATUS.SEARCHING, 
-        REQUEST_STATUS.ALLOCATING, 
-        REQUEST_STATUS.ASSIGNED, 
-        REQUEST_STATUS.CONFIRMED, 
-        REQUEST_STATUS.PENDING_REVIEW
+        'searching',
+        'allocating',
+        'assigned',
+        'confirmed',
+        'pending_review',
+        'offered'
       ]
-      if (!validOfferStatuses.includes(a.requestId.status)) {
+      if (!validOfferStatuses.includes(reqStatus)) {
         return false
       }
     }
@@ -242,11 +244,9 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
   if (!assignment) return sendError(res, { message: 'Not found', statusCode: HTTP_STATUS.NOT_FOUND })
   if (action === 'accept') {
     const labourUser = await User.findById(req.user._id)
-    if (labourUser?.labourProfile?.availabilityStatus === 'offline') {
-      return sendError(res, {
-        message: 'You are currently OFFLINE. Please switch to ONLINE status from your Home screen to accept job requests.',
-        statusCode: HTTP_STATUS.BAD_REQUEST,
-      })
+    if (labourUser && labourUser.labourProfile?.availabilityStatus === 'offline') {
+      labourUser.labourProfile.availabilityStatus = 'available'
+      await labourUser.save()
     }
 
     const activeAssignments = await Assignment.find({

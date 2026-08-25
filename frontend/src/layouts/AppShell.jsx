@@ -43,7 +43,7 @@ import {
   cancelActiveLiveBookings,
   WORKER_CANCELLED_BOOKING_EVENT,
 } from '../lib/individualBookings.js'
-import { readLabourPresenceOnline } from '../hooks/useLabourPresence.js'
+import { readLabourPresenceOnline, writeLabourPresenceOnline } from '../hooks/useLabourPresence.js'
 
 export function AppShell() {
   const { pathname, search } = useLocation()
@@ -60,7 +60,10 @@ export function AppShell() {
   const { headerTagline, bottomNav, drawerNav } = useMemo(() => getAppNavigation(user?.role), [user?.role])
 
   const isLabour = user?.role === USER_ROLES.LABOUR
-  const { data: apiData } = useGetLabourAssignmentsQuery(undefined, { skip: !isLabour })
+  const { data: apiData, refetch: refetchAssignments } = useGetLabourAssignmentsQuery(undefined, {
+    skip: !isLabour,
+    refetchOnMountOrArgChange: true,
+  })
   const [localDemo, setLocalDemo] = useState(() => loadJobDemoState())
   const [incomingJob, setIncomingJob] = useState(null)
   const [isAcceptingPopup, setIsAcceptingPopup] = useState(false)
@@ -151,15 +154,6 @@ export function AppShell() {
     const aid = String(assignmentId);
     dismissedAssignmentsRef.current.delete(aid);
 
-    if (!readLabourPresenceOnline()) {
-      dispatchAlert(
-        'New Job Opportunity',
-        `${data.categoryName || 'Work'} requested nearby. Go ONLINE to accept.`,
-        false,
-      );
-      return;
-    }
-
     const popup = {
       assignmentId: aid,
       type: data.type || 'new_order',
@@ -176,7 +170,7 @@ export function AppShell() {
 
     setIncomingJob(popup);
     incomingJobRef.current = popup;
-  }, [dispatchAlert]);
+  }, []);
 
   const scheduleIncomingJobFromNotification = useCallback((relatedId) => {
     if (!relatedId || user?.role !== USER_ROLES.LABOUR) return;
@@ -194,6 +188,7 @@ export function AppShell() {
       console.log('[Socket] Invalidating Assignments, Requests, Notifications, and Enterprise Jobs cache');
       dispatch(workforceApi.util.invalidateTags(['Assignments', 'Requests', 'Notifications']));
       dispatch(enterpriseApi.util.invalidateTags(['EnterpriseJobs']));
+      refetchAssignments?.();
     };
 
     socket.on('connect', () => {
@@ -213,6 +208,7 @@ export function AppShell() {
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
 
     const handleAssignmentAssigned = (data) => {
       console.log('[Socket] assignment_assigned event received:', data);
@@ -355,6 +351,7 @@ export function AppShell() {
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
       stopGlobalRingSound();
       socket.off('connect');
       socket.off('reconnect');
@@ -376,25 +373,35 @@ export function AppShell() {
       socket.off('bookingCancelledByLabour', handleLabourCancelled);
       socket.off('bookingExpired', handleBookingExpired);
     };
-  }, [user, token, dispatch, presentIncomingJobOffer, scheduleIncomingJobFromNotification, dispatchAlert, refreshAppUser, stopGlobalRingSound]);
+  }, [user, token, dispatch, presentIncomingJobOffer, scheduleIncomingJobFromNotification, dispatchAlert, refreshAppUser, stopGlobalRingSound, refetchAssignments]);
   // ------------------------------------------
 
   // --- Auto-resync pending job offer card from API data (handles background kill / app restart) ---
   useEffect(() => {
     if (!isLabour || !apiData?.assignments) return
 
+    const now = Date.now()
     const pendingOffers = apiData.assignments.filter((a) => {
       if (a.status !== 'offered') return false
       if (dismissedAssignmentsRef.current.has(String(a._id))) return false
 
       const req = a.requestId
       if (!req || typeof req !== 'object') return false
-      if (req.status === 'CANCELLED') return false
+      
+      const reqStatus = String(req.status || '').toLowerCase()
+      if (reqStatus === 'cancelled' || reqStatus === 'rejected') return false
 
-      if (req.expiresAt && new Date(req.expiresAt) <= new Date()) return false
+      if (req.expiresAt && new Date(req.expiresAt).getTime() <= now) return false
 
-      const validOfferStatuses = ['SEARCHING', 'ALLOCATING', 'ASSIGNED', 'CONFIRMED', 'PENDING_REVIEW']
-      if (!validOfferStatuses.includes(req.status)) return false
+      const validOfferStatuses = [
+        'searching',
+        'allocating',
+        'assigned',
+        'confirmed',
+        'pending_review',
+        'offered'
+      ]
+      if (!validOfferStatuses.includes(reqStatus)) return false
 
       return true
     })
@@ -408,12 +415,12 @@ export function AppShell() {
     if (pendingOffer) {
       const req = pendingOffer.requestId
       const expiresAt = req?.expiresAt ? new Date(req.expiresAt).getTime() : null
-      const remainingSeconds = expiresAt ? Math.max(5, Math.floor((expiresAt - Date.now()) / 1000)) : 90
+      const remainingSeconds = expiresAt ? Math.max(5, Math.floor((expiresAt - now) / 1000)) : 90
 
       const popupJob = {
-        assignmentId: pendingOffer._id,
+        assignmentId: String(pendingOffer._id),
         type: 'new_order',
-        requestId: req?._id || req,
+        requestId: req?._id ? String(req._id) : String(req),
         clientName: req?.clientId?.fullName || req?.clientId?.companyName || 'Customer',
         locationText: req?.locationText || req?.siteId?.address || '',
         categoryName: pendingOffer.categoryId?.name || req?.lines?.[0]?.categoryId?.name || 'Worker',
@@ -424,7 +431,7 @@ export function AppShell() {
         timeoutSeconds: remainingSeconds,
       }
 
-      if (readLabourPresenceOnline() && (!incomingJobRef.current || incomingJobRef.current.assignmentId !== String(pendingOffer._id))) {
+      if (!incomingJobRef.current || incomingJobRef.current.assignmentId !== String(pendingOffer._id)) {
         console.log('[AppShell] Resyncing active job offer card from API data:', popupJob)
         presentIncomingJobOffer(popupJob)
       }
@@ -455,10 +462,12 @@ export function AppShell() {
   // --- Incoming Job Popup Handlers ---
   const handlePopupAccept = useCallback(async () => {
     if (!incomingJob?.assignmentId) return;
+    
+    // Automatically switch worker presence to online if currently offline
     if (!readLabourPresenceOnline()) {
-      dispatchAlert('You are Offline', 'Please turn ON your status from Home screen to accept this job.', true);
-      return;
+      writeLabourPresenceOnline(true);
     }
+
     stopGlobalRingSound();
     setIsAcceptingPopup(true);
     try {
@@ -654,8 +663,14 @@ export function AppShell() {
     window.addEventListener('fcm-foreground-message', handleFcmMessage);
     
     const handleServiceWorkerMessage = (event) => {
-      if (event.data && event.data.type === 'NAVIGATE_TO_URL' && event.data.url) {
-        navigate(event.data.url);
+      if (event.data && event.data.type === 'NAVIGATE_TO_URL') {
+        if (event.data.url) navigate(event.data.url);
+        const d = event.data.data;
+        const aid = d?.assignmentId || d?.relatedId || event.data.assignmentId || event.data.relatedId;
+        if (aid && user?.role === USER_ROLES.LABOUR) {
+          scheduleIncomingJobFromNotification(aid);
+          refetchAssignments?.();
+        }
       }
     };
 
@@ -669,8 +684,19 @@ export function AppShell() {
         navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
       }
     };
-  }, [user, token, playNewJobRingSound, scheduleIncomingJobFromNotification, presentIncomingJobOffer, dispatchAlert, refreshAppUser, dispatch, navigate]);
+  }, [user, token, playNewJobRingSound, scheduleIncomingJobFromNotification, presentIncomingJobOffer, dispatchAlert, refreshAppUser, dispatch, navigate, refetchAssignments]);
   // ---------------------------
+
+  // Handle cold-start or deep-link navigation containing assignmentId/relatedId
+  useEffect(() => {
+    if (!isLabour) return;
+    const params = new URLSearchParams(search);
+    const targetAssignmentId = params.get('assignmentId') || params.get('relatedId');
+    if (targetAssignmentId) {
+      scheduleIncomingJobFromNotification(targetAssignmentId);
+      refetchAssignments?.();
+    }
+  }, [isLabour, search, scheduleIncomingJobFromNotification, refetchAssignments]);
 
   const { data: notifData } = workforceApi.useGetNotificationsQuery(undefined, { skip: !user })
   const notifList = useMemo(() => {
