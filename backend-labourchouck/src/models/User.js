@@ -119,6 +119,13 @@ const labourProfileSchema = new mongoose.Schema(
     workRadius: { type: Number, default: 15 }, // Default radius in km
     locationLat: { type: Number },
     locationLng: { type: Number },
+    currentLocation: {
+      lat: { type: Number },
+      lng: { type: Number },
+      heading: { type: Number, default: 0 },
+      speed: { type: Number, default: 0 },
+      updatedAt: { type: Date }
+    },
   },
   { _id: false },
 )

@@ -21,6 +21,8 @@ import {
   Lock
 } from 'lucide-react'
 import { io } from 'socket.io-client'
+import { useLoadScript } from '@react-google-maps/api'
+import { LiveTrackingMap } from './LiveTrackingMap.jsx'
 import { useGetRequestQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation, useCreateExtraWorkMutation, useGetExtraWorkQuery, useUpdateExtraWorkStatusMutation } from '../../../store/api/workforceApi.js'
 import { enrichDiscoverLabourUi, hashSeed } from '../../../lib/discoverLabourDummyUi.js'
 import { loadRazorpayScript } from '../../../lib/razorpay.js'
@@ -31,9 +33,18 @@ import {
   notifyWorkerCancelledBooking,
 } from '../../../lib/individualBookings.js'
 
+const GOOGLE_MAPS_LIBRARIES = ['places']
+
 export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCancel }) {
   const requestId = booking?.requestId || booking?._id
   const [stopRequestPoll, setStopRequestPoll] = useState(false)
+  const [liveEtaInfo, setLiveEtaInfo] = useState(null)
+
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+  const { isLoaded: isMapLoaded } = useLoadScript({
+    googleMapsApiKey: apiKey,
+    libraries: GOOGLE_MAPS_LIBRARIES,
+  })
 
   const { data: requestData, isLoading, error, isError, refetch } = useGetRequestQuery(requestId, {
     skip: !requestId || stopRequestPoll,
@@ -364,6 +375,46 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
 
 
 
+  // Derive customer coordinates for map
+  const customerLocation = useMemo(() => {
+    if (request?.locationLat != null && request?.locationLng != null) {
+      return { lat: Number(request.locationLat), lng: Number(request.locationLng) }
+    }
+    if (request?.locationPoint?.coordinates?.length === 2) {
+      return { lat: Number(request.locationPoint.coordinates[1]), lng: Number(request.locationPoint.coordinates[0]) }
+    }
+    if (draft?.lat != null && draft?.lng != null) {
+      return { lat: Number(draft.lat), lng: Number(draft.lng) }
+    }
+    return { lat: 22.7196, lng: 75.8577 } // default Indore
+  }, [request?.locationLat, request?.locationLng, request?.locationPoint, draft?.lat, draft?.lng])
+
+  // Derive initial worker coordinates for map
+  const initialWorkerLocation = useMemo(() => {
+    if (request?.currentLocation?.lat && request?.currentLocation?.lng) {
+      return {
+        lat: Number(request.currentLocation.lat),
+        lng: Number(request.currentLocation.lng),
+        heading: Number(request.currentLocation.heading) || 0,
+      }
+    }
+    if (assignedLabour?.labourProfile?.currentLocation?.lat && assignedLabour?.labourProfile?.currentLocation?.lng) {
+      return {
+        lat: Number(assignedLabour.labourProfile.currentLocation.lat),
+        lng: Number(assignedLabour.labourProfile.currentLocation.lng),
+        heading: Number(assignedLabour.labourProfile.currentLocation.heading) || 0,
+      }
+    }
+    if (assignedLabour?.labourProfile?.locationLat && assignedLabour?.labourProfile?.locationLng) {
+      return {
+        lat: Number(assignedLabour.labourProfile.locationLat),
+        lng: Number(assignedLabour.labourProfile.locationLng),
+        heading: 0,
+      }
+    }
+    return null
+  }, [request?.currentLocation, assignedLabour])
+
   // Derive stable 6-digit OTP from backend ID
   const verificationOtp = useMemo(() => {
     const id = request?._id || booking?._id || requestId;
@@ -560,8 +611,23 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
           </p>
         </div>
 
+        {/* Live Interactive Google Map (Uber/Rapido style) */}
+        {isMapLoaded && assignedLabour && isAcceptedOrBeyond && (
+          <div className="px-5 pt-4 pb-1">
+            <LiveTrackingMap
+              bookingId={requestId}
+              customerLocation={customerLocation}
+              initialWorkerLocation={initialWorkerLocation}
+              workerName={workerName}
+              workerPic={workerPic}
+              isArrived={['on_site', 'completed'].includes(currentStatus)}
+              onEtaUpdate={(info) => setLiveEtaInfo(info)}
+            />
+          </div>
+        )}
+
         {/* Worker Details Card */}
-        <div className="px-5 pt-5 pb-3">
+        <div className="px-5 pt-4 pb-3">
           <h3 className="text-xs font-extrabold text-slate-900 mb-2 uppercase tracking-wider">Assigned Labour</h3>
 
           {assignedLabour ? (
@@ -614,11 +680,16 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
             </div>
           )}
 
-          {assignedLabour && ['in_progress', 'on_site'].includes(currentStatus) && (
+          {assignedLabour && ['in_progress', 'on_site', 'accepted'].includes(currentStatus) && (
             <div className="mt-2 flex items-center justify-between rounded-2xl bg-gradient-to-br from-brand to-yellow-500 p-3 text-white shadow-lg shadow-brand/20">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wide opacity-90">Estimated Arrival</p>
-                <p className="text-xl font-black tracking-tighter leading-none mt-0.5">15-20 Min</p>
+                <p className="text-xl font-black tracking-tighter leading-none mt-0.5">
+                  {currentStatus === 'on_site' ? 'Arrived at Site' : (liveEtaInfo?.eta || '15-20 Min')}
+                </p>
+                {liveEtaInfo?.distance && currentStatus !== 'on_site' && (
+                  <p className="text-[10px] font-bold opacity-90 mt-0.5">{liveEtaInfo.distance} away</p>
+                )}
               </div>
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 backdrop-blur-md">
                 <Clock className="h-4 w-4 text-white" />

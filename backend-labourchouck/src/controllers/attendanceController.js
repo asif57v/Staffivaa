@@ -361,12 +361,13 @@ export const checkIn = asyncHandler(async (req, res) => {
 
   await WorkforceRequest.findByIdAndUpdate(request._id, { status: 'on_site' })
 
-  import('../utils/socket.js').then(({ getIO }) => {
+  import('../utils/socket.js').then(({ getIO, emitTrackingStop }) => {
     try {
       const io = getIO()
       io.to(`request_${request._id.toString()}`).emit('request_status_update', {
         requestStatus: 'on_site',
       })
+      emitTrackingStop(request._id.toString(), 'arrived')
     } catch (err) {
       console.error('Socket emit error:', err)
     }

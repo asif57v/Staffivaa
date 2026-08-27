@@ -43,6 +43,13 @@ const workforceRequestSchema = new mongoose.Schema(
       type: { type: String, enum: ['Point'], default: 'Point' },
       coordinates: { type: [Number] } // [longitude, latitude]
     },
+    currentLocation: {
+      lat: { type: Number },
+      lng: { type: Number },
+      heading: { type: Number, default: 0 },
+      speed: { type: Number, default: 0 },
+      updatedAt: { type: Date }
+    },
     vendorSearchRadius: { type: Number }, // null means Unlimited
     distanceCalculationVersion: { type: String, default: '1.0' },
     notes: { type: String, trim: true, maxlength: 2000 },
