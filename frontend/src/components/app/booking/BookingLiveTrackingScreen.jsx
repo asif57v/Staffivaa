@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft,
   Phone,
+  MessageCircle,
   MapPin,
   X,
   ShieldCheck,
@@ -11,23 +12,37 @@ import {
   Clock,
   Navigation2,
   AlertCircle,
-  MoreVertical,
   Calendar,
   CreditCard,
   FileText,
-  Map,
   Loader2,
   User,
-  Lock
+  Lock,
+  Share2,
+  ChevronUp,
+  ChevronDown,
+  ShieldAlert,
+  HelpCircle,
+  Copy,
+  Check,
+  Sparkles,
+  Zap,
+  PlusCircle,
 } from 'lucide-react'
 import { io } from 'socket.io-client'
 import { useLoadScript } from '@react-google-maps/api'
 import { LiveTrackingMap } from './LiveTrackingMap.jsx'
-import { useGetRequestQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation, useCreateExtraWorkMutation, useGetExtraWorkQuery, useUpdateExtraWorkStatusMutation } from '../../../store/api/workforceApi.js'
-import { enrichDiscoverLabourUi, hashSeed } from '../../../lib/discoverLabourDummyUi.js'
+import {
+  useGetRequestQuery,
+  useCreateRazorpayOrderMutation,
+  useVerifyRazorpayPaymentMutation,
+  useCreateExtraWorkMutation,
+  useGetExtraWorkQuery,
+  useUpdateExtraWorkStatusMutation,
+} from '../../../store/api/workforceApi.js'
+import { hashSeed } from '../../../lib/discoverLabourDummyUi.js'
 import { loadRazorpayScript } from '../../../lib/razorpay.js'
 import { ExtraWorkModal } from './ExtraWorkModal.jsx'
-import { PlusCircle } from 'lucide-react'
 import {
   markLocalBookingCancelled,
   notifyWorkerCancelledBooking,
@@ -39,6 +54,9 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
   const requestId = booking?.requestId || booking?._id
   const [stopRequestPoll, setStopRequestPoll] = useState(false)
   const [liveEtaInfo, setLiveEtaInfo] = useState(null)
+  const [isSheetExpanded, setIsSheetExpanded] = useState(false)
+  const [copiedOtp, setCopiedOtp] = useState(false)
+  const [showSosModal, setShowSosModal] = useState(false)
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
   const { isLoaded: isMapLoaded } = useLoadScript({
@@ -48,7 +66,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
 
   const { data: requestData, isLoading, error, isError, refetch } = useGetRequestQuery(requestId, {
     skip: !requestId || stopRequestPoll,
-    pollingInterval: stopRequestPoll ? 0 : 8000,
+    pollingInterval: stopRequestPoll ? 0 : 7000,
   })
 
   // Expired / deleted bookings return 404 — stop hammering the API
@@ -94,11 +112,8 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     }
   }
 
-
-
   const handlePayment = async () => {
     if (!requestId || String(requestId).startsWith('demo-')) {
-      // Simulate successful payment for demo bookings
       setRealtimeStatus({ requestStatus: 'confirmed' })
       alert('Simulated Payment Successful!')
       return
@@ -117,7 +132,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
         await refetch()
         return
       }
-      
+
       const options = {
         key: order.keyId,
         amount: order.amount,
@@ -131,7 +146,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
               id: requestId,
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature
+              razorpay_signature: response.razorpay_signature,
             }).unwrap()
             await refetch()
           } catch (err) {
@@ -140,12 +155,12 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
           }
         },
         theme: {
-          color: '#FFD100'
-        }
+          color: '#FFD100',
+        },
       }
-      
+
       const rzp1 = new window.Razorpay(options)
-      rzp1.on('payment.failed', function (response){
+      rzp1.on('payment.failed', function (response) {
         console.error(response.error)
       })
       rzp1.open()
@@ -168,9 +183,9 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
       if (socketUrl.includes('5000')) socketUrl = socketUrl.replace('5000', '5001')
       else if (!socketUrl.includes('5001')) socketUrl = 'http://localhost:5001'
     }
-    const socket = io(socketUrl, { 
+    const socket = io(socketUrl, {
       withCredentials: true,
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
     })
 
     socket.on('connect', () => {
@@ -183,17 +198,17 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
 
     socket.on('request_status_update', (data) => {
       setRealtimeStatus(data)
-      refetch() // Refetch the full data to ensure consistency
+      refetch()
     })
 
     socket.on('bookingAccepted', (data) => {
       setRealtimeStatus({ requestStatus: data.status })
-      refetch() // Refetch to get the accepted labour details
+      refetch()
     })
 
     socket.on('extra_work_updated', () => {
       refetchExtraWork()
-      refetch() // Refresh booking total if accepted
+      refetch()
     })
 
     socket.on('booking_cancelled', (payload) => {
@@ -212,7 +227,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
           })
         } else {
           alert(
-            `Booking Cancelled:\n${payload?.message || 'This booking was cancelled.'}\n\nNote: If you paid the platform fee, the refund process has been initiated. You can check your Wallet for updates.`,
+            `Booking Cancelled:\n${payload?.message || 'This booking was cancelled.'}\n\nNote: If you paid the platform fee, refund process has been initiated.`,
           )
         }
         onBack()
@@ -262,32 +277,31 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
 
   // Data Extraction
   const request = requestData?.request || {}
-  
+
   const [timeLeft, setTimeLeft] = useState(150)
 
   useEffect(() => {
-    let interval;
-    let pollInterval;
+    let interval
+    let pollInterval
 
     if (request?.status === 'platform_fee_pending' && request?.platformFeePendingAt) {
       const pendingAt = new Date(request.platformFeePendingAt).getTime()
       const expiryTime = pendingAt + 2.5 * 60 * 1000
-      
+
       interval = setInterval(() => {
         const now = new Date().getTime()
         const remaining = Math.max(0, Math.floor((expiryTime - now) / 1000))
         setTimeLeft(remaining)
-        
+
         if (remaining <= 0) {
           clearInterval(interval)
-          // Start polling if timer expires and status hasn't updated via socket
           pollInterval = setInterval(() => {
             refetch()
           }, 5000)
         }
       }, 1000)
     }
-      
+
     return () => {
       if (interval) clearInterval(interval)
       if (pollInterval) clearInterval(pollInterval)
@@ -303,12 +317,10 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
   const assignments = requestData?.assignments || []
   const paymentSummary = requestData?.paymentSummary || { serviceCost: 0, extraCost: 0, platformFee: 0, taxes: 0, totalAmount: 0 }
 
-  const activeAssignment = assignments?.find(a => ['accepted', 'on_site', 'in_progress', 'completed'].includes(a.status))
+  const activeAssignment = assignments?.find((a) => ['accepted', 'on_site', 'in_progress', 'completed'].includes(a.status))
 
   let currentStatus = realtimeStatus?.requestStatus || request?.status || booking?.status || 'pending_review'
   if (activeAssignment && ['on_site', 'in_progress', 'completed'].includes(activeAssignment.status)) {
-    // Override request status with assignment status if worker has progressed
-    // This ensures OTP is shown when worker marks 'on_site'
     currentStatus = activeAssignment.status
   }
 
@@ -339,14 +351,11 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     }
   }, [currentStatus, onBack, request?.cancelReason, requestId, booking?.requestId, booking?.ref])
 
-  // Only fallback to demo/draft workers if the booking has actually been accepted or pending payment
   const isAcceptedOrBeyond = ['accepted', 'in_progress', 'on_site', 'completed', 'platform_fee_pending'].includes(currentStatus)
   const fallbackWorker = isAcceptedOrBeyond ? (booking?.assignedWorker || worker || (draft?.selectedWorkers || [])[0]) : null
 
   const assignedLabour = activeAssignment?.labourId || fallbackWorker || null
 
-  // Normalize fields so they always display correctly
-  // activeAssignment?.labourId is populated from the backend, so it's an object containing _id, fullName, phone, etc.
   const workerName = assignedLabour?.fullName || assignedLabour?.displayName || assignedLabour?.name || 'Verified Worker'
   const workerId = assignedLabour?._id || assignedLabour?.id || 'N/A'
   const shortWorkerId =
@@ -356,7 +365,6 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
         : `#${String(workerId).replace(/^demo-/, '').toUpperCase()}`
       : workerId
 
-  // If the backend returned a real phone number, use it. Otherwise, if it's a demo/dummy worker without a phone, generate a placeholder.
   let defaultPhone = '+91 98765 43210'
   if (workerId && String(workerId).startsWith('demo-')) {
     defaultPhone = '+91 98' + String(hashSeed(workerId, 99999999)).padStart(8, '0')
@@ -365,15 +373,16 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
   }
 
   let workerPhone = assignedLabour?.phone || defaultPhone
-  // Ensure Indian phone numbers have +91 prefix if missing
   if (workerPhone && workerPhone.length === 10 && !workerPhone.startsWith('+')) {
     workerPhone = `+91 ${workerPhone.slice(0, 5)} ${workerPhone.slice(5)}`
   }
 
-  const workerAddress = assignedLabour?.contractorProfile?.businessAddress || assignedLabour?.corporateProfile?.registeredAddress || assignedLabour?.address || 'Address not provided'
+  const rawCleanPhone = workerPhone.replace(/\D/g, '')
+
+  const workerAddress = assignedLabour?.contractorProfile?.businessAddress || assignedLabour?.corporateProfile?.registeredAddress || assignedLabour?.address || 'Service Location'
   const workerPic = assignedLabour?.profileImageUrl || assignedLabour?.photoUrl || null
-
-
+  const workerRating = assignedLabour?.rating || '4.9'
+  const workerTotalJobs = assignedLabour?.totalJobs || '140+'
 
   // Derive customer coordinates for map
   const customerLocation = useMemo(() => {
@@ -417,29 +426,51 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
 
   // Derive stable 6-digit OTP from backend ID
   const verificationOtp = useMemo(() => {
-    const id = request?._id || booking?._id || requestId;
-    if (!id) return '------';
-    const num = parseInt(String(id).slice(-6), 16) % 900000;
-    return String(100000 + (isNaN(num) ? 0 : num));
-  }, [request?._id, booking?._id, requestId]);
+    const id = request?._id || booking?._id || requestId
+    if (!id) return '------'
+    const num = parseInt(String(id).slice(-6), 16) % 900000
+    return String(100000 + (isNaN(num) ? 0 : num))
+  }, [request?._id, booking?._id, requestId])
 
-  // Derive timeline steps
-  const steps = [
-    { label: 'Booking Created', done: true, key: 'created' },
-    { label: 'Labour Assigned', done: ['accepted', 'assigned', 'on_site', 'in_progress', 'completed'].includes(currentStatus) || !!assignedLabour, key: 'assigned' },
-    { label: 'On The Way', done: ['accepted', 'on_site', 'in_progress', 'completed'].includes(currentStatus), key: 'travel' },
-    { label: 'Worker Arrived (OTP Pending)', done: ['on_site', 'in_progress', 'completed'].includes(currentStatus), key: 'waiting_otp' },
-    { label: 'Work In Progress', done: ['in_progress', 'completed'].includes(currentStatus), key: 'work_in_progress' },
-    { label: 'Work Completed', done: ['completed'].includes(currentStatus), key: 'completed' },
-  ]
-  const currentStepIdx = steps.findLastIndex(s => s.done)
+  const copyOtpToClipboard = () => {
+    if (!verificationOtp) return
+    navigator.clipboard.writeText(verificationOtp)
+    setCopiedOtp(true)
+    setTimeout(() => setCopiedOtp(false), 2200)
+  }
+
+  const handleShareTracking = () => {
+    const shareText = `Track my worker (${workerName}) on Staffivaa: Booking #${request.reference || booking?.ref || 'N/A'}`
+    const shareUrl = window.location.href
+    if (navigator.share) {
+      navigator.share({ title: 'Staffivaa Live Tracking', text: shareText, url: shareUrl }).catch(() => {})
+    } else {
+      navigator.clipboard.writeText(`${shareText}\n${shareUrl}`)
+      alert('Tracking link copied to clipboard!')
+    }
+  }
+
+  const handleOpenWhatsApp = () => {
+    const ref = request.reference || booking?.ref || ''
+    const msg = encodeURIComponent(`Hi ${workerName}, I booked your service on Staffivaa (Ref #${ref}). Please let me know your ETA.`)
+    window.open(`https://wa.me/${rawCleanPhone}?text=${msg}`, '_blank')
+  }
+
+  // Rapido 4-Stage Live Progress Stepper Calculation
+  const progressPercentage = useMemo(() => {
+    if (currentStatus === 'completed') return 100
+    if (currentStatus === 'in_progress') return 80
+    if (currentStatus === 'on_site') return 60
+    if (['accepted', 'assigned'].includes(currentStatus)) return 35
+    return 15
+  }, [currentStatus])
 
   if (isLoading && !request._id && requestId) {
     return createPortal(
-      <div className="fixed inset-0 z-[100] flex h-screen w-full items-center justify-center bg-slate-100">
+      <div className="fixed inset-0 z-[100] flex h-screen w-full items-center justify-center bg-slate-900 text-white">
         <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-brand" />
-          <p className="text-sm font-bold text-slate-500">Loading booking details...</p>
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-slate-700 border-t-[#FFD100]" />
+          <p className="text-sm font-extrabold tracking-wide text-slate-300">Loading live tracking...</p>
         </div>
       </div>,
       document.body
@@ -448,43 +479,46 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
 
   if (error) {
     return createPortal(
-      <div className="fixed inset-0 z-[100] flex h-screen w-full items-center justify-center bg-slate-100 p-6">
-        <div className="text-center bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm">
+      <div className="fixed inset-0 z-[100] flex h-screen w-full items-center justify-center bg-slate-900 p-6">
+        <div className="text-center bg-white p-8 rounded-3xl shadow-2xl w-full max-w-sm">
           <AlertCircle className="h-12 w-12 text-rose-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-slate-900 mb-2">Failed to load booking</h2>
-          <p className="text-slate-500 mb-6 text-sm">We couldn't retrieve the details for this booking.</p>
-          <button onClick={onBack} className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl">Go Back</button>
+          <h2 className="text-xl font-black text-slate-900 mb-2">Booking Not Found</h2>
+          <p className="text-slate-500 mb-6 text-xs font-semibold">We couldn't retrieve the live details for this booking.</p>
+          <button onClick={onBack} className="w-full bg-[#0F172A] text-white font-extrabold py-3 rounded-2xl active:scale-95 transition">
+            Go Back
+          </button>
         </div>
       </div>,
       document.body
     )
   }
 
-  if (currentStatus === 'platform_fee_pending' || currentStatus === 'accepted') {
+  // Platform Fee Pending state
+  if (currentStatus === 'platform_fee_pending' || (currentStatus === 'accepted' && request.userPaymentStatus !== 'paid' && Number(request.userPlatformFee ?? 0) > 0)) {
     return createPortal(
       <div className="fixed inset-0 z-[100] flex flex-col bg-slate-50 overflow-hidden" style={{ height: '100dvh' }}>
-        <div className="relative shrink-0 bg-white border-b border-slate-100 flex items-center p-4 pt-[max(1rem,env(safe-area-inset-top,1rem))] z-10 shadow-sm">
+        <div className="relative shrink-0 bg-white border-b border-slate-100 flex items-center p-4 pt-[max(1rem,env(safe-area-inset-top,1rem))] z-10 shadow-xs">
           <button onClick={onBack} className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-800 transition active:scale-95">
             <ArrowLeft className="h-5 w-5" />
           </button>
           <h1 className="ml-4 text-lg font-black text-slate-900">
-            {request.userPaymentStatus === 'paid' ? 'Request Accepted' : 'Payment Required'}
+            {request.userPaymentStatus === 'paid' ? 'Request Accepted' : 'Confirm & Dispatch'}
           </h1>
         </div>
         <div className="flex-1 overflow-y-auto p-5 space-y-4 pb-24">
-          <div className="bg-white rounded-[20px] p-6 shadow-sm ring-1 ring-slate-200 text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600 mb-4">
-              <CheckCircle2 className="h-8 w-8" />
+          <div className="bg-white rounded-3xl p-6 shadow-sm ring-1 ring-slate-200 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-700 mb-4">
+              <Zap className="h-8 w-8 text-amber-600 fill-amber-500" />
             </div>
-            <h2 className="text-xl font-black text-slate-900 mb-2">Worker Accepted!</h2>
-            <p className="text-sm font-semibold text-slate-500 mb-4">
-              {request.userPaymentStatus === 'paid' 
-                ? "Platform fee paid successfully. Waiting for the worker to confirm their payment to dispatch."
-                : "Please pay the Staffivaa platform fee to confirm the booking and dispatch your worker."}
+            <h2 className="text-xl font-black text-slate-900 mb-2">Worker Found & Ready!</h2>
+            <p className="text-xs font-semibold text-slate-500 mb-4 leading-relaxed">
+              {request.userPaymentStatus === 'paid'
+                ? 'Platform fee paid successfully. Waiting for worker to confirm dispatch.'
+                : 'Pay the small platform fee to lock in the worker and start live GPS dispatch.'}
             </p>
 
-            {assignedLabour ? (
-              <div className="flex items-center gap-3 bg-slate-50 border border-slate-200/90 p-3.5 rounded-2xl mb-5 text-left shadow-xs">
+            {assignedLabour && (
+              <div className="flex items-center gap-3 bg-slate-50 border border-slate-200/90 p-3.5 rounded-2xl mb-5 text-left">
                 {workerPic ? (
                   <img src={workerPic} alt={workerName} className="h-12 w-12 rounded-full object-cover border-2 border-amber-400 shrink-0" />
                 ) : (
@@ -498,37 +532,37 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
                     <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
                   </div>
                   <p className="text-[11px] font-semibold text-slate-500 flex items-center gap-1 mt-0.5">
-                    <span>Verified Worker</span>
+                    <span>Verified Professional</span>
                     {shortWorkerId && shortWorkerId !== 'N/A' && (
-                      <span className="text-[10px] bg-slate-200/80 px-1.5 py-0.5 rounded text-slate-700 font-bold">{shortWorkerId}</span>
+                      <span className="text-[10px] bg-slate-200 px-1.5 py-0.5 rounded text-slate-700 font-bold">{shortWorkerId}</span>
                     )}
                   </p>
                 </div>
               </div>
-            ) : null}
-            
+            )}
+
             <div className="text-left space-y-3 mb-6 bg-slate-50 rounded-2xl p-4 border border-slate-100">
               <div className="flex justify-between items-center pb-3 border-b border-slate-200">
-                <span className="font-semibold text-slate-700">Platform Fee</span>
-                <span className="font-bold text-slate-900">₹{request.userPlatformFee ?? 0}</span>
+                <span className="text-xs font-semibold text-slate-700">Platform Fee</span>
+                <span className="text-sm font-black text-slate-900">₹{request.userPlatformFee ?? 0}</span>
               </div>
-              <div className="mt-3 flex justify-between items-center pb-2">
-                <span className="text-xs font-semibold text-slate-500">Visiting Charge</span>
+              <div className="flex justify-between items-center pb-2">
+                <span className="text-xs font-semibold text-slate-500">Visiting / Service Charge</span>
                 <span className="text-sm font-bold text-slate-800">₹{paymentSummary?.serviceCost || booking?.estimate?.estimatedSubtotal || 0}</span>
               </div>
-              <div className="mt-2 rounded-lg bg-amber-50 p-3 text-[10px] font-medium leading-relaxed text-amber-800 ring-1 ring-amber-200/50">
-                <AlertCircle className="inline h-3 w-3 mr-1 mb-0.5" />
-                Staffivaa only collects platform fees. The visiting charge is to be paid directly to the labour outside the platform after work is completed.
+              <div className="rounded-xl bg-amber-50 p-3 text-[10px] font-medium leading-relaxed text-amber-900 ring-1 ring-amber-200/60">
+                <AlertCircle className="inline h-3 w-3 mr-1 mb-0.5 text-amber-700" />
+                Staffivaa only collects platform fees. The service charge is to be paid directly to the worker in cash or UPI after completion.
               </div>
             </div>
 
             {request.userPaymentStatus === 'paid' ? (
-              <div className="mt-4 flex flex-col items-center justify-center gap-2 bg-blue-50 p-4 rounded-xl border border-blue-200 shadow-sm">
-                <div className="flex items-center gap-2 text-sm font-extrabold text-blue-700 uppercase tracking-widest">
+              <div className="flex flex-col items-center justify-center gap-2 bg-blue-50 p-4 rounded-2xl border border-blue-200 shadow-xs">
+                <div className="flex items-center gap-2 text-xs font-black text-blue-700 uppercase tracking-wider">
                   {timeLeft <= 0 ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" /> Processing Cancellation</>
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Processing Dispatch</>
                   ) : (
-                    <><Clock className="h-4 w-4" /> Waiting for Worker</>
+                    <><Clock className="h-4 w-4" /> Waiting for Worker Dispatch</>
                   )}
                 </div>
                 <div className="flex justify-between items-center w-full mt-2 px-2 pb-2 border-b border-blue-200/50">
@@ -537,18 +571,13 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
                     {timeLeft <= 0 ? '00:00' : formatTime(timeLeft)}
                   </span>
                 </div>
-                <p className="text-center text-[11px] font-semibold text-blue-600/90 leading-relaxed mt-1">
-                  {timeLeft <= 0 
-                    ? "The 2.5-minute window has ended. The server is processing the auto-cancellation and your refund will be initiated momentarily."
-                    : "You have successfully paid the platform fee. The booking will automatically cancel and your fee will be refunded if the worker does not pay their fee within 2.5 minutes."}
-                </p>
               </div>
             ) : (
-              <button 
-                onClick={handlePayment} 
+              <button
+                onClick={handlePayment}
                 disabled={isCreatingOrder || isVerifying}
-                className={`w-full flex items-center justify-center gap-2 py-4 rounded-xl text-slate-900 font-black transition shadow-sm ${
-                  isCreatingOrder || isVerifying ? 'bg-slate-200 cursor-not-allowed' : 'bg-[#FFDF20] hover:bg-[#F0B400] active:scale-95'
+                className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-slate-950 font-black text-sm transition shadow-md shadow-amber-300/30 ${
+                  isCreatingOrder || isVerifying ? 'bg-slate-200 cursor-not-allowed' : 'bg-[#FFD100] hover:bg-[#F5C200] active:scale-95'
                 }`}
               >
                 {isCreatingOrder || isVerifying ? (
@@ -557,7 +586,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
                   </>
                 ) : (
                   <>
-                    <CreditCard className="h-5 w-5" />{' '}
+                    <CreditCard className="h-5 w-5" />
                     {Number(request.userPlatformFee ?? 0) === 0
                       ? 'Confirm Booking (Free)'
                       : `Pay Platform Fee (₹${request.userPlatformFee ?? 0})`}
@@ -572,7 +601,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
                   onCancel()
                 }
               }}
-              className="w-full mt-3 flex items-center justify-center gap-2 py-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-600 font-extrabold text-xs transition hover:bg-rose-100 active:scale-95 shadow-xs"
+              className="w-full mt-3 flex items-center justify-center gap-2 py-3 rounded-2xl border border-rose-200 bg-rose-50 text-rose-600 font-extrabold text-xs transition hover:bg-rose-100 active:scale-95"
             >
               Cancel Booking
             </button>
@@ -583,294 +612,415 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     )
   }
 
+  // 🚀 MAIN RAPIDO-STYLE LIVE TRACKING INTERFACE
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex flex-col bg-slate-50 overflow-hidden" style={{ height: '100dvh' }}>
-      {/* Top Navigation Bar */}
-      <div className="relative shrink-0 bg-white border-b border-slate-100 flex items-center p-4 pt-[max(1rem,env(safe-area-inset-top,1rem))] z-10 shadow-sm">
-        <button onClick={onBack} className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-800 transition active:scale-95">
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <h1 className="ml-4 text-lg font-black text-slate-900">Booking Details</h1>
+    <div className="fixed inset-0 z-[100] flex flex-col bg-slate-900 overflow-hidden select-none" style={{ height: '100dvh' }}>
+      {/* 1. IMMERSIVE FULLSCREEN GOOGLE MAP BACKGROUND */}
+      <div className="absolute inset-0 z-0 w-full h-full">
+        {isMapLoaded && (
+          <LiveTrackingMap
+            bookingId={requestId}
+            customerLocation={customerLocation}
+            initialWorkerLocation={initialWorkerLocation}
+            workerName={workerName}
+            workerPic={workerPic}
+            isArrived={['on_site', 'completed'].includes(currentStatus)}
+            onEtaUpdate={(info) => setLiveEtaInfo(info)}
+            bottomSheetPadding={isSheetExpanded ? 380 : 220}
+            hideFloatingHud={true}
+          />
+        )}
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto z-20 relative no-scrollbar pb-24">
+      {/* 2. RAPIDO FLOATING TOP GLASS HUD */}
+      <div className="absolute top-0 left-0 right-0 z-30 p-4 pt-[max(1rem,env(safe-area-inset-top,1rem))] pointer-events-none flex items-center justify-between gap-2">
+        {/* Back Button */}
+        <button
+          type="button"
+          onClick={onBack}
+          className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-white/95 text-slate-900 shadow-xl backdrop-blur-md border border-slate-200/90 active:scale-90 transition cursor-pointer"
+          aria-label="Back to History"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
 
-        {/* Top Section */}
-        <div className="px-5 py-4 bg-white border-b border-slate-100">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="flex items-center justify-center h-5 w-5 rounded-full bg-emerald-100 text-emerald-600">
-              <CheckCircle2 className="h-3 w-3" />
-            </div>
-            <span className="text-xs font-bold text-emerald-600 uppercase tracking-wide">Booking Confirmed</span>
-            {socketConnected && <span className="ml-auto flex h-2 w-2 rounded-full bg-green-500 animate-pulse" title="Live connection active" />}
-          </div>
-          <h1 className="text-xl font-black text-slate-900 tracking-tight">Booking #{request.reference || booking?.ref || 'N/A'}</h1>
-          <p className="text-slate-500 text-xs font-medium mt-0.5">
-            {new Date(request.createdAt || booking?.createdAt || Date.now()).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
-          </p>
+        {/* Live Status Pill Header */}
+        <div className="pointer-events-auto flex items-center gap-2 bg-slate-950/85 backdrop-blur-md px-4 py-2.5 rounded-full shadow-2xl border border-slate-800 text-white">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FFD100] opacity-80"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#FFD100]"></span>
+          </span>
+          <span className="text-xs font-black tracking-wide">
+            {currentStatus === 'completed'
+              ? 'Job Completed'
+              : currentStatus === 'in_progress'
+              ? 'Work in Progress'
+              : currentStatus === 'on_site'
+              ? 'Arrived at Location'
+              : 'Worker is on the way'}
+          </span>
         </div>
 
-        {/* Live Interactive Google Map (Uber/Rapido style) */}
-        {isMapLoaded && assignedLabour && isAcceptedOrBeyond && (
-          <div className="px-5 pt-4 pb-1">
-            <LiveTrackingMap
-              bookingId={requestId}
-              customerLocation={customerLocation}
-              initialWorkerLocation={initialWorkerLocation}
-              workerName={workerName}
-              workerPic={workerPic}
-              isArrived={['on_site', 'completed'].includes(currentStatus)}
-              onEtaUpdate={(info) => setLiveEtaInfo(info)}
-            />
+        {/* Right Floating Actions: SOS & Share */}
+        <div className="flex items-center gap-2 pointer-events-auto">
+          {/* Share Live Tracking */}
+          <button
+            type="button"
+            onClick={handleShareTracking}
+            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/95 text-slate-900 shadow-xl backdrop-blur-md border border-slate-200/90 active:scale-90 transition cursor-pointer"
+            title="Share Live Tracking"
+          >
+            <Share2 className="h-4 w-4 text-slate-800" />
+          </button>
+
+          {/* SOS Safety Button */}
+          <button
+            type="button"
+            onClick={() => setShowSosModal(true)}
+            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-500 text-white shadow-xl shadow-rose-500/30 backdrop-blur-md border border-rose-400 active:scale-90 transition cursor-pointer"
+            title="Safety & SOS"
+          >
+            <ShieldAlert className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* 3. RAPIDO INTERACTIVE SLIDING BOTTOM SHEET */}
+      <div
+        className={`absolute bottom-0 left-0 right-0 z-30 bg-white rounded-t-[32px] shadow-[0_-12px_45px_rgba(0,0,0,0.22)] border-t border-slate-100 flex flex-col transition-all duration-300 ${
+          isSheetExpanded ? 'max-h-[85dvh] h-[85dvh]' : 'max-h-[340px] sm:max-h-[380px]'
+        }`}
+      >
+        {/* Drag Pill Handle & Tap-to-expand */}
+        <div
+          onClick={() => setIsSheetExpanded((prev) => !prev)}
+          className="w-full pt-3 pb-2 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50/60 rounded-t-[32px] transition shrink-0"
+        >
+          <div className="w-12 h-1.5 bg-slate-300 rounded-full mb-1" />
+          <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            <span>{isSheetExpanded ? 'Swipe down for map' : 'Swipe up for details'}</span>
+            {isSheetExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
           </div>
-        )}
+        </div>
 
-        {/* Worker Details Card */}
-        <div className="px-5 pt-4 pb-3">
-          <h3 className="text-xs font-extrabold text-slate-900 mb-2 uppercase tracking-wider">Assigned Labour</h3>
-
-          {assignedLabour ? (
-            <div className="bg-white rounded-3xl p-3 ring-1 ring-slate-200/60 shadow-sm flex items-center gap-3">
-              <div className="relative shrink-0">
-                {workerPic ? (
-                  <img
-                    src={workerPic}
-                    alt={workerName}
-                    className="h-12 w-12 rounded-full object-cover ring-2 ring-slate-100"
-                  />
-                ) : (
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 ring-2 ring-slate-200">
-                    <User className="h-6 w-6 text-slate-400" />
-                  </div>
-                )}
-                <span className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-green-500 text-white">
-                  <ShieldCheck className="h-2 w-2" />
+        {/* Scrollable Container Inside Bottom Sheet */}
+        <div className="flex-1 overflow-y-auto px-5 pb-6 space-y-4 no-scrollbar">
+          {/* A. Hero Rapido ETA Banner */}
+          <div className="flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-950 rounded-2xl p-4 text-white shadow-lg border border-slate-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-[#FFD100] text-slate-950">
+                  {currentStatus === 'on_site' ? 'At Doorstep' : currentStatus === 'in_progress' ? 'Ongoing' : 'Estimated ETA'}
                 </span>
+                {liveEtaInfo?.distance && currentStatus !== 'on_site' && (
+                  <span className="text-[11px] font-bold text-slate-300">{liveEtaInfo.distance} away</span>
+                )}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="truncate text-base font-black text-slate-900 leading-tight">
-                    {workerName}
-                  </h2>
-                  <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-400">
-                    ID: {shortWorkerId}
+              <h2 className="text-2xl font-black tracking-tight text-white mt-1">
+                {currentStatus === 'on_site'
+                  ? 'Worker Has Arrived!'
+                  : currentStatus === 'in_progress'
+                  ? 'Work in Progress'
+                  : currentStatus === 'completed'
+                  ? 'Job Finished'
+                  : (liveEtaInfo?.eta || '15-20 mins')}
+              </h2>
+            </div>
+
+            <div className="h-12 w-12 rounded-2xl bg-[#FFD100]/15 border border-[#FFD100]/30 flex items-center justify-center text-[#FFD100] shrink-0">
+              {currentStatus === 'completed' ? (
+                <CheckCircle2 className="h-7 w-7 text-emerald-400" />
+              ) : currentStatus === 'on_site' ? (
+                <ShieldCheck className="h-7 w-7 text-[#FFD100]" />
+              ) : (
+                <Navigation2 className="h-7 w-7 fill-[#FFD100] text-[#FFD100] animate-pulse" />
+              )}
+            </div>
+          </div>
+
+          {/* B. Live Journey Progress Stepper */}
+          <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-100">
+            <div className="flex items-center justify-between text-[11px] font-extrabold text-slate-600 mb-2">
+              <span className={progressPercentage >= 35 ? 'text-slate-900' : 'text-slate-400'}>Assigned</span>
+              <span className={progressPercentage >= 35 ? 'text-slate-900' : 'text-slate-400'}>On Way</span>
+              <span className={progressPercentage >= 60 ? 'text-slate-900' : 'text-slate-400'}>Arrived</span>
+              <span className={progressPercentage >= 80 ? 'text-slate-900' : 'text-slate-400'}>Working</span>
+              <span className={progressPercentage >= 100 ? 'text-emerald-600' : 'text-slate-400'}>Done</span>
+            </div>
+            {/* Progress Bar Track */}
+            <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden relative">
+              <motion.div
+                className="h-full bg-gradient-to-r from-[#FFD100] via-amber-400 to-emerald-500 rounded-full"
+                initial={{ width: '15%' }}
+                animate={{ width: `${progressPercentage}%` }}
+                transition={{ duration: 0.6, ease: 'easeOut' }}
+              />
+            </div>
+          </div>
+
+          {/* C. Rapido Worker Profile Card */}
+          {assignedLabour ? (
+            <div className="bg-white rounded-3xl p-4 ring-1 ring-slate-200/80 shadow-sm">
+              <div className="flex items-center gap-3">
+                {/* Worker Avatar with Gold Badge */}
+                <div className="relative shrink-0">
+                  {workerPic ? (
+                    <img
+                      src={workerPic}
+                      alt={workerName}
+                      className="h-14 w-14 rounded-2xl object-cover ring-2 ring-amber-400"
+                    />
+                  ) : (
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-900 font-black text-lg ring-2 ring-amber-300">
+                      {workerName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white ring-2 ring-white">
+                    <ShieldCheck className="h-3 w-3" />
                   </span>
                 </div>
-                <p className="mt-0.5 truncate text-[11px] font-bold text-slate-700 leading-tight mb-1">
-                  {request.lines?.[0]?.categoryId?.name || draft?.categoryName || 'General Category'}
-                </p>
-                <div className="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-slate-500">
-                  <Phone className="h-2.5 w-2.5 text-brand" />
-                  <span className="text-slate-700">{workerPhone}</span>
+
+                {/* Worker Details */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-1">
+                    <h3 className="font-black text-slate-900 text-base truncate">{workerName}</h3>
+                    <span className="shrink-0 flex items-center gap-1 bg-amber-50 text-amber-900 font-extrabold text-[11px] px-2 py-0.5 rounded-lg border border-amber-200">
+                      ⭐ {workerRating}
+                    </span>
+                  </div>
+
+                  <p className="text-xs font-bold text-slate-600 truncate mt-0.5">
+                    {request.lines?.[0]?.categoryId?.name || draft?.categoryName || 'Daily Service Professional'}
+                  </p>
+
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                      ID: {shortWorkerId}
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                      {workerTotalJobs} Completed
+                    </span>
+                  </div>
                 </div>
-                <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-bold text-slate-500">
-                  <MapPin className="h-2.5 w-2.5 text-brand shrink-0" />
-                  <span className="text-slate-700 truncate">{workerAddress}</span>
-                </div>
+              </div>
+
+              {/* Quick Action Contact Buttons */}
+              <div className="grid grid-cols-2 gap-2.5 mt-4 pt-3 border-t border-slate-100">
+                {/* 1-Tap Call */}
+                <a
+                  href={`tel:${rawCleanPhone}`}
+                  className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-[#FFD100] text-slate-950 font-black text-xs shadow-md shadow-amber-300/30 transition active:scale-95 cursor-pointer"
+                >
+                  <Phone className="h-4 w-4 fill-slate-950 text-slate-950" /> Call Worker
+                </a>
+
+                {/* WhatsApp Chat */}
+                <button
+                  type="button"
+                  onClick={handleOpenWhatsApp}
+                  className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 font-black text-xs transition active:scale-95 cursor-pointer"
+                >
+                  <MessageCircle className="h-4 w-4 text-emerald-600" /> WhatsApp
+                </button>
               </div>
             </div>
           ) : (
-            <div className="bg-slate-50 rounded-3xl p-4 ring-1 ring-slate-200/60 shadow-sm flex flex-col items-center justify-center text-center">
-              <div className="h-10 w-10 rounded-full bg-brand/10 flex items-center justify-center mb-2">
-                <Loader2 className="h-5 w-5 text-brand animate-spin" />
-              </div>
-              <h2 className="text-sm font-bold text-slate-800">Finding available labours...</h2>
-              <p className="text-xs font-semibold text-brand mt-1">Searching nearby professionals...</p>
+            <div className="bg-slate-50 rounded-3xl p-5 border border-slate-200 text-center flex flex-col items-center justify-center">
+              <Loader2 className="h-6 w-6 text-amber-500 animate-spin mb-2" />
+              <p className="text-sm font-bold text-slate-800">Dispatching worker...</p>
             </div>
           )}
 
-          {assignedLabour && ['in_progress', 'on_site', 'accepted'].includes(currentStatus) && (
-            <div className="mt-2 flex items-center justify-between rounded-2xl bg-gradient-to-br from-brand to-yellow-500 p-3 text-white shadow-lg shadow-brand/20">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wide opacity-90">Estimated Arrival</p>
-                <p className="text-xl font-black tracking-tighter leading-none mt-0.5">
-                  {currentStatus === 'on_site' ? 'Arrived at Site' : (liveEtaInfo?.eta || '15-20 Min')}
+          {/* D. Rapido-Style Start Service OTP Card */}
+          <div className="bg-gradient-to-br from-amber-50/90 via-yellow-50 to-orange-50/60 rounded-3xl p-4 border border-amber-200/90 shadow-sm relative overflow-hidden">
+            <div className="flex items-start gap-3.5">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#FFD100] text-slate-950 shadow-sm">
+                <Lock className="h-5 w-5" />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Start Service OTP</h4>
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-200/70 px-2 py-0.5 rounded-full">
+                    Required on Site
+                  </span>
+                </div>
+                <p className="text-[11px] font-semibold text-slate-600 mt-0.5">
+                  Share this OTP with {workerName} only after they arrive at your location.
                 </p>
-                {liveEtaInfo?.distance && currentStatus !== 'on_site' && (
-                  <p className="text-[10px] font-bold opacity-90 mt-0.5">{liveEtaInfo.distance} away</p>
-                )}
-              </div>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 backdrop-blur-md">
-                <Clock className="h-4 w-4 text-white" />
-              </div>
-            </div>
-          )}
-        </div>
 
-        {/* Booking Details Card */}
-        <div className="px-5 pb-4">
-          <h3 className="text-xs font-extrabold text-slate-900 mb-2 uppercase tracking-wider">Booking Details</h3>
-          <div className="bg-white rounded-3xl p-4 ring-1 ring-slate-200/60 shadow-sm space-y-3">
-            <div>
-              <div className="flex items-center gap-2 text-slate-500 text-[10px] font-bold mb-0.5"><FileText className="w-3 h-3" /> Service</div>
-              <p className="text-xs font-semibold text-slate-900">{request.lines?.map(l => l.categoryId?.name).join(', ') || draft?.categoryName || 'Labour Service'}</p>
-            </div>
-            <div>
-              <div className="flex items-center gap-2 text-slate-500 text-[10px] font-bold mb-0.5"><MapPin className="w-3 h-3" /> Address</div>
-              <p className="text-xs font-medium text-slate-900 leading-snug">{request.locationText || draft?.address || 'Service Location'}</p>
-            </div>
-            <div>
-              <div className="flex items-center gap-2 text-slate-500 text-[10px] font-bold mb-0.5"><Calendar className="w-3 h-3" /> Scheduled For</div>
-              <p className="text-xs font-medium text-slate-900">
-                {request.startDate ? new Date(request.startDate).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) : 'Today'}
-                {request.shiftStart ? ` at ${request.shiftStart}` : ''}
-              </p>
-            </div>
-            {request.notes && (
-              <div>
-                <div className="flex items-center gap-2 text-slate-500 text-[10px] font-bold mb-0.5"><AlertCircle className="w-3 h-3" /> Special Instructions</div>
-                <p className="text-xs font-medium text-slate-700 bg-amber-50 p-2.5 rounded-xl border border-amber-100">{request.notes}</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Site Verification OTP Card */}
-        {currentStatus === 'on_site' && (
-          <div className="px-5 pb-4">
-            <div className="bg-white rounded-[20px] p-5 ring-1 ring-slate-200/60 shadow-[0_8px_30px_-4px_rgba(0,0,0,0.05)] relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-1.5 h-full bg-[#FFDF20]" />
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-yellow-50 text-yellow-600">
-                  <Lock className="h-6 w-6" />
+                {/* Big OTP Digits Display */}
+                <div className="mt-3 flex items-center justify-between bg-white rounded-2xl p-2.5 px-3 border border-amber-200 shadow-xs">
+                  <div className="flex items-center gap-1.5 tracking-[0.3em] font-mono text-xl font-black text-slate-900 ml-1">
+                    {verificationOtp}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={copyOtpToClipboard}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-extrabold transition active:scale-95 ${
+                      copiedOtp
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-slate-900 text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    {copiedOtp ? (
+                      <>
+                        <Check className="h-3.5 w-3.5" /> Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5" /> Copy OTP
+                      </>
+                    )}
+                  </button>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-sm font-black text-slate-900 tracking-tight">Site Verification OTP</h3>
-                  <p className="text-[10px] font-bold text-slate-500 leading-snug mt-0.5 pr-2">
-                    Share this OTP only after the worker reaches your location.
+              </div>
+            </div>
+          </div>
+
+          {/* E. EXPANDED SECTIONS (Visible when sheet is expanded or scrolled) */}
+          <div className="space-y-4 pt-1">
+            {/* Booking Details Card */}
+            <div className="bg-white rounded-3xl p-4 ring-1 ring-slate-200/80 shadow-sm space-y-3">
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-2">Booking & Location</h4>
+
+              <div className="flex items-start gap-2.5">
+                <MapPin className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[10px] font-bold uppercase text-slate-400">Service Address</p>
+                  <p className="text-xs font-bold text-slate-900 leading-snug">
+                    {request.locationText || draft?.address || 'Service Location'}
                   </p>
-                  
-                  <div className="mt-4 flex items-center justify-between bg-slate-50 rounded-2xl p-3 border border-slate-100">
-                    <span className="text-2xl font-black tracking-[0.25em] text-slate-900 ml-2">
-                      {verificationOtp}
-                    </span>
-                    <button 
-                      onClick={() => navigator.clipboard.writeText(verificationOtp)}
-                      className="flex h-8 items-center justify-center rounded-xl bg-white px-3 text-[10px] font-bold text-slate-700 shadow-sm ring-1 ring-slate-200/50 hover:bg-slate-50 transition active:scale-95"
-                    >
-                      Copy OTP
-                    </button>
-                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
 
-        {/* Status Timeline */}
-        <div className="px-5 pb-4">
-          <h3 className="text-xs font-extrabold text-slate-900 mb-2 uppercase tracking-wider">Live Status Tracker</h3>
-          <div className="bg-white rounded-3xl p-5 ring-1 ring-slate-200/60 shadow-sm">
-            <div className="relative pl-5 ml-2 space-y-5 border-l-2 border-slate-100">
-              {steps.map((step, idx) => {
-                const isActive = idx === currentStepIdx
-                const isPast = idx < currentStepIdx
-                const isDone = isPast || isActive
-
-                return (
-                  <div key={step.key} className="relative">
-                    <span className={`absolute -left-[1.7rem] top-[0.15rem] flex h-3 w-3 items-center justify-center rounded-full ring-4 ring-white ${isDone ? 'bg-brand' : 'bg-slate-200'}`} />
-                    <p className={`text-[9px] font-bold uppercase tracking-wider mb-0.5 ${isDone ? 'text-brand' : 'text-slate-400'}`}>
-                      {isDone ? (isActive ? 'CURRENT STATUS' : 'COMPLETED') : 'PENDING'}
-                    </p>
-                    <p className={`text-sm font-black leading-tight ${isDone ? 'text-slate-900' : 'text-slate-400'}`}>{step.label}</p>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-
-
-
-        {/* Payment Summary */}
-        <div className="px-5 pb-8">
-          <h3 className="text-xs font-extrabold text-slate-900 mb-2 uppercase tracking-wider">Payment Summary</h3>
-          <div className="bg-white rounded-3xl p-5 ring-1 ring-slate-200/60 shadow-sm">
-            <div className="space-y-3 text-sm font-medium">
-              <div className="flex justify-between text-slate-600">
-                <span>Platform Fee Paid</span>
-                <span>₹{(paymentSummary?.userPlatformFee || 0).toFixed(2)}</span>
+              <div className="flex items-start gap-2.5 pt-2 border-t border-slate-100">
+                <Calendar className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[10px] font-bold uppercase text-slate-400">Scheduled Time</p>
+                  <p className="text-xs font-bold text-slate-900">
+                    {request.startDate ? new Date(request.startDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Today'}
+                    {request.shiftStart ? ` · ${request.shiftStart}` : ' · Immediate Dispatch'}
+                  </p>
+                </div>
               </div>
-              <div className="flex justify-between text-slate-600">
-                <span>Visiting Charge</span>
+
+              {request.notes && (
+                <div className="pt-2 border-t border-slate-100">
+                  <p className="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Special Instructions</p>
+                  <p className="text-xs font-medium text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    {request.notes}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Transparent Fare Breakdown Card */}
+            <div className="bg-white rounded-3xl p-4 ring-1 ring-slate-200/80 shadow-sm space-y-2.5">
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-2">Fare Summary</h4>
+
+              <div className="flex justify-between items-center text-xs font-semibold text-slate-600">
+                <span>Platform Fee</span>
+                <span className="font-bold text-emerald-600">₹{(paymentSummary?.userPlatformFee || request?.userPlatformFee || 0).toFixed(2)} (Paid)</span>
+              </div>
+
+              <div className="flex justify-between items-center text-xs font-semibold text-slate-600">
+                <span>Labour Visiting Charge</span>
+                <span className="font-bold text-slate-900">₹{((paymentSummary?.serviceCost || 0) + (paymentSummary?.extraCost || 0)).toFixed(2)}</span>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-sm font-black text-slate-900">
+                <span>Payable to Worker (Cash/UPI)</span>
                 <span>₹{((paymentSummary?.serviceCost || 0) + (paymentSummary?.extraCost || 0)).toFixed(2)}</span>
               </div>
-              <div className="border-t border-slate-100 pt-3 mt-1 flex justify-between font-black text-slate-900 text-lg">
-                <span>Total Amount Paid on Staffivaa</span>
-                <span>₹{(paymentSummary?.userPlatformFee || 0).toFixed(2)}</span>
+
+              <div className="rounded-xl bg-amber-50 p-2.5 text-[10px] font-medium leading-relaxed text-amber-900 ring-1 ring-amber-200/60 mt-2">
+                <Sparkles className="inline h-3 w-3 mr-1 text-amber-700" />
+                Staffivaa does not take commission from worker wages. Pay the labour charge directly upon completion.
               </div>
-            </div>
-            <div className="mt-4 rounded-lg bg-amber-50 p-3 text-[10px] font-medium leading-relaxed text-amber-800 ring-1 ring-amber-200/50">
-              <AlertCircle className="inline h-3 w-3 mr-1" />
-              Staffivaa only collects platform fees. The visiting charge is to be paid directly to the labour.
             </div>
 
-            {currentStatus === 'completed' ? (
-              <div className="mt-4 border-t border-slate-100 pt-4">
-                <div className="mb-3 flex items-start gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200/60">
-                   <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
-                     <CheckCircle2 className="w-4 h-4" />
-                   </div>
-                   <div>
-                     <h4 className="text-sm font-black text-slate-900 leading-tight mb-0.5">✅ Work Completed</h4>
-                     <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">Your worker has marked this job as completed. Please pay the labour charge directly to the worker.</p>
-                   </div>
-                </div>
+            {/* Extra Work Request Button */}
+            {['accepted', 'in_progress', 'on_site'].includes(currentStatus) && (
+              <button
+                type="button"
+                onClick={() => setIsExtraWorkModalOpen(true)}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-slate-300 bg-slate-50 text-slate-800 font-extrabold text-xs transition hover:bg-slate-100 active:scale-95"
+              >
+                <PlusCircle className="h-4 w-4 text-slate-700" /> Request Extra Scope / Overtime
+              </button>
+            )}
+
+            {/* Cancel Booking Action */}
+            {currentStatus !== 'completed' && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm('Are you sure you want to cancel this booking?')) {
+                      onCancel()
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 font-extrabold text-xs transition hover:bg-rose-100 active:scale-95"
+                >
+                  Cancel This Booking
+                </button>
               </div>
-            ) : isAcceptedOrBeyond ? (
-              <div className="mt-4 flex flex-col items-center justify-center gap-2 bg-yellow-50 p-4 rounded-xl border border-yellow-200 shadow-sm">
-                <div className="flex items-center gap-1.5 text-sm font-extrabold text-yellow-700 uppercase tracking-widest">
-                  <span className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
-                  </span>
-                  Work in Progress
-                </div>
-                <p className="text-center text-[11px] font-semibold text-yellow-600/90 leading-relaxed mt-1">
-                  Your assigned worker is currently completing the service. Pay the labour directly after work is done.
-                </p>
-              </div>
-            ) : null}
+            )}
           </div>
         </div>
       </div>
 
-      {/* Sticky Bottom Actions */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 pb-[max(1rem,env(safe-area-inset-bottom,1rem))] z-30 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-        {currentStatus === 'completed' ? (
-          <div className="flex items-center gap-3">
-            {assignedLabour && (
-              <button onClick={() => window.location.href = `tel:${workerPhone}`} className="flex h-12 shrink-0 items-center justify-center gap-2 px-4 rounded-2xl bg-slate-100 text-sm font-bold text-slate-800 transition active:scale-95">
-                <Phone className="h-4 w-4" /> Call Worker
-              </button>
-            )}
-            <button onClick={onBack} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-[#FFD100] text-sm font-extrabold text-slate-900 transition active:scale-95 shadow-md shadow-amber-300/30">
-              Back to History
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            {assignedLabour && (
-              <button onClick={() => window.location.href = `tel:${workerPhone}`} className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-brand text-xs font-black text-slate-900 transition active:scale-95 shadow-md shadow-brand/20">
-                <Phone className="h-4 w-4" /> Call Worker
-              </button>
-            )}
-            <button onClick={() => {
-              if (window.confirm('Are you sure you want to cancel this booking?')) {
-                onCancel()
-              }
-            }} className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs font-black text-rose-600 transition active:scale-95">
-              Cancel Booking
-            </button>
+      {/* 4. EMERGENCY SOS MODAL */}
+      <AnimatePresence>
+        {showSosModal && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-5 bg-slate-950/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl text-center"
+            >
+              <div className="h-14 w-14 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-3">
+                <ShieldAlert className="h-7 w-7" />
+              </div>
+              <h3 className="text-lg font-black text-slate-900">Safety & Emergency</h3>
+              <p className="text-xs font-semibold text-slate-500 mt-1 mb-5">
+                Staffivaa is committed to your safety. In case of any immediate emergency, contact local authorities or our 24/7 hotline.
+              </p>
+
+              <div className="space-y-2.5">
+                <a
+                  href="tel:112"
+                  className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl bg-rose-600 text-white font-black text-sm shadow-lg shadow-rose-500/30 active:scale-95 transition"
+                >
+                  <Phone className="h-4 w-4" /> Call Police / Emergency (112)
+                </a>
+
+                <a
+                  href="tel:18001234567"
+                  className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl bg-slate-100 text-slate-800 font-extrabold text-xs active:scale-95 transition"
+                >
+                  <HelpCircle className="h-4 w-4" /> Staffivaa Trust & Safety Support
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setShowSosModal(false)}
+                  className="w-full py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
           </div>
         )}
-      </div>
+      </AnimatePresence>
 
-      <ExtraWorkModal 
-        isOpen={isExtraWorkModalOpen} 
-        onClose={() => setIsExtraWorkModalOpen(false)} 
+      {/* Extra Work Modal */}
+      <ExtraWorkModal
+        isOpen={isExtraWorkModalOpen}
+        onClose={() => setIsExtraWorkModalOpen(false)}
         onSubmit={handleCreateExtraWork}
         isLoading={isCreatingExtraWork}
       />
@@ -878,4 +1028,3 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     document.body
   )
 }
-

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
 import {
   ArrowRight,
@@ -7,6 +7,7 @@ import {
   IndianRupee,
   Loader2,
   MapPin,
+  Navigation2,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -72,6 +73,7 @@ function mergeServerData(localBooking, serverData) {
 }
 
 export function IndividualBookingDetail({ booking, onRebook, onBack, onAdvancePipeline }) {
+  const navigate = useNavigate()
   const reduce = useReducedMotion()
   const demo = isDemoBooking(booking)
 
@@ -86,6 +88,8 @@ export function IndividualBookingDetail({ booking, onRebook, onBack, onAdvancePi
   const realBooking = (!demo && serverData) ? mergeServerData(booking, serverData) : booking
   const st = bookingStatusToUi(realBooking.status)
   const workers = totalWorkersFromLines(realBooking.lines)
+
+  const isLiveActive = ['accepted', 'assigned', 'on_site', 'in_progress'].includes(realBooking.status)
 
   if (isLoading && requestId) {
     return (
@@ -103,6 +107,28 @@ export function IndividualBookingDetail({ booking, onRebook, onBack, onAdvancePi
       transition={{ duration: 0.35 }}
       className="space-y-4"
     >
+      {/* Live Active Tracking Banner if job is in progress */}
+      {isLiveActive && (
+        <div className="rounded-2xl bg-slate-900 p-4 text-white flex items-center justify-between shadow-lg border border-slate-800">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FFD100] opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-[#FFD100]"></span>
+            </span>
+            <div>
+              <p className="text-xs font-black text-white">Live Tracking Active</p>
+              <p className="text-[11px] font-semibold text-slate-300">View worker GPS & live ETA</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate(`/app/book?step=active&ref=${realBooking.ref || ''}`)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FFD100] text-slate-950 font-black text-xs shadow-md active:scale-95 transition cursor-pointer"
+          >
+            <Navigation2 className="h-3.5 w-3.5 fill-slate-950" /> Track Map
+          </button>
+        </div>
+      )}
       <GlassPanel className="overflow-hidden border-slate-200/90 ring-1 ring-slate-100/90">
         <div className="bg-linear-to-br from-brand/12 via-white to-emerald-50/40 px-4 py-4">
           <div className="flex flex-wrap items-start justify-between gap-2">

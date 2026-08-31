@@ -169,3 +169,28 @@ iframe[name*="razorpay"],
   height: calc(100dvh - 64px - env(safe-area-inset-bottom, 0px)) !important;
   max-height: calc(100dvh - 64px - env(safe-area-inset-bottom, 0px)) !important;
 }
+
+/* Rapido Live Radar Beacon & Glow Animations */
+@keyframes radar-ripple {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+.animate-radar-ripple {
+  animation: radar-ripple 2s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+}
+
+@keyframes rapido-dash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
