@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { IndianRupee, Wallet, X } from 'lucide-react'
-import { AppPrimaryButton } from '../../app/AppPrimaryButton.jsx'
+import { AppPrimaryButton } from '../app/AppPrimaryButton.jsx'
 
 export function InsufficientWalletModal({ open, minimumRequired, balance, onClose }) {
   if (!open) return null
