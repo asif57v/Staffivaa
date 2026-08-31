@@ -51,6 +51,12 @@ const walletTransactionSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    balanceAfter: {
+      type: Number,
+    },
+    paymentMethod: {
+      type: String,
+    },
     status: {
       type: String,
       required: true,

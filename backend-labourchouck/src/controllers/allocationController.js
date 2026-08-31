@@ -6,6 +6,12 @@ import { Allocation } from '../models/Allocation.js'
 import { Assignment } from '../models/Assignment.js'
 import { User } from '../models/User.js'
 import { SystemPricing } from '../models/SystemPricing.js'
+import { SystemSettings } from '../models/SystemSettings.js'
+import {
+  deductWalletBalance,
+  refundWalletBalance,
+  recordLabourPlatformFeeDeduction,
+} from '../services/walletDeductionService.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { emitRequestStatusUpdate, getIO, emitToUser } from '../utils/socket.js'
@@ -238,6 +244,35 @@ function deg2rad(deg) {
   return deg * (Math.PI/180)
 }
 
+async function resolveDistanceKmForRequest(request, labourLat, labourLng) {
+  let distanceKm = 8.5
+  let reqLat = request.locationLat
+  let reqLng = request.locationLng
+
+  if ((!reqLat || !reqLng) && request.locationText) {
+    try {
+      const apiKey = 'AIzaSyCV6QreLE4QR76xie0BI3B9y2wY4awcPP8'
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(request.locationText)}&key=${apiKey}`
+      const mapRes = await fetch(url)
+      const data = await mapRes.json()
+      if (data?.results?.length > 0) {
+        reqLat = data.results[0].geometry.location.lat
+        reqLng = data.results[0].geometry.location.lng
+        request.locationLat = reqLat
+        request.locationLng = reqLng
+      }
+    } catch (err) {
+      console.error('Backend Geocoding failed:', err.message)
+    }
+  }
+
+  if (reqLat && reqLng && labourLat && labourLng) {
+    distanceKm = getDistanceFromLatLonInKm(reqLat, reqLng, labourLat, labourLng)
+  }
+
+  return Math.round(distanceKm * 10) / 10
+}
+
 export const respondToAssignment = asyncHandler(async (req, res) => {
   const { action, labourLat, labourLng } = req.body
   const assignment = await Assignment.findOne({ _id: req.params.id, labourId: req.user._id })
@@ -261,12 +296,67 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       return sendError(res, { message: 'You already have an active job. Please complete or cancel it before accepting a new one.', statusCode: HTTP_STATUS.BAD_REQUEST });
     }
 
+    const existingRequest = await WorkforceRequest.findById(assignment.requestId)
+    if (!existingRequest) {
+      return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
+    }
+
+    const distanceKm = await resolveDistanceKmForRequest(existingRequest, labourLat, labourLng)
+    const pricing = await SystemPricing.findOne().lean()
+    const { computeLabourPlatformFee, estimateRequestLabourCost } = await import('../utils/platformFeePricing.js')
+    const estimatedTotalLabourCost = estimateRequestLabourCost(existingRequest)
+    const labourFee = computeLabourPlatformFee(pricing, {
+      distanceKm,
+      estimatedTotalLabourCost,
+    })
+
+    const settingsDoc = await SystemSettings.findOne({ singletonId: 'SYSTEM_SETTINGS' }).lean()
+    const minimumRequired = settingsDoc?.minimumLabourWalletBalance ?? 0
+    const walletBalance = labourUser?.walletBalance || 0
+
+    if (labourUser?.isWalletFrozen) {
+      return sendError(res, {
+        message: 'Your wallet is frozen. Contact support to accept bookings.',
+        statusCode: HTTP_STATUS.FORBIDDEN,
+        code: 'WALLET_FROZEN',
+      })
+    }
+
+    if (walletBalance < minimumRequired || (labourFee > 0 && walletBalance < labourFee)) {
+      return sendError(res, {
+        message: 'Insufficient wallet balance. Recharge to accept bookings.',
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+        code: 'INSUFFICIENT_WALLET_BALANCE',
+        errors: {
+          balance: walletBalance,
+          minimumRequired,
+          platformFee: labourFee,
+        },
+      })
+    }
+
+    let feeDeduction = null
+    if (labourFee > 0) {
+      feeDeduction = await deductWalletBalance({ userId: req.user._id, amount: labourFee })
+      if (!feeDeduction.success) {
+        return sendError(res, {
+          message: 'Insufficient wallet balance. Recharge to accept bookings.',
+          statusCode: HTTP_STATUS.BAD_REQUEST,
+          code: 'INSUFFICIENT_WALLET_BALANCE',
+          errors: {
+            balance: walletBalance,
+            minimumRequired,
+            platformFee: labourFee,
+          },
+        })
+      }
+    }
+
     assignment.status = ASSIGNMENT_STATUS.ACCEPTED
     assignment.acceptedAt = new Date()
 
-    const existingRequest = await WorkforceRequest.findById(assignment.requestId)
-    const isUserPaid = existingRequest?.userPaymentStatus === 'paid' || existingRequest?.paymentStatus === 'paid'
-    const isLabourPaid = existingRequest?.labourPaymentStatus === 'paid' || existingRequest?.labourPlatformFee === 0
+    const isUserPaid = existingRequest.userPaymentStatus === 'paid' || existingRequest.paymentStatus === 'paid'
+    const isLabourPaid = labourFee === 0 || Boolean(feeDeduction?.success)
 
     let nextStatus = REQUEST_STATUS.PLATFORM_FEE_PENDING
     let nextLifecycle = isUserPaid ? 'partial' : 'none'
@@ -275,161 +365,134 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       nextLifecycle = 'completed'
     }
 
+    const requestUpdate = {
+      status: nextStatus,
+      labourId: req.user._id,
+      labourName: req.user.fullName,
+      labourPhone: req.user.phone,
+      acceptedAt: new Date(),
+      acceptedBy: req.user._id,
+      platformFeePendingAt: new Date(),
+      platformFeePaymentLifecycle: nextLifecycle,
+      distanceKm,
+      labourPlatformFee: labourFee,
+    }
+
+    if (isLabourPaid) {
+      requestUpdate.labourPaymentStatus = 'paid'
+    }
+
     let request = await WorkforceRequest.findOneAndUpdate(
       {
         _id: assignment.requestId,
         status: REQUEST_STATUS.SEARCHING,
         $or: [
           { expiresAt: { $gt: new Date() } },
-          { expiresAt: { $exists: false } }
-        ]
+          { expiresAt: { $exists: false } },
+        ],
       },
-      {
-        $set: {
-          status: nextStatus,
-          labourId: req.user._id,
-          labourName: req.user.fullName,
-          labourPhone: req.user.phone,
-          acceptedAt: new Date(),
-          acceptedBy: req.user._id,
-          platformFeePendingAt: new Date(),
-          platformFeePaymentLifecycle: nextLifecycle
-        }
-      },
-      { new: true }
+      { $set: requestUpdate },
+      { new: true },
     )
 
     if (!request) {
+      if (feeDeduction?.success && feeDeduction.amount > 0) {
+        await refundWalletBalance({ userId: req.user._id, amount: feeDeduction.amount })
+      }
       return sendError(res, { message: 'Booking already accepted or expired', statusCode: HTTP_STATUS.BAD_REQUEST })
     }
 
-    if (request) {
-      let distanceKm = 8.5; // Fallback if no location data available
-      let reqLat = request.locationLat;
-      let reqLng = request.locationLng;
-
-      // Geocode on backend if missing
-      if ((!reqLat || !reqLng) && request.locationText) {
-        try {
-          const apiKey = "AIzaSyCV6QreLE4QR76xie0BI3B9y2wY4awcPP8"; // Frontend map key from .env
-          const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(request.locationText)}&key=${apiKey}`;
-          const mapRes = await fetch(url);
-          const data = await mapRes.json();
-          if (data && data.results && data.results.length > 0) {
-            reqLat = data.results[0].geometry.location.lat;
-            reqLng = data.results[0].geometry.location.lng;
-            request.locationLat = reqLat;
-            request.locationLng = reqLng;
-          }
-        } catch (err) {
-          console.error("Backend Geocoding failed:", err.message);
-        }
-      }
-
-      if (reqLat && reqLng && labourLat && labourLng) {
-         distanceKm = getDistanceFromLatLonInKm(reqLat, reqLng, labourLat, labourLng);
-      }
-      
-      // Round distance to 1 decimal place
-      distanceKm = Math.round(distanceKm * 10) / 10;
-      
-      const pricing = await SystemPricing.findOne().lean()
-      const { computeLabourPlatformFee, estimateRequestLabourCost } = await import('../utils/platformFeePricing.js')
-      const estimatedTotalLabourCost = estimateRequestLabourCost(request)
-      const labourFee = computeLabourPlatformFee(pricing, {
-        distanceKm,
-        estimatedTotalLabourCost,
+    if (feeDeduction?.success && feeDeduction.amount > 0) {
+      await recordLabourPlatformFeeDeduction({
+        userId: req.user._id,
+        userName: labourUser?.fullName || req.user.fullName,
+        bookingId: request._id,
+        amount: feeDeduction.amount,
+        balanceAfter: feeDeduction.balanceAfter,
       })
+    }
 
-      request.distanceKm = distanceKm;
-      request.labourPlatformFee = labourFee;
-      
-      await request.save()
-
-      const reqRef = request.reference || request._id.toString().slice(-6)
-      let categoryName = 'job'
-      try {
-        const LabourCategory = mongoose.model('LabourCategory')
-        const catId = assignment.categoryId || request.lines?.[0]?.categoryId
-        if (catId) {
-          const catDoc = await LabourCategory.findById(catId).select('name').lean()
-          if (catDoc?.name) categoryName = catDoc.name
-        }
-      } catch {
-        /* ignore */
+    const reqRef = request.reference || request._id.toString().slice(-6)
+    let categoryName = 'job'
+    try {
+      const LabourCategory = mongoose.model('LabourCategory')
+      const catId = assignment.categoryId || request.lines?.[0]?.categoryId
+      if (catId) {
+        const catDoc = await LabourCategory.findById(catId).select('name').lean()
+        if (catDoc?.name) categoryName = catDoc.name
       }
+    } catch {
+      /* ignore */
+    }
 
-      // Close open offers for other workers on this request
-      const otherOffers = await Assignment.find({
-        requestId: request._id,
-        status: ASSIGNMENT_STATUS.OFFERED,
-        labourId: { $ne: req.user._id },
-      }).select('_id labourId').lean()
+    const otherOffers = await Assignment.find({
+      requestId: request._id,
+      status: ASSIGNMENT_STATUS.OFFERED,
+      labourId: { $ne: req.user._id },
+    }).select('_id labourId').lean()
 
-      if (otherOffers.length) {
-        await Assignment.updateMany(
-          { _id: { $in: otherOffers.map((o) => o._id) } },
-          { $set: { status: ASSIGNMENT_STATUS.CANCELLED } },
-        )
-        for (const offer of otherOffers) {
-          emitToUser('labour', offer.labourId.toString(), 'assignment_cancelled', {
-            assignmentId: offer._id.toString(),
-            reason: 'taken_by_other',
-            requestId: request._id.toString(),
-          })
-          triggerBookingNotif({
-            userId: offer.labourId,
-            copy: labourOfferTakenNotif(),
-            relatedId: offer._id,
-            relatedModel: 'Assignment',
-            requestId: request._id,
-          }).catch(() => {})
-        }
-      }
-
-      try {
-        const io = getIO()
-        io.emit('bookingAcceptedGlobal', { requestId: request._id.toString() })
-        emitToUser('individual', request.clientId?.toString(), 'request_updated', { requestId: request._id.toString() })
-
-        // Customer — worker found (payment prompt)
-        if (request.clientId) {
-          triggerBookingNotif({
-            userId: request.clientId,
-            copy: workerFoundNotif(req.user.fullName),
-            relatedId: request._id,
-            relatedModel: 'WorkforceRequest',
-            requestId: request._id,
-          }).catch((err) => console.error('[Notification Error]:', err.message))
-        }
-
-        // Worker — job accepted (their own confirmation + fee prompt)
+    if (otherOffers.length) {
+      await Assignment.updateMany(
+        { _id: { $in: otherOffers.map((o) => o._id) } },
+        { $set: { status: ASSIGNMENT_STATUS.CANCELLED } },
+      )
+      for (const offer of otherOffers) {
+        emitToUser('labour', offer.labourId.toString(), 'assignment_cancelled', {
+          assignmentId: offer._id.toString(),
+          reason: 'taken_by_other',
+          requestId: request._id.toString(),
+        })
         triggerBookingNotif({
-          userId: req.user._id,
-          copy: labourJobAcceptedNotif({
-            categoryName,
-            reference: reqRef,
-            platformFee: labourFee,
-          }),
-          relatedId: assignment._id,
+          userId: offer.labourId,
+          copy: labourOfferTakenNotif(),
+          relatedId: offer._id,
           relatedModel: 'Assignment',
           requestId: request._id,
-        }).catch((err) => console.error('[Notification Error]:', err.message))
-
-        emitToUser('labour', req.user._id.toString(), 'assignment_accepted', { assignmentId: assignment._id.toString() })
-        io.to(`request_${request._id.toString()}`).emit('bookingAccepted', {
-          status: request.status,
-          labourId: request.labourId,
-          labourName: request.labourName,
-          labourPhone: request.labourPhone,
-          acceptedAt: request.acceptedAt,
-          distanceKm: request.distanceKm,
-          labourPlatformFee: request.labourPlatformFee,
-          estimatedArrival: '30 mins' // Add a dummy ETA or omit it
-        })
-      } catch (err) {
-        console.error('Socket emit error:', err)
+        }).catch(() => {})
       }
+    }
+
+    try {
+      const io = getIO()
+      io.emit('bookingAcceptedGlobal', { requestId: request._id.toString() })
+      emitToUser('individual', request.clientId?.toString(), 'request_updated', { requestId: request._id.toString() })
+
+      if (request.clientId) {
+        triggerBookingNotif({
+          userId: request.clientId,
+          copy: workerFoundNotif(req.user.fullName),
+          relatedId: request._id,
+          relatedModel: 'WorkforceRequest',
+          requestId: request._id,
+        }).catch((err) => console.error('[Notification Error]:', err.message))
+      }
+
+      triggerBookingNotif({
+        userId: req.user._id,
+        copy: labourJobAcceptedNotif({
+          categoryName,
+          reference: reqRef,
+          platformFee: labourFee,
+        }),
+        relatedId: assignment._id,
+        relatedModel: 'Assignment',
+        requestId: request._id,
+      }).catch((err) => console.error('[Notification Error]:', err.message))
+
+      emitToUser('labour', req.user._id.toString(), 'assignment_accepted', { assignmentId: assignment._id.toString() })
+      io.to(`request_${request._id.toString()}`).emit('bookingAccepted', {
+        status: request.status,
+        labourId: request.labourId,
+        labourName: request.labourName,
+        labourPhone: request.labourPhone,
+        acceptedAt: request.acceptedAt,
+        distanceKm: request.distanceKm,
+        labourPlatformFee: request.labourPlatformFee,
+        labourPaymentStatus: request.labourPaymentStatus,
+        estimatedArrival: '30 mins',
+      })
+    } catch (err) {
+      console.error('Socket emit error:', err)
     }
   } else if (action === 'decline') {
     assignment.status = ASSIGNMENT_STATUS.DECLINED

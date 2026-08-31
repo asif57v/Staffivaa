@@ -37,15 +37,9 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   return R * c
 }
 
-export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDetail, onComplete, onCancelBooking, onPayFee }) {
+export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDetail, onComplete, onCancelBooking }) {
   const status = job?.status || 'accepted'
   const requestStatus = job?.requestStatus || 'searching'
-  const labourFeeWaived = job?.labourPlatformFee !== undefined && Number(job.labourPlatformFee) === 0
-  const labourUnpaid = !labourFeeWaived && String(job?.labourPaymentStatus || '').toLowerCase() !== 'paid'
-  // Stay locked until worker pays — even if request was wrongly marked confirmed after user-only payment
-  const isPlatformFeePending =
-    labourUnpaid &&
-    ['platform_fee_pending', 'accepted', 'confirmed'].includes(String(requestStatus).toLowerCase())
   const isCustomerPaymentPending =
     String(requestStatus).toLowerCase() === 'platform_fee_pending' &&
     !labourUnpaid &&
@@ -188,7 +182,7 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
   const [timeLeft, setTimeLeft] = useState(150) // 2.5 mins in seconds
 
   useEffect(() => {
-    if ((isPlatformFeePending || isCustomerPaymentPending) && job?.platformFeePendingAt) {
+    if (isCustomerPaymentPending && job?.platformFeePendingAt) {
       const pendingAt = new Date(job.platformFeePendingAt).getTime()
       const expiryTime = pendingAt + 2.5 * 60 * 1000
       
@@ -204,69 +198,12 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
       
       return () => clearInterval(interval)
     }
-  }, [isPlatformFeePending, isCustomerPaymentPending, job?.platformFeePendingAt])
+  }, [isCustomerPaymentPending, job?.platformFeePendingAt])
 
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60).toString().padStart(2, '0')
     const s = (seconds % 60).toString().padStart(2, '0')
     return `${m}:${s}`
-  }
-
-  if (isPlatformFeePending) {
-    return (
-      <article className="overflow-hidden rounded-[1.35rem] border border-slate-200 bg-white shadow-sm ring-1 ring-slate-100 p-6 flex flex-col items-center text-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 shadow-inner">
-          <Lock className="h-8 w-8" />
-        </div>
-        <h3 className="mb-2 text-lg font-black text-slate-900">Booking Locked</h3>
-        <p className="mb-6 text-sm font-semibold text-slate-500 leading-relaxed px-4">
-          Complete your platform fee payment to unlock this booking.
-        </p>
-        
-        <div className="w-full rounded-xl bg-slate-50 p-4 mb-6 border border-slate-100 text-left space-y-2.5">
-          <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
-            <span className="text-xs font-bold text-slate-500">Customer Name</span>
-            <span className="text-sm font-black text-slate-900">{job.userName || job.supervisor || job.contractor || 'Customer'}</span>
-          </div>
-          <div className="flex justify-between items-start pb-2 border-b border-slate-200/60">
-            <span className="text-xs font-bold text-slate-500 shrink-0">Work Location</span>
-            <span className="text-xs font-extrabold text-slate-800 text-right ml-2 leading-snug">{job.location || job.site || job.title || 'Location provided'}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-bold text-slate-500">Distance to Site</span>
-            <span className="text-sm font-black text-slate-900">{distance != null ? formatDistance(distance) : (job.distanceKm != null ? `${job.distanceKm} km` : 'Calculating...')}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-bold text-slate-500">Platform Fee</span>
-            <span className="text-sm font-black text-slate-900 flex items-center"><IndianRupee className="h-3 w-3 mr-0.5"/> {job.labourPlatformFee || 0}</span>
-          </div>
-          <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-200">
-            <span className="text-xs font-bold text-slate-500">Time Remaining</span>
-            <span className={`text-sm font-black ${timeLeft < 60 ? 'text-red-500' : 'text-slate-900'}`}>{formatTime(timeLeft)}</span>
-          </div>
-        </div>
-
-        <div className="flex gap-2.5 w-full">
-          <button
-            type="button"
-            onClick={() => {
-              if (window.confirm('Are you sure you want to cancel this booking?')) {
-                onCancelBooking(job.id)
-              }
-            }}
-            className="flex-1 py-3.5 text-xs font-extrabold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 transition active:scale-95"
-          >
-            Cancel Booking
-          </button>
-          <AppPrimaryButton 
-            className="flex-1 py-3.5 text-sm font-black bg-slate-900 text-white hover:bg-slate-800"
-            onClick={() => onPayFee(job)}
-          >
-            Pay Now
-          </AppPrimaryButton>
-        </div>
-      </article>
-    )
   }
 
   if (isCustomerPaymentPending) {

@@ -33,6 +33,7 @@ export const updateSettings = asyncHandler(async (req, res) => {
     commissionDueDays,
     minimumEnterpriseSecurityBalance,
     isEnterpriseSecurityBalanceEnabled,
+    minimumLabourWalletBalance,
     advancePaymentPercentage,
     remainingPaymentPercentage,
     platformFeeType,
@@ -71,6 +72,7 @@ export const updateSettings = asyncHandler(async (req, res) => {
 
   if (minimumEnterpriseSecurityBalance != null) settings.minimumEnterpriseSecurityBalance = Number(minimumEnterpriseSecurityBalance)
   if (isEnterpriseSecurityBalanceEnabled != null) settings.isEnterpriseSecurityBalanceEnabled = Boolean(isEnterpriseSecurityBalanceEnabled)
+  if (minimumLabourWalletBalance != null) settings.minimumLabourWalletBalance = Math.max(0, Number(minimumLabourWalletBalance))
   if (advancePaymentPercentage != null) settings.advancePaymentPercentage = Number(advancePaymentPercentage)
   if (remainingPaymentPercentage != null) settings.remainingPaymentPercentage = Number(remainingPaymentPercentage)
   if (platformFeeType != null) settings.platformFeeType = String(platformFeeType)

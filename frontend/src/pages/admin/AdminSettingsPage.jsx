@@ -17,6 +17,7 @@ export function AdminSettingsPage() {
   // Dynamic Enterprise Payment Configuration
   const [minimumEnterpriseSecurityBalance, setMinimumEnterpriseSecurityBalance] = useState(0)
   const [isEnterpriseSecurityBalanceEnabled, setIsEnterpriseSecurityBalanceEnabled] = useState(false)
+  const [minimumLabourWalletBalance, setMinimumLabourWalletBalance] = useState(0)
   const [advancePaymentPercentage, setAdvancePaymentPercentage] = useState(0)
   const [remainingPaymentPercentage, setRemainingPaymentPercentage] = useState(100)
   const [platformFeeType, setPlatformFeeType] = useState('percentage')
@@ -74,6 +75,7 @@ export function AdminSettingsPage() {
       
       setMinimumEnterpriseSecurityBalance(data.settings.minimumEnterpriseSecurityBalance ?? 0)
       setIsEnterpriseSecurityBalanceEnabled(data.settings.isEnterpriseSecurityBalanceEnabled ?? false)
+      setMinimumLabourWalletBalance(data.settings.minimumLabourWalletBalance ?? 0)
       setAdvancePaymentPercentage(data.settings.advancePaymentPercentage ?? 0)
       setRemainingPaymentPercentage(data.settings.remainingPaymentPercentage ?? 100)
       setPlatformFeeType(data.settings.platformFeeType || 'percentage')
@@ -136,6 +138,7 @@ export function AdminSettingsPage() {
         supportEmail,
         minimumEnterpriseSecurityBalance,
         isEnterpriseSecurityBalanceEnabled,
+        minimumLabourWalletBalance,
         advancePaymentPercentage,
         remainingPaymentPercentage,
         platformFeeType,
@@ -325,6 +328,34 @@ export function AdminSettingsPage() {
                 </div>
               </div>
             )}
+          </div>
+        </GlassPanel>
+
+        {/* Labour Worker Wallet Settings */}
+        <GlassPanel className="p-6 md:p-8 border border-slate-200/60 shadow-sm space-y-6 bg-white/85">
+          <div className="border-b border-slate-100 pb-4 mb-4">
+            <h3 className="text-lg font-bold text-slate-900">Labour Worker Wallet Settings</h3>
+            <p className="text-xs text-slate-500">
+              Configure the minimum wallet balance workers must maintain to accept bookings. Platform fees are deducted automatically from the wallet on accept.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-bold text-slate-700">
+              Minimum Wallet Balance Required (₹)
+            </label>
+            <p className="text-xs text-slate-500">
+              Workers with balance below this amount cannot accept new bookings until they recharge.
+            </p>
+            <input
+              type="number"
+              min="0"
+              step="50"
+              value={minimumLabourWalletBalance}
+              onChange={(e) => setMinimumLabourWalletBalance(Number(e.target.value))}
+              className="w-full max-w-md px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
+              placeholder="e.g. 100"
+            />
           </div>
         </GlassPanel>
 

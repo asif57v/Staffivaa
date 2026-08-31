@@ -100,6 +100,7 @@ import {
 import { patchCurrentUser } from '../../../api/userProfileApi.js'
 import { setUser } from '../../../store/slices/authSlice.js'
 import { useDispatch } from 'react-redux'
+import { useGetWalletBalanceQuery } from '../../../store/api/walletApi.js'
 
 function getTimeGreeting() {
   const h = new Date().getHours()
@@ -290,6 +291,9 @@ export function LabourHomeScreen({ user }) {
   const { online, setOnline } = useLabourPresence()
 
   const { data: apiData, refetch } = useGetLabourAssignmentsQuery(undefined)
+  const { data: walletApiData } = useGetWalletBalanceQuery(undefined, {
+    pollingInterval: 30000,
+  })
   const [respondAssignment] = useRespondAssignmentMutation()
   const apiBuckets = useMemo(
     () => bucketsFromAssignments(apiData?.assignments || []),
@@ -309,6 +313,10 @@ export function LabourHomeScreen({ user }) {
         ? categories[0].name
         : 'Skilled worker'
       : 'Worker'
+
+  const apiWalletBalance = walletApiData?.data?.balance ?? 0
+  const minimumWalletRequired = walletApiData?.data?.minimumLabourWalletBalance ?? 0
+  const showLowBalanceBanner = minimumWalletRequired > 0 && apiWalletBalance < minimumWalletRequired
 
   useEffect(() => subscribeAttendance(setEntries), [])
   useEffect(() => subscribeWallet(setWallet), [])
@@ -704,6 +712,32 @@ export function LabourHomeScreen({ user }) {
                     className="mt-2.5 inline-flex items-center gap-1.5 rounded-xl bg-amber-900 px-3.5 py-1.5 text-xs font-extrabold text-white shadow-xs hover:bg-amber-950 transition-all active:scale-95"
                   >
                     Complete KYC Now <ChevronRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </FadeInSection>
+        )}
+
+        {showLowBalanceBanner && (
+          <FadeInSection delay={0.03}>
+            <div className="rounded-2xl border border-rose-200/90 bg-rose-50/90 p-4 shadow-sm backdrop-blur-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-700">
+                  <Wallet className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-extrabold text-rose-950">
+                    Recharge your wallet — minimum ₹{Number(minimumWalletRequired).toLocaleString('en-IN')} required to accept bookings
+                  </h3>
+                  <p className="mt-0.5 text-xs font-medium text-rose-900/90 leading-snug">
+                    Current balance: ₹{Number(apiWalletBalance).toLocaleString('en-IN')}. Top up now to accept new job offers.
+                  </p>
+                  <Link
+                    to="/app/wallet"
+                    className="mt-2.5 inline-flex items-center gap-1.5 rounded-xl bg-rose-700 px-3.5 py-1.5 text-xs font-extrabold text-white shadow-xs hover:bg-rose-800 transition-all active:scale-95"
+                  >
+                    Recharge Now <ChevronRight className="h-3.5 w-3.5" />
                   </Link>
                 </div>
               </div>

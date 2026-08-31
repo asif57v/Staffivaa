@@ -21,8 +21,6 @@ import {
   useCheckInMutation,
   useStartWorkMutation,
   useCheckOutMutation,
-  useCreateRazorpayOrderMutation,
-  useVerifyRazorpayPaymentMutation,
 } from '../../store/api/workforceApi.js'
 import { useGetPublicEnterpriseJobsQuery } from '../../store/api/enterpriseApi.js'
 import {
@@ -33,8 +31,8 @@ import {
   saveJobDemoState,
   subscribeJobDemo,
 } from '../../lib/labourJobDemoStorage.js'
-import { loadRazorpayScript } from '../../lib/razorpay.js'
 import { readLabourPresenceOnline } from '../../hooks/useLabourPresence.js'
+import { InsufficientWalletModal } from '../../components/labour/InsufficientWalletModal.jsx'
 
 function isApiAssignment(job) {
   return Boolean(job?.requestId) && /^[a-f0-9]{24}$/i.test(String(job.id))
@@ -52,8 +50,6 @@ export function AppJobsPage() {
   const [checkIn] = useCheckInMutation()
   const [startWork] = useStartWorkMutation()
   const [checkOut] = useCheckOutMutation()
-  const [createOrder, { isLoading: isCreatingOrder }] = useCreateRazorpayOrderMutation()
-  const [verifyPayment, { isLoading: isVerifying }] = useVerifyRazorpayPaymentMutation()
   const { data: enterpriseJobsRes } = useGetPublicEnterpriseJobsQuery(undefined)
   
   const activeEnterpriseJobsCount = enterpriseJobsRes?.data?.length || 0
@@ -76,7 +72,7 @@ export function AppJobsPage() {
   const [detailKind, setDetailKind] = useState('offers')
   const [toast, setToast] = useState('')
   const [showAllHistory, setShowAllHistory] = useState(false)
-  const [feePaymentRequest, setFeePaymentRequest] = useState(null)
+  const [walletGate, setWalletGate] = useState(null)
 
   const kycOk = user?.labourProfile?.kycStatus === KYC_STATUS.VERIFIED
 
@@ -257,21 +253,26 @@ export function AppJobsPage() {
           showToast('Please update your Work Area with a valid GPS location first.')
           return
         }
-        const res = await respondAssignment({ 
+        await respondAssignment({ 
           id: offer.id, 
           action: 'accept',
           labourLat: loc?.lat,
           labourLng: loc?.lng
         }).unwrap()
         refetch()
-        if (res.request && res.request.status === 'platform_fee_pending') {
-          setConfirmingOfferId(null);
-          showToast('Booking Accepted! Please pay the platform fee to unlock.')
-          setTab('active')
-          return;
-        }
+        setConfirmingOfferId(null)
+        showToast('Assignment accepted — platform fee deducted from your wallet.')
+        setTab('active')
       } catch (e) {
         console.error('Accept error:', e)
+        const code = e?.data?.code
+        if (code === 'INSUFFICIENT_WALLET_BALANCE') {
+          setWalletGate({
+            balance: e?.data?.errors?.balance ?? 0,
+            minimumRequired: e?.data?.errors?.minimumRequired ?? 0,
+          })
+          return
+        }
         showToast(e?.data?.message || e?.message || 'Failed to accept offer')
         return
       }
@@ -285,63 +286,6 @@ export function AppJobsPage() {
     setConfirmingOfferId(null)
     showToast('Assignment accepted — head to Active and check in on site.')
     setTab('active')
-  }
-
-  const handlePayment = async (job) => {
-    if (!job || !job.requestId) return;
-    const requestId = job.requestId;
-    try {
-      const isLoaded = await loadRazorpayScript();
-      if (!isLoaded) {
-        showToast('Failed to load payment gateway. Please check your internet connection.');
-        return;
-      }
-
-      const order = await createOrder(requestId).unwrap();
-      
-      // Handle zero-fee bypass
-      if (order.bypassPayment) {
-        showToast('Platform fee waived for long distance! Shift confirmed.');
-        refetch();
-        return;
-      }
-
-      const options = {
-        key: order.keyId,
-        amount: order.amount,
-        currency: order.currency,
-        name: 'Staffivaa',
-        description: 'Labour Platform Fee',
-        order_id: order.orderId,
-        handler: async function (response) {
-          try {
-            await verifyPayment({
-              id: requestId,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature
-            }).unwrap();
-            showToast('Platform fee paid! Booking unlocked.');
-            refetch();
-          } catch (err) {
-            console.error('Payment verification failed', err);
-            showToast('Payment verification failed. Please contact support.');
-          }
-        },
-        theme: {
-          color: '#FFD100'
-        }
-      };
-      const rzp1 = new window.Razorpay(options);
-      rzp1.on('payment.failed', function (response){
-        console.error(response.error);
-        showToast('Payment failed');
-      });
-      rzp1.open();
-    } catch (err) {
-      console.error('Failed to create order', err);
-      showToast(err?.data?.message || 'Failed to initiate payment');
-    }
   }
 
   const handleMarkOnSite = async (id, lat, lng) => {
@@ -542,7 +486,6 @@ export function AppJobsPage() {
                   onComplete={handleCompleteActive}
                   onCancelBooking={handleCancelActive}
                   onOpenDetail={(j) => openDetail(j, 'active')}
-                  onPayFee={handlePayment}
                 />
               </motion.div>
             ))
@@ -625,6 +568,13 @@ export function AppJobsPage() {
         job={detailJob}
         rawJob={detailJob}
         assignmentKind={detailKind === 'active' ? 'active' : 'offer'}
+      />
+
+      <InsufficientWalletModal
+        open={Boolean(walletGate)}
+        balance={walletGate?.balance}
+        minimumRequired={walletGate?.minimumRequired}
+        onClose={() => setWalletGate(null)}
       />
     </div>
   )

@@ -27,16 +27,25 @@ export function WalletPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   
-  const { data: walletData, isLoading, refetch } = useGetWalletBalanceQuery()
-  const [createOrder] = useCreateRazorpayOrderMutation()
-  const [verifyPayment] = useVerifyRazorpayPaymentMutation()
-  const [requestWithdrawal] = useRequestWithdrawalMutation()
-  const [requestRefund, { isLoading: isRequestingRefund }] = useRequestRefundMutation()
-  
   const [isAddMoneyOpen, setIsAddMoneyOpen] = useState(false)
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [txnFilter, setTxnFilter] = useState('all')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+
+  const walletQueryParams = {
+    ...(txnFilter !== 'all' ? { type: txnFilter } : {}),
+    ...(startDate ? { startDate } : {}),
+    ...(endDate ? { endDate } : {}),
+  }
+
+  const { data: walletData, isLoading, refetch } = useGetWalletBalanceQuery(walletQueryParams)
+  const [createOrder] = useCreateRazorpayOrderMutation()
+  const [verifyPayment] = useVerifyRazorpayPaymentMutation()
+  const [requestWithdrawal] = useRequestWithdrawalMutation()
+  const [requestRefund, { isLoading: isRequestingRefund }] = useRequestRefundMutation()
 
   const balance = walletData?.data?.balance || 0
   const pendingBalance = walletData?.data?.pendingBalance || 0
@@ -174,7 +183,7 @@ export function WalletPage() {
 
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-gray-900">Recent Transactions</h3>
+            <h3 className="text-lg font-bold text-gray-900">Transaction History</h3>
             {transactions.length > 3 && (
               <button 
                 onClick={() => setShowAll(!showAll)}
@@ -183,6 +192,44 @@ export function WalletPage() {
                 {showAll ? 'Show Less' : `View All (${transactions.length})`}
               </button>
             )}
+          </div>
+
+          <div className="mb-4 flex flex-wrap gap-2">
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'recharge', label: 'Recharge' },
+              { id: 'deduction', label: 'Platform Fee' },
+              { id: 'credit', label: 'Credits' },
+              { id: 'debit', label: 'Debits' },
+            ].map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setTxnFilter(f.id)}
+                className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                  txnFilter === f.id
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mb-4 grid grid-cols-2 gap-2">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"
+            />
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"
+            />
           </div>
 
           <div className="space-y-1">
@@ -195,8 +242,10 @@ export function WalletPage() {
                   type: txn.type.toLowerCase(),
                   status: txn.status.toLowerCase(),
                   date: new Date(txn.createdAt).toLocaleString(),
+                  balanceAfter: txn.balanceAfter,
+                  bookingRef: txn.bookingId?.reference,
                   isRefundEligible: txn.status === 'Pending' && txn.type === 'Refund' && txn.source?.includes('Refund Eligible'),
-                  onRequestRefund: () => handleRequestRefund(txn.bookingId)
+                  onRequestRefund: () => handleRequestRefund(txn.bookingId?._id || txn.bookingId),
                 }} />
               ))
             ) : (

@@ -229,7 +229,7 @@ export const workforceApi = baseApi.injectEndpoints({
         body: { action, labourLat, labourLng },
       }),
       transformResponse: unwrap,
-      invalidatesTags: ['Assignments'],
+      invalidatesTags: ['Assignments', 'Wallet'],
     }),
     checkIn: build.mutation({
       query: (body) => ({ url: '/workforce/attendance/check-in', method: 'POST', body }),

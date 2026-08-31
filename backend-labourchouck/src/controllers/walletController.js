@@ -3,6 +3,7 @@ import { razorpay } from '../config/razorpay.js'
 import { User } from '../models/User.js'
 import { WalletTransaction } from '../models/WalletTransaction.js'
 import { Withdrawal } from '../models/Withdrawal.js'
+import { SystemSettings } from '../models/SystemSettings.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
 
@@ -68,15 +69,16 @@ export const verifyAddMoneyPayment = asyncHandler(async (req, res) => {
   user.walletBalance = (user.walletBalance || 0) + amount
   await user.save()
 
-  // Create WalletTransaction
   const transaction = await WalletTransaction.create({
     transactionId: razorpay_payment_id,
     payerId: user._id,
     payerName: user.fullName,
-    payerType: 'user', // Can be user, labour, corporate, etc based on role. We can simplify by just using 'user'.
+    payerType: 'user',
     type: 'Credit',
     source: 'Razorpay Add Money',
     amount: amount,
+    balanceAfter: user.walletBalance,
+    paymentMethod: 'razorpay',
     status: 'Completed',
     razorpayOrderId: razorpay_order_id,
     razorpayPaymentId: razorpay_payment_id,
@@ -99,11 +101,42 @@ export const getWalletBalance = asyncHandler(async (req, res) => {
     return res.status(404).json({ status: 'fail', message: 'User not found' })
   }
 
-  const transactions = await WalletTransaction.find({ 
-    $or: [{ payerId: user._id }, { userId: user._id }, { labourId: user._id }] 
-  })
+  const { type, startDate, endDate } = req.query
+  const txnFilter = {
+    $or: [{ payerId: user._id }, { userId: user._id }, { labourId: user._id }],
+  }
+
+  if (type === 'recharge') {
+    txnFilter.type = 'Credit'
+    txnFilter.source = { $regex: /add money|recharge/i }
+  } else if (type === 'deduction') {
+    txnFilter.type = 'Debit'
+    txnFilter.platform_fee = true
+  } else if (type === 'credit') {
+    txnFilter.type = { $in: ['Credit', 'Refund'] }
+  } else if (type === 'debit') {
+    txnFilter.type = 'Debit'
+  }
+
+  if (startDate || endDate) {
+    txnFilter.createdAt = {}
+    if (startDate) txnFilter.createdAt.$gte = new Date(startDate)
+    if (endDate) {
+      const end = new Date(endDate)
+      end.setHours(23, 59, 59, 999)
+      txnFilter.createdAt.$lte = end
+    }
+  }
+
+  const transactions = await WalletTransaction.find(txnFilter)
     .sort({ createdAt: -1 })
-    .limit(50)
+    .limit(100)
+    .populate('bookingId', 'reference status')
+    .lean()
+
+  const settingsDoc = await SystemSettings.findOne({ singletonId: 'SYSTEM_SETTINGS' })
+    .select('minimumLabourWalletBalance')
+    .lean()
 
   const pendingWithdrawals = await Withdrawal.find({
     requestedBy: user._id,
@@ -136,6 +169,7 @@ export const getWalletBalance = asyncHandler(async (req, res) => {
     data: {
       balance: user.walletBalance || 0,
       availableBalance: user.walletBalance || 0,
+      minimumLabourWalletBalance: settingsDoc?.minimumLabourWalletBalance ?? 0,
       pendingBalance,
       totalWithdrawn,
       lifetimeEarnings,

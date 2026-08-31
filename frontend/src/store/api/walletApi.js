@@ -3,7 +3,10 @@ import { baseApi } from './baseApi'
 export const walletApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getWalletBalance: builder.query({
-      query: () => '/wallet',
+      query: (params = {}) => ({
+        url: '/wallet',
+        params,
+      }),
       providesTags: ['Wallet'],
     }),
     createRazorpayOrder: builder.mutation({

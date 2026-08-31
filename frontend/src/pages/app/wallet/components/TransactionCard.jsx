@@ -24,7 +24,18 @@ export function TransactionCard({ transaction }) {
             }`}>
               {transaction.status}
             </span>
+            {transaction.bookingRef ? (
+              <>
+                <span className="text-slate-300">•</span>
+                <span className="font-semibold text-slate-500">#{transaction.bookingRef}</span>
+              </>
+            ) : null}
           </div>
+          {transaction.balanceAfter != null && (
+            <p className="mt-1 text-[10px] font-semibold text-slate-500">
+              Balance after: ₹{Number(transaction.balanceAfter).toLocaleString('en-IN')}
+            </p>
+          )}
           {transaction.isRefundEligible && (
             <button
               onClick={(e) => { e.stopPropagation(); transaction.onRequestRefund?.() }}
