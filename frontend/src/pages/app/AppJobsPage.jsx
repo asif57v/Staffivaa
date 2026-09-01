@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { CheckCircle2, Clock, IndianRupee, MapPin, RotateCcw, Sparkles, Building2 } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth.js'
@@ -32,7 +32,7 @@ import {
   subscribeJobDemo,
 } from '../../lib/labourJobDemoStorage.js'
 import { readLabourPresenceOnline } from '../../hooks/useLabourPresence.js'
-import { readApiErrorPayload, readLabourWalletPolicy } from '../../lib/labourWalletPolicy.js'
+import { readApiErrorPayload, readLabourWalletPolicy, readWalletGateFromError } from '../../lib/labourWalletPolicy.js'
 import { useGetWalletBalanceQuery } from '../../store/api/walletApi.js'
 import { InsufficientWalletModal } from '../../components/labour/InsufficientWalletModal.jsx'
 
@@ -261,6 +261,7 @@ export function AppJobsPage() {
       setWalletGate({
         balance: walletPolicy.balance,
         minimumRequired: walletPolicy.minimumRequired,
+        requiredAmount: walletPolicy.minimumRequired,
       })
       return
     }
@@ -288,14 +289,9 @@ export function AppJobsPage() {
       } catch (e) {
         console.error('Accept error:', e)
         const payload = readApiErrorPayload(e)
-        if (payload?.code === 'INSUFFICIENT_WALLET_BALANCE') {
-          setWalletGate({
-            balance: payload?.errors?.balance ?? walletPolicy.balance,
-            minimumRequired:
-              payload?.errors?.requiredBalance ??
-              payload?.errors?.minimumRequired ??
-              walletPolicy.minimumRequired,
-          })
+        const gate = readWalletGateFromError(e, walletPolicy)
+        if (gate) {
+          setWalletGate(gate)
           return
         }
         showToast(payload?.message || e?.message || 'Failed to accept offer')
@@ -306,6 +302,7 @@ export function AppJobsPage() {
         setWalletGate({
           balance: walletPolicy.balance,
           minimumRequired: walletPolicy.minimumRequired,
+          requiredAmount: walletPolicy.minimumRequired,
         })
         return
       }
@@ -619,6 +616,7 @@ export function AppJobsPage() {
         open={Boolean(walletGate)}
         balance={walletGate?.balance}
         minimumRequired={walletGate?.minimumRequired}
+        requiredAmount={walletGate?.requiredAmount}
         context="job"
         onClose={() => setWalletGate(null)}
       />

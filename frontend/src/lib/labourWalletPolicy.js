@@ -15,13 +15,13 @@ export function readLabourWalletPolicy({ assignmentsData, walletData, user } = {
       0,
   )
   const isFrozen = Boolean(fromAssignments?.isFrozen)
+  const hasMinimumRequirement = minimumRequired > 0
+  const meetsMinimum = !hasMinimumRequirement || balance >= minimumRequired
 
-  const canAcceptBookings =
-    !isFrozen &&
-    (fromAssignments?.canAcceptBookings ??
-      (minimumRequired > 0 ? balance >= minimumRequired : balance > 0))
+  const canAcceptBookings = !isFrozen && meetsMinimum
 
-  const isLowBalance = !canAcceptBookings
+  // Only warn/recharge when admin has set a positive minimum balance requirement.
+  const isLowBalance = hasMinimumRequirement && !meetsMinimum && !isFrozen
 
   return {
     balance,
@@ -34,4 +34,22 @@ export function readLabourWalletPolicy({ assignmentsData, walletData, user } = {
 
 export function readApiErrorPayload(error) {
   return error?.data ?? error ?? {}
+}
+
+/** Build wallet gate modal state from accept API errors. */
+export function readWalletGateFromError(error, walletPolicy) {
+  const payload = readApiErrorPayload(error)
+  if (payload?.code !== 'INSUFFICIENT_WALLET_BALANCE') return null
+
+  const balance = Number(payload?.errors?.balance ?? walletPolicy?.balance ?? 0)
+  const minimumRequired = Number(payload?.errors?.minimumRequired ?? walletPolicy?.minimumRequired ?? 0)
+  const requiredAmount = Number(
+    payload?.errors?.requiredBalance ??
+      payload?.errors?.platformFee ??
+      minimumRequired,
+  )
+
+  if (requiredAmount <= 0 && minimumRequired <= 0) return null
+
+  return { balance, minimumRequired, requiredAmount }
 }

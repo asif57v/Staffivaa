@@ -43,7 +43,7 @@ import {
   cancelActiveLiveBookings,
   WORKER_CANCELLED_BOOKING_EVENT,
 } from '../lib/individualBookings.js'
-import { readApiErrorPayload, readLabourWalletPolicy } from '../lib/labourWalletPolicy.js'
+import { readApiErrorPayload, readLabourWalletPolicy, readWalletGateFromError } from '../lib/labourWalletPolicy.js'
 import { useGetWalletBalanceQuery } from '../store/api/walletApi.js'
 import { InsufficientWalletModal } from '../components/labour/InsufficientWalletModal.jsx'
 import { WorkerLiveLocationBridge } from '../components/labour/WorkerLiveLocationBridge.jsx'
@@ -65,6 +65,7 @@ export function AppShell() {
 
   const isLabour = user?.role === USER_ROLES.LABOUR
   const isOnNavigationPage = pathname.startsWith('/app/navigation/')
+  const isOnWalletPage = pathname.startsWith('/app/wallet')
   const { data: apiData, refetch: refetchAssignments } = useGetLabourAssignmentsQuery(undefined, {
     skip: !isLabour,
     refetchOnMountOrArgChange: true,
@@ -104,6 +105,10 @@ export function AppShell() {
       stopGlobalRingSound();
     }
   }, [incomingJob, stopGlobalRingSound]);
+
+  useEffect(() => {
+    if (isOnWalletPage) setWalletGate(null)
+  }, [isOnWalletPage])
   
   useEffect(() => {
     if (isLabour) return subscribeJobDemo(setLocalDemo)
@@ -488,6 +493,7 @@ export function AppShell() {
       setWalletGate({
         balance: walletPolicy.balance,
         minimumRequired: walletPolicy.minimumRequired,
+        requiredAmount: walletPolicy.minimumRequired,
       })
       return
     }
@@ -519,14 +525,9 @@ export function AppShell() {
     } catch (e) {
       console.error('Popup accept error:', e);
       const payload = readApiErrorPayload(e)
-      if (payload?.code === 'INSUFFICIENT_WALLET_BALANCE') {
-        setWalletGate({
-          balance: payload?.errors?.balance ?? walletPolicy.balance,
-          minimumRequired:
-            payload?.errors?.requiredBalance ??
-            payload?.errors?.minimumRequired ??
-            walletPolicy.minimumRequired,
-        })
+      const gate = readWalletGateFromError(e, walletPolicy)
+      if (gate) {
+        setWalletGate(gate)
         return
       }
       dispatchAlert('Failed to accept', payload?.message || e?.message || 'Please try from Offers tab.', true);
@@ -1254,7 +1255,7 @@ export function AppShell() {
       ) : null}
 
       {/* Rapido-style Incoming Job Popup (Global for Workers) */}
-      {incomingJob && isLabour && (
+      {incomingJob && isLabour && !isOnWalletPage && (
         <IncomingJobPopup
           key={String(incomingJob.assignmentId)}
           job={incomingJob}
@@ -1275,9 +1276,10 @@ export function AppShell() {
       ) : null}
 
       <InsufficientWalletModal
-        open={Boolean(walletGate)}
+        open={Boolean(walletGate) && !isOnWalletPage}
         balance={walletGate?.balance}
         minimumRequired={walletGate?.minimumRequired}
+        requiredAmount={walletGate?.requiredAmount}
         context="job"
         onClose={() => setWalletGate(null)}
       />

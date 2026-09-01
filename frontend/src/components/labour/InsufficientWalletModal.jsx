@@ -1,21 +1,35 @@
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { IndianRupee, Wallet, X } from 'lucide-react'
 import { AppPrimaryButton } from '../app/AppPrimaryButton.jsx'
 
 export function InsufficientWalletModal({
   open,
   minimumRequired,
+  requiredAmount,
   balance,
   onClose,
   context = 'job',
 }) {
+  const navigate = useNavigate()
+
   if (!open) return null
 
   const isJobContext = context === 'job'
+  const adminMinimum = Number(minimumRequired || 0)
+  const amountNeeded = Number(requiredAmount ?? minimumRequired ?? 0)
+  const showPlatformFee = adminMinimum <= 0 && amountNeeded > 0
+
   const title = isJobContext ? 'Recharge to receive this job' : 'Insufficient wallet balance'
-  const description = isJobContext
-    ? 'Your wallet balance is below the minimum required to accept bookings. Recharge now to receive jobs.'
-    : 'Recharge your wallet to continue accepting bookings.'
+  const description = showPlatformFee
+    ? 'Your wallet balance is not enough to cover this job’s platform fee. Recharge now to accept.'
+    : isJobContext
+      ? 'Your wallet balance is below the minimum required to accept bookings. Recharge now to receive jobs.'
+      : 'Recharge your wallet to continue accepting bookings.'
+
+  const handleRecharge = () => {
+    onClose?.()
+    navigate('/app/wallet', { replace: true })
+  }
 
   return (
     <div className="fixed inset-0 z-[10050] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
@@ -48,10 +62,12 @@ export function InsufficientWalletModal({
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="font-semibold text-slate-500">Minimum required</span>
+            <span className="font-semibold text-slate-500">
+              {showPlatformFee ? 'Platform fee needed' : 'Minimum required'}
+            </span>
             <span className="font-black text-amber-700 flex items-center">
               <IndianRupee className="h-3.5 w-3.5" />
-              {Number(minimumRequired || 0).toLocaleString('en-IN')}
+              {amountNeeded.toLocaleString('en-IN')}
             </span>
           </div>
         </div>
@@ -64,11 +80,13 @@ export function InsufficientWalletModal({
           >
             Cancel
           </button>
-          <Link to="/app/wallet" className="flex-1" onClick={onClose}>
-            <AppPrimaryButton type="button" className="w-full py-3 text-sm font-black">
-              {isJobContext ? 'Recharge Wallet' : 'Recharge Now'}
-            </AppPrimaryButton>
-          </Link>
+          <AppPrimaryButton
+            type="button"
+            onClick={handleRecharge}
+            className="flex-1 py-3 text-sm font-black"
+          >
+            {isJobContext ? 'Recharge Wallet' : 'Recharge Now'}
+          </AppPrimaryButton>
         </div>
       </div>
     </div>

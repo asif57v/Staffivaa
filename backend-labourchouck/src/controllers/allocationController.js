@@ -243,7 +243,7 @@ export const listLabourAssignments = asyncHandler(async (req, res) => {
         isFrozen: Boolean(labourUser?.isWalletFrozen),
         canAcceptBookings:
           !labourUser?.isWalletFrozen &&
-          (gateAmount <= 0 ? balance > 0 : balance >= gateAmount),
+          (minimumRequired <= 0 || balance >= minimumRequired),
       },
     },
   })

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { MapPin, User, Clock, IndianRupee, Briefcase, X, CheckCircle2 } from 'lucide-react'
 import './IncomingJobPopup.css'
 
@@ -13,6 +14,7 @@ export function IncomingJobPopup({
   isAccepting,
   walletPolicy,
 }) {
+  const navigate = useNavigate()
   const totalSeconds = job?.timeoutSeconds || 90
   const [timeLeft, setTimeLeft] = useState(totalSeconds)
   const [exiting, setExiting] = useState(false)
@@ -76,6 +78,8 @@ export function IncomingJobPopup({
     }
   }, [])
 
+  const needsRecharge = Boolean(walletPolicy?.isLowBalance)
+
   const handleDismiss = useCallback((reason) => {
     stopAudio()
     setExiting(true)
@@ -89,8 +93,12 @@ export function IncomingJobPopup({
   const handleAccept = useCallback(() => {
     stopAudio()
     if (timerRef.current) clearInterval(timerRef.current)
+    if (needsRecharge) {
+      navigate('/app/wallet', { replace: true })
+      return
+    }
     onAccept?.()
-  }, [stopAudio, onAccept])
+  }, [stopAudio, onAccept, needsRecharge, navigate])
 
   const handleDecline = useCallback(() => {
     stopAudio()
@@ -108,7 +116,6 @@ export function IncomingJobPopup({
   const isUrgent = timeLeft <= 15
   const minutes = Math.floor(timeLeft / 60)
   const seconds = timeLeft % 60
-  const needsRecharge = Boolean(walletPolicy?.isLowBalance)
   const minimumRequired = Number(walletPolicy?.minimumRequired || 0)
   const walletBalance = Number(walletPolicy?.balance || 0)
 
