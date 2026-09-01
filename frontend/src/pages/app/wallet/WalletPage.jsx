@@ -1,27 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Wallet as WalletIcon } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { WalletBalanceCard } from './components/WalletBalanceCard'
 import { TransactionCard } from './components/TransactionCard'
 import { AddMoneyModal } from './components/AddMoneyModal'
 import { WithdrawMoneyModal } from './components/WithdrawMoneyModal'
 import { PageSkeleton } from '../../../components/ui/PageSkeleton'
-import { useGetWalletBalanceQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation, useRequestWithdrawalMutation, useRequestRefundMutation } from '../../../store/api/walletApi'
+import { useGetWalletBalanceQuery, useCreateWalletRechargeOrderMutation, useVerifyWalletRechargePaymentMutation, useRequestWithdrawalMutation, useRequestRefundMutation } from '../../../store/api/walletApi'
 import { useAuth } from '../../../hooks/useAuth'
-
-const loadRazorpayScript = () => {
-  return new Promise((resolve) => {
-    if (window.Razorpay) {
-      resolve(true)
-      return
-    }
-    const script = document.createElement('script')
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    script.onload = () => resolve(true)
-    script.onerror = () => resolve(false)
-    document.body.appendChild(script)
-  })
-}
+import { readLabourWalletPolicy } from '../../../lib/labourWalletPolicy.js'
+import { loadRazorpayScript } from '../../../lib/razorpay.js'
 
 export function WalletPage() {
   const navigate = useNavigate()
@@ -31,6 +20,7 @@ export function WalletPage() {
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isPaymentProcessing, setIsPaymentProcessing] = useState(false)
   const [txnFilter, setTxnFilter] = useState('all')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -42,8 +32,8 @@ export function WalletPage() {
   }
 
   const { data: walletData, isLoading, refetch } = useGetWalletBalanceQuery(walletQueryParams)
-  const [createOrder] = useCreateRazorpayOrderMutation()
-  const [verifyPayment] = useVerifyRazorpayPaymentMutation()
+  const [createOrder] = useCreateWalletRechargeOrderMutation()
+  const [verifyPayment] = useVerifyWalletRechargePaymentMutation()
   const [requestWithdrawal] = useRequestWithdrawalMutation()
   const [requestRefund, { isLoading: isRequestingRefund }] = useRequestRefundMutation()
 
@@ -52,8 +42,8 @@ export function WalletPage() {
   const totalWithdrawn = walletData?.totalWithdrawn || 0
   const lifetimeEarnings = walletData?.lifetimeEarnings || 0
   const transactions = walletData?.transactions || []
-  const minimumWalletRequired = walletData?.minimumLabourWalletBalance || 0
-  const showLowBalanceBanner = minimumWalletRequired > 0 && balance < minimumWalletRequired
+  const walletPolicy = readLabourWalletPolicy({ walletData, user })
+  const { minimumRequired: minimumWalletRequired, isLowBalance: showLowBalanceBanner } = walletPolicy
 
   const handleWithdraw = async (details) => {
     setIsProcessing(true)
@@ -82,80 +72,88 @@ export function WalletPage() {
   }
 
   const handleAddMoney = async (amount) => {
-    setIsProcessing(true)
+    setIsPaymentProcessing(true)
     setIsAddMoneyOpen(false)
 
     try {
       const isLoaded = await loadRazorpayScript()
-      if (!isLoaded) {
-        alert('Failed to load Razorpay SDK. Are you online?')
-        setIsProcessing(false)
+      if (!isLoaded || !window.Razorpay) {
+        toast.error('Failed to load Razorpay. Please check your internet connection.')
+        setIsPaymentProcessing(false)
         return
       }
 
-      // Create Order
-      const res = await createOrder({ amount }).unwrap()
-      const { orderId, amount: orderAmount, currency, key } = res.data
+      const order = await createOrder({ amount }).unwrap()
+      const orderId = order?.orderId
+      const orderAmount = order?.amount
+      const currency = order?.currency || 'INR'
+      const razorpayKey = order?.key || order?.keyId || import.meta.env.VITE_RAZORPAY_KEY_ID
+
+      if (!orderId || !orderAmount || !razorpayKey) {
+        throw new Error('Invalid payment order response from server')
+      }
 
       const options = {
-        key: key,
-        amount: orderAmount.toString(),
-        currency: currency,
+        key: razorpayKey,
+        amount: String(orderAmount),
+        currency,
         name: 'Staffivaa',
         description: 'Add Money to Wallet',
         image: '/favicon.svg',
         order_id: orderId,
         handler: async function (response) {
           try {
-            setIsProcessing(true)
+            setIsPaymentProcessing(true)
             await verifyPayment({
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
-              amount: amount
+              amount,
             }).unwrap()
-            
-            // Payment successful, RTK query invalidates 'Wallet' tag automatically, but we can also refetch
+
+            toast.success(`₹${amount.toLocaleString('en-IN')} added to your wallet`)
             refetch()
           } catch (error) {
             console.error('Payment verification failed:', error)
-            alert('Payment verification failed. If money was deducted, it will be refunded.')
+            toast.error(error?.data?.message || 'Payment verification failed. If money was deducted, it will be refunded.')
           } finally {
-            setIsProcessing(false)
+            setIsPaymentProcessing(false)
           }
         },
         prefill: {
           name: user?.fullName || '',
           email: user?.email || '',
-          contact: user?.phone || ''
+          contact: user?.phone || '',
         },
         theme: {
-          color: '#0f172a'
+          color: '#0f172a',
         },
         modal: {
-          ondismiss: function() {
-            setIsProcessing(false)
-          }
-        }
+          ondismiss: function () {
+            setIsPaymentProcessing(false)
+          },
+        },
       }
 
       const rzp1 = new window.Razorpay(options)
       rzp1.on('payment.failed', function (response) {
         console.error('Payment Failed:', response.error)
-        setIsProcessing(false)
+        toast.error(response?.error?.description || 'Payment failed. Please try again.')
+        setIsPaymentProcessing(false)
       })
+
+      setIsPaymentProcessing(false)
       rzp1.open()
-      
     } catch (error) {
       console.error('Failed to initiate payment:', error)
-      alert(error?.data?.message || 'Failed to initiate payment. Please try again.')
-      setIsProcessing(false)
+      toast.error(error?.data?.message || error?.message || 'Failed to initiate payment. Please try again.')
+      setIsPaymentProcessing(false)
     }
   }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      <PageSkeleton visible={isProcessing || isLoading} />
+      <PageSkeleton visible={(isProcessing && !isPaymentProcessing) || isLoading} />
       
       {/* Sticky Header */}
       <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100 px-4 py-3 -mx-4 -mt-2">

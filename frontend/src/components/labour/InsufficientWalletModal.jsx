@@ -2,11 +2,23 @@ import { Link } from 'react-router-dom'
 import { IndianRupee, Wallet, X } from 'lucide-react'
 import { AppPrimaryButton } from '../app/AppPrimaryButton.jsx'
 
-export function InsufficientWalletModal({ open, minimumRequired, balance, onClose }) {
+export function InsufficientWalletModal({
+  open,
+  minimumRequired,
+  balance,
+  onClose,
+  context = 'job',
+}) {
   if (!open) return null
 
+  const isJobContext = context === 'job'
+  const title = isJobContext ? 'Recharge to receive this job' : 'Insufficient wallet balance'
+  const description = isJobContext
+    ? 'Your wallet balance is below the minimum required to accept bookings. Recharge now to receive jobs.'
+    : 'Recharge your wallet to continue accepting bookings.'
+
   return (
-    <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4 bg-slate-900/50 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-[10050] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
       <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl ring-1 ring-slate-200">
         <div className="flex items-start justify-between gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
@@ -22,9 +34,9 @@ export function InsufficientWalletModal({ open, minimumRequired, balance, onClos
           </button>
         </div>
 
-        <h3 className="mt-3 text-base font-black text-slate-900">Insufficient wallet balance</h3>
+        <h3 className="mt-3 text-base font-black text-slate-900">{title}</h3>
         <p className="mt-1.5 text-sm font-medium text-slate-600 leading-relaxed">
-          Recharge to accept bookings.
+          {description}
         </p>
 
         <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-3 space-y-2 text-sm">
@@ -54,7 +66,7 @@ export function InsufficientWalletModal({ open, minimumRequired, balance, onClos
           </button>
           <Link to="/app/wallet" className="flex-1" onClick={onClose}>
             <AppPrimaryButton type="button" className="w-full py-3 text-sm font-black">
-              Recharge Now
+              {isJobContext ? 'Recharge Wallet' : 'Recharge Now'}
             </AppPrimaryButton>
           </Link>
         </div>

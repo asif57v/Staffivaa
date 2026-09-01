@@ -351,7 +351,14 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     }
   }, [currentStatus, onBack, request?.cancelReason, requestId, booking?.requestId, booking?.ref])
 
-  const isAcceptedOrBeyond = ['accepted', 'in_progress', 'on_site', 'completed', 'platform_fee_pending'].includes(currentStatus)
+  const isAcceptedOrBeyond = ['accepted', 'confirmed', 'in_progress', 'on_site', 'completed', 'platform_fee_pending'].includes(currentStatus)
+  const isIndividualBooking = request?.sourceType === 'individual' || booking?.sourceType === 'individual'
+  const requiresUserPayment =
+    !isIndividualBooking &&
+    request?.userPaymentStatus !== 'paid' &&
+    Number(request?.userPlatformFee ?? 0) > 0 &&
+    (currentStatus === 'platform_fee_pending' ||
+      (currentStatus === 'accepted' && request?.userPaymentStatus !== 'paid'))
   const fallbackWorker = isAcceptedOrBeyond ? (booking?.assignedWorker || worker || (draft?.selectedWorkers || [])[0]) : null
 
   const assignedLabour = activeAssignment?.labourId || fallbackWorker || null
@@ -493,8 +500,8 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     )
   }
 
-  // Platform Fee Pending state
-  if (currentStatus === 'platform_fee_pending' || (currentStatus === 'accepted' && request.userPaymentStatus !== 'paid' && Number(request.userPlatformFee ?? 0) > 0)) {
+  // Corporate / legacy bookings may still require upfront user platform fee.
+  if (requiresUserPayment) {
     return createPortal(
       <div className="fixed inset-0 z-[100] flex flex-col bg-slate-50 overflow-hidden" style={{ height: '100dvh' }}>
         <div className="relative shrink-0 bg-white border-b border-slate-100 flex items-center p-4 pt-[max(1rem,env(safe-area-inset-top,1rem))] z-10 shadow-xs">

@@ -14,19 +14,21 @@ export const walletApi = baseApi.injectEndpoints({
       transformResponse: unwrapWallet,
       providesTags: ['Wallet'],
     }),
-    createRazorpayOrder: builder.mutation({
+    createWalletRechargeOrder: builder.mutation({
       query: (data) => ({
         url: '/wallet/razorpay/create-order',
         method: 'POST',
         body: data,
       }),
+      transformResponse: unwrapWallet,
     }),
-    verifyRazorpayPayment: builder.mutation({
+    verifyWalletRechargePayment: builder.mutation({
       query: (data) => ({
         url: '/wallet/razorpay/verify',
         method: 'POST',
         body: data,
       }),
+      transformResponse: unwrapWallet,
       invalidatesTags: ['Wallet'],
     }),
     requestWithdrawal: builder.mutation({
@@ -49,8 +51,8 @@ export const walletApi = baseApi.injectEndpoints({
 
 export const { 
   useGetWalletBalanceQuery, 
-  useCreateRazorpayOrderMutation, 
-  useVerifyRazorpayPaymentMutation,
+  useCreateWalletRechargeOrderMutation, 
+  useVerifyWalletRechargePaymentMutation,
   useRequestWithdrawalMutation,
   useRequestRefundMutation
 } = walletApi

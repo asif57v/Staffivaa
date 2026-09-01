@@ -15,16 +15,20 @@ export function readLabourWalletPolicy({ assignmentsData, walletData, user } = {
       0,
   )
   const isFrozen = Boolean(fromAssignments?.isFrozen)
-  const isLowBalance = minimumRequired > 0 && balance < minimumRequired
+
+  const canAcceptBookings =
+    !isFrozen &&
+    (fromAssignments?.canAcceptBookings ??
+      (minimumRequired > 0 ? balance >= minimumRequired : balance > 0))
+
+  const isLowBalance = !canAcceptBookings
 
   return {
     balance,
     minimumRequired,
     isFrozen,
     isLowBalance,
-    canAcceptBookings:
-      !isFrozen &&
-      (fromAssignments?.canAcceptBookings ?? balance >= minimumRequired),
+    canAcceptBookings,
   }
 }
 

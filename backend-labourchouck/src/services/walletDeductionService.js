@@ -89,9 +89,7 @@ export async function recordLabourPlatformFeeDeduction({
     await WalletTransaction.create({
       transactionId: `TXN-LFEE-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       bookingId,
-      payerId: userId,
-      payerName: userName || 'Worker',
-      payerType: 'labour',
+      payerType: 'system',
       platform_fee: true,
       type: 'Credit',
       source: 'Labour Platform Fee',

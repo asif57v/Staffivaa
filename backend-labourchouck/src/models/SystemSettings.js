@@ -69,8 +69,15 @@ const systemSettingsSchema = new mongoose.Schema(
     // Labour worker wallet — minimum balance required to accept bookings
     minimumLabourWalletBalance: {
       type: Number,
-      default: 0,
+      default: 100,
       min: 0,
+    },
+    minimumLabourWalletBalanceUpdatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    minimumLabourWalletBalanceUpdatedAt: {
+      type: Date,
     },
     advancePaymentPercentage: {
       type: Number,

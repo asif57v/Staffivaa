@@ -260,7 +260,11 @@ export const createRequest = asyncHandler(async (req, res) => {
     commissionDueDays: settings.commissionDueDays,
 
     status: sourceType === REQUEST_SOURCE.INDIVIDUAL ? REQUEST_STATUS.SEARCHING : REQUEST_STATUS.ALLOCATING,
-    ...(sourceType === REQUEST_SOURCE.INDIVIDUAL && { expiresAt: new Date(Date.now() + 3 * 60 * 1000) }),
+    ...(sourceType === REQUEST_SOURCE.INDIVIDUAL && {
+      expiresAt: new Date(Date.now() + 3 * 60 * 1000),
+      userPlatformFee: 0,
+      userPaymentStatus: 'paid',
+    }),
   })
 
   // Send offers to matching workers (for INDIVIDUAL requests)

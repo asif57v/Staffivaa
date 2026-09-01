@@ -296,9 +296,18 @@ export function IndividualBookingFlowPage() {
         const acceptedAssignment = assignments?.find(a => ['accepted', 'on_site', 'in_progress', 'completed'].includes(a.status))
         console.log('[Homeowner] Poll specific request:', id, 'status:', request?.status, 'acceptedAssignment:', !!acceptedAssignment)
 
-        if (acceptedAssignment) {
+        if (acceptedAssignment || request?.status === 'confirmed' || request?.labourId) {
           console.log('[Homeowner] ACCEPTED! Transitioning to live tracking')
-          transitionToActive(acceptedAssignment.labourId || acceptedAssignment)
+          transitionToActive(
+            acceptedAssignment?.labourId ||
+              (request?.labourId
+                ? {
+                    _id: request.labourId,
+                    fullName: request.labourName,
+                    phone: request.labourPhone,
+                  }
+                : acceptedAssignment),
+          )
         }
       } catch (err) { console.error('[Homeowner] Poll error:', err) }
     }
@@ -351,8 +360,14 @@ export function IndividualBookingFlowPage() {
         const acceptedAssignment = assignments?.find(a => ['accepted', 'on_site', 'in_progress', 'completed'].includes(a.status))
         console.log('[Homeowner] Poll fallback: request', activeReq._id, 'acceptedAssignment:', !!acceptedAssignment)
 
-        if (acceptedAssignment) {
-          transitionToActive(acceptedAssignment?.labourId)
+        if (acceptedAssignment || detailJson?.data?.request?.status === 'confirmed' || detailJson?.data?.request?.labourId) {
+          const req = detailJson?.data?.request
+          transitionToActive(
+            acceptedAssignment?.labourId ||
+              (req?.labourId
+                ? { _id: req.labourId, fullName: req.labourName, phone: req.labourPhone }
+                : null),
+          )
         }
       } catch (err) { console.error('[Homeowner] Poll all error:', err) }
     }

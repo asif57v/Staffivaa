@@ -14,7 +14,7 @@ import { LabourJobHistoryCard } from '../../components/labour/jobs/LabourJobHist
 import { LabourJobOfferCard } from '../../components/labour/jobs/LabourJobOfferCard.jsx'
 import { LabourJobsHero } from '../../components/labour/jobs/LabourJobsHero.jsx'
 import { LabourJobsTabBar } from '../../components/labour/jobs/LabourJobsTabBar.jsx'
-import { readAppUserLocation } from '../../lib/appUserLocationStorage.js'
+import { readAppUserLocation, autoFetchLiveLocation } from '../../lib/appUserLocationStorage.js'
 import {
   useGetLabourAssignmentsQuery,
   useRespondAssignmentMutation,
@@ -266,10 +266,14 @@ export function AppJobsPage() {
     }
     if (isApiAssignment(offer)) {
       try {
-        const loc = readAppUserLocation()
+        let loc = readAppUserLocation()
         if (!loc?.lat || !loc?.lng) {
-          showToast('Please update your Work Area with a valid GPS location first.')
-          return
+          try {
+            loc = await autoFetchLiveLocation({ timeout: 12000 })
+          } catch {
+            showToast('Please allow location access or set your Work Area from Home.')
+            return
+          }
         }
         await respondAssignment({ 
           id: offer.id, 
@@ -287,7 +291,10 @@ export function AppJobsPage() {
         if (payload?.code === 'INSUFFICIENT_WALLET_BALANCE') {
           setWalletGate({
             balance: payload?.errors?.balance ?? walletPolicy.balance,
-            minimumRequired: payload?.errors?.minimumRequired ?? walletPolicy.minimumRequired,
+            minimumRequired:
+              payload?.errors?.requiredBalance ??
+              payload?.errors?.minimumRequired ??
+              walletPolicy.minimumRequired,
           })
           return
         }
@@ -295,6 +302,13 @@ export function AppJobsPage() {
         return
       }
     } else {
+      if (walletPolicy.isLowBalance) {
+        setWalletGate({
+          balance: walletPolicy.balance,
+          minimumRequired: walletPolicy.minimumRequired,
+        })
+        return
+      }
       persist({
         ...localDemo,
         offers: localDemo.offers.filter((o) => o.id !== offer.id),
@@ -605,6 +619,7 @@ export function AppJobsPage() {
         open={Boolean(walletGate)}
         balance={walletGate?.balance}
         minimumRequired={walletGate?.minimumRequired}
+        context="job"
         onClose={() => setWalletGate(null)}
       />
     </div>

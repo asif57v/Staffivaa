@@ -8,8 +8,9 @@ let socket = null
 let activeUser = null
 
 export const connectSocket = (user, token) => {
-  if (user && user._id && user.role) {
-    activeUser = user;
+  const userId = user?._id || user?.id
+  if (user && userId && user.role) {
+    activeUser = { ...user, _id: userId }
   }
 
   if (socket) {

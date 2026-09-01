@@ -1,6 +1,6 @@
 import mongoose from 'mongoose'
 import { USER_ROLES } from '../constants/roles.js'
-import { REQUEST_STATUS, ASSIGNMENT_STATUS } from '../constants/workforceConstants.js'
+import { REQUEST_STATUS, ASSIGNMENT_STATUS, REQUEST_SOURCE } from '../constants/workforceConstants.js'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { Allocation } from '../models/Allocation.js'
 import { Assignment } from '../models/Assignment.js'
@@ -229,16 +229,21 @@ export const listLabourAssignments = asyncHandler(async (req, res) => {
     User.findById(req.user._id).select('walletBalance isWalletFrozen').lean(),
   ])
 
+  const minimumRequired = settingsDoc?.minimumLabourWalletBalance ?? 0
+  const balance = labourUser?.walletBalance ?? 0
+  const gateAmount = minimumRequired
+
   sendSuccess(res, {
     data: {
       assignments: validAssignments,
       walletPolicy: {
-        balance: labourUser?.walletBalance ?? 0,
-        minimumRequired: settingsDoc?.minimumLabourWalletBalance ?? 0,
+        balance,
+        minimumRequired,
+        requiredBalance: gateAmount,
         isFrozen: Boolean(labourUser?.isWalletFrozen),
         canAcceptBookings:
           !labourUser?.isWalletFrozen &&
-          (labourUser?.walletBalance ?? 0) >= (settingsDoc?.minimumLabourWalletBalance ?? 0),
+          (gateAmount <= 0 ? balance > 0 : balance >= gateAmount),
       },
     },
   })
@@ -295,6 +300,14 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
   const assignment = await Assignment.findOne({ _id: req.params.id, labourId: req.user._id })
   if (!assignment) return sendError(res, { message: 'Not found', statusCode: HTTP_STATUS.NOT_FOUND })
   if (action === 'accept') {
+    if (assignment.status !== ASSIGNMENT_STATUS.OFFERED) {
+      return sendError(res, {
+        message: 'This job offer is no longer available.',
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+        code: 'OFFER_UNAVAILABLE',
+      })
+    }
+
     const labourUser = await User.findById(req.user._id)
     if (labourUser && labourUser.labourProfile?.availabilityStatus === 'offline') {
       labourUser.labourProfile.availabilityStatus = 'available'
@@ -329,7 +342,8 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
 
     const settingsDoc = await SystemSettings.findOne({ singletonId: 'SYSTEM_SETTINGS' }).lean()
     const minimumRequired = settingsDoc?.minimumLabourWalletBalance ?? 0
-    const walletBalance = labourUser?.walletBalance || 0
+    const walletBalance = Number(labourUser?.walletBalance) || 0
+    const gateAmount = Math.max(Number(minimumRequired) || 0, Number(labourFee) || 0)
 
     if (labourUser?.isWalletFrozen) {
       return sendError(res, {
@@ -339,15 +353,16 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       })
     }
 
-    if (walletBalance < minimumRequired || (labourFee > 0 && walletBalance < labourFee)) {
+    if (gateAmount > 0 && walletBalance < gateAmount) {
       return sendError(res, {
-        message: 'Insufficient wallet balance. Recharge to accept bookings.',
+        message: `Insufficient wallet balance. You need at least ₹${gateAmount.toLocaleString('en-IN')} to accept this job.`,
         statusCode: HTTP_STATUS.BAD_REQUEST,
         code: 'INSUFFICIENT_WALLET_BALANCE',
         errors: {
           balance: walletBalance,
           minimumRequired,
           platformFee: labourFee,
+          requiredBalance: gateAmount,
         },
       })
     }
@@ -372,12 +387,16 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
     assignment.status = ASSIGNMENT_STATUS.ACCEPTED
     assignment.acceptedAt = new Date()
 
-    const isUserPaid = existingRequest.userPaymentStatus === 'paid' || existingRequest.paymentStatus === 'paid'
+    const isIndividual = existingRequest.sourceType === REQUEST_SOURCE.INDIVIDUAL
+    const isUserPaid =
+      isIndividual ||
+      existingRequest.userPaymentStatus === 'paid' ||
+      existingRequest.paymentStatus === 'paid'
     const isLabourPaid = labourFee === 0 || Boolean(feeDeduction?.success)
 
     let nextStatus = REQUEST_STATUS.PLATFORM_FEE_PENDING
     let nextLifecycle = isUserPaid ? 'partial' : 'none'
-    if (isUserPaid && isLabourPaid) {
+    if (isLabourPaid && isUserPaid) {
       nextStatus = REQUEST_STATUS.CONFIRMED
       nextLifecycle = 'completed'
     }
@@ -398,14 +417,41 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
     if (isLabourPaid) {
       requestUpdate.labourPaymentStatus = 'paid'
     }
+    if (isIndividual) {
+      requestUpdate.userPaymentStatus = 'paid'
+      requestUpdate.userPlatformFee = 0
+    }
+
+    if (labourLat != null && labourLng != null) {
+      requestUpdate.currentLocation = {
+        lat: Number(labourLat),
+        lng: Number(labourLng),
+        heading: 0,
+        speed: 0,
+        updatedAt: new Date(),
+      }
+    }
+
+    const acceptableRequestStatuses = [
+      REQUEST_STATUS.SEARCHING,
+      REQUEST_STATUS.ALLOCATING,
+      REQUEST_STATUS.ASSIGNED,
+      REQUEST_STATUS.PENDING_REVIEW,
+    ]
 
     let request = await WorkforceRequest.findOneAndUpdate(
       {
         _id: assignment.requestId,
-        status: REQUEST_STATUS.SEARCHING,
-        $or: [
-          { expiresAt: { $gt: new Date() } },
-          { expiresAt: { $exists: false } },
+        status: { $in: acceptableRequestStatuses },
+        $or: [{ labourId: null }, { labourId: { $exists: false } }],
+        $and: [
+          {
+            $or: [
+              { status: { $ne: REQUEST_STATUS.SEARCHING } },
+              { expiresAt: { $gt: new Date() } },
+              { expiresAt: { $exists: false } },
+            ],
+          },
         ],
       },
       { $set: requestUpdate },
@@ -416,7 +462,11 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       if (feeDeduction?.success && feeDeduction.amount > 0) {
         await refundWalletBalance({ userId: req.user._id, amount: feeDeduction.amount })
       }
-      return sendError(res, { message: 'Booking already accepted or expired', statusCode: HTTP_STATUS.BAD_REQUEST })
+      return sendError(res, {
+        message: 'This job was already taken by another worker or has expired. Please wait for the next offer.',
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+        code: 'BOOKING_UNAVAILABLE',
+      })
     }
 
     if (feeDeduction?.success && feeDeduction.amount > 0) {

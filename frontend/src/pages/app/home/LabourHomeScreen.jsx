@@ -683,7 +683,9 @@ export function LabourHomeScreen({ user }) {
                       Min ₹{Number(minimumWalletRequired).toLocaleString('en-IN')} to accept
                     </p>
                   ) : (
-                    <p className="mt-0.5 text-[9px] text-slate-500">For booking fees</p>
+                    <p className={`mt-0.5 text-[9px] font-semibold ${showLowBalanceBanner ? 'text-rose-600' : 'text-slate-500'}`}>
+                      {showLowBalanceBanner ? 'Recharge to accept bookings' : 'For booking fees'}
+                    </p>
                   )}
                 </div>
                 <Link
@@ -740,7 +742,9 @@ export function LabourHomeScreen({ user }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-extrabold text-rose-950">
-                    Recharge your wallet — minimum ₹{Number(minimumWalletRequired).toLocaleString('en-IN')} required to accept bookings
+                    {minimumWalletRequired > 0
+                      ? `Recharge your wallet — minimum ₹${Number(minimumWalletRequired).toLocaleString('en-IN')} required to accept bookings`
+                      : 'Recharge your wallet to accept bookings'}
                   </h3>
                   <p className="mt-0.5 text-xs font-medium text-rose-900/90 leading-snug">
                     Current balance: ₹{Number(apiWalletBalance).toLocaleString('en-IN')}. Top up now to accept new job offers.
@@ -814,7 +818,7 @@ export function LabourHomeScreen({ user }) {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation()
-                      navigate(`/app/navigation/${todayJob.id}`, { state: { job: todayJob } })
+                      navigate(`/app/navigation/${todayJob.requestId || todayJob.id}`, { state: { job: todayJob } })
                     }}
                     className="flex-1 py-2.5 text-xs bg-slate-900 text-white border-0"
                   >

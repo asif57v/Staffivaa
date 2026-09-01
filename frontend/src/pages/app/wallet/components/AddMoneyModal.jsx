@@ -9,7 +9,7 @@ export function AddMoneyModal({ isOpen, onClose, onProceed }) {
 
   useEffect(() => {
     if (isOpen) {
-      setAmount('')
+      setAmount('100')
     }
   }, [isOpen])
 

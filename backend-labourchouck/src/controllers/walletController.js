@@ -1,21 +1,30 @@
 import crypto from 'crypto'
+import mongoose from 'mongoose'
 import { razorpay } from '../config/razorpay.js'
 import { User } from '../models/User.js'
 import { WalletTransaction } from '../models/WalletTransaction.js'
 import { Withdrawal } from '../models/Withdrawal.js'
 import { SystemSettings } from '../models/SystemSettings.js'
+import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
 
 export const createAddMoneyOrder = asyncHandler(async (req, res) => {
-  const { amount } = req.body
+  const amount = Number(req.body.amount)
 
-  if (!amount || amount < 10) {
+  if (!Number.isFinite(amount) || amount < 10) {
     return res.status(400).json({ status: 'fail', message: 'Minimum amount is ₹10' })
   }
 
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+    return res.status(503).json({
+      status: 'fail',
+      message: 'Razorpay payment gateway is not configured. Please add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET on the server.',
+    })
+  }
+
   const options = {
-    amount: amount * 100, // Razorpay works in paise
+    amount: Math.round(amount * 100), // Razorpay works in paise
     currency: 'INR',
     receipt: `receipt_${req.user._id}_${Date.now()}`,
   }
@@ -29,6 +38,7 @@ export const createAddMoneyOrder = asyncHandler(async (req, res) => {
       amount: order.amount,
       currency: order.currency,
       key: process.env.RAZORPAY_KEY_ID,
+      keyId: process.env.RAZORPAY_KEY_ID,
     },
   })
 })
@@ -66,7 +76,7 @@ export const verifyAddMoneyPayment = asyncHandler(async (req, res) => {
     return res.status(404).json({ status: 'fail', message: 'User not found' })
   }
 
-  user.walletBalance = (user.walletBalance || 0) + amount
+  user.walletBalance = (Number(user.walletBalance) || 0) + Number(amount)
   await user.save()
 
   const transaction = await WalletTransaction.create({
@@ -103,7 +113,9 @@ export const getWalletBalance = asyncHandler(async (req, res) => {
 
   const { type, startDate, endDate } = req.query
   const txnFilter = {
-    $or: [{ payerId: user._id }, { userId: user._id }, { labourId: user._id }],
+    $or: [{ payerId: user._id }, { labourId: user._id }],
+    // Exclude admin revenue ledger duplicates (not worker wallet credits)
+    source: { $nin: ['Labour Platform Fee', 'Lead Generation Platform Fee'] },
   }
 
   if (type === 'recharge') {
@@ -128,15 +140,40 @@ export const getWalletBalance = asyncHandler(async (req, res) => {
     }
   }
 
-  const transactions = await WalletTransaction.find(txnFilter)
+  const transactionsRaw = await WalletTransaction.find(txnFilter)
     .sort({ createdAt: -1 })
     .limit(100)
-    .populate('bookingId', 'reference status')
     .lean()
+
+  const validBookingIds = [
+    ...new Set(
+      transactionsRaw
+        .map((txn) => txn.bookingId)
+        .filter((id) => id && mongoose.Types.ObjectId.isValid(String(id))),
+    ),
+  ]
+
+  let bookingMap = new Map()
+  if (validBookingIds.length > 0) {
+    const bookings = await WorkforceRequest.find({ _id: { $in: validBookingIds } })
+      .select('reference status')
+      .lean()
+    bookingMap = new Map(bookings.map((booking) => [String(booking._id), booking]))
+  }
+
+  const transactions = transactionsRaw.map((txn) => ({
+    ...txn,
+    bookingId:
+      txn.bookingId && bookingMap.has(String(txn.bookingId))
+        ? bookingMap.get(String(txn.bookingId))
+        : txn.bookingId,
+  }))
 
   const settingsDoc = await SystemSettings.findOne({ singletonId: 'SYSTEM_SETTINGS' })
     .select('minimumLabourWalletBalance')
     .lean()
+
+  const minimumRequired = settingsDoc?.minimumLabourWalletBalance ?? 0
 
   const pendingWithdrawals = await Withdrawal.find({
     requestedBy: user._id,
@@ -154,9 +191,10 @@ export const getWalletBalance = asyncHandler(async (req, res) => {
   const lifetimeEarningsAgg = await WalletTransaction.aggregate([
     {
       $match: {
-        $or: [{ payerId: user._id }, { userId: user._id }, { labourId: user._id }],
+        $or: [{ payerId: user._id }, { labourId: user._id }],
         type: 'Credit',
         status: 'Completed',
+        source: { $nin: ['Labour Platform Fee', 'Lead Generation Platform Fee'] },
       },
     },
     { $group: { _id: null, total: { $sum: '$amount' } } },
@@ -169,7 +207,7 @@ export const getWalletBalance = asyncHandler(async (req, res) => {
     data: {
       balance: user.walletBalance || 0,
       availableBalance: user.walletBalance || 0,
-      minimumLabourWalletBalance: settingsDoc?.minimumLabourWalletBalance ?? 0,
+      minimumLabourWalletBalance: minimumRequired,
       pendingBalance,
       totalWithdrawn,
       lifetimeEarnings,
@@ -272,6 +310,7 @@ export const requestWithdrawal = asyncHandler(async (req, res) => {
     type: 'Withdrawal',
     source: `Wallet Withdrawal Request (${payoutType === 'upi' ? 'UPI' : 'Bank Transfer'})`,
     amount: numericAmount,
+    balanceAfter,
     status: 'Pending',
     referenceModel: 'Withdrawal',
     referenceId: withdrawal._id,

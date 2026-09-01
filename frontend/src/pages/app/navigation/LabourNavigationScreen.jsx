@@ -76,7 +76,8 @@ export function LabourNavigationScreen() {
 
   const [checkIn, { isLoading: isCheckingIn }] = useCheckInMutation()
 
-  const targetBookingId = bookingId || job?.requestId || job?.id
+  // Tracking rooms use WorkforceRequest id — not assignment id from the URL.
+  const targetBookingId = job?.requestId || bookingId || job?.id
 
   // Live Location Emitter Hook
   const isTrackingActive = job?.status !== 'on_site' && job?.status !== 'completed'

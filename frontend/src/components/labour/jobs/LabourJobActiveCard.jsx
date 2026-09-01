@@ -40,10 +40,13 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDetail, onComplete, onCancelBooking }) {
   const status = job?.status || 'accepted'
   const requestStatus = job?.requestStatus || 'searching'
+  const labourUnpaid = String(job?.labourPaymentStatus || '').toLowerCase() !== 'paid'
   const isCustomerPaymentPending =
+    job?.sourceType !== 'individual' &&
     String(requestStatus).toLowerCase() === 'platform_fee_pending' &&
     !labourUnpaid &&
-    String(job?.userPaymentStatus || '').toLowerCase() !== 'paid'
+    String(job?.userPaymentStatus || '').toLowerCase() !== 'paid' &&
+    Number(job?.userPlatformFee ?? 0) > 0
   const isCompleted = status === 'completed'
   const isCheckedIn = ['on_site', 'in_progress', 'completed'].includes(status)
   const onSite = status === 'on_site' || status === 'in_progress'
@@ -289,7 +292,7 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
             type="button"
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/app/navigation/${job.id}`, { state: { job } })
+              navigate(`/app/navigation/${job.requestId || job.id}`, { state: { job } })
             }}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-md hover:bg-emerald-700 transition active:scale-95"
             aria-label="Open navigation map"

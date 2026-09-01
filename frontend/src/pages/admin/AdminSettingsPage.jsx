@@ -346,6 +346,7 @@ export function AdminSettingsPage() {
             </label>
             <p className="text-xs text-slate-500">
               Workers with balance below this amount cannot accept new bookings until they recharge.
+              Set to <strong>0</strong> only if you want to disable the minimum-balance rule.
             </p>
             <input
               type="number"

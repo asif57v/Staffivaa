@@ -43,6 +43,10 @@ import {
   cancelActiveLiveBookings,
   WORKER_CANCELLED_BOOKING_EVENT,
 } from '../lib/individualBookings.js'
+import { readApiErrorPayload, readLabourWalletPolicy } from '../lib/labourWalletPolicy.js'
+import { useGetWalletBalanceQuery } from '../store/api/walletApi.js'
+import { InsufficientWalletModal } from '../components/labour/InsufficientWalletModal.jsx'
+import { WorkerLiveLocationBridge } from '../components/labour/WorkerLiveLocationBridge.jsx'
 import { readLabourPresenceOnline, writeLabourPresenceOnline } from '../hooks/useLabourPresence.js'
 
 export function AppShell() {
@@ -60,10 +64,21 @@ export function AppShell() {
   const { headerTagline, bottomNav, drawerNav } = useMemo(() => getAppNavigation(user?.role), [user?.role])
 
   const isLabour = user?.role === USER_ROLES.LABOUR
+  const isOnNavigationPage = pathname.startsWith('/app/navigation/')
   const { data: apiData, refetch: refetchAssignments } = useGetLabourAssignmentsQuery(undefined, {
     skip: !isLabour,
     refetchOnMountOrArgChange: true,
+    pollingInterval: isLabour ? 15000 : 0,
   })
+  const { data: walletData } = useGetWalletBalanceQuery(undefined, {
+    skip: !isLabour,
+    refetchOnMountOrArgChange: true,
+  })
+  const walletPolicy = useMemo(
+    () => readLabourWalletPolicy({ assignmentsData: apiData, walletData, user }),
+    [apiData, walletData, user],
+  )
+  const [walletGate, setWalletGate] = useState(null)
   const [localDemo, setLocalDemo] = useState(() => loadJobDemoState())
   const [incomingJob, setIncomingJob] = useState(null)
   const [isAcceptingPopup, setIsAcceptingPopup] = useState(false)
@@ -469,15 +484,27 @@ export function AppShell() {
     }
 
     stopGlobalRingSound();
+    if (walletPolicy.isLowBalance) {
+      setWalletGate({
+        balance: walletPolicy.balance,
+        minimumRequired: walletPolicy.minimumRequired,
+      })
+      return
+    }
+
     setIsAcceptingPopup(true);
     try {
-      const loc = readAppUserLocation();
+      let loc = readAppUserLocation();
       if (!loc?.lat || !loc?.lng) {
-        dispatchAlert('Location Required', 'Please update your Work Area with a valid GPS location first.', true);
-        setIsAcceptingPopup(false);
-        return;
+        try {
+          loc = await autoFetchLiveLocation({ timeout: 12000 });
+        } catch {
+          dispatchAlert('Location Required', 'Please allow location access or set your Work Area from Home.', true);
+          setIsAcceptingPopup(false);
+          return;
+        }
       }
-      const res = await respondAssignment({
+      await respondAssignment({
         id: incomingJob.assignmentId,
         action: 'accept',
         labourLat: loc?.lat,
@@ -486,21 +513,27 @@ export function AppShell() {
       
       setIncomingJob(null);
       incomingJobRef.current = null;
-      
-      if (res.request && res.request.status === 'platform_fee_pending') {
-        dispatchAlert('Booking Accepted!', 'Please pay the platform fee in your active jobs tab.');
-      } else {
-        dispatchAlert('Job accepted!', 'Head to Active tab to view details.');
-      }
-      // Navigate to the Jobs tab active section
+      dispatch(walletApi.util.invalidateTags(['Wallet']));
+      dispatchAlert('Job accepted!', 'Platform fee deducted from your wallet. Head to Active tab to view details.');
       navigate('/app/jobs');
     } catch (e) {
       console.error('Popup accept error:', e);
-      dispatchAlert('Failed to accept', e?.data?.message || e?.message || 'Please try from Offers tab.', true);
+      const payload = readApiErrorPayload(e)
+      if (payload?.code === 'INSUFFICIENT_WALLET_BALANCE') {
+        setWalletGate({
+          balance: payload?.errors?.balance ?? walletPolicy.balance,
+          minimumRequired:
+            payload?.errors?.requiredBalance ??
+            payload?.errors?.minimumRequired ??
+            walletPolicy.minimumRequired,
+        })
+        return
+      }
+      dispatchAlert('Failed to accept', payload?.message || e?.message || 'Please try from Offers tab.', true);
     } finally {
       setIsAcceptingPopup(false);
     }
-  }, [incomingJob, respondAssignment, navigate, dispatchAlert, stopGlobalRingSound]);
+  }, [incomingJob, respondAssignment, navigate, dispatchAlert, stopGlobalRingSound, walletPolicy]);
 
   const handlePopupDecline = useCallback(async () => {
     stopGlobalRingSound();
@@ -1215,6 +1248,11 @@ export function AppShell() {
         />
       ) : null}
 
+      {/* Broadcast worker GPS while travelling to the job site */}
+      {isLabour && !isOnNavigationPage ? (
+        <WorkerLiveLocationBridge assignments={apiData?.assignments} />
+      ) : null}
+
       {/* Rapido-style Incoming Job Popup (Global for Workers) */}
       {incomingJob && isLabour && (
         <IncomingJobPopup
@@ -1224,6 +1262,7 @@ export function AppShell() {
           onDecline={handlePopupDecline}
           onTimeout={handlePopupTimeout}
           isAccepting={isAcceptingPopup}
+          walletPolicy={walletPolicy}
         />
       )}
 
@@ -1234,6 +1273,14 @@ export function AppShell() {
           onClose={() => setWorkerCancelPopup({ open: false, message: '' })}
         />
       ) : null}
+
+      <InsufficientWalletModal
+        open={Boolean(walletGate)}
+        balance={walletGate?.balance}
+        minimumRequired={walletGate?.minimumRequired}
+        context="job"
+        onClose={() => setWalletGate(null)}
+      />
     </div>
   )
 }

@@ -152,6 +152,19 @@ export function LiveTrackingMap({
   const lastPacketTimeRef = useRef(initialWorkerLocation ? Date.now() : 0)
   const lastDirectionsTimeRef = useRef(0)
 
+  const mapCenter = useMemo(() => {
+    if (customerLocation?.lat != null && customerLocation?.lng != null) {
+      return { lat: customerLocation.lat, lng: customerLocation.lng }
+    }
+    if (displayedWorkerPos?.lat != null && displayedWorkerPos?.lng != null) {
+      return { lat: displayedWorkerPos.lat, lng: displayedWorkerPos.lng }
+    }
+    if (initialWorkerLocation?.lat != null && initialWorkerLocation?.lng != null) {
+      return { lat: initialWorkerLocation.lat, lng: initialWorkerLocation.lng }
+    }
+    return { lat: 22.7196, lng: 75.8577 }
+  }, [customerLocation, displayedWorkerPos, initialWorkerLocation])
+
   // Sync initial worker location if it changes from parent
   useEffect(() => {
     if (initialWorkerLocation?.lat && initialWorkerLocation?.lng && !displayedWorkerPos) {
@@ -450,9 +463,14 @@ export function LiveTrackingMap({
     >
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
+        center={mapCenter}
+        zoom={displayedWorkerPos && customerLocation ? 14 : 13}
         options={defaultMapOptions}
         onLoad={(map) => {
           mapRef.current = map
+          if (customerLocation) {
+            map.panTo(customerLocation)
+          }
         }}
       >
         {/* Rapido High-Contrast Polyline: Clean Dark Slate Road Contour */}

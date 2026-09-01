@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Wallet as WalletIcon } from 'lucide-react'
 import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
 import { PageSkeleton } from '../../../components/ui/PageSkeleton.jsx'
-import { useGetWalletBalanceQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation, useRequestWithdrawalMutation, useRequestRefundMutation } from '../../../store/api/walletApi.js'
+import { useGetWalletBalanceQuery, useCreateWalletRechargeOrderMutation, useVerifyWalletRechargePaymentMutation, useRequestWithdrawalMutation, useRequestRefundMutation } from '../../../store/api/walletApi.js'
 import { useAuth } from '../../../hooks/useAuth.js'
 
 import { WalletBalanceCard } from '../../../pages/app/wallet/components/WalletBalanceCard.jsx'
@@ -28,8 +28,8 @@ export function CorporateWalletPage() {
   const { user } = useAuth()
   
   const { data: walletData, isLoading, refetch } = useGetWalletBalanceQuery()
-  const [createOrder] = useCreateRazorpayOrderMutation()
-  const [verifyPayment] = useVerifyRazorpayPaymentMutation()
+  const [createOrder] = useCreateWalletRechargeOrderMutation()
+  const [verifyPayment] = useVerifyWalletRechargePaymentMutation()
   const [requestWithdrawal] = useRequestWithdrawalMutation()
   const [requestRefund] = useRequestRefundMutation()
   
@@ -78,14 +78,20 @@ export function CorporateWalletPage() {
         return
       }
 
-      // Create Order
-      const res = await createOrder({ amount }).unwrap()
-      const { orderId, amount: orderAmount, currency, key } = res.data
+      const order = await createOrder({ amount }).unwrap()
+      const orderId = order?.orderId
+      const orderAmount = order?.amount
+      const currency = order?.currency || 'INR'
+      const razorpayKey = order?.key || order?.keyId || import.meta.env.VITE_RAZORPAY_KEY_ID
+
+      if (!orderId || !orderAmount || !razorpayKey) {
+        throw new Error('Invalid payment order response from server')
+      }
 
       const options = {
-        key: key,
-        amount: orderAmount.toString(),
-        currency: currency,
+        key: razorpayKey,
+        amount: String(orderAmount),
+        currency,
         name: 'Staffivaa',
         description: 'Add Money to Wallet',
         image: '/favicon.svg',
@@ -128,11 +134,11 @@ export function CorporateWalletPage() {
         console.error('Payment Failed:', response.error)
         setIsProcessing(false)
       })
+      setIsProcessing(false)
       rzp1.open()
-      
     } catch (error) {
       console.error('Failed to initiate payment:', error)
-      alert(error?.data?.message || 'Failed to initiate payment. Please try again.')
+      alert(error?.data?.message || error?.message || 'Failed to initiate payment. Please try again.')
       setIsProcessing(false)
     }
   }
