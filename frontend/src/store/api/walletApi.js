@@ -1,5 +1,9 @@
 import { baseApi } from './baseApi'
 
+function unwrapWallet(response) {
+  return response?.data ?? response
+}
+
 export const walletApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getWalletBalance: builder.query({
@@ -7,6 +11,7 @@ export const walletApi = baseApi.injectEndpoints({
         url: '/wallet',
         params,
       }),
+      transformResponse: unwrapWallet,
       providesTags: ['Wallet'],
     }),
     createRazorpayOrder: builder.mutation({

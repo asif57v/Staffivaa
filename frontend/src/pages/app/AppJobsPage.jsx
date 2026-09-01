@@ -32,6 +32,8 @@ import {
   subscribeJobDemo,
 } from '../../lib/labourJobDemoStorage.js'
 import { readLabourPresenceOnline } from '../../hooks/useLabourPresence.js'
+import { readApiErrorPayload, readLabourWalletPolicy } from '../../lib/labourWalletPolicy.js'
+import { useGetWalletBalanceQuery } from '../../store/api/walletApi.js'
 import { InsufficientWalletModal } from '../../components/labour/InsufficientWalletModal.jsx'
 
 function isApiAssignment(job) {
@@ -45,6 +47,10 @@ export function AppJobsPage() {
   const [localDemo, setLocalDemo] = useState(() => loadJobDemoState())
   const { data: apiData, error: apiError, refetch } = useGetLabourAssignmentsQuery(undefined, {
     pollingInterval: 8000,
+    refetchOnMountOrArgChange: true,
+  })
+  const { data: walletData } = useGetWalletBalanceQuery(undefined, {
+    refetchOnMountOrArgChange: true,
   })
   const [respondAssignment] = useRespondAssignmentMutation()
   const [checkIn] = useCheckInMutation()
@@ -240,10 +246,22 @@ export function AppJobsPage() {
     setConfirmingOfferId((prev) => (prev === id ? null : id))
   }
 
+  const walletPolicy = useMemo(
+    () => readLabourWalletPolicy({ assignmentsData: apiData, walletData, user }),
+    [apiData, walletData, user],
+  )
+
   const handleConfirmAccept = async (offer) => {
     if (!kycOk) return
     if (!readLabourPresenceOnline()) {
       showToast('You are currently OFFLINE. Please turn ON your status from Home screen to accept this job.')
+      return
+    }
+    if (walletPolicy.isLowBalance) {
+      setWalletGate({
+        balance: walletPolicy.balance,
+        minimumRequired: walletPolicy.minimumRequired,
+      })
       return
     }
     if (isApiAssignment(offer)) {
@@ -265,15 +283,15 @@ export function AppJobsPage() {
         setTab('active')
       } catch (e) {
         console.error('Accept error:', e)
-        const code = e?.data?.code
-        if (code === 'INSUFFICIENT_WALLET_BALANCE') {
+        const payload = readApiErrorPayload(e)
+        if (payload?.code === 'INSUFFICIENT_WALLET_BALANCE') {
           setWalletGate({
-            balance: e?.data?.errors?.balance ?? 0,
-            minimumRequired: e?.data?.errors?.minimumRequired ?? 0,
+            balance: payload?.errors?.balance ?? walletPolicy.balance,
+            minimumRequired: payload?.errors?.minimumRequired ?? walletPolicy.minimumRequired,
           })
           return
         }
-        showToast(e?.data?.message || e?.message || 'Failed to accept offer')
+        showToast(payload?.message || e?.message || 'Failed to accept offer')
         return
       }
     } else {
@@ -424,6 +442,19 @@ export function AppJobsPage() {
       </AnimatePresence>
 
       <LabourJobsHero offersCount={demo.offers.length} activeCount={demo.active.length} kycOk={kycOk} />
+
+      {walletPolicy.isLowBalance ? (
+        <Link
+          to="/app/wallet"
+          className="block rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900 shadow-sm"
+        >
+          <p className="font-extrabold">Wallet balance too low to accept bookings</p>
+          <p className="mt-1 text-xs font-medium text-rose-800">
+            You have ₹{Number(walletPolicy.balance).toLocaleString('en-IN')}. Minimum ₹
+            {Number(walletPolicy.minimumRequired).toLocaleString('en-IN')} required. Tap to recharge.
+          </p>
+        </Link>
+      ) : null}
 
       <div className="flex items-center justify-between gap-2 px-0.5">
         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">

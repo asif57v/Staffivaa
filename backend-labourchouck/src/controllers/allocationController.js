@@ -224,7 +224,24 @@ export const listLabourAssignments = asyncHandler(async (req, res) => {
     console.error('Failed to refresh live labour platform fees:', err.message)
   }
 
-  sendSuccess(res, { data: { assignments: validAssignments } })
+  const [settingsDoc, labourUser] = await Promise.all([
+    SystemSettings.findOne({ singletonId: 'SYSTEM_SETTINGS' }).select('minimumLabourWalletBalance').lean(),
+    User.findById(req.user._id).select('walletBalance isWalletFrozen').lean(),
+  ])
+
+  sendSuccess(res, {
+    data: {
+      assignments: validAssignments,
+      walletPolicy: {
+        balance: labourUser?.walletBalance ?? 0,
+        minimumRequired: settingsDoc?.minimumLabourWalletBalance ?? 0,
+        isFrozen: Boolean(labourUser?.isWalletFrozen),
+        canAcceptBookings:
+          !labourUser?.isWalletFrozen &&
+          (labourUser?.walletBalance ?? 0) >= (settingsDoc?.minimumLabourWalletBalance ?? 0),
+      },
+    },
+  })
 })
 
 function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {

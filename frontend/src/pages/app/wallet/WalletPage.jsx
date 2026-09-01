@@ -47,11 +47,13 @@ export function WalletPage() {
   const [requestWithdrawal] = useRequestWithdrawalMutation()
   const [requestRefund, { isLoading: isRequestingRefund }] = useRequestRefundMutation()
 
-  const balance = walletData?.data?.balance || 0
-  const pendingBalance = walletData?.data?.pendingBalance || 0
-  const totalWithdrawn = walletData?.data?.totalWithdrawn || 0
-  const lifetimeEarnings = walletData?.data?.lifetimeEarnings || 0
-  const transactions = walletData?.data?.transactions || []
+  const balance = walletData?.balance || 0
+  const pendingBalance = walletData?.pendingBalance || 0
+  const totalWithdrawn = walletData?.totalWithdrawn || 0
+  const lifetimeEarnings = walletData?.lifetimeEarnings || 0
+  const transactions = walletData?.transactions || []
+  const minimumWalletRequired = walletData?.minimumLabourWalletBalance || 0
+  const showLowBalanceBanner = minimumWalletRequired > 0 && balance < minimumWalletRequired
 
   const handleWithdraw = async (details) => {
     setIsProcessing(true)
@@ -180,6 +182,15 @@ export function WalletPage() {
           onAddMoney={() => setIsAddMoneyOpen(true)}
           onWithdraw={() => setIsWithdrawOpen(true)}
         />
+
+        {showLowBalanceBanner && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+            <p className="font-bold">Low wallet balance</p>
+            <p className="mt-1 text-xs font-medium text-rose-800">
+              Minimum ₹{Number(minimumWalletRequired).toLocaleString('en-IN')} required to accept bookings. Recharge to continue.
+            </p>
+          </div>
+        )}
 
         <div>
           <div className="flex items-center justify-between mb-4">

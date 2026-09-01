@@ -100,6 +100,7 @@ import {
 import { patchCurrentUser } from '../../../api/userProfileApi.js'
 import { setUser } from '../../../store/slices/authSlice.js'
 import { useDispatch } from 'react-redux'
+import { readLabourWalletPolicy } from '../../../lib/labourWalletPolicy.js'
 import { useGetWalletBalanceQuery } from '../../../store/api/walletApi.js'
 
 function getTimeGreeting() {
@@ -293,6 +294,7 @@ export function LabourHomeScreen({ user }) {
   const { data: apiData, refetch } = useGetLabourAssignmentsQuery(undefined)
   const { data: walletApiData } = useGetWalletBalanceQuery(undefined, {
     pollingInterval: 30000,
+    refetchOnMountOrArgChange: true,
   })
   const [respondAssignment] = useRespondAssignmentMutation()
   const apiBuckets = useMemo(
@@ -314,9 +316,17 @@ export function LabourHomeScreen({ user }) {
         : 'Skilled worker'
       : 'Worker'
 
-  const apiWalletBalance = walletApiData?.data?.balance ?? 0
-  const minimumWalletRequired = walletApiData?.data?.minimumLabourWalletBalance ?? 0
-  const showLowBalanceBanner = minimumWalletRequired > 0 && apiWalletBalance < minimumWalletRequired
+  const walletPolicy = useMemo(
+    () =>
+      readLabourWalletPolicy({
+        assignmentsData: apiData,
+        walletData: walletApiData,
+        user,
+      }),
+    [apiData, walletApiData, user],
+  )
+  const { balance: apiWalletBalance, minimumRequired: minimumWalletRequired, isLowBalance: showLowBalanceBanner } =
+    walletPolicy
 
   useEffect(() => subscribeAttendance(setEntries), [])
   useEffect(() => subscribeWallet(setWallet), [])
@@ -662,28 +672,30 @@ export function LabourHomeScreen({ user }) {
 
               <div className="flex w-[7.4rem] shrink-0 flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50 p-2.5 shadow-sm sm:w-[8.25rem] sm:p-3">
                 <div>
-                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">This month</p>
-                  <p className="mt-0.5 font-mono text-base font-black leading-tight tabular-nums text-slate-900 sm:text-lg">
-                    {formatInrFromPaise(earnings.monthPaise)}
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Platform wallet</p>
+                  <p className={`mt-0.5 font-mono text-base font-black leading-tight tabular-nums sm:text-lg ${
+                    showLowBalanceBanner ? 'text-rose-600' : 'text-slate-900'
+                  }`}>
+                    ₹{Number(apiWalletBalance).toLocaleString('en-IN')}
                   </p>
-                  {(earnings.availablePaise ?? 0) > 0 ? (
-                    <p className="mt-0.5 truncate text-[9px] font-semibold text-emerald-600">
-                      {formatInrFromPaise(earnings.availablePaise)} withdraw
-                    </p>
-                  ) : earnings.pendingPaise > 0 ? (
-                    <p className="mt-0.5 truncate text-[9px] font-semibold text-amber-600">
-                      {formatInrFromPaise(earnings.pendingPaise)} clearing
+                  {minimumWalletRequired > 0 ? (
+                    <p className={`mt-0.5 text-[9px] font-semibold ${showLowBalanceBanner ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      Min ₹{Number(minimumWalletRequired).toLocaleString('en-IN')} to accept
                     </p>
                   ) : (
-                    <p className="mt-0.5 text-[9px] text-slate-500">From attendance</p>
+                    <p className="mt-0.5 text-[9px] text-slate-500">For booking fees</p>
                   )}
                 </div>
                 <Link
-                  to="/app/earnings"
-                  className="mt-2 flex w-full items-center justify-center gap-1 rounded-xl bg-linear-to-r from-brand-bright to-brand py-2 text-[10px] font-black text-white shadow-md shadow-brand/30 transition hover:brightness-110 active:scale-[0.98]"
+                  to="/app/wallet"
+                  className={`mt-2 flex w-full items-center justify-center gap-1 rounded-xl py-2 text-[10px] font-black text-white shadow-md transition hover:brightness-110 active:scale-[0.98] ${
+                    showLowBalanceBanner
+                      ? 'bg-linear-to-r from-rose-600 to-rose-700 shadow-rose-500/30'
+                      : 'bg-linear-to-r from-brand-bright to-brand shadow-brand/30'
+                  }`}
                 >
                   <Wallet className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Withdraw
+                  {showLowBalanceBanner ? 'Recharge' : 'Wallet'}
                 </Link>
               </div>
             </div>

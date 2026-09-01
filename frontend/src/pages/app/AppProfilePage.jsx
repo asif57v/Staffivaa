@@ -355,6 +355,17 @@ export function AppProfilePage() {
     >
       <ProfileScreenHeader />
 
+      {user?.role === USER_ROLES.LABOUR ? (
+        <button
+          type="button"
+          onClick={() => alert('Test button clicked')}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-brand py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-brand-bright active:scale-[0.99]"
+        >
+          <Sparkles className="h-4 w-4" aria-hidden />
+          Test Button
+        </button>
+      ) : null}
+
       <motion.section
         initial={reduce ? false : { opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}

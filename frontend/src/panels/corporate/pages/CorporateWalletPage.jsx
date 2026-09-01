@@ -37,8 +37,8 @@ export function CorporateWalletPage() {
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
 
-  const balance = walletData?.data?.balance || 0
-  const transactions = walletData?.data?.transactions || []
+  const balance = walletData?.balance || 0
+  const transactions = walletData?.transactions || []
 
   const handleWithdraw = async (details) => {
     setIsProcessing(true)

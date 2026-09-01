@@ -39,8 +39,8 @@ const byRole = {
     bottomNav: [
       { id: 'home', to: '/app', label: 'Home', icon: Home, end: true },
       { id: 'jobs', to: '/app/jobs', label: 'Jobs', icon: HardHat },
+      { id: 'wallet', to: '/app/wallet', label: 'Wallet', icon: Wallet },
       { id: 'attendance', to: '/app/attendance', label: 'Attendance', icon: Clock },
-      { id: 'enterprise', to: '/app/enterprise-jobs', label: 'Enterprise', icon: Briefcase },
       { id: 'profile', to: '/app/profile', label: 'Profile', icon: UserRound },
     ],
     drawerNav: [

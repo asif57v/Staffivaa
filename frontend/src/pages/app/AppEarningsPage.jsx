@@ -35,7 +35,7 @@ export function AppEarningsPage() {
 
   const { data: walletData, refetch: refetchWallet } = useGetWalletBalanceQuery()
   const [requestRefund] = useRequestRefundMutation()
-  const backendTransactions = walletData?.data?.transactions || []
+  const backendTransactions = walletData?.transactions || []
 
   const { data: payslipsData, isLoading: loadingSlips } = useGetMyEnterprisePayrollsQuery()
   const enterprisePayrolls = payslipsData?.data || []
