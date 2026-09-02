@@ -751,7 +751,7 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
             startDate: request.startDate,
             shiftStart: request.shiftStart || '',
             shiftEnd: request.shiftEnd || '',
-            timeoutSeconds: 90
+            timeoutSeconds: 60
           })
           triggerBookingNotif({
             userId: newAss.labourId,

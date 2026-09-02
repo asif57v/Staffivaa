@@ -357,7 +357,7 @@ export const createRequest = asyncHandler(async (req, res) => {
               startDate: request.startDate,
               shiftStart: request.shiftStart || '',
               shiftEnd: request.shiftEnd || '',
-              timeoutSeconds: 90,
+              timeoutSeconds: 60,
             })
 
             await triggerBookingNotif({
@@ -375,7 +375,7 @@ export const createRequest = asyncHandler(async (req, res) => {
                 locationText: request.locationText || '',
                 categoryName: category?.name || 'Worker',
                 perDayRate: String(baseRate),
-                timeoutSeconds: '90',
+                timeoutSeconds: '60',
               },
             })
           } catch (err) {

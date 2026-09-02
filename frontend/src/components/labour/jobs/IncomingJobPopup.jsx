@@ -16,7 +16,7 @@ export function IncomingJobPopup({
   walletPolicy,
 }) {
   const navigate = useNavigate()
-  const totalSeconds = job?.timeoutSeconds || 90
+  const totalSeconds = Math.min(60, Number(job?.timeoutSeconds) || 60)
   const [timeLeft, setTimeLeft] = useState(totalSeconds)
   const [exiting, setExiting] = useState(false)
   const audioRef = useRef(null)
@@ -31,7 +31,7 @@ export function IncomingJobPopup({
       jobIdRef.current = nextId
       setExiting(false)
     }
-    setTimeLeft(job?.timeoutSeconds || 90)
+    setTimeLeft(Math.min(60, Number(job?.timeoutSeconds) || 60))
   }, [job?.assignmentId, job?.timeoutSeconds])
 
   // Audio playback removed as requested
@@ -144,11 +144,33 @@ export function IncomingJobPopup({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto ${exiting ? '' : 'ijp-backdrop'}`}
-      style={{ backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(6px)' }}
+      className={`fixed inset-0 z-[99999] flex items-center justify-center p-4 ${exiting ? '' : 'ijp-backdrop'}`}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100dvh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+        zIndex: 99999,
+        padding: '16px',
+        boxSizing: 'border-box',
+      }}
     >
       <div
-        className={`relative w-full max-w-[390px] mx-auto my-auto ${exiting ? 'ijp-card-exit' : 'ijp-card'}`}
+        className={`w-full max-w-[390px] ${exiting ? 'ijp-card-exit' : 'ijp-card'}`}
+        style={{
+          margin: 'auto',
+          maxWidth: '390px',
+          width: '100%',
+        }}
       >
         {/* Main Floating Card - All 4 corners rounded */}
         <div className="rounded-3xl bg-white overflow-hidden shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)]">

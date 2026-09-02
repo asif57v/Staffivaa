@@ -185,7 +185,7 @@ export function AppShell() {
       startDate: data.startDate,
       shiftStart: data.shiftStart || '',
       shiftEnd: data.shiftEnd || '',
-      timeoutSeconds: data.timeoutSeconds || 90,
+      timeoutSeconds: Math.min(60, Number(data.timeoutSeconds) || 60),
     };
 
     setIncomingJob(popup);
@@ -435,7 +435,7 @@ export function AppShell() {
     if (pendingOffer) {
       const req = pendingOffer.requestId
       const expiresAt = req?.expiresAt ? new Date(req.expiresAt).getTime() : null
-      const remainingSeconds = expiresAt ? Math.max(5, Math.floor((expiresAt - now) / 1000)) : 90
+      const remainingSeconds = expiresAt ? Math.min(60, Math.max(5, Math.floor((expiresAt - now) / 1000))) : 60
 
       const popupJob = {
         assignmentId: String(pendingOffer._id),

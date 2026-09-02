@@ -62,11 +62,13 @@
 .ijp-card {
   animation: ijp-scale-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   transform-origin: center center;
+  margin: auto;
 }
 
 .ijp-card-exit {
   animation: ijp-scale-out 0.25s ease-in forwards;
   transform-origin: center center;
+  margin: auto;
 }
 
 .ijp-accept-btn {
