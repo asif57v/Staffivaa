@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useLocation, useNavigationType } from 'react-router-dom'
+import { getLenisInstance } from '../../lib/lenisController.js'
 
 /**
  * Global Scroll Manager for Workforce OS / Staffivaa
@@ -25,10 +26,16 @@ const getValidScrollContainers = () => {
 }
 
 export function scrollToTop(smooth = true) {
-  const behavior = smooth ? 'smooth' : 'instant'
-  window.scrollTo({ top: 0, left: 0, behavior })
+  const lenis = getLenisInstance()
+  if (lenis) {
+    lenis.scrollTo(0, { immediate: !smooth })
+  } else {
+    const behavior = smooth ? 'smooth' : 'instant'
+    window.scrollTo({ top: 0, left: 0, behavior })
+  }
+
   getValidScrollContainers().forEach((c) => {
-    c.scrollTo({ top: 0, behavior })
+    c.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'instant' })
   })
 }
 
@@ -87,7 +94,12 @@ export function GlobalScrollManager() {
       const targetContainerY = saved ? saved.containerY : 0
 
       const restore = () => {
-        window.scrollTo({ top: targetY, left: 0, behavior: 'instant' })
+        const lenis = getLenisInstance()
+        if (lenis) {
+          lenis.scrollTo(targetY, { immediate: true })
+        } else {
+          window.scrollTo({ top: targetY, left: 0, behavior: 'instant' })
+        }
         getValidScrollContainers().forEach((c) => {
           c.scrollTop = targetContainerY
         })
@@ -100,7 +112,12 @@ export function GlobalScrollManager() {
     } else {
       // PUSH or REPLACE Navigation (New Page / Tab Click) -> Always start from TOP!
       const resetToTop = () => {
-        window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+        const lenis = getLenisInstance()
+        if (lenis) {
+          lenis.scrollTo(0, { immediate: true })
+        } else {
+          window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+        }
         getValidScrollContainers().forEach((c) => {
           c.scrollTop = 0
         })

@@ -36,8 +36,26 @@ img {
 }
 
 html {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   background-color: #0f172a; /* Dark background on desktop */
+}
+
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+html.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis [data-lenis-prevent],
+.lenis [data-lenis-prevent-touch] {
+  overscroll-behavior: contain;
 }
 
 body {

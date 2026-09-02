@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import toast, { Toaster } from 'react-hot-toast'
 import { AuthProvider } from './context/AuthProvider.jsx'
 import { GlobalScrollManager } from './components/navigation/GlobalScrollManager.jsx'
+import { SmoothScrollProvider } from './components/navigation/SmoothScrollProvider.jsx'
 import { ProtectedRoute } from './components/auth/ProtectedRoute.jsx'
 import { GuestRoute } from './components/auth/GuestRoute.jsx'
 import { AuthRootRoute } from './components/auth/AuthRootRoute.jsx'
@@ -68,6 +69,7 @@ function RouteChangeListener() {
 function App() {
   return (
     <BrowserRouter>
+      <SmoothScrollProvider>
       <GlobalScrollManager />
       <RouteChangeListener />
       <Toaster 
@@ -199,6 +201,7 @@ function App() {
           </Routes>
         </Suspense>
       </AuthProvider>
+      </SmoothScrollProvider>
     </BrowserRouter>
   )
 }

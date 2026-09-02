@@ -143,14 +143,14 @@ export function IncomingJobPopup({
 
   return (
     <div
-      className={`fixed inset-0 z-[9999] flex items-end justify-center ${exiting ? '' : 'ijp-backdrop'}`}
+      className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 ${exiting ? '' : 'ijp-backdrop'}`}
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)' }}
     >
       <div
-        className={`w-full max-w-md mx-4 mb-6 ${exiting ? 'ijp-card-exit' : 'ijp-card'}`}
+        className={`w-full max-w-md ${exiting ? 'ijp-card-exit' : 'ijp-card'}`}
       >
         {/* Main Card */}
-        <div className="rounded-[1.75rem] bg-white overflow-hidden shadow-[0_-8px_40px_-10px_rgba(0,0,0,0.3)]">
+        <div className="rounded-[1.75rem] bg-white overflow-hidden shadow-[0_20px_60px_-12px_rgba(0,0,0,0.45)]">
           
           {/* Header with Timer */}
           <div className="relative bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-5 pt-5 pb-4">

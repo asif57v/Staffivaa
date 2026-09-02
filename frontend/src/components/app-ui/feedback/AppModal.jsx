@@ -47,7 +47,9 @@ export function AppModal({ open, title, description, children, onClose, footer }
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="max-h-[min(70vh,32rem)] overflow-y-auto px-4 py-4">{children}</div>
+        <div className="max-h-[min(70vh,32rem)] overflow-y-auto px-4 py-4" data-lenis-prevent>
+          {children}
+        </div>
         {footer ? <div className="border-t border-slate-100 px-4 py-3">{footer}</div> : null}
       </motion.div>
     </motion.div>
