@@ -144,11 +144,11 @@ export function IncomingJobPopup({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[9999] flex min-h-[100dvh] items-center justify-center p-4 ${exiting ? '' : 'ijp-backdrop'}`}
+      className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-hidden ${exiting ? '' : 'ijp-backdrop'}`}
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)' }}
     >
       <div
-        className={`w-full max-w-md ${exiting ? 'ijp-card-exit' : 'ijp-card'}`}
+        className={`w-full max-w-md m-auto ${exiting ? 'ijp-card-exit' : 'ijp-card'}`}
       >
         {/* Main Card */}
         <div className="rounded-[1.75rem] bg-white overflow-hidden shadow-[0_20px_60px_-12px_rgba(0,0,0,0.45)]">
