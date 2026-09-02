@@ -144,14 +144,14 @@ export function IncomingJobPopup({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-hidden ${exiting ? '' : 'ijp-backdrop'}`}
-      style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)' }}
+      className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto ${exiting ? '' : 'ijp-backdrop'}`}
+      style={{ backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(6px)' }}
     >
       <div
-        className={`w-full max-w-md m-auto ${exiting ? 'ijp-card-exit' : 'ijp-card'}`}
+        className={`relative w-full max-w-[390px] mx-auto my-auto ${exiting ? 'ijp-card-exit' : 'ijp-card'}`}
       >
-        {/* Main Card */}
-        <div className="rounded-[1.75rem] bg-white overflow-hidden shadow-[0_20px_60px_-12px_rgba(0,0,0,0.45)]">
+        {/* Main Floating Card - All 4 corners rounded */}
+        <div className="rounded-3xl bg-white overflow-hidden shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)]">
           
           {/* Header with Timer */}
           <div className="relative bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-5 pt-5 pb-4">

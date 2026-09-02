@@ -107,8 +107,8 @@ export function BookingFindingScreen({ categoryLabel, onComplete, onNoMatch, onC
         <div className="mt-10 w-full max-w-xs">
           <AppButton
             type="button"
-            variant="secondary"
-            className="w-full border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+            variant="danger"
+            className="w-full"
             disabled={cancelling}
             loading={cancelling}
             onClick={onCancel}
