@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { MapPin, User, Clock, IndianRupee, Briefcase, X, CheckCircle2 } from 'lucide-react'
 import './IncomingJobPopup.css'
@@ -141,9 +142,9 @@ export function IncomingJobPopup({
     }
   }
 
-  return (
+  return createPortal(
     <div
-      className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 ${exiting ? '' : 'ijp-backdrop'}`}
+      className={`fixed inset-0 z-[9999] flex min-h-[100dvh] items-center justify-center p-4 ${exiting ? '' : 'ijp-backdrop'}`}
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)' }}
     >
       <div
@@ -305,6 +306,7 @@ export function IncomingJobPopup({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
