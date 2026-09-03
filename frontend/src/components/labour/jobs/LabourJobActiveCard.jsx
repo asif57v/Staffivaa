@@ -148,7 +148,7 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
           ? 'Customer cancelled the booking.'
           : payload?.message || 'This booking was cancelled.'
       alert(`Booking Cancelled:\n${msg}`)
-      navigate('/app/jobs', { replace: true })
+      navigate('/app/jobs?tab=active', { replace: true })
     })
     
     return () => {

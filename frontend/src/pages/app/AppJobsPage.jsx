@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { CheckCircle2, Clock, IndianRupee, MapPin, RotateCcw, Sparkles, Building2 } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth.js'
@@ -43,7 +43,11 @@ function isApiAssignment(job) {
 export function AppJobsPage() {
   const { user } = useAuth()
   const reduce = useReducedMotion()
-  const [tab, setTab] = useState('offers')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabFromUrl = searchParams.get('tab')
+  const initialTab =
+    tabFromUrl === 'active' || tabFromUrl === 'history' || tabFromUrl === 'offers' ? tabFromUrl : 'offers'
+  const [tab, setTab] = useState(initialTab)
   const [localDemo, setLocalDemo] = useState(() => loadJobDemoState())
   const { data: apiData, error: apiError, refetch } = useGetLabourAssignmentsQuery(undefined, {
     pollingInterval: 8000,
@@ -81,6 +85,28 @@ export function AppJobsPage() {
   const [walletGate, setWalletGate] = useState(null)
 
   const kycOk = user?.labourProfile?.kycStatus === KYC_STATUS.VERIFIED
+
+  useEffect(() => {
+    const next =
+      tabFromUrl === 'active' || tabFromUrl === 'history' || tabFromUrl === 'offers' ? tabFromUrl : null
+    if (next && next !== tab) setTab(next)
+  }, [tabFromUrl])
+
+  const handleTabChange = useCallback(
+    (nextTab) => {
+      setTab(nextTab)
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          if (nextTab === 'offers') params.delete('tab')
+          else params.set('tab', nextTab)
+          return params
+        },
+        { replace: true },
+      )
+    },
+    [setSearchParams],
+  )
 
   useEffect(() => {
     subscribeJobDemo(setLocalDemo)
@@ -285,7 +311,7 @@ export function AppJobsPage() {
         refetch()
         setConfirmingOfferId(null)
         showToast('Assignment accepted — platform fee deducted from your wallet.')
-        setTab('active')
+        handleTabChange('active')
       } catch (e) {
         console.error('Accept error:', e)
         const payload = readApiErrorPayload(e)
@@ -314,7 +340,7 @@ export function AppJobsPage() {
     }
     setConfirmingOfferId(null)
     showToast('Assignment accepted — head to Active and check in on site.')
-    setTab('active')
+    handleTabChange('active')
   }
 
   const handleMarkOnSite = async (id, lat, lng) => {
@@ -473,7 +499,7 @@ export function AppJobsPage() {
         </p>
       </div>
 
-      <LabourJobsTabBar tab={tab} onChange={setTab} counts={tabCounts} />
+      <LabourJobsTabBar tab={tab} onChange={handleTabChange} counts={tabCounts} />
 
       <motion.div
         key={tab}

@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft,
   Phone,
-  MessageCircle,
   MapPin,
   X,
   ShieldCheck,
@@ -28,9 +27,10 @@ import {
   Sparkles,
   Zap,
   PlusCircle,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react'
 import { io } from 'socket.io-client'
-import { useLoadScript } from '@react-google-maps/api'
 import { LiveTrackingMap } from './LiveTrackingMap.jsx'
 import {
   useGetRequestQuery,
@@ -47,22 +47,18 @@ import {
   markLocalBookingCancelled,
   notifyWorkerCancelledBooking,
 } from '../../../lib/individualBookings.js'
-
-const GOOGLE_MAPS_LIBRARIES = ['places']
+import { useGoogleMapsLoader } from '../../../hooks/useGoogleMapsLoader.js'
 
 export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCancel }) {
   const requestId = booking?.requestId || booking?._id
   const [stopRequestPoll, setStopRequestPoll] = useState(false)
   const [liveEtaInfo, setLiveEtaInfo] = useState(null)
   const [isSheetExpanded, setIsSheetExpanded] = useState(false)
+  const [isMapFullscreen, setIsMapFullscreen] = useState(false)
   const [copiedOtp, setCopiedOtp] = useState(false)
   const [showSosModal, setShowSosModal] = useState(false)
 
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-  const { isLoaded: isMapLoaded } = useLoadScript({
-    googleMapsApiKey: apiKey,
-    libraries: GOOGLE_MAPS_LIBRARIES,
-  })
+  const { isLoaded: isMapLoaded } = useGoogleMapsLoader()
 
   const { data: requestData, isLoading, error, isError, refetch } = useGetRequestQuery(requestId, {
     skip: !requestId || stopRequestPoll,
@@ -457,12 +453,6 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
     }
   }
 
-  const handleOpenWhatsApp = () => {
-    const ref = request.reference || booking?.ref || ''
-    const msg = encodeURIComponent(`Hi ${workerName}, I booked your service on Staffivaa (Ref #${ref}). Please let me know your ETA.`)
-    window.open(`https://wa.me/${rawCleanPhone}?text=${msg}`, '_blank')
-  }
-
   // Rapido 4-Stage Live Progress Stepper Calculation
   const progressPercentage = useMemo(() => {
     if (currentStatus === 'completed') return 100
@@ -633,20 +623,32 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
             workerPic={workerPic}
             isArrived={['on_site', 'completed'].includes(currentStatus)}
             onEtaUpdate={(info) => setLiveEtaInfo(info)}
-            bottomSheetPadding={isSheetExpanded ? 380 : 220}
+            bottomSheetPadding={isMapFullscreen ? 24 : isSheetExpanded ? 380 : 220}
             hideFloatingHud={true}
+            hideFullscreenButton={true}
+            isFullscreen={isMapFullscreen}
+            onFullscreenChange={(next) => {
+              setIsMapFullscreen(next)
+              if (next) setIsSheetExpanded(false)
+            }}
           />
         )}
       </div>
 
       {/* 2. RAPIDO FLOATING TOP GLASS HUD */}
-      <div className="absolute top-0 left-0 right-0 z-30 p-4 pt-[max(1rem,env(safe-area-inset-top,1rem))] pointer-events-none flex items-center justify-between gap-2">
+      <div className="absolute top-0 left-0 right-0 z-40 p-4 pt-[max(1rem,env(safe-area-inset-top,1rem))] pointer-events-none flex items-center justify-between gap-2">
         {/* Back Button */}
         <button
           type="button"
-          onClick={onBack}
+          onClick={() => {
+            if (isMapFullscreen) {
+              setIsMapFullscreen(false)
+              return
+            }
+            onBack()
+          }}
           className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-white/95 text-slate-900 shadow-xl backdrop-blur-md border border-slate-200/90 active:scale-90 transition cursor-pointer"
-          aria-label="Back to History"
+          aria-label={isMapFullscreen ? 'Exit full map' : 'Back to History'}
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
@@ -668,8 +670,28 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
           </span>
         </div>
 
-        {/* Right Floating Actions: SOS & Share */}
+        {/* Right Floating Actions: Full Map, SOS & Share */}
         <div className="flex items-center gap-2 pointer-events-auto">
+          <button
+            type="button"
+            onClick={() => {
+              setIsMapFullscreen((prev) => {
+                const next = !prev
+                if (next) setIsSheetExpanded(false)
+                return next
+              })
+            }}
+            className={`flex h-11 w-11 items-center justify-center rounded-2xl shadow-xl backdrop-blur-md border active:scale-90 transition cursor-pointer ${
+              isMapFullscreen
+                ? 'bg-slate-900 text-[#FFD100] border-slate-700 ring-2 ring-[#FFD100]/50'
+                : 'bg-white/95 text-slate-900 border-slate-200/90'
+            }`}
+            title={isMapFullscreen ? 'Exit full map' : 'Full screen map'}
+            aria-label={isMapFullscreen ? 'Exit full map' : 'Full screen map'}
+          >
+            {isMapFullscreen ? <Minimize2 className="h-4.5 w-4.5" /> : <Maximize2 className="h-4.5 w-4.5" />}
+          </button>
+
           {/* Share Live Tracking */}
           <button
             type="button"
@@ -695,23 +717,43 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
       {/* 3. RAPIDO INTERACTIVE SLIDING BOTTOM SHEET */}
       <div
         className={`absolute bottom-0 left-0 right-0 z-30 bg-white rounded-t-[32px] shadow-[0_-12px_45px_rgba(0,0,0,0.22)] border-t border-slate-100 flex flex-col transition-all duration-300 ${
-          isSheetExpanded ? 'max-h-[85dvh] h-[85dvh]' : 'max-h-[340px] sm:max-h-[380px]'
+          isMapFullscreen
+            ? 'translate-y-[calc(100%-3.25rem)] max-h-[3.25rem]'
+            : isSheetExpanded
+              ? 'max-h-[85dvh] h-[85dvh] translate-y-0'
+              : 'max-h-[340px] sm:max-h-[380px] translate-y-0'
         }`}
       >
-        {/* Drag Pill Handle & Tap-to-expand */}
+        {/* Drag Pill Handle & Tap-to-expand / exit fullscreen */}
         <div
-          onClick={() => setIsSheetExpanded((prev) => !prev)}
+          onClick={() => {
+            if (isMapFullscreen) {
+              setIsMapFullscreen(false)
+              return
+            }
+            setIsSheetExpanded((prev) => !prev)
+          }}
           className="w-full pt-3 pb-2 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50/60 rounded-t-[32px] transition shrink-0"
         >
           <div className="w-12 h-1.5 bg-slate-300 rounded-full mb-1" />
           <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-            <span>{isSheetExpanded ? 'Swipe down for map' : 'Swipe up for details'}</span>
-            {isSheetExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+            <span>
+              {isMapFullscreen
+                ? 'Tap to show details'
+                : isSheetExpanded
+                  ? 'Swipe down for map'
+                  : 'Swipe up for details'}
+            </span>
+            {isMapFullscreen || isSheetExpanded ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronUp className="h-3 w-3" />
+            )}
           </div>
         </div>
 
         {/* Scrollable Container Inside Bottom Sheet */}
-        <div className="flex-1 overflow-y-auto px-5 pb-6 space-y-4 no-scrollbar">
+        <div className={`flex-1 overflow-y-auto px-5 pb-6 space-y-4 no-scrollbar ${isMapFullscreen ? 'hidden' : ''}`}>
           {/* A. Hero Rapido ETA Banner */}
           <div className="flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-950 rounded-2xl p-4 text-white shadow-lg border border-slate-800">
             <div>
@@ -812,23 +854,13 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
               </div>
 
               {/* Quick Action Contact Buttons */}
-              <div className="grid grid-cols-2 gap-2.5 mt-4 pt-3 border-t border-slate-100">
-                {/* 1-Tap Call */}
+              <div className="mt-4 pt-3 border-t border-slate-100">
                 <a
                   href={`tel:${rawCleanPhone}`}
-                  className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-[#FFD100] text-slate-950 font-black text-xs shadow-md shadow-amber-300/30 transition active:scale-95 cursor-pointer"
+                  className="flex w-full items-center justify-center gap-2 py-3 rounded-2xl bg-[#FFD100] text-slate-950 font-black text-xs shadow-md shadow-amber-300/30 transition active:scale-95 cursor-pointer"
                 >
                   <Phone className="h-4 w-4 fill-slate-950 text-slate-950" /> Call Worker
                 </a>
-
-                {/* WhatsApp Chat */}
-                <button
-                  type="button"
-                  onClick={handleOpenWhatsApp}
-                  className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 font-black text-xs transition active:scale-95 cursor-pointer"
-                >
-                  <MessageCircle className="h-4 w-4 text-emerald-600" /> WhatsApp
-                </button>
               </div>
             </div>
           ) : (

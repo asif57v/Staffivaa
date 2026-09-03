@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { GoogleMap, useLoadScript, DirectionsRenderer, Marker } from '@react-google-maps/api'
+import { GoogleMap, DirectionsRenderer, Marker } from '@react-google-maps/api'
 import {
   ArrowLeft,
   Navigation,
@@ -17,12 +17,12 @@ import {
 } from 'lucide-react'
 import { useCheckInMutation } from '../../../store/api/workforceApi.js'
 import { useWorkerLocationEmitter } from '../../../hooks/useWorkerLocationEmitter.js'
-
-const libraries = ['places']
+import { refreshGoogleMap, useGoogleMapsLoader } from '../../../hooks/useGoogleMapsLoader.js'
 
 const mapContainerStyle = {
   width: '100%',
   height: '100%',
+  minHeight: '240px',
 }
 
 const defaultCenter = {
@@ -58,17 +58,15 @@ export function LabourNavigationScreen() {
   const { state } = useLocation()
   const job = state?.job
 
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-  const { isLoaded, loadError } = useLoadScript({
-    googleMapsApiKey: apiKey,
-    libraries,
-  })
+  const { apiKey, isLoaded, loadError } = useGoogleMapsLoader()
 
   const [customerPos, setCustomerPos] = useState(null)
   const [directions, setDirections] = useState(null)
   const [distance, setDistance] = useState('')
   const [eta, setEta] = useState('')
   const [isFullscreen, setIsFullscreen] = useState(false)
+  // Force a fresh GoogleMap instance each visit — fixes blank tiles after navigating away.
+  const [mapInstanceKey] = useState(() => `nav-map-${Date.now()}`)
 
   const mapRef = useRef(null)
   const initialBoundsFitRef = useRef(false)
@@ -98,6 +96,15 @@ export function LabourNavigationScreen() {
     bookingId: targetBookingId,
     isActive: isTrackingActive,
   })
+
+  const mapCenter = useMemo(() => {
+    if (labourPos?.lat != null && labourPos?.lng != null) return labourPos
+    if (customerPos?.lat != null && customerPos?.lng != null) return customerPos
+    if (job?.locationLat != null && job?.locationLng != null) {
+      return { lat: Number(job.locationLat), lng: Number(job.locationLng) }
+    }
+    return defaultCenter
+  }, [labourPos, customerPos, job?.locationLat, job?.locationLng])
 
   // Geocode customer location if not available as coordinates
   useEffect(() => {
@@ -219,7 +226,7 @@ export function LabourNavigationScreen() {
         lat: labourPos?.lat,
         lng: labourPos?.lng,
       }).unwrap()
-      navigate(-1) // Go back to active jobs
+      navigate('/app/jobs?tab=active', { replace: true })
     } catch (err) {
       console.error('Failed to check in', err)
       alert(err?.data?.message || 'Failed to mark check-in')
@@ -228,10 +235,20 @@ export function LabourNavigationScreen() {
 
   const handleRecenter = useCallback(() => {
     if (mapRef.current && labourPos) {
+      refreshGoogleMap(mapRef.current, labourPos)
       mapRef.current.panTo(labourPos)
       mapRef.current.setZoom(16)
     }
   }, [labourPos])
+
+  // After remount / fullscreen toggle, force map tiles to repaint
+  useEffect(() => {
+    if (!mapRef.current || !isLoaded) return
+    const t = window.setTimeout(() => {
+      refreshGoogleMap(mapRef.current, mapCenter)
+    }, 120)
+    return () => window.clearTimeout(t)
+  }, [isLoaded, isFullscreen, mapCenter, mapInstanceKey])
 
   // SVG Marker with rotation matching heading
   const workerMarkerSvg = useMemo(() => {
@@ -352,12 +369,33 @@ export function LabourNavigationScreen() {
       </button>
 
       {/* Map Area (Expands to full height in fullscreen mode) */}
-      <div className={`flex-1 relative transition-all duration-300 ${isFullscreen ? 'pb-0' : 'pb-64 lg:pb-72'}`}>
+      <div className={`flex-1 relative min-h-[240px] bg-slate-100 transition-all duration-300 ${isFullscreen ? 'pb-0' : 'pb-64 lg:pb-72'}`}>
         <GoogleMap
+          key={mapInstanceKey}
           mapContainerStyle={mapContainerStyle}
+          center={mapCenter}
+          zoom={14}
           options={mapOptions}
           onLoad={(map) => {
             mapRef.current = map
+            // Deferred resize fixes blank grey map when returning to this screen
+            window.requestAnimationFrame(() => {
+              refreshGoogleMap(map, mapCenter)
+            })
+            window.setTimeout(() => {
+              refreshGoogleMap(map, mapCenter)
+              if (labourPos && customerPos && !initialBoundsFitRef.current) {
+                try {
+                  const bounds = new window.google.maps.LatLngBounds()
+                  bounds.extend(labourPos)
+                  bounds.extend(customerPos)
+                  map.fitBounds(bounds, { top: 100, bottom: 280, left: 50, right: 50 })
+                  initialBoundsFitRef.current = true
+                } catch {
+                  /* ignore */
+                }
+              }
+            }, 180)
           }}
         >
           {directions && (

@@ -34,9 +34,16 @@ function LenisBridge() {
     const disableLenis = LENIS_DISABLED_ROUTE_RE.test(pathname)
     if (disableLenis) {
       lenis.stop()
+      // Prevent Lenis from leaving the page in a bad scroll/height state for Google Maps
+      document.documentElement.classList.add('lenis-maps-safe')
     } else {
+      document.documentElement.classList.remove('lenis-maps-safe')
       lenis.start()
       lenis.resize()
+    }
+
+    return () => {
+      document.documentElement.classList.remove('lenis-maps-safe')
     }
   }, [lenis, pathname])
 

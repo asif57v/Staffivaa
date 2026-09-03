@@ -521,7 +521,7 @@ export function AppShell() {
       incomingJobRef.current = null;
       dispatch(walletApi.util.invalidateTags(['Wallet']));
       dispatchAlert('Job accepted!', 'Platform fee deducted from your wallet. Head to Active tab to view details.');
-      navigate('/app/jobs');
+      navigate('/app/jobs?tab=active');
     } catch (e) {
       console.error('Popup accept error:', e);
       const payload = readApiErrorPayload(e)

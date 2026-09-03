@@ -53,6 +53,12 @@ html.lenis.lenis-smooth {
   overflow: hidden;
 }
 
+html.lenis-maps-safe,
+html.lenis-maps-safe body {
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
 .lenis [data-lenis-prevent],
 .lenis [data-lenis-prevent-touch] {
   overscroll-behavior: contain;

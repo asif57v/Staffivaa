@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { getSocket } from '../../../services/socket.js'
 import { store } from '../../../store/index.js'
+import { refreshGoogleMap } from '../../../hooks/useGoogleMapsLoader.js'
 
 const mapContainerStyle = {
   width: '100%',
@@ -127,6 +128,9 @@ export function LiveTrackingMap({
   containerClassName = '',
   bottomSheetPadding = 0,
   hideFloatingHud = false,
+  hideFullscreenButton = false,
+  isFullscreen: controlledFullscreen,
+  onFullscreenChange,
 }) {
   const [displayedWorkerPos, setDisplayedWorkerPos] = useState(initialWorkerLocation || null)
   const [displayedHeading, setDisplayedHeading] = useState(initialWorkerLocation?.heading || 0)
@@ -137,8 +141,20 @@ export function LiveTrackingMap({
   const [isSocketConnected, setIsSocketConnected] = useState(false)
   const [isStale, setIsStale] = useState(false)
   const [hasArrivedState, setHasArrivedState] = useState(isArrived)
-  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [internalFullscreen, setInternalFullscreen] = useState(false)
   const [trafficEnabled, setTrafficEnabled] = useState(false)
+
+  const isFullscreen =
+    typeof controlledFullscreen === 'boolean' ? controlledFullscreen : internalFullscreen
+
+  const setIsFullscreen = useCallback(
+    (next) => {
+      const value = typeof next === 'function' ? next(isFullscreen) : next
+      if (onFullscreenChange) onFullscreenChange(value)
+      else setInternalFullscreen(value)
+    },
+    [isFullscreen, onFullscreenChange],
+  )
 
   const mapRef = useRef(null)
   const trafficLayerRef = useRef(null)
@@ -456,21 +472,29 @@ export function LiveTrackingMap({
   return (
     <div
       className={`transition-all duration-300 select-none overflow-hidden ${
-        isFullscreen
+        isFullscreen && !hideFullscreenButton
           ? 'fixed inset-0 z-[100] w-full h-[100dvh] bg-slate-900'
           : containerClassName || 'relative w-full h-full bg-slate-100'
       }`}
     >
       <GoogleMap
-        mapContainerStyle={mapContainerStyle}
+        mapContainerStyle={{ ...mapContainerStyle, minHeight: '240px' }}
         center={mapCenter}
         zoom={displayedWorkerPos && customerLocation ? 14 : 13}
         options={defaultMapOptions}
         onLoad={(map) => {
           mapRef.current = map
-          if (customerLocation) {
-            map.panTo(customerLocation)
-          }
+          window.requestAnimationFrame(() => {
+            refreshGoogleMap(map, mapCenter)
+          })
+          window.setTimeout(() => {
+            refreshGoogleMap(map, mapCenter)
+            if (customerLocation && displayedWorkerPos) {
+              fitRouteBounds()
+            } else if (customerLocation) {
+              map.panTo(customerLocation)
+            }
+          }, 180)
         }}
       >
         {/* Rapido High-Contrast Polyline: Clean Dark Slate Road Contour */}
@@ -544,22 +568,24 @@ export function LiveTrackingMap({
         </button>
 
         {/* Fullscreen Map Toggle */}
-        <button
-          type="button"
-          onClick={() => setIsFullscreen((prev) => !prev)}
-          className={`flex h-11 w-11 items-center justify-center rounded-2xl shadow-xl transition active:scale-90 border cursor-pointer ${
-            isFullscreen
-              ? 'bg-slate-900 text-white border-slate-800 ring-2 ring-brand'
-              : 'bg-white text-slate-700 border-slate-200/90 hover:bg-slate-50'
-          }`}
-          title={isFullscreen ? 'Exit Fullscreen' : 'Full Screen Map'}
-        >
-          {isFullscreen ? (
-            <Minimize2 className="h-5 w-5 text-brand" />
-          ) : (
-            <Maximize2 className="h-5 w-5 text-slate-700" />
-          )}
-        </button>
+        {!hideFullscreenButton ? (
+          <button
+            type="button"
+            onClick={() => setIsFullscreen((prev) => !prev)}
+            className={`flex h-11 w-11 items-center justify-center rounded-2xl shadow-xl transition active:scale-90 border cursor-pointer ${
+              isFullscreen
+                ? 'bg-slate-900 text-white border-slate-800 ring-2 ring-brand'
+                : 'bg-white text-slate-700 border-slate-200/90 hover:bg-slate-50'
+            }`}
+            title={isFullscreen ? 'Exit Fullscreen' : 'Full Screen Map'}
+          >
+            {isFullscreen ? (
+              <Minimize2 className="h-5 w-5 text-brand" />
+            ) : (
+              <Maximize2 className="h-5 w-5 text-slate-700" />
+            )}
+          </button>
+        ) : null}
       </div>
 
       {/* Floating Status & ETA Top HUD (Only when not hidden by parent full UI) */}
