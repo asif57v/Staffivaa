@@ -716,12 +716,12 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
 
       {/* 3. RAPIDO INTERACTIVE SLIDING BOTTOM SHEET */}
       <div
-        className={`absolute bottom-0 left-0 right-0 z-30 bg-white rounded-t-[32px] shadow-[0_-12px_45px_rgba(0,0,0,0.22)] border-t border-slate-100 flex flex-col transition-all duration-300 ${
+        className={`absolute bottom-0 left-0 right-0 z-30 bg-white rounded-t-[32px] shadow-[0_-12px_45px_rgba(0,0,0,0.22)] border-t border-slate-100 flex flex-col overflow-hidden transition-all duration-300 ${
           isMapFullscreen
             ? 'translate-y-[calc(100%-3.25rem)] max-h-[3.25rem]'
             : isSheetExpanded
               ? 'max-h-[85dvh] h-[85dvh] translate-y-0'
-              : 'max-h-[340px] sm:max-h-[380px] translate-y-0'
+              : 'max-h-[min(52dvh,420px)] h-[min(52dvh,420px)] translate-y-0'
         }`}
       >
         {/* Drag Pill Handle & Tap-to-expand / exit fullscreen */}
@@ -752,8 +752,14 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
           </div>
         </div>
 
-        {/* Scrollable Container Inside Bottom Sheet */}
-        <div className={`flex-1 overflow-y-auto px-5 pb-6 space-y-4 no-scrollbar ${isMapFullscreen ? 'hidden' : ''}`}>
+        {/* Scrollable Container Inside Bottom Sheet — min-h-0 is required for flex overflow scroll */}
+        <div
+          data-lenis-prevent
+          data-lenis-prevent-touch
+          className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.5rem,env(safe-area-inset-bottom,1.5rem))] space-y-4 [-webkit-overflow-scrolling:touch] touch-pan-y ${
+            isMapFullscreen ? 'hidden' : ''
+          }`}
+        >
           {/* A. Hero Rapido ETA Banner */}
           <div className="flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-950 rounded-2xl p-4 text-white shadow-lg border border-slate-800">
             <div>
