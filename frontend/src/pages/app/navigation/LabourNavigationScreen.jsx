@@ -1,6 +1,15 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { GoogleMap, DirectionsRenderer, Marker } from '@react-google-maps/api'
+import { useCheckInMutation } from '../../../store/api/workforceApi.js'
+import { useWorkerLocationEmitter } from '../../../hooks/useWorkerLocationEmitter.js'
+import {
+  buildRotatableMapOptions,
+  calculateMapBearing,
+  refreshGoogleMap,
+  setMapCamera,
+  useGoogleMapsLoader,
+} from '../../../hooks/useGoogleMapsLoader.js'
 import {
   ArrowLeft,
   Navigation,
@@ -14,10 +23,9 @@ import {
   Maximize2,
   Minimize2,
   ChevronUp,
+  Compass,
+  Navigation2,
 } from 'lucide-react'
-import { useCheckInMutation } from '../../../store/api/workforceApi.js'
-import { useWorkerLocationEmitter } from '../../../hooks/useWorkerLocationEmitter.js'
-import { refreshGoogleMap, useGoogleMapsLoader } from '../../../hooks/useGoogleMapsLoader.js'
 
 const mapContainerStyle = {
   width: '100%',
@@ -30,27 +38,18 @@ const defaultCenter = {
   lng: 75.8577,
 }
 
-const mapOptions = {
-  disableDefaultUI: true,
-  gestureHandling: 'greedy', // 🚀 Removes "Use ctrl + scroll to zoom" overlay and enables smooth single-finger touch on mobile
-  clickableIcons: false,
-  isFractionalZoomEnabled: true,
-  keyboardShortcuts: false,
-  maxZoom: 19,
-  minZoom: 3,
-  styles: [
-    {
-      featureType: 'poi',
-      elementType: 'labels',
-      stylers: [{ visibility: 'off' }],
-    },
-    {
-      featureType: 'transit',
-      elementType: 'labels',
-      stylers: [{ visibility: 'off' }],
-    },
-  ],
-}
+const baseMapStyle = [
+  {
+    featureType: 'poi',
+    elementType: 'labels',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'transit',
+    elementType: 'labels',
+    stylers: [{ visibility: 'off' }],
+  },
+]
 
 export function LabourNavigationScreen() {
   const { bookingId } = useParams()
@@ -65,12 +64,23 @@ export function LabourNavigationScreen() {
   const [distance, setDistance] = useState('')
   const [eta, setEta] = useState('')
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [mapHeading, setMapHeading] = useState(0)
   // Force a fresh GoogleMap instance each visit — fixes blank tiles after navigating away.
   const [mapInstanceKey] = useState(() => `nav-map-${Date.now()}`)
 
   const mapRef = useRef(null)
   const initialBoundsFitRef = useRef(false)
   const lastDirectionsTimeRef = useRef(0)
+
+  const mapOptions = useMemo(
+    () =>
+      buildRotatableMapOptions({
+        maxZoom: 19,
+        minZoom: 3,
+        styles: baseMapStyle,
+      }),
+    [isLoaded],
+  )
 
   const [checkIn, { isLoading: isCheckingIn }] = useCheckInMutation()
 
@@ -241,6 +251,24 @@ export function LabourNavigationScreen() {
     }
   }, [labourPos])
 
+  const handleResetNorth = useCallback(() => {
+    if (!mapRef.current) return
+    setMapCamera(mapRef.current, { heading: 0, tilt: 0 })
+    setMapHeading(0)
+  }, [])
+
+  const handleFaceDestination = useCallback(() => {
+    if (!mapRef.current || !labourPos || !customerPos) return
+    const bearing = calculateMapBearing(labourPos, customerPos)
+    setMapCamera(mapRef.current, {
+      heading: bearing,
+      tilt: 45,
+      center: labourPos,
+      zoom: 16,
+    })
+    setMapHeading(bearing)
+  }, [labourPos, customerPos])
+
   // After remount / fullscreen toggle, force map tiles to repaint
   useEffect(() => {
     if (!mapRef.current || !isLoaded) return
@@ -356,17 +384,41 @@ export function LabourNavigationScreen() {
         </div>
       )}
 
-      {/* Floating Recenter Button (Positions smoothly above sheet) */}
-      <button
-        type="button"
-        onClick={handleRecenter}
-        className={`absolute right-4 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-white text-slate-800 shadow-xl border border-slate-200/80 transition-all duration-300 active:scale-90 cursor-pointer ${
+      {/* Floating map camera controls */}
+      <div
+        className={`absolute right-4 z-20 flex flex-col gap-2 transition-all duration-300 ${
           isFullscreen ? 'bottom-16' : 'bottom-[290px]'
         }`}
-        title="Recenter to my location"
       >
-        <LocateFixed className="h-6 w-6 text-slate-700" />
-      </button>
+        <button
+          type="button"
+          onClick={handleFaceDestination}
+          disabled={!labourPos || !customerPos}
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 text-[#FFD100] shadow-xl border border-slate-700 transition active:scale-90 cursor-pointer disabled:opacity-40"
+          title="Face destination (like Google Maps navigation)"
+        >
+          <Navigation2 className="h-5 w-5" />
+        </button>
+        <button
+          type="button"
+          onClick={handleResetNorth}
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-slate-800 shadow-xl border border-slate-200/80 transition active:scale-90 cursor-pointer"
+          title="Reset map to North"
+        >
+          <Compass
+            className="h-6 w-6 text-slate-700 transition-transform duration-200"
+            style={{ transform: `rotate(${-mapHeading}deg)` }}
+          />
+        </button>
+        <button
+          type="button"
+          onClick={handleRecenter}
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-slate-800 shadow-xl border border-slate-200/80 transition active:scale-90 cursor-pointer"
+          title="Recenter to my location"
+        >
+          <LocateFixed className="h-6 w-6 text-slate-700" />
+        </button>
+      </div>
 
       {/* Map Area (Expands to full height in fullscreen mode) */}
       <div className={`flex-1 relative min-h-[240px] bg-slate-100 transition-all duration-300 ${isFullscreen ? 'pb-0' : 'pb-64 lg:pb-72'}`}>
@@ -378,6 +430,9 @@ export function LabourNavigationScreen() {
           options={mapOptions}
           onLoad={(map) => {
             mapRef.current = map
+            const headingListener = map.addListener('heading_changed', () => {
+              setMapHeading(Number(map.getHeading?.() || 0))
+            })
             // Deferred resize fixes blank grey map when returning to this screen
             window.requestAnimationFrame(() => {
               refreshGoogleMap(map, mapCenter)
@@ -396,6 +451,15 @@ export function LabourNavigationScreen() {
                 }
               }
             }, 180)
+            map.__staffivaaHeadingListener = headingListener
+          }}
+          onUnmount={(map) => {
+            try {
+              map?.__staffivaaHeadingListener?.remove?.()
+            } catch {
+              /* ignore */
+            }
+            mapRef.current = null
           }}
         >
           {directions && (

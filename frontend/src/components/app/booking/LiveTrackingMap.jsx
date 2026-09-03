@@ -15,7 +15,12 @@ import {
 } from 'lucide-react'
 import { getSocket } from '../../../services/socket.js'
 import { store } from '../../../store/index.js'
-import { refreshGoogleMap } from '../../../hooks/useGoogleMapsLoader.js'
+import {
+  buildRotatableMapOptions,
+  calculateMapBearing,
+  refreshGoogleMap,
+  setMapCamera,
+} from '../../../hooks/useGoogleMapsLoader.js'
 
 const mapContainerStyle = {
   width: '100%',
@@ -91,12 +96,7 @@ const rapidoMapStyles = [
   },
 ]
 
-const defaultMapOptions = {
-  disableDefaultUI: true,
-  gestureHandling: 'greedy', // Removes "Use ctrl + scroll to zoom" overlay and enables smooth single-finger touch on mobile
-  clickableIcons: false,
-  isFractionalZoomEnabled: true,
-  keyboardShortcuts: false,
+const defaultMapOptionsBase = {
   maxZoom: 19,
   minZoom: 4,
   styles: rapidoMapStyles,
@@ -143,6 +143,7 @@ export function LiveTrackingMap({
   const [hasArrivedState, setHasArrivedState] = useState(isArrived)
   const [internalFullscreen, setInternalFullscreen] = useState(false)
   const [trafficEnabled, setTrafficEnabled] = useState(false)
+  const [mapHeading, setMapHeading] = useState(0)
 
   const isFullscreen =
     typeof controlledFullscreen === 'boolean' ? controlledFullscreen : internalFullscreen
@@ -155,6 +156,8 @@ export function LiveTrackingMap({
     },
     [isFullscreen, onFullscreenChange],
   )
+
+  const defaultMapOptions = useMemo(() => buildRotatableMapOptions(defaultMapOptionsBase), [])
 
   const mapRef = useRef(null)
   const trafficLayerRef = useRef(null)
@@ -395,6 +398,24 @@ export function LiveTrackingMap({
     }
   }, [displayedWorkerPos, customerLocation, fitRouteBounds])
 
+  const handleResetNorth = useCallback(() => {
+    if (!mapRef.current) return
+    setMapCamera(mapRef.current, { heading: 0, tilt: 0 })
+    setMapHeading(0)
+  }, [])
+
+  const handleFaceDestination = useCallback(() => {
+    if (!mapRef.current || !displayedWorkerPos || !customerLocation) return
+    const bearing = calculateMapBearing(displayedWorkerPos, customerLocation)
+    setMapCamera(mapRef.current, {
+      heading: bearing,
+      tilt: 45,
+      center: displayedWorkerPos,
+      zoom: 15,
+    })
+    setMapHeading(bearing)
+  }, [displayedWorkerPos, customerLocation])
+
   // Traffic layer toggle
   const toggleTraffic = useCallback(() => {
     if (!mapRef.current || !window.google) return
@@ -484,6 +505,9 @@ export function LiveTrackingMap({
         options={defaultMapOptions}
         onLoad={(map) => {
           mapRef.current = map
+          map.addListener('heading_changed', () => {
+            setMapHeading(Number(map.getHeading?.() || 0))
+          })
           window.requestAnimationFrame(() => {
             refreshGoogleMap(map, mapCenter)
           })
@@ -538,11 +562,33 @@ export function LiveTrackingMap({
         )}
       </GoogleMap>
 
-      {/* Floating Interactive Controls (Recenter, Traffic, Fullscreen) */}
+      {/* Floating Interactive Controls (Recenter, Face route, Compass, Traffic, Fullscreen) */}
       <div
         className="absolute right-4 z-10 flex flex-col gap-2 pointer-events-auto"
-        style={{ bottom: isFullscreen ? '2rem' : `${(bottomSheetPadding || 180) + 16}px` }}
+        style={{ bottom: isFullscreen && !hideFullscreenButton ? '2rem' : `${(bottomSheetPadding || 180) + 16}px` }}
       >
+        <button
+          type="button"
+          onClick={handleFaceDestination}
+          disabled={!displayedWorkerPos || !customerLocation}
+          className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-[#FFD100] shadow-xl border border-slate-700 transition active:scale-90 cursor-pointer disabled:opacity-40"
+          title="Face destination"
+        >
+          <Navigation2 className="h-5 w-5" />
+        </button>
+
+        <button
+          type="button"
+          onClick={handleResetNorth}
+          className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-800 shadow-xl border border-slate-200/90 hover:bg-slate-50 transition active:scale-90 cursor-pointer"
+          title="Reset map to North"
+        >
+          <Compass
+            className="h-5 w-5 text-slate-700 transition-transform duration-200"
+            style={{ transform: `rotate(${-mapHeading}deg)` }}
+          />
+        </button>
+
         {/* Recenter / Frame Route Button */}
         <button
           type="button"
