@@ -708,7 +708,11 @@ export function AdminLayout() {
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8">
+        <main
+          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8"
+          data-lenis-prevent="true"
+          style={{ overscrollBehavior: 'contain' }}
+        >
           <motion.div
             key={pathname}
             initial={reduce ? false : { opacity: 0, y: 8 }}

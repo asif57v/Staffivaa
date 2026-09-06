@@ -20,7 +20,6 @@ const lenisOptions = {
 
 function LenisBridge() {
   const lenis = useLenis()
-  const { pathname } = useLocation()
 
   useEffect(() => {
     if (!lenis) return undefined
@@ -28,34 +27,26 @@ function LenisBridge() {
     return () => clearLenisInstance()
   }, [lenis])
 
-  useEffect(() => {
-    if (!lenis) return
-
-    const disableLenis = LENIS_DISABLED_ROUTE_RE.test(pathname)
-    if (disableLenis) {
-      lenis.stop()
-      // Prevent Lenis from leaving the page in a bad scroll/height state for Google Maps
-      document.documentElement.classList.add('lenis-maps-safe')
-    } else {
-      document.documentElement.classList.remove('lenis-maps-safe')
-      lenis.start()
-      lenis.resize()
-    }
-
-    return () => {
-      document.documentElement.classList.remove('lenis-maps-safe')
-    }
-  }, [lenis, pathname])
-
   return null
 }
 
 export function SmoothScrollProvider({ children }) {
+  const { pathname } = useLocation()
   const prefersReducedMotion =
     typeof window !== 'undefined' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-  if (prefersReducedMotion) {
+  const disableLenis = LENIS_DISABLED_ROUTE_RE.test(pathname)
+
+  useEffect(() => {
+    if (disableLenis) {
+      clearLenisInstance()
+      document.documentElement.classList.remove('lenis', 'lenis-smooth', 'lenis-stopped', 'lenis-maps-safe')
+      document.body.classList.remove('lenis', 'lenis-smooth', 'lenis-stopped')
+    }
+  }, [disableLenis])
+
+  if (prefersReducedMotion || disableLenis) {
     return children
   }
 

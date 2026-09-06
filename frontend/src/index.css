@@ -101,6 +101,7 @@ body.admin-mode {
   max-width: none;
   box-shadow: none;
   background-color: #f8fafc;
+  overflow: auto;
   
   /* Re-enable text selection for admin */
   -webkit-touch-callout: default;
