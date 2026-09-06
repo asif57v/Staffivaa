@@ -8,6 +8,7 @@ import { SystemSettings } from '../models/SystemSettings.js'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
+import { emitToUser } from '../utils/socket.js'
 
 export const createAddMoneyOrder = asyncHandler(async (req, res) => {
   const amount = Number(req.body.amount)
@@ -58,25 +59,23 @@ export const verifyAddMoneyPayment = asyncHandler(async (req, res) => {
   try {
     const generatedBuffer = Buffer.from(expectedSignature, 'hex');
     const providedBuffer = Buffer.from(razorpay_signature, 'hex');
-    if (generatedBuffer.length === providedBuffer.length) {
-      isAuthentic = crypto.timingSafeEqual(generatedBuffer, providedBuffer);
+    if (generatedBuffer.length === providedBuffer.length && crypto.timingSafeEqual(generatedBuffer, providedBuffer)) {
+      isAuthentic = true;
     }
-  } catch (err) {
+  } catch (e) {
     isAuthentic = false;
   }
 
   if (!isAuthentic) {
-    return res.status(400).json({ status: 'fail', message: 'Invalid payment signature' })
+    return res.status(400).json({ status: 'fail', message: 'Payment verification failed: Invalid signature' })
   }
 
-  // Payment is successful, add money to wallet
   const user = await User.findById(req.user._id)
-  
   if (!user) {
     return res.status(404).json({ status: 'fail', message: 'User not found' })
   }
 
-  user.walletBalance = (Number(user.walletBalance) || 0) + Number(amount)
+  user.walletBalance = (user.walletBalance || 0) + Number(amount)
   await user.save()
 
   const transaction = await WalletTransaction.create({
@@ -93,6 +92,13 @@ export const verifyAddMoneyPayment = asyncHandler(async (req, res) => {
     razorpayOrderId: razorpay_order_id,
     razorpayPaymentId: razorpay_payment_id,
   })
+
+  try {
+    emitToUser(user.role || 'labour', user._id.toString(), 'wallet_updated', {
+      walletBalance: user.walletBalance,
+      transaction,
+    })
+  } catch (err) {}
 
   res.status(200).json({
     status: 'success',

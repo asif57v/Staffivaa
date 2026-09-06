@@ -293,8 +293,8 @@ export function LabourHomeScreen({ user }) {
 
   const { data: apiData, refetch } = useGetLabourAssignmentsQuery(undefined)
   const { data: walletApiData } = useGetWalletBalanceQuery(undefined, {
-    pollingInterval: 30000,
-    refetchOnMountOrArgChange: true,
+    pollingInterval: 0,
+    refetchOnMountOrArgChange: false,
   })
   const [respondAssignment] = useRespondAssignmentMutation()
   const apiBuckets = useMemo(

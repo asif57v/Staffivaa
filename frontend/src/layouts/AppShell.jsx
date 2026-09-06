@@ -68,12 +68,12 @@ export function AppShell() {
   const isOnWalletPage = pathname.startsWith('/app/wallet')
   const { data: apiData, refetch: refetchAssignments } = useGetLabourAssignmentsQuery(undefined, {
     skip: !isLabour,
-    refetchOnMountOrArgChange: true,
-    pollingInterval: isLabour ? 15000 : 0,
+    refetchOnMountOrArgChange: false,
+    pollingInterval: 0,
   })
   const { data: walletData } = useGetWalletBalanceQuery(undefined, {
     skip: !isLabour,
-    refetchOnMountOrArgChange: true,
+    refetchOnMountOrArgChange: false,
   })
   const walletPolicy = useMemo(
     () => readLabourWalletPolicy({ assignmentsData: apiData, walletData, user }),
@@ -207,32 +207,6 @@ export function AppShell() {
 
     const socket = connectSocket(user, token);
 
-    const invalidateCache = () => {
-      console.log('[Socket] Invalidating Assignments, Requests, Notifications, and Enterprise Jobs cache');
-      dispatch(workforceApi.util.invalidateTags(['Assignments', 'Requests', 'Notifications']));
-      dispatch(enterpriseApi.util.invalidateTags(['EnterpriseJobs']));
-      refetchAssignments?.();
-    };
-
-    socket.on('connect', () => {
-      console.log('[Socket.io] Connected to server:', socket.id);
-      invalidateCache();
-    });
-
-    socket.on('reconnect', () => {
-      console.log('[Socket.io] Reconnected to server');
-      invalidateCache();
-    });
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[AppShell] App became visible, refreshing assignments cache');
-        invalidateCache();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleVisibilityChange);
-
     const handleAssignmentAssigned = (data) => {
       console.log('[Socket] assignment_assigned event received:', data);
 
@@ -240,14 +214,26 @@ export function AppShell() {
         presentIncomingJobOffer(data);
       }
 
-      invalidateCache();
+      dispatch(workforceApi.util.invalidateTags(['Assignments']));
     };
 
     const handleAssignmentEnded = () => {
       stopGlobalRingSound();
       setIncomingJob(null);
       incomingJobRef.current = null;
-      invalidateCache();
+      dispatch(workforceApi.util.invalidateTags(['Assignments']));
+    };
+
+    const refreshAssignments = () => {
+      dispatch(workforceApi.util.invalidateTags(['Assignments']));
+    };
+
+    const refreshRequests = () => {
+      dispatch(workforceApi.util.invalidateTags(['Requests']));
+    };
+
+    const refreshWallet = () => {
+      dispatch(walletApi.util.invalidateTags(['Wallet']));
     };
 
     socket.on('bookingAcceptedGlobal', (data) => {
@@ -256,18 +242,18 @@ export function AppShell() {
         setIncomingJob(null);
         incomingJobRef.current = null;
       }
-      invalidateCache();
+      refreshAssignments();
     });
 
-    socket.on('assignment_created', invalidateCache);
+    socket.on('assignment_created', refreshAssignments);
     socket.on('assignment_assigned', handleAssignmentAssigned);
-    socket.on('assignment_accepted', invalidateCache);
+    socket.on('assignment_accepted', refreshAssignments);
     socket.on('assignment_rejected', handleAssignmentEnded);
-    socket.on('assignment_completed', invalidateCache);
+    socket.on('assignment_completed', refreshAssignments);
     socket.on('assignment_cancelled', handleAssignmentEnded);
 
-    socket.on('request_created', invalidateCache);
-    socket.on('request_updated', invalidateCache);
+    socket.on('request_created', refreshRequests);
+    socket.on('request_updated', refreshRequests);
     socket.on('request_cancelled', handleAssignmentEnded);
 
     const handleNewNotif = (notification) => {
@@ -276,7 +262,6 @@ export function AppShell() {
         scheduleIncomingJobFromNotification(notification.relatedId);
       }
 
-      // Ring sound is handled exclusively by assignment_assigned and incomingJob popup state.
       // Show in-app alert toast for all notifications
       dispatchAlert(notification.title || 'New Notification', notification.body || notification.message || '', false);
 
@@ -288,9 +273,10 @@ export function AppShell() {
         notification?.type === 'SALARY_RELEASED' ||
         notification?.type === 'WITHDRAWAL_APPROVED' ||
         notification?.type === 'WITHDRAWAL_ON_HOLD' ||
-        notification?.type === 'WITHDRAWAL_REJECTED'
+        notification?.type === 'WITHDRAWAL_REJECTED' ||
+        notification?.type === 'WALLET_CREDITED'
       ) {
-        dispatch(walletApi.util.invalidateTags(['Wallet']));
+        refreshWallet();
       }
 
       // Refresh user object (balance, status etc)
@@ -303,12 +289,13 @@ export function AppShell() {
       const body = data?.notification?.body || 'Your account status or verification has been updated by Admin.';
       dispatchAlert(title, body, statusStr !== 'approved' && statusStr !== 'active');
       refreshAppUser();
-      invalidateCache();
+      refreshAssignments();
     };
 
     socket.on('notification:new', handleNewNotif);
     socket.on('kyc:updated', handleKycUpdate);
-    socket.on('dashboard:updated', invalidateCache);
+    socket.on('wallet_updated', refreshWallet);
+    socket.on('wallet:updated', refreshWallet);
 
     const handleWorkerFullCancel = (payload = {}) => {
       if (user?.role !== USER_ROLES.INDIVIDUAL) return
@@ -328,7 +315,8 @@ export function AppShell() {
         requestId: payload.requestId,
         ref: payload.reference,
       })
-      invalidateCache()
+      refreshRequests()
+      refreshAssignments()
     }
 
     const handleBookingCancelled = (payload = {}) => {
@@ -344,7 +332,7 @@ export function AppShell() {
         reason: payload.cancelReason || payload.reason || 'cancelled',
       })
       cancelActiveLiveBookings(payload.cancelReason || payload.reason || 'cancelled')
-      invalidateCache()
+      refreshRequests()
     }
 
     const handleLabourCancelled = (payload = {}) => {
@@ -354,7 +342,7 @@ export function AppShell() {
         return
       }
       // Paid re-search path — keep booking alive; tracking screen handles UX
-      invalidateCache()
+      refreshRequests()
     }
 
     const handleBookingExpired = (payload = {}) => {
@@ -365,7 +353,7 @@ export function AppShell() {
         reason: 'search_expired',
       })
       cancelActiveLiveBookings('search_expired')
-      invalidateCache()
+      refreshRequests()
     }
 
     socket.on('booking_cancelled', handleBookingCancelled)
@@ -373,30 +361,27 @@ export function AppShell() {
     socket.on('bookingExpired', handleBookingExpired)
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleVisibilityChange);
       stopGlobalRingSound();
-      socket.off('connect');
-      socket.off('reconnect');
-      socket.off('assignment_created', invalidateCache);
+      socket.off('assignment_created', refreshAssignments);
       socket.off('assignment_assigned', handleAssignmentAssigned);
-      socket.off('assignment_accepted', invalidateCache);
+      socket.off('assignment_accepted', refreshAssignments);
       socket.off('assignment_rejected', handleAssignmentEnded);
-      socket.off('assignment_completed', invalidateCache);
+      socket.off('assignment_completed', refreshAssignments);
       socket.off('assignment_cancelled', handleAssignmentEnded);
 
-      socket.off('request_created', invalidateCache);
-      socket.off('request_updated', invalidateCache);
+      socket.off('request_created', refreshRequests);
+      socket.off('request_updated', refreshRequests);
       socket.off('request_cancelled', handleAssignmentEnded);
       socket.off('notification:new', handleNewNotif);
       socket.off('kyc:updated', handleKycUpdate);
-      socket.off('dashboard:updated', invalidateCache);
+      socket.off('wallet_updated', refreshWallet);
+      socket.off('wallet:updated', refreshWallet);
       socket.off('bookingAcceptedGlobal');
       socket.off('booking_cancelled', handleBookingCancelled);
       socket.off('bookingCancelledByLabour', handleLabourCancelled);
       socket.off('bookingExpired', handleBookingExpired);
     };
-  }, [user, token, dispatch, presentIncomingJobOffer, scheduleIncomingJobFromNotification, dispatchAlert, refreshAppUser, stopGlobalRingSound, refetchAssignments]);
+  }, [user, token, dispatch, presentIncomingJobOffer, scheduleIncomingJobFromNotification, dispatchAlert, refreshAppUser, stopGlobalRingSound]);
   // ------------------------------------------
 
   // --- Auto-resync pending job offer card from API data (handles background kill / app restart) ---

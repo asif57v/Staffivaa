@@ -50,11 +50,11 @@ export function AppJobsPage() {
   const [tab, setTab] = useState(initialTab)
   const [localDemo, setLocalDemo] = useState(() => loadJobDemoState())
   const { data: apiData, error: apiError, refetch } = useGetLabourAssignmentsQuery(undefined, {
-    pollingInterval: 8000,
-    refetchOnMountOrArgChange: true,
+    pollingInterval: 0,
+    refetchOnMountOrArgChange: false,
   })
   const { data: walletData } = useGetWalletBalanceQuery(undefined, {
-    refetchOnMountOrArgChange: true,
+    refetchOnMountOrArgChange: false,
   })
   const [respondAssignment] = useRespondAssignmentMutation()
   const [checkIn] = useCheckInMutation()
