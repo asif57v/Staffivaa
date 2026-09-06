@@ -2,10 +2,44 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { MapPin, User, Clock, IndianRupee, Briefcase, X, CheckCircle2 } from 'lucide-react'
+import { readAppUserLocation } from '../../../lib/appUserLocationStorage.js'
 import './IncomingJobPopup.css'
 
 const CIRCLE_RADIUS = 54
 const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * CIRCLE_RADIUS
+
+function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null
+  const numLat1 = Number(lat1)
+  const numLon1 = Number(lon1)
+  const numLat2 = Number(lat2)
+  const numLon2 = Number(lon2)
+  if (!Number.isFinite(numLat1) || !Number.isFinite(numLon1) || !Number.isFinite(numLat2) || !Number.isFinite(numLon2)) {
+    return null
+  }
+
+  const R = 6371e3 // metres
+  const φ1 = (numLat1 * Math.PI) / 180
+  const φ2 = (numLat2 * Math.PI) / 180
+  const Δφ = ((numLat2 - numLat1) * Math.PI) / 180
+  const Δλ = ((numLon2 - numLon1) * Math.PI) / 180
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+
+  return R * c
+}
+
+function formatDistance(meters) {
+  if (meters == null || isNaN(meters)) return ''
+  if (meters < 1000) {
+    return `${Math.round(meters)} m`
+  }
+  const km = meters / 1000
+  return `${km < 10 ? km.toFixed(1) : Math.round(km)} km`
+}
 
 export function IncomingJobPopup({
   job,
@@ -22,6 +56,63 @@ export function IncomingJobPopup({
   const audioRef = useRef(null)
   const timerRef = useRef(null)
   const jobIdRef = useRef(job?.assignmentId)
+
+  const [distanceMeters, setDistanceMeters] = useState(() => {
+    if (job?.distanceKm != null && Number.isFinite(Number(job.distanceKm))) {
+      return Number(job.distanceKm) * 1000
+    }
+    if (job?.distance != null && Number.isFinite(Number(job.distance))) {
+      return Number(job.distance)
+    }
+    const savedLoc = readAppUserLocation()
+    if (savedLoc?.lat != null && savedLoc?.lng != null && job?.locationLat != null && job?.locationLng != null) {
+      return calculateDistanceMeters(savedLoc.lat, savedLoc.lng, job.locationLat, job.locationLng)
+    }
+    return null
+  })
+
+  // Watch / get high-accuracy live GPS location for real-time distance
+  useEffect(() => {
+    // Re-initialize if job changes
+    if (job?.distanceKm != null && Number.isFinite(Number(job.distanceKm))) {
+      setDistanceMeters(Number(job.distanceKm) * 1000)
+    } else if (job?.distance != null && Number.isFinite(Number(job.distance))) {
+      setDistanceMeters(Number(job.distance))
+    } else {
+      const savedLoc = readAppUserLocation()
+      if (savedLoc?.lat != null && savedLoc?.lng != null && job?.locationLat != null && job?.locationLng != null) {
+        setDistanceMeters(calculateDistanceMeters(savedLoc.lat, savedLoc.lng, job.locationLat, job.locationLng))
+      }
+    }
+
+    if (!navigator?.geolocation || job?.locationLat == null || job?.locationLng == null) return
+
+    let isMounted = true
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (!isMounted) return
+        const d = calculateDistanceMeters(
+          pos.coords.latitude,
+          pos.coords.longitude,
+          job.locationLat,
+          job.locationLng
+        )
+        if (d != null) {
+          setDistanceMeters(d)
+        }
+      },
+      (err) => {
+        console.warn('[IncomingJobPopup] Geolocation error:', err?.message)
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
+    )
+
+    return () => {
+      isMounted = false
+    }
+  }, [job?.assignmentId, job?.locationLat, job?.locationLng, job?.distanceKm, job?.distance])
+
+  const distanceDisplay = formatDistance(distanceMeters)
 
   // Reset timer + animation whenever a new job offer arrives
   useEffect(() => {
@@ -260,8 +351,15 @@ export function IncomingJobPopup({
                   <MapPin className="h-4 w-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Location</p>
-                  <p className="text-xs font-semibold text-slate-700 leading-relaxed break-words">{job.locationText}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Location</p>
+                    {distanceDisplay && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100/80 px-2 py-0.5 text-[10px] font-extrabold text-emerald-800 ring-1 ring-emerald-600/20">
+                        {distanceDisplay} away
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs font-semibold text-slate-700 leading-relaxed break-words mt-0.5">{job.locationText}</p>
                 </div>
               </div>
             )}

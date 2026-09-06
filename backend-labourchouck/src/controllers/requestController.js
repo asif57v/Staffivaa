@@ -346,12 +346,38 @@ export const createRequest = asyncHandler(async (req, res) => {
       await Promise.all(
         createdAssignments.map(async (assignment) => {
           try {
+            const worker = matchingWorkers.find((w) => String(w._id) === String(assignment.labourId))
+            let workerDistanceKm = null
+            if (
+              worker?.labourProfile?.locationLat != null &&
+              worker?.labourProfile?.locationLng != null &&
+              request.locationLat != null &&
+              request.locationLng != null
+            ) {
+              const R = 6371
+              const dLat = (worker.labourProfile.locationLat - request.locationLat) * (Math.PI / 180)
+              const dLon = (worker.labourProfile.locationLng - request.locationLng) * (Math.PI / 180)
+              const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(request.locationLat * (Math.PI / 180)) *
+                  Math.cos(worker.labourProfile.locationLat * (Math.PI / 180)) *
+                  Math.sin(dLon / 2) *
+                  Math.sin(dLon / 2)
+              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+              workerDistanceKm = Math.round(R * c * 10) / 10
+            }
+
+            const effectiveDistanceKm = workerDistanceKm != null ? workerDistanceKm : request.distanceKm
+
             emitToUser('labour', assignment.labourId.toString(), 'assignment_assigned', {
               assignmentId: assignment._id.toString(),
               type: 'new_order',
               requestId: request._id.toString(),
               clientName: user.fullName || 'Customer',
               locationText: request.locationText || '',
+              locationLat: request.locationLat,
+              locationLng: request.locationLng,
+              distanceKm: effectiveDistanceKm,
               categoryName: category?.name || 'Worker',
               perDayRate: baseRate,
               startDate: request.startDate,
@@ -373,6 +399,9 @@ export const createRequest = asyncHandler(async (req, res) => {
               fcmExtra: {
                 clientName: user.fullName || 'Customer',
                 locationText: request.locationText || '',
+                locationLat: request.locationLat != null ? String(request.locationLat) : '',
+                locationLng: request.locationLng != null ? String(request.locationLng) : '',
+                distanceKm: effectiveDistanceKm != null ? String(effectiveDistanceKm) : '',
                 categoryName: category?.name || 'Worker',
                 perDayRate: String(baseRate),
                 timeoutSeconds: '60',
