@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Autocomplete, useLoadScript } from '@react-google-maps/api'
 import { motion, useReducedMotion } from 'framer-motion'
@@ -132,6 +132,9 @@ export function IndividualBookingFlowPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [activeOffers, setActiveOffers] = useState([])
   const [categoriesList, setCategoriesList] = useState([])
+
+  const isSubmittingRef = useRef(false)
+  const lastSubmitTimeRef = useRef(0)
 
   useEffect(() => {
     const loadCategories = async () => {
@@ -660,28 +663,34 @@ export function IndividualBookingFlowPage() {
   }
 
   const confirmBooking = async () => {
-    if (isGenerating) return
+    const now = Date.now()
+    // Debounce & single-flight guard: prevent duplicate requests if already submitting or triggered within 2.5s
+    if (isSubmittingRef.current || isGenerating || now - lastSubmitTimeRef.current < 2500) {
+      return
+    }
+
+    if (!validateDetails()) {
+      return
+    }
+
+    isSubmittingRef.current = true
+    lastSubmitTimeRef.current = now
     setIsGenerating(true)
-    setTimeout(() => setIsGenerating(false), 3000)
+    setFormError('')
 
-    if (!validateDetails()) return
-    writeAppUserLocation({ address: draft.address.trim(), lat: draft.lat, lng: draft.lng })
-    const payload = bookingPayloadFromDraft({
-      ...draft,
-      imageNames: imageFiles.map((f) => f.name),
-    })
-    const record = createIndividualBookingRecord(payload, pricingData?.pricing)
-    record.assignedWorker = null
-    record.status = 'searching'
-    record.jobTimelineStep = 'searching'
-    record.etaMinutes = null
-
-
-    const stored = loadIndividualBookings()
-    saveIndividualBookings([record, ...stored])
-
-    let apiRequestId = null
     try {
+      writeAppUserLocation({ address: draft.address.trim(), lat: draft.lat, lng: draft.lng })
+      const payload = bookingPayloadFromDraft({
+        ...draft,
+        imageNames: imageFiles.map((f) => f.name),
+      })
+      const record = createIndividualBookingRecord(payload, pricingData?.pricing)
+      record.assignedWorker = null
+      record.status = 'searching'
+      record.jobTimelineStep = 'searching'
+      record.etaMinutes = null
+
+      let apiRequestId = null
       const res = await createRequest({
         lines: [{ categoryId: draft.categoryId, quantity: draft.workers || 1 }],
         startDate: draft.bookingType === 'scheduled' && draft.serviceDate ? draft.serviceDate : new Date().toISOString().slice(0, 10),
@@ -693,31 +702,40 @@ export function IndividualBookingFlowPage() {
         scheduleType: 'daily',
       }).unwrap()
       console.log('[Homeowner] createRequest response:', res)
+
       if (res?.request?._id) {
         apiRequestId = res.request._id
         record.requestId = apiRequestId
+        const stored = loadIndividualBookings()
         saveIndividualBookings([record, ...stored])
         console.log('[Homeowner] requestId saved:', apiRequestId)
       } else {
         console.error('[Homeowner] createRequest response missing request._id:', res)
         setFormError('Failed to parse backend response. Missing request ID.')
+        setIsGenerating(false)
+        isSubmittingRef.current = false
         return
       }
+
+      console.log('[Homeowner] Setting activeBooking with requestId:', record.requestId, 'record:', record)
+      setActiveBooking(record)
+      patchBookingDraft({ lastRef: record.ref })
+
+      navigate(buildBookingFlowPath('searching', {
+        categoryId: draft.categoryId || categoryIdParam,
+        groupId: draft.groupId || groupIdParam,
+        ref: record.ref,
+      }), { replace: true })
     } catch (err) {
       console.error('[Homeowner] createRequest FAILED:', err)
       setFormError(err?.data?.message || err?.message || 'Backend API failed. Are you logged in as a homeowner?')
-      return
+      setIsGenerating(false)
+      isSubmittingRef.current = false
+    } finally {
+      setTimeout(() => {
+        isSubmittingRef.current = false
+      }, 1500)
     }
-
-    console.log('[Homeowner] Setting activeBooking with requestId:', record.requestId, 'record:', record)
-    setActiveBooking(record)
-    patchBookingDraft({ lastRef: record.ref })
-
-    navigate(buildBookingFlowPath('searching', {
-      categoryId: draft.categoryId || categoryIdParam,
-      groupId: draft.groupId || groupIdParam,
-      ref: record.ref,
-    }), { replace: true })
   }
 
   const simulateAccept = useCallback(() => {
@@ -826,8 +844,16 @@ export function IndividualBookingFlowPage() {
           <p className="mt-4 text-base font-bold text-slate-900">Booking Expired</p>
           <p className="mt-2 text-sm text-slate-600">No labour was able to accept your request within the 3-minute window. This can happen during peak hours.</p>
           <motion.div layout className="mt-8 flex flex-col gap-3">
-            <AppPrimaryButton type="button" onClick={() => { setNoMatch(false); confirmBooking() }}>
-              Book Again
+            <AppPrimaryButton
+              type="button"
+              disabled={isGenerating}
+              loading={isGenerating}
+              onClick={() => {
+                setNoMatch(false)
+                confirmBooking()
+              }}
+            >
+              {isGenerating ? 'Processing...' : 'Book Again'}
             </AppPrimaryButton>
             <AppButton type="button" variant="secondary" onClick={() => navigate('/app/discover/labours')}>
               Browse Available Workers
@@ -1166,10 +1192,22 @@ export function IndividualBookingFlowPage() {
           </GlassPanel>
 
           <div className="flex gap-2">
-            <AppButton type="button" variant="secondary" className="flex-1" onClick={() => goStep('details')}>
+            <AppButton
+              type="button"
+              variant="secondary"
+              className="flex-1"
+              disabled={isGenerating}
+              onClick={() => goStep('details')}
+            >
               Edit details
             </AppButton>
-            <AppPrimaryButton type="button" className="flex-1 py-3.5" disabled={isGenerating} onClick={confirmBooking}>
+            <AppPrimaryButton
+              type="button"
+              className="flex-1 py-3.5"
+              disabled={isGenerating}
+              loading={isGenerating}
+              onClick={confirmBooking}
+            >
               {isGenerating ? 'Processing...' : 'Request Booking'}
               {!isGenerating && <CheckCircle2 className="h-4 w-4 ml-1 inline" aria-hidden />}
             </AppPrimaryButton>

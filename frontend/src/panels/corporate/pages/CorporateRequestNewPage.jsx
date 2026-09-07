@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { 
   ArrowLeft, Plus, Trash2, Navigation, ChevronDown, 
@@ -53,6 +53,8 @@ export function CorporateRequestNewPage() {
   const [vendorSearchRadius, setVendorSearchRadius] = useState('')
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState([emptyLine()])
+  const isSubmittingRef = useRef(false)
+  const lastSubmitTimeRef = useRef(0)
   const [categories, setCategories] = useState([])
   const [error, setError] = useState('')
   const [autocomplete, setAutocomplete] = useState(null)
@@ -173,6 +175,11 @@ export function CorporateRequestNewPage() {
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault()
+    const now = Date.now()
+    if (isSubmittingRef.current || isLoading || now - lastSubmitTimeRef.current < 2500) {
+      return
+    }
+
     setError('')
 
     if (user?.accountStatus && user.accountStatus !== 'active') {
@@ -214,6 +221,9 @@ export function CorporateRequestNewPage() {
       return
     }
 
+    isSubmittingRef.current = true
+    lastSubmitTimeRef.current = now
+
     try {
       await createRequest({
         projectId: projectId && projectId !== 'none' ? projectId : undefined,
@@ -236,6 +246,11 @@ export function CorporateRequestNewPage() {
       navigate('/corporate/requests')
     } catch (err) {
       setError(err?.data?.message || err?.message || 'Could not create request')
+      isSubmittingRef.current = false
+    } finally {
+      setTimeout(() => {
+        isSubmittingRef.current = false
+      }, 1500)
     }
   }
 
