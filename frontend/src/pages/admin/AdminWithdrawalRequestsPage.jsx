@@ -368,16 +368,16 @@ export function AdminWithdrawalRequestsPage() {
                             {details.kycStatus || 'Pending'}
                           </span>
                         </div>
-                        {details.kycDetails?.aadhaarMasked && (
+                        {(details.kycDetails?.aadhaarNumber || details.kycDetails?.aadhaarMasked) && (
                           <div className="flex justify-between">
-                            <span className="text-slate-500 font-medium">Aadhaar Masked:</span>
-                            <span className="font-mono font-bold text-slate-800">{details.kycDetails.aadhaarMasked}</span>
+                            <span className="text-slate-500 font-medium">Aadhaar (Full):</span>
+                            <span className="font-mono font-bold text-slate-800">{details.kycDetails.aadhaarNumber || details.kycDetails.aadhaarMasked}</span>
                           </div>
                         )}
-                        {details.kycDetails?.panMasked && (
+                        {(details.kycDetails?.panNumber || details.kycDetails?.panMasked) && (
                           <div className="flex justify-between">
-                            <span className="text-slate-500 font-medium">PAN Masked:</span>
-                            <span className="font-mono font-bold text-slate-800">{details.kycDetails.panMasked}</span>
+                            <span className="text-slate-500 font-medium">PAN (Full):</span>
+                            <span className="font-mono font-bold text-slate-800">{details.kycDetails.panNumber || details.kycDetails.panMasked}</span>
                           </div>
                         )}
                       </div>

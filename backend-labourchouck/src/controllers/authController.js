@@ -141,7 +141,18 @@ export const registerVerify = asyncHandler(async (req, res) => {
     doc.contractorProfile = { businessName, verificationStatus: 'pending' }
   }
   if (role === USER_ROLES.LABOUR) {
-    doc.labourProfile = {}
+    const rawAadhaar = (req.body.aadhaar || req.body.aadhaarNumber || '').toString().replace(/\D/g, '').slice(0, 12)
+    const rawPan = (req.body.pan || req.body.panNumber || '').toString().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)
+    doc.labourProfile = {
+      ...(rawAadhaar ? {
+        aadhaarNumber: rawAadhaar,
+        aadhaarMasked: `XXXX XXXX ${rawAadhaar.slice(-4)}`,
+      } : {}),
+      ...(rawPan ? {
+        panNumber: rawPan,
+        panMasked: `${rawPan.slice(0, 5)} XXXX ${rawPan.slice(-1)}`,
+      } : {}),
+    }
   }
 
   let user

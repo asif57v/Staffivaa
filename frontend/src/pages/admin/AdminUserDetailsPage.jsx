@@ -434,8 +434,13 @@ export function AdminUserDetailsPage() {
 
                   {user.corporateProfile && (
                     <GlassPanel className="p-6">
-                      <h2 className="mb-5 text-sm font-bold uppercase tracking-wide text-slate-400">Corporate Registration</h2>
-                      <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="mb-5 flex items-center justify-between">
+                        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-400">Corporate Registration</h2>
+                        <span className="inline-flex rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-slate-700">
+                          Status: {user.corporateProfile.status || 'pending'}
+                        </span>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
                           <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Company Name</p>
                           <p className="mt-1 text-base font-bold text-slate-900">{user.corporateProfile.companyName || '—'}</p>
@@ -444,11 +449,119 @@ export function AdminUserDetailsPage() {
                           <p className="text-xs font-bold uppercase tracking-wider text-slate-500">GST Number</p>
                           <p className="mt-1 font-mono text-base font-medium text-slate-900">{user.corporateProfile.gstNumber || '—'}</p>
                         </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">PAN Number</p>
+                          <p className="mt-1 font-mono text-base font-medium text-slate-900">{user.corporateProfile.panNumber || '—'}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">CIN Number</p>
+                          <p className="mt-1 font-mono text-base font-medium text-slate-900">{user.corporateProfile.cinNumber || '—'}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Contact Person</p>
+                          <p className="mt-1 text-base font-medium text-slate-900">{user.corporateProfile.contactPersonName || '—'}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Contact Email</p>
+                          <p className="mt-1 text-base font-medium text-slate-900">{user.corporateProfile.contactEmail || '—'}</p>
+                        </div>
                       </div>
+                      {user.corporateProfile.registeredAddress && (
+                        <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Registered Address</p>
+                          <p className="mt-1 text-sm text-slate-800">{user.corporateProfile.registeredAddress}, {user.corporateProfile.city}, {user.corporateProfile.state} - {user.corporateProfile.pincode}</p>
+                        </div>
+                      )}
                     </GlassPanel>
                   )}
 
-                  {!user.labourProfile && !user.corporateProfile && !user.contractorProfile && (
+                  {user.enterpriseProfile && (
+                    <GlassPanel className="p-6">
+                      <div className="mb-5 flex items-center justify-between">
+                        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-400">Enterprise Registration</h2>
+                        <span className="inline-flex rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-slate-700">
+                          Status: {user.enterpriseProfile.status || 'pending'}
+                        </span>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Company Name</p>
+                          <p className="mt-1 text-base font-bold text-slate-900">{user.enterpriseProfile.companyName || '—'}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Company Type</p>
+                          <p className="mt-1 text-base font-medium text-slate-900">{user.enterpriseProfile.companyType || '—'}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">GST Number</p>
+                          <p className="mt-1 font-mono text-base font-medium text-slate-900">{user.enterpriseProfile.gstNumber || '—'}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">PAN Number</p>
+                          <p className="mt-1 font-mono text-base font-medium text-slate-900">{user.enterpriseProfile.panNumber || '—'}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">CIN Number</p>
+                          <p className="mt-1 font-mono text-base font-medium text-slate-900">{user.enterpriseProfile.cinNumber || '—'}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Contact Person</p>
+                          <p className="mt-1 text-base font-medium text-slate-900">{user.enterpriseProfile.contactPersonName || '—'}</p>
+                        </div>
+                      </div>
+                      {user.enterpriseProfile.registeredAddress && (
+                        <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Registered Address</p>
+                          <p className="mt-1 text-sm text-slate-800">{user.enterpriseProfile.registeredAddress}, {user.enterpriseProfile.city}, {user.enterpriseProfile.state} - {user.enterpriseProfile.pincode}</p>
+                        </div>
+                      )}
+                    </GlassPanel>
+                  )}
+
+                  {user.contractorProfile && (
+                    <GlassPanel className="p-6">
+                      <div className="mb-5 flex items-center justify-between">
+                        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-400">Contractor / Vendor Profile</h2>
+                        <span className="inline-flex rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-slate-700">
+                          Verification: {user.contractorProfile.verificationStatus || 'pending'}
+                        </span>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Business Name</p>
+                          <p className="mt-1 text-base font-bold text-slate-900">{user.contractorProfile.businessName || '—'}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Vendor Type</p>
+                          <p className="mt-1 text-base font-medium text-slate-900">{user.contractorProfile.vendorType || '—'}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">GST Number</p>
+                          <p className="mt-1 font-mono text-base font-medium text-slate-900">{user.contractorProfile.gstNumber || '—'}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">PAN Number</p>
+                          <p className="mt-1 font-mono text-base font-medium text-slate-900">{user.contractorProfile.panNumber || '—'}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Contact Person</p>
+                          <p className="mt-1 text-base font-medium text-slate-900">{user.contractorProfile.contactPersonName || '—'}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Contact Phone / Email</p>
+                          <p className="mt-1 text-sm font-medium text-slate-900">{user.contractorProfile.contactPhone ? `+91 ${user.contractorProfile.contactPhone}` : '—'} {user.contractorProfile.contactEmail ? `(${user.contractorProfile.contactEmail})` : ''}</p>
+                        </div>
+                      </div>
+                      {user.contractorProfile.businessAddress && (
+                        <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Business Address</p>
+                          <p className="mt-1 text-sm text-slate-800">{user.contractorProfile.businessAddress}, {user.contractorProfile.city}, {user.contractorProfile.state} - {user.contractorProfile.pincode}</p>
+                        </div>
+                      )}
+                    </GlassPanel>
+                  )}
+
+                  {!user.labourProfile && !user.corporateProfile && !user.enterpriseProfile && !user.contractorProfile && (
                     <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center">
                       <ShieldCheck className="mx-auto h-12 w-12 text-slate-300" />
                       <p className="mt-3 text-sm font-medium text-slate-500">No specific role details available for this user type.</p>

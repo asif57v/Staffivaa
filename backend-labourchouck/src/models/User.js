@@ -86,9 +86,9 @@ const labourProfileSchema = new mongoose.Schema(
       default: KYC_STATUS.PENDING,
     },
     aadhaarMasked: String,
-    aadhaarNumber: { type: String, select: false },
+    aadhaarNumber: { type: String, trim: true },
     panMasked: String,
-    panNumber: { type: String, select: false },
+    panNumber: { type: String, trim: true, uppercase: true },
     /** When worker submitted Aadhaar/PAN video KYC for admin review */
     kycSubmittedAt: Date,
     /** Cloudinary video URL for manual Aadhaar + PAN review */

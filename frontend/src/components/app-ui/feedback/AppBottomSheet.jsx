@@ -9,9 +9,12 @@ export function AppBottomSheetBackdrop({ onClose }) {
   return (
     <button
       type="button"
-      className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm cursor-pointer"
+      className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm cursor-pointer touch-none"
       aria-label="Close"
       onClick={onClose}
+      onTouchMove={(e) => {
+        if (e.cancelable) e.preventDefault()
+      }}
     />
   )
 }

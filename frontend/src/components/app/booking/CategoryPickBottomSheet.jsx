@@ -23,9 +23,7 @@ export function CategoryPickBottomSheet({ open, onClose, tradeGroups = [], group
   useEffect(() => {
     if (!open) return
     const prevOverflow = document.body.style.overflow
-    const prevTouchAction = document.body.style.touchAction
     document.body.style.overflow = 'hidden'
-    document.body.style.touchAction = 'none'
 
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') onClose?.()
@@ -34,7 +32,6 @@ export function CategoryPickBottomSheet({ open, onClose, tradeGroups = [], group
 
     return () => {
       document.body.style.overflow = prevOverflow
-      document.body.style.touchAction = prevTouchAction
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [open, onClose])
@@ -120,7 +117,9 @@ export function CategoryPickBottomSheet({ open, onClose, tradeGroups = [], group
             role="dialog"
             aria-modal="true"
             aria-labelledby="category-pick-title"
-            className="relative z-10 flex h-[85dvh] max-h-[720px] w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] border border-slate-200/90 bg-white shadow-2xl sm:h-[80vh] sm:rounded-3xl"
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            className="relative z-10 flex h-[85dvh] max-h-[720px] w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] border border-slate-200/90 bg-white shadow-2xl sm:h-[80vh] sm:rounded-3xl touch-auto"
             initial={reduce ? false : { y: '100%' }}
             animate={{ y: 0 }}
             exit={reduce ? undefined : { y: '100%' }}
@@ -152,11 +151,11 @@ export function CategoryPickBottomSheet({ open, onClose, tradeGroups = [], group
             </div>
 
             {/* Scrollable Content Body */}
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 [-webkit-overflow-scrolling:touch] space-y-4">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-3 [-webkit-overflow-scrolling:touch] space-y-4 touch-pan-y">
               {/* Main Categories Row */}
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Main category</p>
-                <div className="-mx-4 px-4 overflow-x-auto overscroll-x-contain pb-2 scrollbar-none [touch-action:pan-x] [-webkit-overflow-scrolling:touch]">
+                <div className="-mx-4 px-4 overflow-x-auto overscroll-x-contain pb-2 scrollbar-none [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
                   <div className="flex gap-2.5 w-max">
                     <button
                       type="button"

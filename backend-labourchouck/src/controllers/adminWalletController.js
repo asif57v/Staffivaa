@@ -299,7 +299,9 @@ export const getWithdrawalDetailsById = asyncHandler(async (req, res) => {
       upiDetails: withdrawal.upiDetails || worker.upiDetails || null,
       kycStatus: worker.labourProfile?.kycStatus || 'pending',
       kycDetails: {
+        aadhaarNumber: worker.labourProfile?.aadhaarNumber || worker.labourProfile?.aadhaarMasked,
         aadhaarMasked: worker.labourProfile?.aadhaarMasked,
+        panNumber: worker.labourProfile?.panNumber || worker.labourProfile?.panMasked,
         panMasked: worker.labourProfile?.panMasked,
         kycVideoUrl: worker.labourProfile?.kycVideoUrl,
         kycFrontImageUrl: worker.labourProfile?.kycFrontImageUrl,
