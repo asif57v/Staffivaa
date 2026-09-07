@@ -464,7 +464,6 @@ export const listUsers = asyncHandler(async (req, res) => {
 
   const [items, total] = await Promise.all([
     User.find(q)
-      .select('-passwordHash +labourProfile.aadhaarNumber +labourProfile.panNumber')
       .populate({ path: 'labourProfile.categoryIds', select: 'name slug isActive' })
       .sort({ lastLoginAt: -1, createdAt: -1 })
       .skip(skip)
@@ -496,7 +495,6 @@ export const listUsers = asyncHandler(async (req, res) => {
 /** Admin: get one user (includes KYC document data URLs for review) */
 export const getUserById = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id)
-    .select('+labourProfile.aadhaarNumber +labourProfile.panNumber')
     .populate({ path: 'adminNotes.addedBy', select: 'fullName email profileImageUrl role' })
   if (!user) {
     return sendError(res, { message: 'User not found', statusCode: HTTP_STATUS.NOT_FOUND, code: 'NOT_FOUND' })

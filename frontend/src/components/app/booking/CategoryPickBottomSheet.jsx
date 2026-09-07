@@ -7,6 +7,7 @@ import { AppBottomSheetBackdrop } from '../../app-ui/feedback/AppBottomSheet.jsx
 import { getCategoryImageUrl } from '../../../lib/labourCategoryDisplay.js'
 import { buildBookingFlowPath } from '../../../lib/bookingFlowNavigation.js'
 import { readBookingDraft, writeBookingDraft } from '../../../lib/individualBookingDraft.js'
+import { getLenisInstance } from '../../../lib/lenisController.js'
 
 const GROUP_ICONS = [HardHat, Wrench, PaintRoller, Hammer, Sparkles]
 
@@ -19,11 +20,38 @@ export function CategoryPickBottomSheet({ open, onClose, tradeGroups = [], group
   const [groupId, setGroupId] = useState(null)
   const [categoryId, setCategoryId] = useState(null)
 
-  // Body scroll lock while bottom sheet is open
+  // Lock background page + Lenis while bottom sheet is open
   useEffect(() => {
     if (!open) return
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+
+    const html = document.documentElement
+    const body = document.body
+    const scrollY = window.scrollY || window.pageYOffset || 0
+
+    const prev = {
+      htmlOverflow: html.style.overflow,
+      htmlOverscroll: html.style.overscrollBehavior,
+      bodyOverflow: body.style.overflow,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyLeft: body.style.left,
+      bodyRight: body.style.right,
+      bodyWidth: body.style.width,
+      bodyOverscroll: body.style.overscrollBehavior,
+    }
+
+    html.style.overflow = 'hidden'
+    html.style.overscrollBehavior = 'none'
+    body.style.overflow = 'hidden'
+    body.style.overscrollBehavior = 'none'
+    body.style.position = 'fixed'
+    body.style.top = `-${scrollY}px`
+    body.style.left = '0'
+    body.style.right = '0'
+    body.style.width = '100%'
+
+    const lenis = getLenisInstance()
+    lenis?.stop?.()
 
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') onClose?.()
@@ -31,7 +59,18 @@ export function CategoryPickBottomSheet({ open, onClose, tradeGroups = [], group
     window.addEventListener('keydown', handleKeyDown)
 
     return () => {
-      document.body.style.overflow = prevOverflow
+      html.style.overflow = prev.htmlOverflow
+      html.style.overscrollBehavior = prev.htmlOverscroll
+      body.style.overflow = prev.bodyOverflow
+      body.style.position = prev.bodyPosition
+      body.style.top = prev.bodyTop
+      body.style.left = prev.bodyLeft
+      body.style.right = prev.bodyRight
+      body.style.width = prev.bodyWidth
+      body.style.overscrollBehavior = prev.bodyOverscroll
+
+      lenis?.start?.()
+      window.scrollTo(0, scrollY)
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [open, onClose])
@@ -109,8 +148,20 @@ export function CategoryPickBottomSheet({ open, onClose, tradeGroups = [], group
       {open ? (
         <div
           key="category-pick-container"
-          className="fixed inset-0 z-[200] flex items-end justify-center sm:items-center sm:p-4"
+          className="fixed inset-0 z-[200] flex items-end justify-center overflow-hidden overscroll-none sm:items-center sm:p-4"
           role="presentation"
+          data-lenis-prevent
+          data-lenis-prevent-touch
+          onTouchMove={(e) => {
+            // Keep page behind locked; allow scroll only inside designated modal scroll areas
+            const target = e.target
+            if (!(target instanceof Element)) {
+              if (e.cancelable) e.preventDefault()
+              return
+            }
+            const inModalScroll = target.closest('[data-modal-scroll]')
+            if (!inModalScroll && e.cancelable) e.preventDefault()
+          }}
         >
           <AppBottomSheetBackdrop onClose={onClose} />
           <motion.div
@@ -118,14 +169,13 @@ export function CategoryPickBottomSheet({ open, onClose, tradeGroups = [], group
             aria-modal="true"
             aria-labelledby="category-pick-title"
             onClick={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-            className="relative z-10 flex h-[85dvh] max-h-[720px] w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] border border-slate-200/90 bg-white shadow-2xl sm:h-[80vh] sm:rounded-3xl touch-auto"
+            className="relative z-10 flex h-[85dvh] max-h-[720px] w-full max-w-md flex-col overflow-hidden rounded-t-[1.75rem] border border-slate-200/90 bg-white shadow-2xl sm:h-[80vh] sm:rounded-3xl"
             initial={reduce ? false : { y: '100%' }}
             animate={{ y: 0 }}
             exit={reduce ? undefined : { y: '100%' }}
             transition={reduce ? { duration: 0.2 } : { type: 'spring', damping: 28, stiffness: 300 }}
           >
-            {/* Header */}
+            {/* Header — non-scrolling */}
             <div className="border-b border-slate-100 px-4 pb-3 pt-2.5 shrink-0 bg-white">
               <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-slate-200 sm:hidden" aria-hidden />
               <div className="flex items-start justify-between gap-3">
@@ -150,13 +200,21 @@ export function CategoryPickBottomSheet({ open, onClose, tradeGroups = [], group
               </div>
             </div>
 
-            {/* Scrollable Content Body */}
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-3 [-webkit-overflow-scrolling:touch] space-y-4 touch-pan-y">
-              {/* Main Categories Row */}
-              <div>
+            {/* Scrollable Content Body — only vertical scroll container */}
+            <div
+              data-modal-scroll="vertical"
+              data-lenis-prevent
+              data-lenis-prevent-touch
+              className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 py-3 space-y-4 [-webkit-overflow-scrolling:touch]"
+            >
+              {/* Main Categories Row — dedicated horizontal scroll */}
+              <div className="shrink-0">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Main category</p>
-                <div className="-mx-4 px-4 overflow-x-auto overscroll-x-contain pb-2 scrollbar-none [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch]">
-                  <div className="flex gap-2.5 w-max">
+                <div
+                  data-modal-scroll="horizontal"
+                  className="-mx-4 px-4 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-2 scrollbar-none [-webkit-overflow-scrolling:touch] [touch-action:pan-x]"
+                >
+                  <div className="flex w-max gap-2.5">
                     <button
                       type="button"
                       onClick={() => pickGroup(null)}
@@ -291,7 +349,7 @@ export function CategoryPickBottomSheet({ open, onClose, tradeGroups = [], group
               )}
             </div>
 
-            {/* Bottom Sticky Action Bar */}
+            {/* Bottom Sticky Action Bar — non-scrolling within modal flex column */}
             <div className="shrink-0 border-t border-slate-100 bg-white px-4 py-3 pb-[max(1.25rem,env(safe-area-inset-bottom,1.25rem))] shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
               <button
                 type="button"
