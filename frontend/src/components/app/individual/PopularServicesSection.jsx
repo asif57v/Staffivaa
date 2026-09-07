@@ -65,14 +65,11 @@ export function PopularServicesSection({ onBook }) {
         </h3>
       </div>
 
-      <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto px-1 pb-4 scrollbar-none [&::-webkit-scrollbar]:hidden">
+      <div className="flex gap-3.5 overflow-x-auto -mx-3 px-3 pb-3 pt-1 scrollbar-none [&::-webkit-scrollbar]:hidden overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]">
         {POPULAR_SERVICES.map((service, idx) => (
-          <motion.div
+          <div
             key={service.id}
-            initial={reduce ? false : { opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3, delay: Math.min(idx * 0.1, 0.4) }}
-            className="group relative flex w-[160px] min-w-[160px] cursor-pointer snap-start flex-col overflow-hidden rounded-2xl bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] ring-1 ring-slate-100 transition-all hover:shadow-[0_8px_16px_rgba(0,0,0,0.08)] active:scale-[0.97]"
+            className="group relative flex w-[165px] min-w-[165px] shrink-0 cursor-pointer flex-col overflow-hidden rounded-2xl bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] ring-1 ring-slate-100 transition-all hover:shadow-[0_8px_16px_rgba(0,0,0,0.08)] active:scale-[0.97]"
             onClick={() => onBook?.(service)}
           >
             {/* Image Container */}
@@ -121,7 +118,7 @@ export function PopularServicesSection({ onBook }) {
                 )}
               </div>
             </div>
-          </motion.div>
+          </div>
         ))}
       </div>
     </motion.section>

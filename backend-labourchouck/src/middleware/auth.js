@@ -1,5 +1,6 @@
 import { verifyAccessToken } from '../services/tokenService.js'
 import { User } from '../models/User.js'
+import { USER_ROLES } from '../constants/roles.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError } from '../utils/apiResponse.js'
 
@@ -33,18 +34,30 @@ export const protect = asyncHandler(async (req, res, next) => {
     })
   }
 
-  // Single active session enforcement:
-  // If token has a session ID (`payload.sid`), the user's activeSessionId in DB must match it.
-  // If user has logged out (activeSessionId is null/cleared) or logged in on another device (different activeSessionId), reject.
-  if (payload.sid && user.activeSessionId !== payload.sid) {
-    return sendError(res, {
-      message: 'You have been logged in from another device. Your session has ended.',
-      statusCode: HTTP_STATUS.UNAUTHORIZED,
-      code: 'SESSION_TERMINATED',
-      data: {
-        reason: 'logged_in_elsewhere',
-      },
-    })
+  // Active session enforcement:
+  // Non-admin roles: exactly 1 active session allowed.
+  // Admin role: up to 2 simultaneous active sessions allowed.
+  if (payload.sid) {
+    let isValidSession = false
+    if (user.role === USER_ROLES.ADMIN) {
+      const adminSessions = Array.isArray(user.activeSessionIds) && user.activeSessionIds.length > 0
+        ? user.activeSessionIds
+        : (user.activeSessionId ? [user.activeSessionId] : [])
+      isValidSession = adminSessions.includes(payload.sid)
+    } else {
+      isValidSession = user.activeSessionId === payload.sid
+    }
+
+    if (!isValidSession) {
+      return sendError(res, {
+        message: 'You have been logged in from another device. Your session has ended.',
+        statusCode: HTTP_STATUS.UNAUTHORIZED,
+        code: 'SESSION_TERMINATED',
+        data: {
+          reason: 'logged_in_elsewhere',
+        },
+      })
+    }
   }
 
   req.user = user
@@ -62,7 +75,19 @@ export const optionalAuth = asyncHandler(async (req, res, next) => {
     const payload = verifyAccessToken(token)
     const user = await User.findById(payload.sub)
     if (user && user.isActive) {
-      if (!payload.sid || user.activeSessionId === payload.sid) {
+      let isValidSession = false
+      if (!payload.sid) {
+        isValidSession = true
+      } else if (user.role === USER_ROLES.ADMIN) {
+        const adminSessions = Array.isArray(user.activeSessionIds) && user.activeSessionIds.length > 0
+          ? user.activeSessionIds
+          : (user.activeSessionId ? [user.activeSessionId] : [])
+        isValidSession = adminSessions.includes(payload.sid)
+      } else {
+        isValidSession = user.activeSessionId === payload.sid
+      }
+
+      if (isValidSession) {
         req.user = user
         req.tokenPayload = payload
       }

@@ -51,6 +51,27 @@ export const connectSocket = (user, token) => {
 
   socket.on('session:terminated', (data) => {
     console.warn('[Socket.io] Received session:terminated event from server:', data)
+    
+    // If evictedSid is specified (e.g. admin 2-device limit eviction), only evict matching session
+    if (data?.evictedSid) {
+      const state = store.getState()
+      const currentToken = state?.auth?.token
+      if (currentToken) {
+        try {
+          const parts = currentToken.split('.')
+          if (parts.length >= 2) {
+            const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+            if (payload?.sid && payload.sid !== data.evictedSid) {
+              // This client device session was not the evicted one; keep active
+              return
+            }
+          }
+        } catch (e) {
+          // In case of parsing error, proceed to terminate session
+        }
+      }
+    }
+
     const message = data?.message || 'You have been logged in from another device. Your session has ended.'
     if (typeof window !== 'undefined') {
       clearPushSyncState()

@@ -164,6 +164,7 @@ async function runTests() {
 
       // 6. Voluntary Logout on Device C -> Invalidate all
       user.activeSessionId = null;
+      user.activeSessionIds = [];
       await user.save();
 
       const resC2 = await simulateProtectMiddleware(tokenC);
@@ -172,6 +173,97 @@ async function runTests() {
         `After logout, Device C token is invalid`,
       );
     }
+
+    // =========================================================
+    // ADMIN ROLE: 2 CONCURRENT DEVICE SESSIONS ALLOWED
+    // =========================================================
+    console.log('\n--- Testing Role: ADMIN (2 Concurrent Devices Allowed) ---');
+    const adminEmail = 'admin_session_test@staffivaa.com';
+    const adminPhone = '9990000099';
+    await User.deleteOne({ email: adminEmail });
+    await User.deleteOne({ phone: adminPhone });
+    const adminUser = await User.create({
+      email: adminEmail,
+      phone: adminPhone,
+      role: USER_ROLES.ADMIN,
+      fullName: 'Super Admin Test',
+      isActive: true,
+      activeSessionIds: [],
+    });
+    createdUserIds.push(adminUser._id);
+
+    // 1. Admin Login: Device 1
+    const adminSession1 = crypto.randomUUID();
+    adminUser.activeSessionIds = [adminSession1];
+    adminUser.activeSessionId = adminSession1;
+    await adminUser.save();
+
+    const adminToken1 = signAccessToken(adminUser, adminSession1);
+    const resAdmin1_1 = await simulateProtectMiddleware(adminToken1);
+    assert(resAdmin1_1.ok === true, 'Admin Device 1 is authorized on initial login');
+
+    // 2. Admin Login: Device 2 (Simultaneous second device)
+    const adminSession2 = crypto.randomUUID();
+    let currentAdminSessions = [...adminUser.activeSessionIds];
+    if (currentAdminSessions.length >= 2) {
+      currentAdminSessions = currentAdminSessions.slice(currentAdminSessions.length - 1);
+    }
+    currentAdminSessions.push(adminSession2);
+    adminUser.activeSessionIds = currentAdminSessions;
+    adminUser.activeSessionId = adminSession2;
+    await adminUser.save();
+
+    const adminToken2 = signAccessToken(adminUser, adminSession2);
+    const resAdmin2_1 = await simulateProtectMiddleware(adminToken2);
+    assert(resAdmin2_1.ok === true, 'Admin Device 2 is authorized on second device login');
+
+    // CRITICAL DUAL-SESSION CHECK: Admin Device 1 must STILL be authorized!
+    const resAdmin1_2 = await simulateProtectMiddleware(adminToken1);
+    assert(resAdmin1_2.ok === true, 'Admin Device 1 is STILL authorized while Device 2 is active (2 concurrent devices working!)');
+
+    // 3. Admin Login: Device 3 (Exceeds max 2 -> Evicts oldest: Device 1)
+    const adminSession3 = crypto.randomUUID();
+    currentAdminSessions = [...adminUser.activeSessionIds];
+    let evictedAdminSession = null;
+    if (currentAdminSessions.length >= 2) {
+      evictedAdminSession = currentAdminSessions[0]; // Device 1 session
+      currentAdminSessions = currentAdminSessions.slice(currentAdminSessions.length - 1);
+    }
+    currentAdminSessions.push(adminSession3);
+    adminUser.activeSessionIds = currentAdminSessions;
+    adminUser.activeSessionId = adminSession3;
+    await adminUser.save();
+
+    assert(evictedAdminSession === adminSession1, 'Oldest admin session (Device 1) was evicted when 3rd device logged in');
+
+    const adminToken3 = signAccessToken(adminUser, adminSession3);
+    const resAdmin3_1 = await simulateProtectMiddleware(adminToken3);
+    assert(resAdmin3_1.ok === true, 'Admin Device 3 is authorized');
+
+    // Device 2 must STILL be authorized
+    const resAdmin2_2 = await simulateProtectMiddleware(adminToken2);
+    assert(resAdmin2_2.ok === true, 'Admin Device 2 is STILL authorized after Device 3 logged in');
+
+    // Device 1 must now be REJECTED (evicted)
+    const resAdmin1_3 = await simulateProtectMiddleware(adminToken1);
+    assert(
+      resAdmin1_3.ok === false &&
+      resAdmin1_3.statusCode === 401 &&
+      resAdmin1_3.body?.code === 'SESSION_TERMINATED',
+      'Admin Device 1 is now REJECTED (401 SESSION_TERMINATED) because 3rd device evicted it',
+    );
+
+    // 4. Admin Device 2 Voluntary Logout (Selective device logout)
+    adminUser.activeSessionIds = adminUser.activeSessionIds.filter((sid) => sid !== adminSession2);
+    await adminUser.save();
+
+    const resAdmin2_3 = await simulateProtectMiddleware(adminToken2);
+    assert(resAdmin2_3.ok === false && resAdmin2_3.statusCode === 401, 'Admin Device 2 is invalid after selective logout');
+
+    // Device 3 should STILL be active after Device 2 logged out
+    const resAdmin3_2 = await simulateProtectMiddleware(adminToken3);
+    assert(resAdmin3_2.ok === true, 'Admin Device 3 remains active after Device 2 logged out');
+
   } finally {
     // Cleanup test users
     if (createdUserIds.length > 0) {

@@ -215,6 +215,7 @@ const userSchema = new mongoose.Schema(
     fcmTokensWeb: { type: [String], default: [] },
     fcmTokensMobile: { type: [String], default: [] },
     activeSessionId: { type: String, default: null, index: true },
+    activeSessionIds: { type: [String], default: [] },
     lastLoginDevice: { type: String, default: null },
     lastLoginIp: { type: String, default: null },
     lastLoginAt: Date,

@@ -589,7 +589,7 @@ function formatBannerPrice(rawPrice) {
             onMouseLeave={() => { isHeroHoveredRef.current = false }}
             onTouchStart={() => { isHeroHoveredRef.current = true }}
             onTouchEnd={() => { isHeroHoveredRef.current = false }}
-            className="relative overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-none flex gap-3 pb-2 pt-1 px-3 w-full min-h-[130px]"
+            className="relative overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-none flex gap-3 pb-2 pt-1 px-3 w-full min-h-[130px] overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]"
           >
             {activeCarouselBanners.map((slide, i) => {
               const slideImage = slide.image || slide.imageUrl || '/home_service_hero.png'
@@ -674,12 +674,12 @@ function formatBannerPrice(rawPrice) {
           </div>
           <div
             ref={categoryScrollRef}
-            className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 pt-1 scrollbar-none [&::-webkit-scrollbar]:hidden w-full px-3"
+            className="flex gap-2.5 overflow-x-auto pb-2 pt-1 scrollbar-none [&::-webkit-scrollbar]:hidden w-full px-3 overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]"
           >
             <button
               type="button"
               onClick={() => setSelectedGroupId(null)}
-              className="flex min-w-[76px] w-[76px] shrink-0 snap-start flex-col items-center gap-2 transition active:scale-[0.96]"
+              className="flex min-w-[76px] w-[76px] shrink-0 flex-col items-center gap-2 transition active:scale-[0.96] cursor-pointer touch-manipulation"
             >
               <span className={`flex h-[64px] w-[64px] items-center justify-center rounded-full border shadow-sm transition-all ${selectedGroupId == null
                 ? 'border-[#FFD100] bg-[#FFD100]/15 text-slate-900 ring-2 ring-[#FFD100] ring-offset-1'
@@ -699,7 +699,7 @@ function formatBannerPrice(rawPrice) {
                   key={gid}
                   type="button"
                   onClick={() => setSelectedGroupId(gid)}
-                  className="flex min-w-[76px] w-[76px] shrink-0 snap-start flex-col items-center gap-2 transition active:scale-[0.96]"
+                  className="flex min-w-[76px] w-[76px] shrink-0 flex-col items-center gap-2 transition active:scale-[0.96] cursor-pointer touch-manipulation"
                 >
                   <span className={`flex h-[64px] w-[64px] items-center justify-center rounded-full border shadow-sm transition-all ${active
                     ? 'border-[#FFD100] bg-[#FFD100]/15 text-slate-900 ring-2 ring-[#FFD100] ring-offset-1'
@@ -743,9 +743,9 @@ function formatBannerPrice(rawPrice) {
             animate={{ opacity: 1, y: 0 }}
             className="mt-6 -mx-3 px-3"
           >
-            <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-none snap-x snap-mandatory">
+            <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-none snap-x snap-mandatory overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]">
               {middleBanners.map(banner => (
-                <div key={banner._id} className="w-full snap-center shrink-0 rounded-[20px] overflow-hidden shadow-sm relative group">
+                <div key={banner._id} className="w-[90%] sm:w-[92%] snap-center shrink-0 rounded-[20px] overflow-hidden shadow-sm relative group">
                   <a 
                     href={banner.redirectUrl || '#'} 
                     onClick={(e) => { e.preventDefault(); handleHeroSlideClick(banner); }}
@@ -781,7 +781,7 @@ function formatBannerPrice(rawPrice) {
                 <Sparkles className="h-4 w-4 text-[#F59E0B]" /> Exclusive Offers
               </h3>
             </div>
-            <div className="flex overflow-x-auto gap-3 pb-2 -mx-3 px-3 scrollbar-none snap-x snap-mandatory">
+            <div className="flex overflow-x-auto gap-3 pb-2 -mx-3 px-3 scrollbar-none snap-x snap-mandatory overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]">
               {marketingOffers.map(offer => {
                 const targetCategoryId = offer.categories?.[0]
                 
@@ -801,7 +801,7 @@ function formatBannerPrice(rawPrice) {
                 return (
                 <div 
                   key={offer._id} 
-                  className="w-full snap-center shrink-0 rounded-[20px] overflow-hidden border border-slate-200 shadow-sm relative bg-white"
+                  className="w-[88%] sm:w-[90%] snap-center shrink-0 rounded-[20px] overflow-hidden border border-slate-200 shadow-sm relative bg-white"
                 >
                   <img src={offer.image} alt={offer.title} className="w-full h-32 object-cover" />
                   <div className="p-3">
@@ -890,7 +890,7 @@ function formatBannerPrice(rawPrice) {
           {bookingsLoading ? <AppListSkeleton rows={2} /> : null}
 
           {!bookingsLoading && recentBookings.length ? (
-            <motion.div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 pt-2 -mx-3 px-3 scrollbar-none [&::-webkit-scrollbar]:hidden mt-2">
+            <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 pt-2 -mx-3 px-3 scrollbar-none [&::-webkit-scrollbar]:hidden mt-2 overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]">
               {recentBookings.map((b, idx) => {
                 const st = bookingStatusToUi(b.status)
                 const primaryLine = (b.lines || [])[0]
@@ -963,7 +963,7 @@ function formatBannerPrice(rawPrice) {
                   </motion.div>
                 )
               })}
-            </motion.div>
+            </div>
           ) : null}
 
           {!bookingsLoading && !recentBookings.length ? (
@@ -1043,9 +1043,9 @@ function formatBannerPrice(rawPrice) {
             animate={{ opacity: 1, y: 0 }}
             className="mt-8 -mx-3 px-3"
           >
-            <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-none snap-x snap-mandatory">
+            <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-none snap-x snap-mandatory overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]">
               {bottomBanners.map(banner => (
-                <div key={banner._id} className="w-full snap-center shrink-0 rounded-[20px] overflow-hidden shadow-sm relative group">
+                <div key={banner._id} className="w-[90%] sm:w-[92%] snap-center shrink-0 rounded-[20px] overflow-hidden shadow-sm relative group">
                   <a 
                     href={banner.redirectUrl || '#'} 
                     onClick={(e) => { e.preventDefault(); handleHeroSlideClick(banner); }}
@@ -1081,7 +1081,7 @@ function formatBannerPrice(rawPrice) {
             </div>
             
             <div 
-              className="relative w-full overflow-x-auto snap-x snap-mandatory px-5 pb-6"
+              className="relative w-full overflow-x-auto px-5 pb-6 overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {/* Custom class for hiding scrollbar in webkit browsers isn't always standard, so inline styles help for Firefox/IE. */}

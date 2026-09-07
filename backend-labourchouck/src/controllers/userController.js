@@ -751,8 +751,31 @@ export const saveFcmToken = asyncHandler(async (req, res) => {
 /** POST /users/me/fcm-token/remove — remove FCM token on logout */
 export const removeFcmToken = asyncHandler(async (req, res) => {
   const { token, clearAll } = req.body
+  const isTargetAdmin = req.user.role === USER_ROLES.ADMIN
+  const sessionToPull = req.tokenPayload?.sid
 
-  if (token && typeof token === 'string' && token.trim() && !clearAll) {
+  if (isTargetAdmin && !clearAll && sessionToPull) {
+    // Only pull this device's specific session ID from activeSessionIds
+    const updateQuery = {
+      $pull: {
+        activeSessionIds: sessionToPull,
+      },
+    }
+    if (token && typeof token === 'string' && token.trim()) {
+      const cleanToken = token.trim()
+      updateQuery.$pull.fcmTokensWeb = cleanToken
+      updateQuery.$pull.fcmTokensMobile = cleanToken
+    }
+    await User.updateOne({ _id: req.user._id }, updateQuery)
+
+    if (token && typeof token === 'string' && token.trim()) {
+      const cleanToken = token.trim()
+      await User.updateMany(
+        { $or: [{ fcmTokensWeb: cleanToken }, { fcmTokensMobile: cleanToken }] },
+        { $pull: { fcmTokensWeb: cleanToken, fcmTokensMobile: cleanToken } }
+      )
+    }
+  } else if (token && typeof token === 'string' && token.trim() && !clearAll) {
     const cleanToken = token.trim()
     await User.updateOne(
       { _id: req.user._id },
@@ -761,7 +784,7 @@ export const removeFcmToken = asyncHandler(async (req, res) => {
           fcmTokensWeb: cleanToken, 
           fcmTokensMobile: cleanToken 
         },
-        $set: { activeSessionId: null },
+        $set: { activeSessionId: null, activeSessionIds: [] },
       }
     )
     // Also pull globally from any other user record to guarantee no ghost subscriptions
@@ -778,6 +801,7 @@ export const removeFcmToken = asyncHandler(async (req, res) => {
           fcmTokensWeb: [], 
           fcmTokensMobile: [],
           activeSessionId: null,
+          activeSessionIds: [],
         } 
       }
     )

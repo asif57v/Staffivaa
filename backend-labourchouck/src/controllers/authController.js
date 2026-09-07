@@ -36,7 +36,7 @@ function buildAuthPayload(user, token) {
 }
 
 /** Helper to notify previous device/browser sessions on socket */
-function broadcastSessionTermination(user) {
+function broadcastSessionTermination(user, evictedSid = null) {
   try {
     const io = getIO()
     if (io && user?._id && user?.role) {
@@ -45,6 +45,7 @@ function broadcastSessionTermination(user) {
       io.to(`${canonicalRole}_${uId}`).emit('session:terminated', {
         message: 'You have been logged in from another device. Your session has ended.',
         reason: 'logged_in_elsewhere',
+        evictedSid: evictedSid || null,
         timestamp: new Date().toISOString(),
       })
       console.log(`[Auth] Broadcasted session:terminated to ${canonicalRole}_${uId}`)
@@ -114,6 +115,7 @@ export const registerVerify = asyncHandler(async (req, res) => {
     fullName: fullName || undefined,
     isPhoneVerified: true,
     activeSessionId: sessionId,
+    activeSessionIds: [sessionId],
     lastLoginAt: new Date(),
     lastLoginDevice: req.headers['user-agent'] || 'Unknown',
     lastLoginIp: req.ip || req.connection?.remoteAddress || null,
@@ -262,9 +264,10 @@ export const loginVerify = asyncHandler(async (req, res) => {
   // Terminate any previous active session across other devices/browsers
   broadcastSessionTermination(user)
 
-  // Generate new unique activeSessionId
+  // Generate new unique activeSessionId (single active device enforcement for non-admin)
   const sessionId = crypto.randomUUID()
   user.activeSessionId = sessionId
+  user.activeSessionIds = [sessionId]
   user.isPhoneVerified = true
   user.lastLoginAt = new Date()
   user.lastLoginDevice = req.headers['user-agent'] || 'Unknown'
@@ -325,10 +328,24 @@ export const adminLogin = asyncHandler(async (req, res) => {
     })
   }
 
-  // Terminate any previous active admin session
-  broadcastSessionTermination(user)
-
   const sessionId = crypto.randomUUID()
+
+  // Admin dual-device session logic:
+  // Allow up to 2 active devices simultaneously for ADMIN.
+  let currentSessions = Array.isArray(user.activeSessionIds) ? [...user.activeSessionIds] : []
+  if (user.activeSessionId && !currentSessions.includes(user.activeSessionId)) {
+    currentSessions.unshift(user.activeSessionId)
+  }
+
+  // If 2 or more sessions already exist, evict the oldest session so only 1 remains before adding new
+  if (currentSessions.length >= 2) {
+    const evictedSid = currentSessions[0]
+    currentSessions = currentSessions.slice(currentSessions.length - 1)
+    broadcastSessionTermination(user, evictedSid)
+  }
+
+  currentSessions.push(sessionId)
+  user.activeSessionIds = currentSessions
   user.activeSessionId = sessionId
   user.lastLoginAt = new Date()
   user.lastLoginDevice = req.headers['user-agent'] || 'Unknown'
