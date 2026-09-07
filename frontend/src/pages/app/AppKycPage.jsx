@@ -91,7 +91,7 @@ export function AppKycPage() {
 
   const aadhaarDigits = digitsOnly(aadhaar).length
   const normalizedPan = normalizePan(pan)
-  const panValid = /^[A-Z]{5}\d{4}[A-Z]$/.test(normalizedPan)
+  const panValid = normalizedPan.length === 10
   const hasRecordedVideo = Boolean(videoFile || videoPreviewUrl)
   const detailsReady = isResubmit || (aadhaarDigits === 12 && panValid)
   const canSubmit = detailsReady && hasRecordedVideo && !busy

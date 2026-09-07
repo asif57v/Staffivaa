@@ -40,7 +40,7 @@ function normalizePan(input) {
 }
 
 function isValidPan(normalized) {
-  return /^[A-Z]{5}\d{4}[A-Z]$/.test(normalized)
+  return /^[A-Z0-9]{10}$/.test(normalized)
 }
 
 function maskPan(normalized) {
