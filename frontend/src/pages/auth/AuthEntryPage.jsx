@@ -29,7 +29,7 @@ import { ApiError } from '../../api/http.js'
 import { useGetPublicLegalPagesQuery } from '../../store/api/legalApi.js'
 import authBg from '../../assets/auth-bg.png'
 
-const GST_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i
+const GST_RE = /^[A-Z0-9]{15}$/i
 
 const ROLE_OPTIONS = [
   {
@@ -227,7 +227,7 @@ export function AuthEntryPage() {
           return
         }
         if ((role === USER_ROLES.CORPORATE || role === USER_ROLES.ENTERPRISE) && gstNumber.trim() && !GST_RE.test(gstNumber.trim())) {
-          setBanner({ variant: 'error', message: 'Invalid GST format (e.g. 22AAAAA0000A1Z5). Enter a valid 15-character GSTIN or leave blank.' })
+          setBanner({ variant: 'error', message: 'GSTIN must be exactly 15 characters (or leave blank).' })
           setBusy(false)
           return
         }
@@ -293,7 +293,7 @@ export function AuthEntryPage() {
           body.companyName = companyName.trim()
           if (gstNumber.trim()) {
             if (!GST_RE.test(gstNumber.trim())) {
-              setBanner({ variant: 'error', message: 'Invalid GST format (e.g. 22AAAAA0000A1Z5). Enter a valid 15-character GSTIN or leave blank.' })
+              setBanner({ variant: 'error', message: 'GSTIN must be exactly 15 characters (or leave blank).' })
               setBusy(false)
               return
             }

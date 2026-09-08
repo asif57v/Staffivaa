@@ -256,9 +256,14 @@ export function CorporateProfilePage() {
       setBanner({ variant: 'error', message: 'PIN code must be exactly 6 digits.' })
       return
     }
+    const cleanedPan = normalizePan(form.panNumber)
+    if (cleanedPan && cleanedPan.length !== 10) {
+      setBanner({ variant: 'error', message: 'Company PAN must be exactly 10 characters.' })
+      return
+    }
     const cleanedGst = normalizeGst(form.gstNumber)
-    if (cleanedGst && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i.test(cleanedGst)) {
-      setBanner({ variant: 'error', message: 'Invalid GSTIN format (e.g. 22AAAAA0000A1Z5).' })
+    if (cleanedGst && cleanedGst.length !== 15) {
+      setBanner({ variant: 'error', message: 'GSTIN must be exactly 15 characters.' })
       return
     }
     setBanner(null)

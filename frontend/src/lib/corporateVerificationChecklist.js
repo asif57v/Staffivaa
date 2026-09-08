@@ -1,6 +1,6 @@
 import { CORPORATE_DOCUMENT_TYPES } from '../constants/corporateVerification.js'
 
-const GST_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/
+const GST_RE = /^[A-Z0-9]{15}$/i
 const PINCODE_RE = /^\d{6}$/
 
 export function normalizePan(value) {

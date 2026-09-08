@@ -4,9 +4,9 @@ import {
   CORPORATE_DOCUMENT_TYPES,
 } from '../constants/corporateVerification.js'
 
-const GST_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/
-const PIN_RE = /^[A-Z]{5}\d{4}[A-Z]$/
-const PIN_LENIENT_RE = /^[A-Z0-9]{10}$/
+const GST_RE = /^[A-Z0-9]{15}$/i
+const PIN_RE = /^[A-Z0-9]{10}$/i
+const PIN_LENIENT_RE = /^[A-Z0-9]{10}$/i
 const PINCODE_RE = /^\d{6}$/
 
 export function labelForCorporateDocumentType(type) {
@@ -164,7 +164,7 @@ export function validateCorporateProfileForSubmit(profile = {}) {
       return {
         ok: false,
         checklist: progress.checklist,
-        message: 'GSTIN format is invalid — fix it or clear the GST field',
+        message: 'GSTIN must be exactly 15 characters — fix it or clear the GST field',
       }
     }
     return { ok: true, checklist: progress.checklist }

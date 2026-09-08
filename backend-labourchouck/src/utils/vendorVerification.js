@@ -5,7 +5,7 @@ import {
   VENDOR_TYPE_LIST,
 } from '../constants/vendorVerification.js'
 
-const GST_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/
+const GST_RE = /^[A-Z0-9]{15}$/i
 const PINCODE_RE = /^\d{6}$/
 
 export function labelForVendorDocumentType(type) {
@@ -152,7 +152,7 @@ export function validateVendorProfileForSubmit(profile = {}) {
       return {
         ok: false,
         checklist: progress.checklist,
-        message: 'GSTIN format is invalid — fix it or clear the GST field',
+        message: 'GSTIN must be exactly 15 characters — fix it or clear the GST field',
       }
     }
     return { ok: true, checklist: progress.checklist }
