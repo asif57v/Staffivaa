@@ -3,16 +3,16 @@ import { KYC_STATUS } from '../constants/userRoles.js'
 export const KYC_WORKFLOW = [
   { id: 'aadhaar', label: 'Enter Aadhaar number', short: 'Aadhaar' },
   { id: 'pan', label: 'Enter PAN number', short: 'PAN' },
-  { id: 'video', label: 'Record document video', short: 'Video' },
+  { id: 'photos', label: 'Upload document photos', short: 'Photos' },
   { id: 'review', label: 'Admin verification', short: 'Review' },
   { id: 'verified', label: 'Verified on platform', short: 'Done' },
 ]
 
-/** Timeline copy when Aadhaar/PAN were already submitted and only video needs redo. */
+/** Timeline copy when Aadhaar/PAN were already submitted and only photos need redo. */
 export const KYC_WORKFLOW_RESUBMIT = [
   { id: 'aadhaar', label: 'Aadhaar saved', short: 'Aadhaar' },
   { id: 'pan', label: 'PAN saved', short: 'PAN' },
-  { id: 'video', label: 'Record new KYC video', short: 'Video' },
+  { id: 'photos', label: 'Upload new KYC photos', short: 'Photos' },
   { id: 'review', label: 'Admin verification', short: 'Review' },
   { id: 'verified', label: 'Verified on platform', short: 'Done' },
 ]
@@ -29,7 +29,7 @@ export function getKycUiState(labourProfile) {
   if (kyc === KYC_STATUS.VERIFIED) {
     return {
       phase: 'verified',
-      title: 'Video KYC verified',
+      title: 'KYC verified',
       subtitle: 'You can accept jobs and receive payouts on verified sites.',
       tone: 'emerald',
     }
@@ -38,7 +38,7 @@ export function getKycUiState(labourProfile) {
     return {
       phase: 'review',
       title: 'Under admin review',
-      subtitle: 'Your KYC video was submitted and is waiting for manual approval.',
+      subtitle: 'Your KYC photos were submitted and are waiting for manual approval.',
       tone: 'sky',
     }
   }
@@ -46,14 +46,14 @@ export function getKycUiState(labourProfile) {
     return {
       phase: 'failed',
       title: 'Verification needs correction',
-      subtitle: reviewNote || 'Record a clearer Aadhaar and PAN video, then submit again.',
+      subtitle: reviewNote || 'Upload clearer Aadhaar and document photos, then submit again.',
       tone: 'rose',
     }
   }
   return {
     phase: 'submit',
     title: 'Complete your KYC',
-    subtitle: 'Record Aadhaar and PAN documents in one live video to unlock jobs.',
+    subtitle: 'Upload Aadhaar photos and selfie from camera or gallery to unlock jobs.',
     tone: 'violet',
   }
 }

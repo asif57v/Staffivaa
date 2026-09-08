@@ -104,6 +104,16 @@ const labourProfileSchema = new mongoose.Schema(
     /** Cloudinary HTTPS URLs (preferred) */
     kycFrontImageUrl: { type: String, maxlength: 2048 },
     kycBackImageUrl: { type: String, maxlength: 2048 },
+    kycSelfieUrl: { type: String, maxlength: 2048 },
+    kycPanImageUrl: { type: String, maxlength: 2048 },
+    kycPhotos: [
+      {
+        label: { type: String, trim: true },
+        url: { type: String, maxlength: 2048 },
+        type: { type: String, trim: true },
+        uploadedAt: { type: Date, default: Date.now },
+      },
+    ],
     /** Legacy base64 data URLs — kept for older submissions */
     kycFrontImageDataUrl: { type: String },
     kycBackImageDataUrl: { type: String },

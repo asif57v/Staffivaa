@@ -33,7 +33,7 @@ import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
 import { LabourKycHero } from '../../components/labour/kyc/LabourKycHero.jsx'
 import { LabourKycWorkflowTimeline } from '../../components/labour/kyc/LabourKycWorkflowTimeline.jsx'
-import { LabourKycVideoRecorder } from '../../components/labour/kyc/LabourKycVideoRecorder.jsx'
+import { LabourKycPhotoUploadGrid } from '../../components/labour/kyc/LabourKycPhotoUploadGrid.jsx'
 
 function digitsOnly(s) {
   return String(s || '').replace(/\D/g, '').slice(0, 12)
@@ -49,21 +49,6 @@ function normalizePan(s) {
 const BENEFIT_ICONS = [HardHat, ShieldCheck, IndianRupee]
 const KYC_DRAFT_KEY = 'lc-labour-kyc-draft'
 
-async function videoFileForSubmit(videoFile, videoPreviewUrl) {
-  if (videoFile) {
-    const isMp4 = videoFile.type.includes('mp4') || videoFile.name.endsWith('.mp4')
-    const safeType = isMp4 ? 'video/mp4' : 'video/webm'
-    return new File([videoFile], videoFile.name || `kyc-video-${Date.now()}.${isMp4 ? 'mp4' : 'webm'}`, { type: safeType })
-  }
-  if (!videoPreviewUrl) return null
-  const res = await fetch(videoPreviewUrl)
-  const blob = await res.blob()
-  const isMp4 = blob.type && blob.type.includes('mp4')
-  const safeType = isMp4 ? 'video/mp4' : 'video/webm'
-  const ext = isMp4 ? 'mp4' : 'webm'
-  return new File([blob], `kyc-video-${Date.now()}.${ext}`, { type: safeType })
-}
-
 export function AppKycPage() {
   const reduce = useReducedMotion()
   const dispatch = useDispatch()
@@ -71,8 +56,7 @@ export function AppKycPage() {
 
   const [aadhaar, setAadhaar] = useState('')
   const [pan, setPan] = useState('')
-  const [videoFile, setVideoFile] = useState(null)
-  const [videoPreviewUrl, setVideoPreviewUrl] = useState('')
+  const [photos, setPhotos] = useState({})
   const [busy, setBusy] = useState(false)
   const [banner, setBanner] = useState(null)
 
@@ -92,9 +76,9 @@ export function AppKycPage() {
   const aadhaarDigits = digitsOnly(aadhaar).length
   const normalizedPan = normalizePan(pan)
   const panValid = normalizedPan.length === 10
-  const hasRecordedVideo = Boolean(videoFile || videoPreviewUrl)
+  const hasRequiredPhotos = Boolean(photos.aadhaar_front && photos.aadhaar_back && photos.selfie)
   const detailsReady = isResubmit || (aadhaarDigits === 12 && panValid)
-  const canSubmit = detailsReady && hasRecordedVideo && !busy
+  const canSubmit = detailsReady && hasRequiredPhotos && !busy
   const workflowStep = kycWorkflowStepIndex({
     kycStatus: kyc,
     submittedAt,
@@ -109,12 +93,6 @@ export function AppKycPage() {
     failed: 'Action needed',
     submit: 'Not submitted',
   }
-
-  useEffect(() => {
-    return () => {
-      if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl)
-    }
-  }, [videoPreviewUrl])
 
   useEffect(() => {
     if (isResubmit || ui.phase === 'verified') return
@@ -134,23 +112,6 @@ export function AppKycPage() {
     sessionStorage.setItem(KYC_DRAFT_KEY, JSON.stringify({ aadhaar, pan }))
   }, [aadhaar, pan, isResubmit, ui.phase])
 
-  const clearVideo = () => {
-    setVideoFile(null)
-    setVideoPreviewUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev)
-      return ''
-    })
-  }
-
-  const handleRecorded = (file, previewUrl) => {
-    setBanner(null)
-    setVideoFile(file)
-    setVideoPreviewUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev)
-      return previewUrl
-    })
-  }
-
   const handleSubmit = async () => {
     setBanner(null)
     const d = digitsOnly(aadhaar)
@@ -167,34 +128,34 @@ export function AppKycPage() {
       setBanner({ variant: 'error', message: 'Update Aadhaar and PAN only if you want to change them.' })
       return
     }
-    if (!hasRecordedVideo) {
-      setBanner({ variant: 'error', message: 'Record your KYC video before submitting.' })
+    if (!photos.aadhaar_front || !photos.aadhaar_back || !photos.selfie) {
+      setBanner({ variant: 'error', message: 'Please upload Aadhaar Front, Aadhaar Back, and Selfie photo.' })
       return
     }
     setBusy(true)
     try {
-      const fileToUpload = await videoFileForSubmit(videoFile, videoPreviewUrl)
-      if (!fileToUpload) {
-        setBanner({ variant: 'error', message: 'Record your KYC video before submitting.' })
-        return
-      }
-      const uploaded = await uploadMedia(fileToUpload, UPLOAD_FOLDERS.KYC_VIDEOS)
-      const videoUrl = assetUrlFromUpload(uploaded)
-      if (!videoUrl) {
-        setBanner({ variant: 'error', message: 'Video upload failed — no URL returned.' })
-        return
-      }
+      const photoList = [
+        photos.aadhaar_front ? { label: 'Aadhaar Card (Front)', url: photos.aadhaar_front, type: 'aadhaar_front' } : null,
+        photos.aadhaar_back ? { label: 'Aadhaar Card (Back)', url: photos.aadhaar_back, type: 'aadhaar_back' } : null,
+        photos.selfie ? { label: 'Worker Selfie', url: photos.selfie, type: 'selfie' } : null,
+        photos.pan ? { label: 'PAN Card / Certificate', url: photos.pan, type: 'pan' } : null,
+      ].filter(Boolean)
+
       const payload = {
-        videoUrl,
-        videoMeta: uploaded.data?.asset,
+        photos: photoList,
+        frontImageUrl: photos.aadhaar_front || '',
+        backImageUrl: photos.aadhaar_back || '',
+        selfieUrl: photos.selfie || '',
+        panImageUrl: photos.pan || '',
       }
       if (!isResubmit || d.length === 12) payload.aadhaar = d
       if (!isResubmit || panValid) payload.pan = normalizedPan
+
       const res = await submitLabourKycDocuments(payload)
       if (res.data?.user) dispatch(setUser(res.data.user))
       setBanner({ variant: 'success', message: res.message || 'Submitted for admin review.' })
       sessionStorage.removeItem(KYC_DRAFT_KEY)
-      clearVideo()
+      setPhotos({})
       if (!isResubmit) {
         setAadhaar('')
         setPan('')
@@ -334,17 +295,17 @@ export function AppKycPage() {
       {showForm ? (
         <GlassPanel className="border-slate-200/90 p-4 sm:p-5">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            {compactForm ? 'Replace submission' : 'Submit video KYC'}
+            {compactForm ? 'Update documents & photos' : 'Submit KYC documents & photos'}
           </p>
           {compactForm ? (
-            <p className="mt-1 text-xs text-slate-600">Record a clearer video before admin decides.</p>
+            <p className="mt-1 text-xs text-slate-600">Upload clearer photos before admin reviews your profile.</p>
           ) : isResubmit ? (
             <p className="mt-1 text-xs leading-relaxed text-slate-600">
-              Your previous Aadhaar and PAN are already saved. Record a new video showing both documents clearly, then submit again.
+              Your previous Aadhaar and PAN numbers are saved. Upload new clear photos of your documents and selfie, then submit again.
             </p>
           ) : (
             <p className="mt-1 text-xs leading-relaxed text-slate-600">
-              Please carry your Aadhaar card photo and PAN card photo. Record one live video showing the front and back of both documents.
+              Please take clear photos or choose from your gallery: Aadhaar front, Aadhaar back, your live selfie, and optional PAN / skill certificate.
             </p>
           )}
 
@@ -353,7 +314,7 @@ export function AppKycPage() {
               <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Saved details</p>
               <p className="mt-1 font-mono text-sm text-slate-800">Aadhaar {profile.aadhaarMasked}</p>
               <p className="font-mono text-sm text-slate-800">PAN {profile.panMasked}</p>
-              <p className="mt-2 text-[11px] text-slate-500">Only a new video is required for resubmission.</p>
+              <p className="mt-2 text-[11px] text-slate-500">Only updated photos are required for resubmission.</p>
             </div>
           ) : null}
 
@@ -393,11 +354,10 @@ export function AppKycPage() {
           </div>
           ) : null}
 
-          <div className="mt-4">
-            <LabourKycVideoRecorder
-              previewUrl={videoPreviewUrl}
-              onRecorded={handleRecorded}
-              onClear={clearVideo}
+          <div className="mt-5">
+            <LabourKycPhotoUploadGrid
+              photos={photos}
+              onChange={setPhotos}
               disabled={busy}
             />
           </div>

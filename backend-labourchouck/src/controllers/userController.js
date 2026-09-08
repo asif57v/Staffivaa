@@ -234,12 +234,21 @@ export const submitLabourKycDocuments = asyncHandler(async (req, res) => {
     }
   }
 
+  const photos = Array.isArray(req.body.photos) ? req.body.photos : []
+  const frontUrl = normalizeStoredMediaUrl(req.body.frontImageUrl || req.body.kycFrontImageUrl || photos.find((p) => p.type === 'aadhaar_front' || p.label?.toLowerCase().includes('front'))?.url)
+  const backUrl = normalizeStoredMediaUrl(req.body.backImageUrl || req.body.kycBackImageUrl || photos.find((p) => p.type === 'aadhaar_back' || p.label?.toLowerCase().includes('back'))?.url)
+  const selfieUrl = normalizeStoredMediaUrl(req.body.selfieUrl || req.body.kycSelfieUrl || photos.find((p) => p.type === 'selfie' || p.label?.toLowerCase().includes('selfie') || p.label?.toLowerCase().includes('photo'))?.url)
+  const panUrl = normalizeStoredMediaUrl(req.body.panImageUrl || req.body.kycPanImageUrl || photos.find((p) => p.type === 'pan' || p.label?.toLowerCase().includes('pan'))?.url)
   const videoUrl = normalizeStoredMediaUrl(req.body.videoUrl)
-  if (!videoUrl) {
+
+  const hasPhotos = Boolean(frontUrl || backUrl || selfieUrl || photos.length > 0)
+  const hasVideo = Boolean(videoUrl)
+
+  if (!hasPhotos && !hasVideo) {
     return sendError(res, {
-      message: 'Record and upload a KYC video before submitting',
+      message: 'Please upload at least Aadhaar card and worker selfie photo before submitting',
       statusCode: HTTP_STATUS.BAD_REQUEST,
-      code: 'INVALID_KYC_VIDEO',
+      code: 'INVALID_KYC_DOCUMENTS',
     })
   }
 
@@ -253,8 +262,24 @@ export const submitLabourKycDocuments = asyncHandler(async (req, res) => {
     req.user.labourProfile.panMasked = maskPan(normalizedPan)
     req.user.labourProfile.panNumber = normalizedPan
   }
-  req.user.labourProfile.kycVideoUrl = videoUrl
-  req.user.labourProfile.kycVideoMeta = sanitizeKycVideoMeta(req.body.videoMeta)
+  if (frontUrl) req.user.labourProfile.kycFrontImageUrl = frontUrl
+  if (backUrl) req.user.labourProfile.kycBackImageUrl = backUrl
+  if (selfieUrl) req.user.labourProfile.kycSelfieUrl = selfieUrl
+  if (panUrl) req.user.labourProfile.kycPanImageUrl = panUrl
+  if (photos.length > 0) {
+    req.user.labourProfile.kycPhotos = photos
+      .map((p) => ({
+        label: p.label || 'Document',
+        url: normalizeStoredMediaUrl(p.url) || p.url,
+        type: p.type || 'other',
+        uploadedAt: new Date(),
+      }))
+      .filter((p) => Boolean(p.url))
+  }
+  if (videoUrl) {
+    req.user.labourProfile.kycVideoUrl = videoUrl
+    req.user.labourProfile.kycVideoMeta = sanitizeKycVideoMeta(req.body.videoMeta)
+  }
   req.user.labourProfile.kycSubmittedAt = new Date()
   req.user.labourProfile.kycReviewNote = undefined
 
@@ -272,7 +297,7 @@ export const submitLabourKycDocuments = asyncHandler(async (req, res) => {
   })
 
   return sendSuccess(res, {
-    message: 'KYC video submitted — an admin will review your Aadhaar and PAN shortly.',
+    message: 'KYC documents submitted — an admin will review your details shortly.',
     data: { user: req.user.toSafeObject() },
   })
 })

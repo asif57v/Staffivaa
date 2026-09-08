@@ -5,6 +5,8 @@ import {
   ArrowUpRight,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  ExternalLink,
   IdCard,
   Layers,
   Loader2,
@@ -20,6 +22,27 @@ import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import { KYC_STATUS, USER_ROLES } from '../../constants/userRoles.js'
 import { formatLastLoginDisplay } from '../../lib/formatAdminLastLogin.js'
+
+function getWorkerKycPhotos(labourProfile) {
+  if (!labourProfile) return []
+  if (Array.isArray(labourProfile.kycPhotos) && labourProfile.kycPhotos.length > 0) {
+    return labourProfile.kycPhotos.filter((p) => p && p.url)
+  }
+  const list = []
+  if (labourProfile.kycFrontImageUrl) {
+    list.push({ label: 'Aadhaar Card (Front)', url: labourProfile.kycFrontImageUrl, type: 'aadhaar_front' })
+  }
+  if (labourProfile.kycBackImageUrl) {
+    list.push({ label: 'Aadhaar Card (Back)', url: labourProfile.kycBackImageUrl, type: 'aadhaar_back' })
+  }
+  if (labourProfile.kycSelfieUrl) {
+    list.push({ label: 'Worker Selfie', url: labourProfile.kycSelfieUrl, type: 'selfie' })
+  }
+  if (labourProfile.kycPanImageUrl) {
+    list.push({ label: 'PAN Card / Certificate', url: labourProfile.kycPanImageUrl, type: 'pan' })
+  }
+  return list
+}
 
 function readInitialKyc(sp) {
   const k = sp.get('kyc')?.toLowerCase()
@@ -119,6 +142,7 @@ export function AdminLabourPage() {
   const [detailError, setDetailError] = useState('')
   const [reviewNote, setReviewNote] = useState('')
   const [reviewBusy, setReviewBusy] = useState(false)
+  const [zoomImage, setZoomImage] = useState(null)
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 350)
@@ -516,7 +540,7 @@ export function AdminLabourPage() {
                     onClick={() => setReviewUserId(u._id)}
                     className="mt-2 w-full rounded-xl border border-brand/30 bg-brand/10 py-2 text-xs font-bold text-brand transition hover:bg-brand/15"
                   >
-                    Review video KYC
+                    Review KYC documents
                   </button>
                 ) : null}
                 {u.labourProfile?.aadhaarNumber ? (
@@ -578,12 +602,12 @@ export function AdminLabourPage() {
             onClick={() => !reviewBusy && setReviewUserId(null)}
           />
           <motion.div
-        initial={reduce ? false : { opacity: 0, y: 16 }}
+            initial={reduce ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             className="relative z-10 max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-slate-200/90 bg-white shadow-2xl sm:rounded-3xl"
           >
-            <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white/95 px-4 py-3 backdrop-blur-sm">
-              <p className="text-sm font-extrabold text-slate-900">Video KYC review</p>
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white/95 px-4 py-3 backdrop-blur-sm">
+              <p className="text-sm font-extrabold text-slate-900">Labour KYC review</p>
               <button
                 type="button"
                 disabled={reviewBusy}
@@ -628,22 +652,71 @@ export function AdminLabourPage() {
                       </p>
                     ) : null}
                   </div>
+
+                  {/* KYC Photos Grid */}
                   <div>
-                    <p className="mb-1 text-[11px] font-bold uppercase text-slate-500">Recorded KYC video</p>
-                    {detailUser.labourProfile?.kycVideoUrl ? (
+                    <p className="mb-2 text-[11px] font-bold uppercase text-slate-500">KYC Photos & Documents</p>
+                    {(() => {
+                      const photos = getWorkerKycPhotos(detailUser.labourProfile)
+                      if (photos.length > 0) {
+                        return (
+                          <div className="grid grid-cols-2 gap-2.5">
+                            {photos.map((p, idx) => (
+                              <div key={idx} className="group relative overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                                <div className="relative aspect-4/3 w-full overflow-hidden bg-slate-900/10">
+                                  <img
+                                    src={p.url}
+                                    alt={p.label || 'KYC document'}
+                                    className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setZoomImage({ url: p.url, title: p.label || 'KYC Document' })}
+                                    className="absolute inset-0 flex items-center justify-center bg-slate-950/40 opacity-0 transition group-hover:opacity-100 text-white font-bold text-xs gap-1.5 cursor-pointer"
+                                  >
+                                    <Eye className="h-4 w-4" /> View Full
+                                  </button>
+                                </div>
+                                <div className="p-2 bg-white border-t border-slate-100 flex items-center justify-between">
+                                  <p className="text-[11px] font-bold text-slate-800 truncate">{p.label || `Document #${idx + 1}`}</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => setZoomImage({ url: p.url, title: p.label || 'KYC Document' })}
+                                    className="text-brand hover:text-brand/80 text-[10px] font-bold shrink-0 ml-1 cursor-pointer"
+                                  >
+                                    Zoom
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      }
+                      if (!detailUser.labourProfile?.kycVideoUrl) {
+                        return (
+                          <div className="rounded-xl border border-amber-200/80 bg-amber-50 p-3 text-xs text-amber-950 space-y-1">
+                            <p className="font-bold text-amber-900">⚠️ No KYC photos submitted by this worker.</p>
+                            <p className="text-amber-800/90 font-medium">You can still approve & verify this account below if documents are verified offline.</p>
+                          </div>
+                        )
+                      }
+                      return null
+                    })()}
+                  </div>
+
+                  {/* Legacy Video Fallback */}
+                  {detailUser.labourProfile?.kycVideoUrl ? (
+                    <div>
+                      <p className="mb-1 text-[11px] font-bold uppercase text-slate-500">Recorded KYC Video (Legacy)</p>
                       <video
                         src={detailUser.labourProfile.kycVideoUrl}
                         controls
                         playsInline
                         className="aspect-video w-full rounded-xl border border-slate-200/90 bg-slate-950 object-contain"
                       />
-                    ) : (
-                      <div className="rounded-xl border border-amber-200/80 bg-amber-50 p-3 text-xs text-amber-950 space-y-1">
-                        <p className="font-bold text-amber-900">⚠️ No KYC video submitted by this worker.</p>
-                        <p className="text-amber-800/90 font-medium">You can still approve & verify this account below if documents are valid.</p>
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : null}
+
                   <div>
                     <label className="mb-1 block text-[11px] font-bold uppercase text-slate-500" htmlFor="reject-note">
                       Note if rejecting (optional)
@@ -653,7 +726,7 @@ export function AdminLabourPage() {
                       rows={2}
                       value={reviewNote}
                       onChange={(e) => setReviewNote(e.target.value)}
-                      placeholder="e.g. Video is unclear — please record again"
+                      placeholder="e.g. Aadhaar photo is blurry — please re-upload clear photos"
                       className="w-full rounded-xl border border-slate-200/90 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-brand/35"
                     />
                   </div>
@@ -671,9 +744,10 @@ export function AdminLabourPage() {
                       className="flex-1 py-3 text-sm"
                       disabled={reviewBusy}
                       onClick={() => {
-                        const hasVideo = Boolean(detailUser.labourProfile?.kycVideoUrl)
-                        if (!hasVideo) {
-                          const proceed = window.confirm('⚠️ Video KYC is not submitted by this worker.\n\nDo you still want to verify and approve this account?')
+                        const photos = getWorkerKycPhotos(detailUser.labourProfile)
+                        const hasDocuments = photos.length > 0 || Boolean(detailUser.labourProfile?.kycVideoUrl)
+                        if (!hasDocuments) {
+                          const proceed = window.confirm('⚠️ No KYC photos or video were submitted by this worker.\n\nDo you still want to verify and approve this account?')
                           if (!proceed) return
                         }
                         runKycReview('approved')
@@ -689,6 +763,31 @@ export function AdminLabourPage() {
           </motion.div>
         </div>
       ) : null}
+
+      {/* Lightbox / Zoom Modal */}
+      {zoomImage && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="relative max-h-[90vh] max-w-2xl w-full overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 bg-slate-50">
+              <p className="text-sm font-bold text-slate-900">{zoomImage.title}</p>
+              <button
+                type="button"
+                onClick={() => setZoomImage(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-200 hover:text-slate-900 transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-3 bg-slate-900/5 flex items-center justify-center max-h-[75vh] overflow-auto">
+              <img
+                src={zoomImage.url}
+                alt={zoomImage.title}
+                className="max-h-[70vh] w-auto rounded-xl object-contain shadow-sm"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

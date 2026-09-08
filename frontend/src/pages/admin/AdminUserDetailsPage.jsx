@@ -5,7 +5,7 @@ import {
   ArrowLeft, Loader2, User as UserIcon, Mail, Phone, Calendar, ShieldCheck,
   CheckCircle2, Wallet, History, Lock, ShieldAlert, FileText, AlertTriangle,
   Trash2, PauseCircle, PlayCircle, Plus, Minus, CreditCard, Clock, Check, X,
-  Activity
+  Activity, Eye
 } from 'lucide-react'
 import {
   fetchAdminUserById, patchUserStatusAdmin, addAdminNote,
@@ -17,6 +17,27 @@ import { ROLE_LABELS, USER_ROLES } from '../../constants/userRoles.js'
 import { ACCOUNT_STATUS_COLORS, ACCOUNT_STATUS_LABELS, ACCOUNT_STATUSES } from '../../constants/userStatuses.js'
 import { formatLastLoginDisplay } from '../../lib/formatAdminLastLogin.js'
 import { AdminConfirmActionDialog } from '../../components/admin/AdminConfirmActionDialog.jsx'
+
+function getWorkerKycPhotos(labourProfile) {
+  if (!labourProfile) return []
+  if (Array.isArray(labourProfile.kycPhotos) && labourProfile.kycPhotos.length > 0) {
+    return labourProfile.kycPhotos.filter((p) => p && p.url)
+  }
+  const list = []
+  if (labourProfile.kycFrontImageUrl) {
+    list.push({ label: 'Aadhaar Card (Front)', url: labourProfile.kycFrontImageUrl, type: 'aadhaar_front' })
+  }
+  if (labourProfile.kycBackImageUrl) {
+    list.push({ label: 'Aadhaar Card (Back)', url: labourProfile.kycBackImageUrl, type: 'aadhaar_back' })
+  }
+  if (labourProfile.kycSelfieUrl) {
+    list.push({ label: 'Worker Selfie', url: labourProfile.kycSelfieUrl, type: 'selfie' })
+  }
+  if (labourProfile.kycPanImageUrl) {
+    list.push({ label: 'PAN Card / Certificate', url: labourProfile.kycPanImageUrl, type: 'pan' })
+  }
+  return list
+}
 
 function StatusBadge({ status, active }) {
   const accountStatus = status || (active !== false ? ACCOUNT_STATUSES.ACTIVE : ACCOUNT_STATUSES.DELETED)
@@ -40,6 +61,7 @@ export function AdminUserDetailsPage() {
 
   // Dialog State
   const [dialogConfig, setDialogConfig] = useState({ isOpen: false })
+  const [zoomImage, setZoomImage] = useState(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -377,8 +399,8 @@ export function AdminUserDetailsPage() {
               {activeTab === 'role' && (
                 <div className="space-y-6">
                   {user.labourProfile && (
-                    <GlassPanel className="p-6">
-                      <div className="mb-5 flex items-center justify-between">
+                    <GlassPanel className="p-6 space-y-5">
+                      <div className="flex items-center justify-between">
                         <h2 className="text-sm font-bold uppercase tracking-wide text-slate-400">Labour KYC Review</h2>
                         <span className="inline-flex rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-slate-700">
                           Status: {user.labourProfile.kycStatus}
@@ -394,22 +416,87 @@ export function AdminUserDetailsPage() {
                           <p className="mt-1 font-mono text-lg font-medium text-slate-900">{user.labourProfile.panNumber || user.labourProfile.panMasked || '—'}</p>
                         </div>
                       </div>
+
+                      {/* KYC Photos Grid */}
+                      <div>
+                        <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">KYC Photos & Documents</p>
+                        {(() => {
+                          const photos = getWorkerKycPhotos(user.labourProfile)
+                          if (photos.length > 0) {
+                            return (
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                {photos.map((p, idx) => (
+                                  <div key={idx} className="group relative overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-sm">
+                                    <div className="relative aspect-4/3 w-full overflow-hidden bg-slate-900/10">
+                                      <img
+                                        src={p.url}
+                                        alt={p.label || 'KYC document'}
+                                        className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => setZoomImage({ url: p.url, title: p.label || 'KYC Document' })}
+                                        className="absolute inset-0 flex items-center justify-center bg-slate-950/40 opacity-0 transition group-hover:opacity-100 text-white font-bold text-xs gap-1.5 cursor-pointer"
+                                      >
+                                        <Eye className="h-4 w-4" /> View Full
+                                      </button>
+                                    </div>
+                                    <div className="p-2 bg-white border-t border-slate-100 flex items-center justify-between">
+                                      <p className="text-[11px] font-bold text-slate-800 truncate">{p.label || `Document #${idx + 1}`}</p>
+                                      <button
+                                        type="button"
+                                        onClick={() => setZoomImage({ url: p.url, title: p.label || 'KYC Document' })}
+                                        className="text-brand hover:text-brand/80 text-[10px] font-bold shrink-0 ml-1 cursor-pointer"
+                                      >
+                                        Zoom
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          }
+                          if (!user.labourProfile.kycVideoUrl) {
+                            return (
+                              <div className="rounded-xl border border-amber-200/80 bg-amber-50 p-3 text-xs text-amber-950 space-y-1">
+                                <p className="font-bold text-amber-900">⚠️ No KYC photos submitted by this worker.</p>
+                                <p className="text-amber-800/90 font-medium">You can still approve & verify this account below if documents are verified offline.</p>
+                              </div>
+                            )
+                          }
+                          return null
+                        })()}
+                      </div>
+
+                      {/* Legacy Video Display */}
+                      {user.labourProfile.kycVideoUrl && (
+                        <div>
+                          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Recorded KYC Video (Legacy)</p>
+                          <video
+                            src={user.labourProfile.kycVideoUrl}
+                            controls
+                            playsInline
+                            className="aspect-video max-w-md w-full rounded-xl border border-slate-200/90 bg-slate-950 object-contain"
+                          />
+                        </div>
+                      )}
                       
                       {user.labourProfile.kycStatus === 'pending' && (
                         <div className="flex gap-3 pt-4 border-t border-slate-100">
                           <button
                             onClick={() => {
-                              const hasVideo = Boolean(user.labourProfile?.kycVideoUrl)
+                              const photos = getWorkerKycPhotos(user.labourProfile)
+                              const hasDocs = photos.length > 0 || Boolean(user.labourProfile?.kycVideoUrl)
                               openDialog({
-                                title: hasVideo ? 'Approve KYC' : '⚠️ Video KYC Not Submitted',
-                                description: hasVideo
+                                title: hasDocs ? 'Approve KYC' : '⚠️ No Documents Submitted',
+                                description: hasDocs
                                   ? 'Are you sure you want to approve this labour account? They will be able to start accepting jobs immediately.'
-                                  : 'This worker has NOT submitted a Video KYC yet. Are you sure you still want to verify and approve this account?',
-                                confirmText: hasVideo ? 'Approve' : 'Yes, Verify Anyway',
+                                  : 'This worker has NOT submitted KYC photos or video yet. Are you sure you still want to verify and approve this account?',
+                                confirmText: hasDocs ? 'Approve' : 'Yes, Verify Anyway',
                                 onConfirm: () => handleKycReview('approved', '')
                               })
                             }}
-                            className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
+                            className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 cursor-pointer"
                           >
                             Approve KYC
                           </button>
@@ -422,13 +509,12 @@ export function AdminUserDetailsPage() {
                               requireReason: true,
                               onConfirm: ({ reason }) => handleKycReview('rejected', reason)
                             })}
-                            className="flex-1 rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-bold text-rose-700 shadow-sm transition hover:bg-rose-100"
+                            className="flex-1 rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm font-bold text-rose-700 shadow-sm transition hover:bg-rose-100 cursor-pointer"
                           >
                             Reject KYC
                           </button>
                         </div>
                       )}
-                      {/* KYC Video Logic would go here if provided in API */}
                     </GlassPanel>
                   )}
 
@@ -697,6 +783,31 @@ export function AdminUserDetailsPage() {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Lightbox / Zoom Modal */}
+      {zoomImage && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="relative max-h-[90vh] max-w-2xl w-full overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 bg-slate-50">
+              <p className="text-sm font-bold text-slate-900">{zoomImage.title}</p>
+              <button
+                type="button"
+                onClick={() => setZoomImage(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-200 hover:text-slate-900 transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-3 bg-slate-900/5 flex items-center justify-center max-h-[75vh] overflow-auto">
+              <img
+                src={zoomImage.url}
+                alt={zoomImage.title}
+                className="max-h-[70vh] w-auto rounded-xl object-contain shadow-sm"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
