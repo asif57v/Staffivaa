@@ -101,22 +101,27 @@ export const createRequest = asyncHandler(async (req, res) => {
     settings = await SystemSettings.create({ singletonId: 'SYSTEM_SETTINGS' })
   }
 
-  // Estimate total labor cost to compute percentage fees
+  // Estimate total labor cost to compute percentage fees and category platform fees
   const LabourCategory = mongoose.model('LabourCategory')
   const categoryIds = parsedLines.map((l) => l.categoryId)
   const categories = await LabourCategory.find({ _id: { $in: categoryIds } }).lean()
   const categoryMap = {}
+  const categoryFeeMap = {}
   categories.forEach((c) => {
     categoryMap[c._id.toString()] = c.baseRate || 800
+    categoryFeeMap[c._id.toString()] = c.platformFee ?? 0
   })
 
   let totalWorkers = 0
   let estimatedLabourCostPerDay = 0
+  let totalCategoryPlatformFee = 0
   parsedLines.forEach((l) => {
     const qty = l.quantity || 1
     const rate = categoryMap[l.categoryId.toString()] || 800
+    const catPf = categoryFeeMap[l.categoryId.toString()] ?? 0
     totalWorkers += qty
     estimatedLabourCostPerDay += qty * rate
+    totalCategoryPlatformFee += qty * catPf
   })
   const estimatedTotalLabourCost = estimatedLabourCostPerDay * totalDurationInDays
 
@@ -127,11 +132,17 @@ export const createRequest = asyncHandler(async (req, res) => {
   let platformFeeValue = 0
 
   if (sourceType === REQUEST_SOURCE.INDIVIDUAL) {
-    const pfConfig = pricing.userBooking.platformFee
-    platformFeeType = pfConfig.type || 'fixed'
-    platformFeeValue = pfConfig.value ?? 0
-    const { computeUserBookingPlatformFee } = await import('../utils/platformFeePricing.js')
-    userPlatformFee = computeUserBookingPlatformFee(pricing, { estimatedTotalLabourCost })
+    if (totalCategoryPlatformFee > 0) {
+      userPlatformFee = totalCategoryPlatformFee
+      platformFeeType = 'category'
+      platformFeeValue = totalCategoryPlatformFee
+    } else {
+      const pfConfig = pricing.userBooking.platformFee
+      platformFeeType = pfConfig.type || 'fixed'
+      platformFeeValue = pfConfig.value ?? 0
+      const { computeUserBookingPlatformFee } = await import('../utils/platformFeePricing.js')
+      userPlatformFee = computeUserBookingPlatformFee(pricing, { estimatedTotalLabourCost })
+    }
 
     if (pricing.userBooking.gst?.enabled) {
       userGstRate = pricing.userBooking.gst.rate ?? 18
@@ -602,7 +613,7 @@ export const getRequest = asyncHandler(async (req, res) => {
     .populate('projectId', 'name')
     .populate('siteId', 'name')
     .populate('clientId', 'fullName corporateProfile.companyName')
-    .populate('lines.categoryId', 'name baseRate')
+    .populate('lines.categoryId', 'name baseRate platformFee')
     .lean()
   if (!request) return sendError(res, { message: 'Not found', statusCode: HTTP_STATUS.NOT_FOUND })
 
@@ -651,6 +662,7 @@ export const getRequest = asyncHandler(async (req, res) => {
     computeUserBookingPlatformFee,
     computeLabourPlatformFee,
     estimateRequestLabourCost,
+    estimateRequestCategoryPlatformFee,
   } = await import('../utils/platformFeePricing.js')
   const pricingDoc = await SystemPricing.findOne().lean()
 
@@ -659,15 +671,22 @@ export const getRequest = asyncHandler(async (req, res) => {
   const labourUnpaid = request.labourPaymentStatus !== 'paid'
   if (userUnpaid || labourUnpaid) {
     const categoryRateMap = {}
+    const categoryFeeMap = {}
     request.lines?.forEach((line) => {
       const id = String(line.categoryId?._id || line.categoryId || '')
-      if (id) categoryRateMap[id] = line.categoryId?.baseRate || 800
+      if (id) {
+        categoryRateMap[id] = line.categoryId?.baseRate || 800
+        categoryFeeMap[id] = line.categoryId?.platformFee ?? 0
+      }
     })
     const estimatedTotalLabourCost = estimateRequestLabourCost(request, categoryRateMap)
+    const categoryPlatformFee = estimateRequestCategoryPlatformFee(request, categoryFeeMap)
     const patch = {}
 
     if (userUnpaid && request.sourceType === 'individual') {
-      const liveUserFee = computeUserBookingPlatformFee(pricingDoc, { estimatedTotalLabourCost })
+      const liveUserFee = categoryPlatformFee > 0
+        ? categoryPlatformFee
+        : computeUserBookingPlatformFee(pricingDoc, { estimatedTotalLabourCost, categoryPlatformFee })
       if (Number(request.userPlatformFee) !== liveUserFee) {
         patch.userPlatformFee = liveUserFee
         request.userPlatformFee = liveUserFee
@@ -678,6 +697,7 @@ export const getRequest = asyncHandler(async (req, res) => {
       const liveLabourFee = computeLabourPlatformFee(pricingDoc, {
         distanceKm: request.distanceKm || 0,
         estimatedTotalLabourCost,
+        categoryPlatformFee,
       })
       if (Number(request.labourPlatformFee) !== liveLabourFee) {
         patch.labourPlatformFee = liveLabourFee

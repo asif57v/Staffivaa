@@ -39,7 +39,7 @@ function getRazorpayInstance() {
 
 export const createRazorpayOrder = asyncHandler(async (req, res) => {
   const { id } = req.params
-  const request = await WorkforceRequest.findById(id)
+  const request = await WorkforceRequest.findById(id).populate('lines.categoryId', 'name baseRate platformFee')
   
   if (!request) {
     return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
@@ -61,19 +61,24 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
     computeUserBookingPlatformFee,
     computeLabourPlatformFee,
     estimateRequestLabourCost,
+    estimateRequestCategoryPlatformFee,
   } = await import('../utils/platformFeePricing.js')
   const pricingDoc = await SystemPricing.findOne().lean()
 
   // Refresh unpaid fees from live admin pricing before charging
   if (request.userPaymentStatus !== 'paid' || request.labourPaymentStatus !== 'paid') {
     const estimatedTotalLabourCost = estimateRequestLabourCost(request)
+    const categoryPlatformFee = estimateRequestCategoryPlatformFee(request)
     if (request.userPaymentStatus !== 'paid' && request.sourceType !== 'corporate') {
-      request.userPlatformFee = computeUserBookingPlatformFee(pricingDoc, { estimatedTotalLabourCost })
+      request.userPlatformFee = categoryPlatformFee > 0
+        ? categoryPlatformFee
+        : computeUserBookingPlatformFee(pricingDoc, { estimatedTotalLabourCost, categoryPlatformFee })
     }
     if (request.labourPaymentStatus !== 'paid') {
       request.labourPlatformFee = computeLabourPlatformFee(pricingDoc, {
         distanceKm: request.distanceKm || 0,
         estimatedTotalLabourCost,
+        categoryPlatformFee,
       })
     }
   }

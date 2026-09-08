@@ -27,11 +27,24 @@ import { Camera, Loader2, ImageIcon } from 'lucide-react'
 import { assetUrlFromUpload, uploadMedia } from '../../api/uploadApi.js'
 import { UPLOAD_FOLDERS } from '../../constants/uploadFolders.js'
 
-function CategoryModal({ groupLabel, initialName = '', initialBaseRate = 800, initialImageUrl = '', isEdit = false, onClose, onSubmit, busy, error, reduceMotion }) {
+function CategoryModal({
+  groupLabel,
+  initialName = '',
+  initialBaseRate = 800,
+  initialPlatformFee = 0,
+  initialImageUrl = '',
+  isEdit = false,
+  onClose,
+  onSubmit,
+  busy,
+  error,
+  reduceMotion,
+}) {
   const inputRef = useRef(null)
 
   const [name, setName] = useState(initialName)
   const [baseRate, setBaseRate] = useState(initialBaseRate)
+  const [platformFee, setPlatformFee] = useState(initialPlatformFee)
   const [imageUrl, setImageUrl] = useState(initialImageUrl)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
@@ -39,10 +52,11 @@ function CategoryModal({ groupLabel, initialName = '', initialBaseRate = 800, in
   useEffect(() => {
     setName(initialName)
     setBaseRate(initialBaseRate)
+    setPlatformFee(initialPlatformFee)
     setImageUrl(initialImageUrl)
     const t = window.setTimeout(() => inputRef.current?.focus(), 50)
     return () => window.clearTimeout(t)
-  }, [initialName, initialBaseRate])
+  }, [initialName, initialBaseRate, initialPlatformFee, initialImageUrl])
 
   const handleFile = async (file) => {
     if (!file?.type?.startsWith('image/')) {
@@ -68,7 +82,7 @@ function CategoryModal({ groupLabel, initialName = '', initialBaseRate = 800, in
 
   function handleSubmit(e) {
     e.preventDefault()
-    onSubmit({ name: name.trim(), baseRate, imageUrl: imageUrl.trim() })
+    onSubmit({ name: name.trim(), baseRate, platformFee, imageUrl: imageUrl.trim() })
   }
 
   return (
@@ -130,6 +144,19 @@ function CategoryModal({ groupLabel, initialName = '', initialBaseRate = 800, in
               value={baseRate}
               onChange={(e) => setBaseRate(Number(e.target.value))}
               placeholder="e.g. 800"
+              className="w-full rounded-xl border border-slate-200/90 bg-white px-4 py-3 text-sm outline-none ring-slate-200/80 focus:ring-2 focus:ring-brand/35 mb-3"
+            />
+
+            <label htmlFor="modal-cat-platformfee" className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              Platform Fee (₹)
+            </label>
+            <input
+              id="modal-cat-platformfee"
+              type="number"
+              min="0"
+              value={platformFee}
+              onChange={(e) => setPlatformFee(Number(e.target.value))}
+              placeholder="e.g. 50"
               className="w-full rounded-xl border border-slate-200/90 bg-white px-4 py-3 text-sm outline-none ring-slate-200/80 focus:ring-2 focus:ring-brand/35 mb-4"
             />
             
@@ -372,7 +399,7 @@ export function AdminLabourCategoriesPage() {
     }
   }
 
-  async function handleModalSubmit({ name, baseRate, imageUrl }) {
+  async function handleModalSubmit({ name, baseRate, platformFee, imageUrl }) {
     if (!name) {
       setModalError('Enter a name')
       return
@@ -381,7 +408,7 @@ export function AdminLabourCategoriesPage() {
     setModalBusy(true)
     try {
       if (editingCategory) {
-        await patchAdminLabourCategory(editingCategory._id, { name, baseRate, imageUrl })
+        await patchAdminLabourCategory(editingCategory._id, { name, baseRate, platformFee, imageUrl })
       } else {
         if (!selectedGroupId) {
           setModalError('No group selected')
@@ -392,6 +419,7 @@ export function AdminLabourCategoriesPage() {
           groupId: selectedGroupId,
           name,
           baseRate,
+          platformFee,
           imageUrl,
           sortOrder: 999,
         })
@@ -616,7 +644,15 @@ export function AdminLabourCategoriesPage() {
                             </div>
                             <div>
                               <p className="font-semibold text-slate-900">{c.name}</p>
-                              <p className="mt-0.5 font-mono text-[11px] text-slate-400">{c.slug}</p>
+                              <div className="mt-1 flex flex-wrap items-center gap-2">
+                                <span className="font-mono text-[11px] text-slate-400">{c.slug}</span>
+                                <span className="inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                                  Visiting: ₹{c.baseRate ?? 800}
+                                </span>
+                                <span className="inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/70">
+                                  Platform Fee: ₹{c.platformFee ?? 0}
+                                </span>
+                              </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -669,6 +705,7 @@ export function AdminLabourCategoriesPage() {
             groupLabel={groupLabel}
             initialName={editingCategory ? editingCategory.name : ''}
             initialBaseRate={editingCategory?.baseRate ?? 800}
+            initialPlatformFee={editingCategory?.platformFee ?? 0}
             initialImageUrl={editingCategory?.imageUrl ?? ''}
             isEdit={!!editingCategory}
             onClose={() => {

@@ -310,7 +310,7 @@ export function generateBookingRef() {
 }
 
 /**
- * @param {{ lines: { quantity: number, baseRate?: number }[], durationDays: number }} input
+ * @param {{ lines: { quantity: number, baseRate?: number, platformFee?: number }[], durationDays: number }} input
  */
 export function estimateIndividualBooking(input, pricingConfig) {
   const durationDays = Math.max(1, Number(input.durationDays) || 1)
@@ -325,8 +325,15 @@ export function estimateIndividualBooking(input, pricingConfig) {
   
   const RATE_PER_WORKER_DAY = (input.lines && input.lines.length > 0 && input.lines[0].baseRate !== undefined) ? Number(input.lines[0].baseRate) : 0
   
-  let platformFee = Math.round(estimatedTotal * 0.05)
-  if (pricingConfig?.userBooking?.platformFee) {
+  // Calculate category-based platform fee if configured
+  const categoryPlatformFeeSum = (input.lines || []).reduce((sum, ln) => {
+    const qty = Math.max(1, Number(ln.quantity) || 1)
+    const fee = ln.platformFee !== undefined && ln.platformFee !== null && !isNaN(Number(ln.platformFee)) ? Number(ln.platformFee) : 0
+    return sum + (qty * fee)
+  }, 0)
+
+  let platformFee = categoryPlatformFeeSum
+  if (categoryPlatformFeeSum === 0 && pricingConfig?.userBooking?.platformFee) {
     const pf = pricingConfig.userBooking.platformFee
     if (pf.type === 'percentage') {
       platformFee = Math.round((estimatedTotal * (pf.value ?? 10)) / 100)
@@ -527,6 +534,8 @@ export function bookingPayloadFromDraft(draft) {
       categoryId: draft.categoryId,
       categoryName: draft.categoryName,
       groupName: draft.groupName,
+      baseRate: draft.baseRate,
+      platformFee: draft.platformFee,
       quantity: draft.matchMode === 'manual' ? qty : 1,
     },
   ]

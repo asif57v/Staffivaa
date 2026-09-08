@@ -542,11 +542,14 @@ export function IndividualBookingFlowPage() {
   const estimate = useMemo(() => {
     const cat = categoriesList.find((c) => String(c._id) === String(draft.categoryId))
     const baseRate = cat?.baseRate ?? 0
+    const platformFee = cat?.platformFee ?? 0
 
     const lines = [
       {
         quantity: Math.max(1, (draft.selectedWorkers || []).length || 1),
         baseRate,
+        platformFee,
+        categoryId: draft.categoryId,
       },
     ]
     const days = durationKindToDays(draft.durationKind, draft.durationDays)

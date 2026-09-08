@@ -28,6 +28,7 @@ export const listGrouped = asyncHandler(async (_req, res) => {
       subtitle: c.subtitle,
       imageUrl: c.imageUrl || '',
       baseRate: c.baseRate,
+      platformFee: c.platformFee ?? 0,
       sortOrder: c.sortOrder,
     })
   }

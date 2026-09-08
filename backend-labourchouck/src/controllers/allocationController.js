@@ -157,13 +157,13 @@ export const listLabourAssignments = asyncHandler(async (req, res) => {
       path: 'requestId',
       populate: [
         { path: 'clientId', select: 'fullName phone corporateProfile companyName' },
-        { path: 'lines.categoryId', select: 'name' },
+        { path: 'lines.categoryId', select: 'name baseRate platformFee' },
         { path: 'projectId', select: 'name' },
         { path: 'siteId', select: 'address' }
       ]
     })
     .populate('vendorId', 'fullName contractorProfile')
-    .populate('categoryId', 'name')
+    .populate('categoryId', 'name baseRate platformFee')
     .lean()
 
   const now = new Date()
@@ -202,7 +202,7 @@ export const listLabourAssignments = asyncHandler(async (req, res) => {
   // Refresh unpaid labour platform fees from live admin pricing
   try {
     const pricing = await SystemPricing.findOne().lean()
-    const { computeLabourPlatformFee, estimateRequestLabourCost } = await import('../utils/platformFeePricing.js')
+    const { computeLabourPlatformFee, estimateRequestLabourCost, estimateRequestCategoryPlatformFee } = await import('../utils/platformFeePricing.js')
     const updates = []
     for (const a of validAssignments) {
       const req = a.requestId
@@ -210,9 +210,11 @@ export const listLabourAssignments = asyncHandler(async (req, res) => {
       if (req.labourPaymentStatus === 'paid') continue
       if (!['platform_fee_pending', 'accepted', 'confirmed'].includes(req.status)) continue
 
-      const liveFee = computeLabourPlatformFee(pricing, {
+      const categoryFee = estimateRequestCategoryPlatformFee(req)
+      const liveFee = categoryFee > 0 ? categoryFee : computeLabourPlatformFee(pricing, {
         distanceKm: req.distanceKm || 0,
         estimatedTotalLabourCost: estimateRequestLabourCost(req),
+        categoryPlatformFee: categoryFee,
       })
       if (Number(req.labourPlatformFee) !== liveFee) {
         req.labourPlatformFee = liveFee
@@ -326,18 +328,20 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       return sendError(res, { message: 'You already have an active job. Please complete or cancel it before accepting a new one.', statusCode: HTTP_STATUS.BAD_REQUEST });
     }
 
-    const existingRequest = await WorkforceRequest.findById(assignment.requestId)
+    const existingRequest = await WorkforceRequest.findById(assignment.requestId).populate('lines.categoryId', 'name baseRate platformFee')
     if (!existingRequest) {
       return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
     }
 
     const distanceKm = await resolveDistanceKmForRequest(existingRequest, labourLat, labourLng)
     const pricing = await SystemPricing.findOne().lean()
-    const { computeLabourPlatformFee, estimateRequestLabourCost } = await import('../utils/platformFeePricing.js')
+    const { computeLabourPlatformFee, estimateRequestLabourCost, estimateRequestCategoryPlatformFee } = await import('../utils/platformFeePricing.js')
     const estimatedTotalLabourCost = estimateRequestLabourCost(existingRequest)
-    const labourFee = computeLabourPlatformFee(pricing, {
+    const categoryFee = estimateRequestCategoryPlatformFee(existingRequest)
+    const labourFee = categoryFee > 0 ? categoryFee : computeLabourPlatformFee(pricing, {
       distanceKm,
       estimatedTotalLabourCost,
+      categoryPlatformFee: categoryFee,
     })
 
     const settingsDoc = await SystemSettings.findOne({ singletonId: 'SYSTEM_SETTINGS' }).lean()

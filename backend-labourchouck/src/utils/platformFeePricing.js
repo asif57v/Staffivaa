@@ -5,10 +5,19 @@
 
 /**
  * @param {object|null|undefined} pricing
- * @param {{ estimatedTotalLabourCost?: number }} [opts]
+ * @param {{ estimatedTotalLabourCost?: number, categoryPlatformFee?: number }} [opts]
  * @returns {number}
  */
 export function computeUserBookingPlatformFee(pricing, opts = {}) {
+  // If category-specific platform fee is explicitly supplied, prioritize it
+  if (
+    opts.categoryPlatformFee !== undefined &&
+    opts.categoryPlatformFee !== null &&
+    !Number.isNaN(Number(opts.categoryPlatformFee))
+  ) {
+    return Math.max(0, Math.round(Number(opts.categoryPlatformFee)))
+  }
+
   const estimatedTotalLabourCost = Number(opts.estimatedTotalLabourCost) || 0
   const pfConfig = pricing?.userBooking?.platformFee || {}
 
@@ -39,18 +48,29 @@ export function computeUserBookingPlatformFee(pricing, opts = {}) {
 
 /**
  * @param {object|null|undefined} pricing
- * @param {{ distanceKm?: number, estimatedTotalLabourCost?: number }} [opts]
+ * @param {{ distanceKm?: number, estimatedTotalLabourCost?: number, categoryPlatformFee?: number }} [opts]
  * @returns {number}
  */
 export function computeLabourPlatformFee(pricing, opts = {}) {
-  const distanceKm = Number(opts.distanceKm) || 0
+  // If category-specific platform fee is supplied, prioritize category-level fee
+  if (
+    opts.categoryPlatformFee !== undefined &&
+    opts.categoryPlatformFee !== null &&
+    !Number.isNaN(Number(opts.categoryPlatformFee))
+  ) {
+    return Math.max(0, Math.round(Number(opts.categoryPlatformFee)))
+  }
+
   const estimatedTotalLabourCost = Number(opts.estimatedTotalLabourCost) || 800
   const pf = pricing?.labour?.platformFee
 
   if (!pf) return 0
   if (pf.status === 'disabled') return 0
 
+  /*
+  // Distance-based fee calculation commented out in favor of category-wise platform fee
   if (pf.type === 'distance') {
+    const distanceKm = Number(opts.distanceKm) || 0
     const slabs = Array.isArray(pf.slabs) ? [...pf.slabs] : []
     slabs.sort((a, b) => Number(a.minDistance || 0) - Number(b.minDistance || 0))
     for (const slab of slabs) {
@@ -65,6 +85,7 @@ export function computeLabourPlatformFee(pricing, opts = {}) {
     }
     return 0
   }
+  */
 
   if (pf.type === 'percentage') {
     return Math.max(0, Math.round((estimatedTotalLabourCost * Number(pf.value ?? 0)) / 100))
@@ -96,4 +117,20 @@ export function estimateRequestLabourCost(request, categoryRateMap = {}) {
     days = Math.max(1, diffDays + 1)
   }
   return perDay * days
+}
+
+/**
+ * Estimate total category platform fee from request lines.
+ * @param {object} request
+ * @param {Map<string, number>|Record<string, number>} [categoryFeeMap]
+ */
+export function estimateRequestCategoryPlatformFee(request, categoryFeeMap = {}) {
+  const lines = request?.lines || []
+  let totalFee = 0
+  for (const line of lines) {
+    const catId = String(line.categoryId?._id || line.categoryId || '')
+    const fee = Number(categoryFeeMap[catId] ?? line.categoryId?.platformFee ?? 0)
+    totalFee += fee * (line.quantity || 1)
+  }
+  return totalFee
 }
