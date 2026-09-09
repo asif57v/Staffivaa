@@ -5,7 +5,7 @@ import {
   ArrowLeft, Loader2, User as UserIcon, Mail, Phone, Calendar, ShieldCheck,
   CheckCircle2, Wallet, History, Lock, ShieldAlert, FileText, AlertTriangle,
   Trash2, PauseCircle, PlayCircle, Plus, Minus, CreditCard, Clock, Check, X,
-  Activity, Eye
+  Activity, Eye, Camera
 } from 'lucide-react'
 import {
   fetchAdminUserById, patchUserStatusAdmin, addAdminNote,
@@ -18,25 +18,45 @@ import { ACCOUNT_STATUS_COLORS, ACCOUNT_STATUS_LABELS, ACCOUNT_STATUSES } from '
 import { formatLastLoginDisplay } from '../../lib/formatAdminLastLogin.js'
 import { AdminConfirmActionDialog } from '../../components/admin/AdminConfirmActionDialog.jsx'
 
-function getWorkerKycPhotos(labourProfile) {
+function getWorkerKycDocumentSlots(labourProfile) {
   if (!labourProfile) return []
-  if (Array.isArray(labourProfile.kycPhotos) && labourProfile.kycPhotos.length > 0) {
-    return labourProfile.kycPhotos.filter((p) => p && p.url)
+  const photos = Array.isArray(labourProfile.kycPhotos) ? labourProfile.kycPhotos : []
+
+  const findUrl = (type, key, labelMatch) => {
+    if (labourProfile[key]) return labourProfile[key]
+    const p = photos.find(
+      (item) => item?.type === type || (item?.label && item.label.toLowerCase().includes(labelMatch)),
+    )
+    return p?.url || ''
   }
-  const list = []
-  if (labourProfile.kycFrontImageUrl) {
-    list.push({ label: 'Aadhaar Card (Front)', url: labourProfile.kycFrontImageUrl, type: 'aadhaar_front' })
-  }
-  if (labourProfile.kycBackImageUrl) {
-    list.push({ label: 'Aadhaar Card (Back)', url: labourProfile.kycBackImageUrl, type: 'aadhaar_back' })
-  }
-  if (labourProfile.kycSelfieUrl) {
-    list.push({ label: 'Worker Selfie', url: labourProfile.kycSelfieUrl, type: 'selfie' })
-  }
-  if (labourProfile.kycPanImageUrl) {
-    list.push({ label: 'PAN Card / Certificate', url: labourProfile.kycPanImageUrl, type: 'pan' })
-  }
-  return list
+
+  const frontUrl = findUrl('aadhaar_front', 'kycFrontImageUrl', 'front')
+  const backUrl = findUrl('aadhaar_back', 'kycBackImageUrl', 'back')
+  const selfieUrl = findUrl('selfie', 'kycSelfieUrl', 'selfie')
+  const panUrl = findUrl('pan', 'kycPanImageUrl', 'pan')
+
+  const slots = [
+    { id: 'aadhaar_front', label: 'Aadhaar Card (Front)', url: frontUrl, isRequired: true },
+    { id: 'aadhaar_back', label: 'Aadhaar Card (Back)', url: backUrl, isRequired: true },
+    { id: 'selfie', label: 'Worker Selfie / Face Photo', url: selfieUrl, isRequired: true },
+    { id: 'pan', label: 'PAN Card / Certificate', url: panUrl, isRequired: false },
+  ]
+
+  const primaryUrls = new Set([frontUrl, backUrl, selfieUrl, panUrl].filter(Boolean))
+  const extras = photos
+    .filter((p) => p?.url && !primaryUrls.has(p.url))
+    .map((p, i) => ({
+      id: `extra_${i}`,
+      label: p.label || `Additional Document #${i + 1}`,
+      url: p.url,
+      isRequired: false,
+    }))
+
+  return [...slots, ...extras]
+}
+
+function getWorkerKycPhotos(labourProfile) {
+  return getWorkerKycDocumentSlots(labourProfile).filter((s) => Boolean(s.url))
 }
 
 function StatusBadge({ status, active }) {
@@ -419,52 +439,107 @@ export function AdminUserDetailsPage() {
 
                       {/* KYC Photos Grid */}
                       <div>
-                        <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">KYC Photos & Documents</p>
-                        {(() => {
-                          const photos = getWorkerKycPhotos(user.labourProfile)
-                          if (photos.length > 0) {
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                            KYC Photos & Documents
+                          </p>
+                          {(() => {
+                            const slots = getWorkerKycDocumentSlots(user.labourProfile)
+                            const uploadedCount = slots.filter((s) => Boolean(s.url)).length
+                            if (uploadedCount === 0) {
+                              return (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-100/80 px-2.5 py-0.5 rounded-full border border-amber-300">
+                                  ⚠️ No Photos Uploaded (0/{slots.length})
+                                </span>
+                              )
+                            }
                             return (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                                ✓ {uploadedCount} of {slots.length} Photos Uploaded
+                              </span>
+                            )
+                          })()}
+                        </div>
+
+                        {(() => {
+                          const slots = getWorkerKycDocumentSlots(user.labourProfile)
+                          const uploadedCount = slots.filter((s) => Boolean(s.url)).length
+
+                          return (
+                            <div className="space-y-3">
+                              {uploadedCount === 0 && (
+                                <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-950 space-y-1">
+                                  <p className="font-bold text-amber-900 flex items-center gap-1.5">
+                                    <span>⚠️ No KYC photos submitted by this worker.</span>
+                                  </p>
+                                  <p className="text-amber-800/90 font-medium leading-relaxed">
+                                    Worker submitted Aadhaar/PAN numbers without attaching photo documents. You can review the numbers offline or approve/reject accordingly.
+                                  </p>
+                                </div>
+                              )}
+
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                {photos.map((p, idx) => (
-                                  <div key={idx} className="group relative overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-sm">
-                                    <div className="relative aspect-4/3 w-full overflow-hidden bg-slate-900/10">
-                                      <img
-                                        src={p.url}
-                                        alt={p.label || 'KYC document'}
-                                        className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => setZoomImage({ url: p.url, title: p.label || 'KYC Document' })}
-                                        className="absolute inset-0 flex items-center justify-center bg-slate-950/40 opacity-0 transition group-hover:opacity-100 text-white font-bold text-xs gap-1.5 cursor-pointer"
-                                      >
-                                        <Eye className="h-4 w-4" /> View Full
-                                      </button>
-                                    </div>
-                                    <div className="p-2 bg-white border-t border-slate-100 flex items-center justify-between">
-                                      <p className="text-[11px] font-bold text-slate-800 truncate">{p.label || `Document #${idx + 1}`}</p>
-                                      <button
-                                        type="button"
-                                        onClick={() => setZoomImage({ url: p.url, title: p.label || 'KYC Document' })}
-                                        className="text-brand hover:text-brand/80 text-[10px] font-bold shrink-0 ml-1 cursor-pointer"
-                                      >
-                                        Zoom
-                                      </button>
+                                {slots.map((slot) => (
+                                  <div
+                                    key={slot.id}
+                                    className={`group relative overflow-hidden rounded-xl border transition ${
+                                      slot.url
+                                        ? 'border-emerald-200 bg-white shadow-sm'
+                                        : 'border-dashed border-slate-200 bg-slate-50/70'
+                                    }`}
+                                  >
+                                    {slot.url ? (
+                                      <div className="relative aspect-4/3 w-full overflow-hidden bg-slate-900/10">
+                                        <img
+                                          src={slot.url}
+                                          alt={slot.label}
+                                          className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => setZoomImage({ url: slot.url, title: slot.label })}
+                                          className="absolute inset-0 flex items-center justify-center bg-slate-950/40 opacity-0 transition group-hover:opacity-100 text-white font-bold text-xs gap-1.5 cursor-pointer"
+                                        >
+                                          <Eye className="h-4 w-4" /> View Full
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="aspect-4/3 w-full flex flex-col items-center justify-center p-2 text-center bg-slate-100/50">
+                                        <Camera className="h-6 w-6 text-slate-300 mb-1" />
+                                        <span className="text-[10px] font-bold text-slate-400">No image</span>
+                                      </div>
+                                    )}
+
+                                    <div className="p-2.5 bg-white border-t border-slate-100 flex flex-col gap-1">
+                                      <p className="text-[11px] font-bold text-slate-800 truncate" title={slot.label}>
+                                        {slot.label}
+                                      </p>
+                                      <div className="flex items-center justify-between mt-0.5">
+                                        {slot.url ? (
+                                          <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                            ✓ Uploaded
+                                          </span>
+                                        ) : (
+                                          <span className="text-[9px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                            {slot.isRequired ? '❌ Not uploaded' : '— Optional'}
+                                          </span>
+                                        )}
+                                        {slot.url ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => setZoomImage({ url: slot.url, title: slot.label })}
+                                            className="text-brand hover:text-brand/80 text-[10px] font-bold shrink-0 ml-1 cursor-pointer"
+                                          >
+                                            Zoom
+                                          </button>
+                                        ) : null}
+                                      </div>
                                     </div>
                                   </div>
                                 ))}
                               </div>
-                            )
-                          }
-                          if (!user.labourProfile.kycVideoUrl) {
-                            return (
-                              <div className="rounded-xl border border-amber-200/80 bg-amber-50 p-3 text-xs text-amber-950 space-y-1">
-                                <p className="font-bold text-amber-900">⚠️ No KYC photos submitted by this worker.</p>
-                                <p className="text-amber-800/90 font-medium">You can still approve & verify this account below if documents are verified offline.</p>
-                              </div>
-                            )
-                          }
-                          return null
+                            </div>
+                          )
                         })()}
                       </div>
 

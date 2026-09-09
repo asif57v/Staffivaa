@@ -244,14 +244,6 @@ export const submitLabourKycDocuments = asyncHandler(async (req, res) => {
   const hasPhotos = Boolean(frontUrl || backUrl || selfieUrl || photos.length > 0)
   const hasVideo = Boolean(videoUrl)
 
-  if (!hasPhotos && !hasVideo) {
-    return sendError(res, {
-      message: 'Please upload at least Aadhaar card and worker selfie photo before submitting',
-      statusCode: HTTP_STATUS.BAD_REQUEST,
-      code: 'INVALID_KYC_DOCUMENTS',
-    })
-  }
-
   req.user.labourProfile = req.user.labourProfile || {}
   req.user.labourProfile.kycStatus = KYC_STATUS.PENDING
   if (hasAadhaarInput) {
@@ -262,20 +254,19 @@ export const submitLabourKycDocuments = asyncHandler(async (req, res) => {
     req.user.labourProfile.panMasked = maskPan(normalizedPan)
     req.user.labourProfile.panNumber = normalizedPan
   }
-  if (frontUrl) req.user.labourProfile.kycFrontImageUrl = frontUrl
-  if (backUrl) req.user.labourProfile.kycBackImageUrl = backUrl
-  if (selfieUrl) req.user.labourProfile.kycSelfieUrl = selfieUrl
-  if (panUrl) req.user.labourProfile.kycPanImageUrl = panUrl
-  if (photos.length > 0) {
-    req.user.labourProfile.kycPhotos = photos
-      .map((p) => ({
-        label: p.label || 'Document',
-        url: normalizeStoredMediaUrl(p.url) || p.url,
-        type: p.type || 'other',
-        uploadedAt: new Date(),
-      }))
-      .filter((p) => Boolean(p.url))
-  }
+  req.user.labourProfile.kycFrontImageUrl = frontUrl || ''
+  req.user.labourProfile.kycBackImageUrl = backUrl || ''
+  req.user.labourProfile.kycSelfieUrl = selfieUrl || ''
+  req.user.labourProfile.kycPanImageUrl = panUrl || ''
+  req.user.labourProfile.kycPhotos = photos
+    .map((p) => ({
+      label: p.label || 'Document',
+      url: normalizeStoredMediaUrl(p.url) || p.url,
+      type: p.type || 'other',
+      uploadedAt: new Date(),
+    }))
+    .filter((p) => Boolean(p.url))
+
   if (videoUrl) {
     req.user.labourProfile.kycVideoUrl = videoUrl
     req.user.labourProfile.kycVideoMeta = sanitizeKycVideoMeta(req.body.videoMeta)

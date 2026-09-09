@@ -10,28 +10,24 @@ const KYC_SLOTS = [
     label: 'Aadhaar Card (Front)',
     desc: 'Front side with photo and full details',
     required: true,
-    cameraFacing: 'environment',
   },
   {
     id: 'aadhaar_back',
     label: 'Aadhaar Card (Back)',
     desc: 'Back side with address and barcode',
     required: true,
-    cameraFacing: 'environment',
   },
   {
     id: 'selfie',
     label: 'Worker Selfie / Live Face Photo',
     desc: 'Clear face photo taken in good lighting',
     required: true,
-    cameraFacing: 'user',
   },
   {
     id: 'pan',
     label: 'PAN Card / Certificate',
     desc: 'PAN card or any skill/trade certificate',
     required: false,
-    cameraFacing: 'environment',
   },
 ]
 
@@ -83,7 +79,7 @@ export function LabourKycPhotoUploadGrid({ photos = {}, onChange, disabled = fal
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-slate-500">KYC Photos & Documents</p>
-          <p className="text-xs text-slate-600">Take clear photos with your camera or upload from your gallery.</p>
+          <p className="text-xs text-slate-600">Take clear photos with camera or gallery (optional — can submit without photos).</p>
         </div>
       </div>
 
@@ -166,7 +162,7 @@ export function LabourKycPhotoUploadGrid({ photos = {}, onChange, disabled = fal
                         id={`camera-input-${slot.id}`}
                         type="file"
                         accept="image/*"
-                        capture={slot.cameraFacing}
+                        capture="environment"
                         disabled={disabled || isBusy}
                         className="hidden"
                         onChange={(e) => {

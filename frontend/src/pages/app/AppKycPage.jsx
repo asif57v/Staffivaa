@@ -75,9 +75,8 @@ export function AppKycPage() {
   const aadhaarDigits = digitsOnly(aadhaar).length
   const normalizedPan = normalizePan(pan)
   const panValid = normalizedPan.length === 10
-  const hasRequiredPhotos = Boolean(photos.aadhaar_front && photos.aadhaar_back && photos.selfie)
   const detailsReady = isResubmit || (aadhaarDigits === 12 && panValid)
-  const canSubmit = detailsReady && hasRequiredPhotos && !busy
+  const canSubmit = detailsReady && !busy
   const workflowStep = kycWorkflowStepIndex({
     kycStatus: kyc,
     submittedAt,
@@ -125,10 +124,6 @@ export function AppKycPage() {
       }
     } else if ((d.length > 0 && d.length !== 12) || (normalizedPan.length > 0 && !panValid)) {
       setBanner({ variant: 'error', message: 'Update Aadhaar and PAN only if you want to change them.' })
-      return
-    }
-    if (!photos.aadhaar_front || !photos.aadhaar_back || !photos.selfie) {
-      setBanner({ variant: 'error', message: 'Please upload Aadhaar Front, Aadhaar Back, and Selfie photo.' })
       return
     }
     setBusy(true)
