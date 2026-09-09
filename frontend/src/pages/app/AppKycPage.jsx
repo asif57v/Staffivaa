@@ -155,9 +155,14 @@ export function AppKycPage() {
         setPan('')
       }
     } catch (e) {
+      const msg = e instanceof ApiError
+        ? (Array.isArray(e.errors) && e.errors.length > 0
+            ? e.errors.map((err) => err.message).filter(Boolean).join(', ') || e.message
+            : e.message)
+        : 'KYC submission failed. Try again.'
       setBanner({
         variant: 'error',
-        message: e instanceof ApiError ? e.message : 'KYC submission failed. Try again.',
+        message: msg,
       })
     } finally {
       setBusy(false)
