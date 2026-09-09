@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Camera, Image as ImageIcon, Loader2, Trash2, CheckCircle2, ShieldAlert, Eye, X } from 'lucide-react'
-import { uploadMedia, assetUrlFromUpload } from '../../../api/uploadApi.js'
+import { uploadDocument, assetUrlFromUpload } from '../../../api/uploadApi.js'
 import { UPLOAD_FOLDERS } from '../../../constants/uploadFolders.js'
 import { ApiError } from '../../../api/http.js'
 
@@ -51,7 +51,7 @@ export function LabourKycPhotoUploadGrid({ photos = {}, onChange, disabled = fal
     setUploadingSlot(slotId)
 
     try {
-      const uploaded = await uploadMedia(file, UPLOAD_FOLDERS.KYC_DOCUMENTS)
+      const uploaded = await uploadDocument(file, UPLOAD_FOLDERS.KYC_DOCUMENTS)
       const url = assetUrlFromUpload(uploaded)
       if (url) {
         onChange({

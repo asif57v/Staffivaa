@@ -19,7 +19,6 @@ import { ApiError } from '../../api/http.js'
 import { KYC_STATUS } from '../../constants/userRoles.js'
 import { useAuth } from '../../hooks/useAuth.js'
 import { setUser } from '../../store/slices/authSlice.js'
-import { assetUrlFromUpload, uploadMedia } from '../../api/uploadApi.js'
 import { UPLOAD_FOLDERS } from '../../constants/uploadFolders.js'
 import {
   getKycUiState,
