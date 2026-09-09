@@ -53,11 +53,12 @@ router.post(
   [
     body('aadhaar').optional({ values: 'falsy' }).isString().trim(),
     body('pan').optional({ values: 'falsy' }).isString().trim(),
-    body('videoUrl')
-      .isString()
-      .trim()
-      .isURL({ protocols: ['https'], require_protocol: true })
-      .withMessage('KYC video URL is required'),
+    body('photos').optional().isArray().withMessage('photos must be an array'),
+    body('frontImageUrl').optional({ values: 'falsy' }).isString().trim(),
+    body('backImageUrl').optional({ values: 'falsy' }).isString().trim(),
+    body('selfieUrl').optional({ values: 'falsy' }).isString().trim(),
+    body('panImageUrl').optional({ values: 'falsy' }).isString().trim(),
+    body('videoUrl').optional({ values: 'falsy' }).isString().trim(),
     body('videoMeta').optional().isObject().withMessage('videoMeta must be an object'),
   ],
   validateRequest,
