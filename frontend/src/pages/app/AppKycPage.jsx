@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
@@ -14,6 +14,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
+import { uploadDocument, assetUrlFromUpload } from '../../api/uploadApi.js'
 import { submitLabourKycDocuments } from '../../api/userKycApi.js'
 import { ApiError } from '../../api/http.js'
 import { KYC_STATUS } from '../../constants/userRoles.js'
@@ -28,6 +29,7 @@ import {
   KYC_WORKFLOW_RESUBMIT,
   kycWorkflowStepIndex,
 } from '../../lib/labourKycFlow.js'
+import { saveKycDraft, loadKycDraft, clearKycDraft } from '../../lib/kycDraftStorage.js'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
 import { LabourKycHero } from '../../components/labour/kyc/LabourKycHero.jsx'
@@ -46,7 +48,6 @@ function normalizePan(s) {
 }
 
 const BENEFIT_ICONS = [HardHat, ShieldCheck, IndianRupee]
-const KYC_DRAFT_KEY = 'lc-labour-kyc-draft'
 
 export function AppKycPage() {
   const reduce = useReducedMotion()
@@ -57,7 +58,9 @@ export function AppKycPage() {
   const [pan, setPan] = useState('')
   const [photos, setPhotos] = useState({})
   const [busy, setBusy] = useState(false)
+  const [busyText, setBusyText] = useState('')
   const [banner, setBanner] = useState(null)
+  const [draftLoaded, setDraftLoaded] = useState(false)
 
   useEffect(() => {
     if (!banner) return
@@ -76,7 +79,19 @@ export function AppKycPage() {
   const normalizedPan = normalizePan(pan)
   const panValid = normalizedPan.length === 10
   const detailsReady = isResubmit || (aadhaarDigits === 12 && panValid)
-  const hasMandatoryPhotos = Boolean(photos.aadhaar_front) && Boolean(photos.aadhaar_back) && Boolean(photos.pan)
+
+  const hasValidSlot = (slotValue) => {
+    if (!slotValue) return false
+    if (typeof slotValue === 'string') return Boolean(slotValue.trim())
+    if (typeof slotValue === 'object') return Boolean(slotValue.file || slotValue.previewUrl)
+    return false
+  }
+
+  const hasMandatoryPhotos =
+    hasValidSlot(photos.aadhaar_front) &&
+    hasValidSlot(photos.aadhaar_back) &&
+    hasValidSlot(photos.pan)
+
   const canSubmit = (isResubmit ? detailsReady : (detailsReady && hasMandatoryPhotos)) && !busy
   const workflowStep = kycWorkflowStepIndex({
     kycStatus: kyc,
@@ -93,23 +108,48 @@ export function AppKycPage() {
     submit: 'Not submitted',
   }
 
+  // Load persistent draft on mount / user change
   useEffect(() => {
-    if (isResubmit || ui.phase === 'verified') return
-    try {
-      const raw = sessionStorage.getItem(KYC_DRAFT_KEY)
-      if (!raw) return
-      const draft = JSON.parse(raw)
-      if (!aadhaar && draft.aadhaar) setAadhaar(digitsOnly(draft.aadhaar))
-      if (!pan && draft.pan) setPan(normalizePan(draft.pan))
-    } catch {
-      /* ignore corrupt draft */
+    let cancelled = false
+    async function initDraft() {
+      if (ui.phase === 'verified') {
+        setDraftLoaded(true)
+        return
+      }
+      try {
+        const draft = await loadKycDraft(user?._id)
+        if (!cancelled && draft) {
+          if (draft.aadhaar) setAadhaar(digitsOnly(draft.aadhaar))
+          if (draft.pan) setPan(normalizePan(draft.pan))
+          if (draft.photos && Object.keys(draft.photos).length > 0) {
+            setPhotos(draft.photos)
+          }
+        }
+      } catch (err) {
+        console.warn('[AppKycPage] Failed to restore draft:', err)
+      } finally {
+        if (!cancelled) setDraftLoaded(true)
+      }
     }
-  }, [isResubmit, ui.phase])
+    initDraft()
+    return () => {
+      cancelled = true
+    }
+  }, [user?._id, ui.phase])
 
+  // Auto-save draft when fields or photos change (after initial draft load)
   useEffect(() => {
-    if (isResubmit || ui.phase === 'verified') return
-    sessionStorage.setItem(KYC_DRAFT_KEY, JSON.stringify({ aadhaar, pan }))
-  }, [aadhaar, pan, isResubmit, ui.phase])
+    if (!draftLoaded || ui.phase === 'verified') return
+    const timer = setTimeout(() => {
+      saveKycDraft({
+        aadhaar,
+        pan,
+        photos,
+        userId: user?._id,
+      })
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [aadhaar, pan, photos, draftLoaded, user?._id, ui.phase])
 
   const handleSubmit = async () => {
     setBanner(null)
@@ -123,15 +163,15 @@ export function AppKycPage() {
         setBanner({ variant: 'error', message: 'Enter a valid 10-character PAN number.' })
         return
       }
-      if (!photos.aadhaar_front) {
+      if (!hasValidSlot(photos.aadhaar_front)) {
         setBanner({ variant: 'error', message: 'Please upload Aadhaar Card (Front side photo).' })
         return
       }
-      if (!photos.aadhaar_back) {
+      if (!hasValidSlot(photos.aadhaar_back)) {
         setBanner({ variant: 'error', message: 'Please upload Aadhaar Card (Back side photo).' })
         return
       }
-      if (!photos.pan) {
+      if (!hasValidSlot(photos.pan)) {
         setBanner({ variant: 'error', message: 'Please upload PAN Card photo.' })
         return
       }
@@ -139,29 +179,52 @@ export function AppKycPage() {
       setBanner({ variant: 'error', message: 'Update Aadhaar and PAN only if you want to change them.' })
       return
     }
+
     setBusy(true)
+    setBusyText('Uploading documents to secure storage...')
     try {
-      const photoList = [
-        photos.aadhaar_front ? { label: 'Aadhaar Card (Front)', url: photos.aadhaar_front, type: 'aadhaar_front' } : null,
-        photos.aadhaar_back ? { label: 'Aadhaar Card (Back)', url: photos.aadhaar_back, type: 'aadhaar_back' } : null,
-        photos.pan ? { label: 'PAN Card', url: photos.pan, type: 'pan' } : null,
-        photos.selfie ? { label: 'Worker Selfie', url: photos.selfie, type: 'selfie' } : null,
-      ].filter(Boolean)
+      // Parallel upload of any staged local files
+      const uploadSlot = async (slotId, label, slotValue) => {
+        if (!slotValue) return null
+        if (typeof slotValue === 'string' && slotValue.trim()) {
+          return { label, url: slotValue, type: slotId }
+        }
+        if (typeof slotValue === 'object' && slotValue.file) {
+          const uploaded = await uploadDocument(slotValue.file, UPLOAD_FOLDERS.KYC_DOCUMENTS)
+          const remoteUrl = assetUrlFromUpload(uploaded)
+          if (!remoteUrl) throw new Error(`Failed to upload ${label}`)
+          return { label, url: remoteUrl, type: slotId }
+        }
+        if (typeof slotValue === 'object' && slotValue.previewUrl && !slotValue.previewUrl.startsWith('blob:')) {
+          return { label, url: slotValue.previewUrl, type: slotId }
+        }
+        return null
+      }
+
+      const [frontDoc, backDoc, panDoc, selfieDoc] = await Promise.all([
+        uploadSlot('aadhaar_front', 'Aadhaar Card (Front)', photos.aadhaar_front),
+        uploadSlot('aadhaar_back', 'Aadhaar Card (Back)', photos.aadhaar_back),
+        uploadSlot('pan', 'PAN Card', photos.pan),
+        uploadSlot('selfie', 'Worker Selfie', photos.selfie),
+      ])
+
+      const photoList = [frontDoc, backDoc, panDoc, selfieDoc].filter(Boolean)
 
       const payload = {
         photos: photoList,
-        frontImageUrl: photos.aadhaar_front || '',
-        backImageUrl: photos.aadhaar_back || '',
-        panImageUrl: photos.pan || '',
-        selfieUrl: photos.selfie || '',
+        frontImageUrl: frontDoc?.url || '',
+        backImageUrl: backDoc?.url || '',
+        panImageUrl: panDoc?.url || '',
+        selfieUrl: selfieDoc?.url || '',
       }
       if (!isResubmit || d.length === 12) payload.aadhaar = d
       if (!isResubmit || panValid) payload.pan = normalizedPan
 
+      setBusyText('Submitting KYC details for verification...')
       const res = await submitLabourKycDocuments(payload)
       if (res.data?.user) dispatch(setUser(res.data.user))
       setBanner({ variant: 'success', message: res.message || 'Submitted for admin review.' })
-      sessionStorage.removeItem(KYC_DRAFT_KEY)
+      await clearKycDraft(user?._id)
       setPhotos({})
       if (!isResubmit) {
         setAadhaar('')
@@ -172,13 +235,14 @@ export function AppKycPage() {
         ? (Array.isArray(e.errors) && e.errors.length > 0
             ? e.errors.map((err) => err.message).filter(Boolean).join(', ') || e.message
             : e.message)
-        : 'KYC submission failed. Try again.'
+        : (e?.message || 'KYC submission failed. Try again.')
       setBanner({
         variant: 'error',
         message: msg,
       })
     } finally {
       setBusy(false)
+      setBusyText('')
     }
   }
 
@@ -410,19 +474,24 @@ export function AppKycPage() {
 
           <AppPrimaryButton
             type="button"
-            className="mt-5 w-full py-3.5 text-sm"
+            className="mt-5 w-full py-3.5 text-sm flex items-center justify-center gap-2"
             disabled={!canSubmit}
             onClick={handleSubmit}
           >
-            {compactForm || isResubmit ? (
+            {busy ? (
+              <>
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                <span>{busyText || 'Processing...'}</span>
+              </>
+            ) : compactForm || isResubmit ? (
               <>
                 <RefreshCw className="h-4 w-4" aria-hidden />
-                Submit again
+                <span>Submit again</span>
               </>
             ) : (
               <>
                 <ShieldCheck className="h-4 w-4" aria-hidden />
-                Submit for admin review
+                <span>Submit for admin review</span>
               </>
             )}
           </AppPrimaryButton>

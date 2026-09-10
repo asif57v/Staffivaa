@@ -212,7 +212,7 @@ export function CategoryPickBottomSheet({ open, onClose, tradeGroups = [], group
                 <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">Main category</p>
                 <div
                   data-modal-scroll="horizontal"
-                  className="-mx-4 px-4 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-2 scrollbar-none [-webkit-overflow-scrolling:touch] [touch-action:pan-x]"
+                  className="-mx-4 px-4 overflow-x-auto pb-2 scrollbar-none [-webkit-overflow-scrolling:touch] touch-pan-y touch-pan-x"
                 >
                   <div className="flex w-max gap-2.5">
                     <button

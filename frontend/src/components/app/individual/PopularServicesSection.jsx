@@ -65,7 +65,7 @@ export function PopularServicesSection({ onBook }) {
         </h3>
       </div>
 
-      <div className="flex gap-3.5 overflow-x-auto -mx-3 px-3 pb-3 pt-1 scrollbar-none [&::-webkit-scrollbar]:hidden overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]">
+      <div className="flex gap-3.5 overflow-x-auto -mx-3 px-3 pb-3 pt-1 scrollbar-none [&::-webkit-scrollbar]:hidden touch-pan-y touch-pan-x [-webkit-overflow-scrolling:touch]">
         {POPULAR_SERVICES.map((service, idx) => (
           <div
             key={service.id}

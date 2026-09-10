@@ -589,7 +589,7 @@ function formatBannerPrice(rawPrice) {
             onMouseLeave={() => { isHeroHoveredRef.current = false }}
             onTouchStart={() => { isHeroHoveredRef.current = true }}
             onTouchEnd={() => { isHeroHoveredRef.current = false }}
-            className="relative overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-none flex gap-3 pb-2 pt-1 px-3 w-full min-h-[130px] overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]"
+            className="relative overflow-x-auto snap-x snap-mandatory scrollbar-none flex gap-3 pb-2 pt-1 px-3 w-full min-h-[130px] touch-pan-y touch-pan-x [-webkit-overflow-scrolling:touch]"
           >
             {activeCarouselBanners.map((slide, i) => {
               const slideImage = slide.image || slide.imageUrl || '/home_service_hero.png'
@@ -674,7 +674,7 @@ function formatBannerPrice(rawPrice) {
           </div>
           <div
             ref={categoryScrollRef}
-            className="flex gap-2.5 overflow-x-auto pb-2 pt-1 scrollbar-none [&::-webkit-scrollbar]:hidden w-full px-3 overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]"
+            className="flex gap-2.5 overflow-x-auto pb-2 pt-1 scrollbar-none [&::-webkit-scrollbar]:hidden w-full px-3 touch-pan-y touch-pan-x [-webkit-overflow-scrolling:touch]"
           >
             <button
               type="button"
@@ -743,7 +743,7 @@ function formatBannerPrice(rawPrice) {
             animate={{ opacity: 1, y: 0 }}
             className="mt-6 -mx-3 px-3"
           >
-            <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-none snap-x snap-mandatory overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]">
+            <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-none snap-x snap-mandatory touch-pan-y touch-pan-x [-webkit-overflow-scrolling:touch]">
               {middleBanners.map(banner => (
                 <div key={banner._id} className="w-[90%] sm:w-[92%] snap-center shrink-0 rounded-[20px] overflow-hidden shadow-sm relative group">
                   <a 
@@ -781,7 +781,7 @@ function formatBannerPrice(rawPrice) {
                 <Sparkles className="h-4 w-4 text-[#F59E0B]" /> Exclusive Offers
               </h3>
             </div>
-            <div className="flex overflow-x-auto gap-3 pb-2 -mx-3 px-3 scrollbar-none snap-x snap-mandatory overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]">
+            <div className="flex overflow-x-auto gap-3 pb-2 -mx-3 px-3 scrollbar-none snap-x snap-mandatory touch-pan-y touch-pan-x [-webkit-overflow-scrolling:touch]">
               {marketingOffers.map(offer => {
                 const targetCategoryId = offer.categories?.[0]
                 
@@ -890,7 +890,7 @@ function formatBannerPrice(rawPrice) {
           {bookingsLoading ? <AppListSkeleton rows={2} /> : null}
 
           {!bookingsLoading && recentBookings.length ? (
-            <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 pt-2 -mx-3 px-3 scrollbar-none [&::-webkit-scrollbar]:hidden mt-2 overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]">
+            <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 pt-2 -mx-3 px-3 scrollbar-none [&::-webkit-scrollbar]:hidden mt-2 touch-pan-y touch-pan-x [-webkit-overflow-scrolling:touch]">
               {recentBookings.map((b, idx) => {
                 const st = bookingStatusToUi(b.status)
                 const primaryLine = (b.lines || [])[0]
@@ -1043,7 +1043,7 @@ function formatBannerPrice(rawPrice) {
             animate={{ opacity: 1, y: 0 }}
             className="mt-8 -mx-3 px-3"
           >
-            <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-none snap-x snap-mandatory overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]">
+            <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-none snap-x snap-mandatory touch-pan-y touch-pan-x [-webkit-overflow-scrolling:touch]">
               {bottomBanners.map(banner => (
                 <div key={banner._id} className="w-[90%] sm:w-[92%] snap-center shrink-0 rounded-[20px] overflow-hidden shadow-sm relative group">
                   <a 
@@ -1081,7 +1081,7 @@ function formatBannerPrice(rawPrice) {
             </div>
             
             <div 
-              className="relative w-full overflow-x-auto px-5 pb-6 overscroll-x-contain [touch-action:pan-x] [-webkit-overflow-scrolling:touch]"
+              className="relative w-full overflow-x-auto px-5 pb-6 touch-pan-y touch-pan-x [-webkit-overflow-scrolling:touch]"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {/* Custom class for hiding scrollbar in webkit browsers isn't always standard, so inline styles help for Firefox/IE. */}
