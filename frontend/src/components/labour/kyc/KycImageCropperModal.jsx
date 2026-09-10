@@ -117,8 +117,8 @@ export function KycImageCropperModal({
         </button>
       </header>
 
-      {/* Aspect Ratio Selector Bar */}
-      <div className="relative z-10 flex shrink-0 items-center justify-center gap-1.5 overflow-x-auto border-b border-white/10 bg-slate-900/60 px-4 py-2">
+      {/* Aspect Ratio Selector Bar with safe left/right scroll padding */}
+      <div className="relative z-10 flex shrink-0 items-center justify-start sm:justify-center gap-2 overflow-x-auto border-b border-white/10 bg-slate-900/80 px-4 py-2.5 scrollbar-none [&::-webkit-scrollbar]:hidden touch-pan-x [-webkit-overflow-scrolling:touch]">
         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1 hidden sm:inline">
           Frame Ratio:
         </span>
@@ -130,9 +130,9 @@ export function KycImageCropperModal({
               key={preset.id}
               type="button"
               onClick={() => setCurrentAspect(preset.aspect)}
-              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition active:scale-95 ${
+              className={`shrink-0 flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition active:scale-95 whitespace-nowrap ${
                 isActive
-                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  ? 'bg-amber-500 text-slate-950 shadow-sm ring-1 ring-amber-400'
                   : 'bg-white/10 text-slate-300 hover:bg-white/15 hover:text-white'
               }`}
             >
@@ -145,11 +145,11 @@ export function KycImageCropperModal({
         <button
           type="button"
           onClick={handleFitFull}
-          className="ml-1 flex items-center gap-1 rounded-lg bg-white/10 px-2.5 py-1 text-xs font-bold text-slate-300 hover:bg-white/15 hover:text-white transition active:scale-95"
+          className="shrink-0 ml-1 flex items-center gap-1 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/15 hover:text-white transition active:scale-95 whitespace-nowrap"
           title="Fit full image in view"
         >
           <Maximize2 className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Fit Full</span>
+          <span>Fit Full</span>
         </button>
       </div>
 
@@ -181,8 +181,8 @@ export function KycImageCropperModal({
         />
       </main>
 
-      {/* Controls & Action Footer */}
-      <footer className="relative z-10 shrink-0 border-t border-white/10 bg-slate-900/90 px-4 py-3 sm:px-6 space-y-3">
+      {/* Controls & Action Footer with lifted mobile bottom clearance */}
+      <footer className="relative z-10 shrink-0 border-t border-white/10 bg-slate-900/95 px-4 pt-3 pb-8 sm:pb-5 sm:px-6 space-y-3.5">
         {/* Zoom Slider */}
         <div className="mx-auto flex max-w-md items-center gap-3">
           <button
@@ -227,13 +227,13 @@ export function KycImageCropperModal({
           </button>
         </div>
 
-        {/* Action Buttons */}
-        <div className="mx-auto flex max-w-md items-center justify-end gap-2.5 pt-1">
+        {/* Action Buttons lifted with ample touch area and bottom clearance */}
+        <div className="mx-auto flex max-w-md items-center justify-between gap-3 pt-1">
           <button
             type="button"
             onClick={onCancel}
             disabled={isProcessing}
-            className="flex-1 sm:flex-none rounded-xl border border-white/20 px-4 py-2.5 text-xs sm:text-sm font-bold text-white hover:bg-white/10 transition active:scale-95 disabled:opacity-50"
+            className="flex-1 rounded-xl border border-white/20 bg-white/5 py-3 px-4 text-xs sm:text-sm font-bold text-white hover:bg-white/15 transition active:scale-95 disabled:opacity-50 text-center"
           >
             Cancel
           </button>
@@ -242,7 +242,7 @@ export function KycImageCropperModal({
             type="button"
             onClick={handleSave}
             disabled={isProcessing}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-2.5 text-xs sm:text-sm font-extrabold text-slate-950 shadow-lg shadow-amber-500/25 hover:from-amber-400 hover:to-amber-500 transition active:scale-95 disabled:opacity-50"
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 py-3 px-5 text-xs sm:text-sm font-extrabold text-slate-950 shadow-lg shadow-amber-500/25 hover:from-amber-400 hover:to-amber-500 transition active:scale-95 disabled:opacity-50"
           >
             {isProcessing ? (
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
