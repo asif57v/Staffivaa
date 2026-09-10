@@ -63,8 +63,8 @@ export function KycImageCropperModal({
     if (!imageSrc || !croppedAreaPixels) return
     setIsProcessing(true)
     try {
-      const { file, previewUrl } = await getCroppedImg(imageSrc, croppedAreaPixels, 'kyc-cropped.jpg')
-      onSave?.(file, previewUrl)
+      const { file, previewUrl, dataUrl } = await getCroppedImg(imageSrc, croppedAreaPixels, 'kyc-cropped.jpg')
+      onSave?.(file, previewUrl, dataUrl)
     } catch (err) {
       console.error('[KycImageCropperModal] Failed to crop image:', err)
     } finally {

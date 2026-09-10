@@ -29,7 +29,7 @@ import {
   KYC_WORKFLOW_RESUBMIT,
   kycWorkflowStepIndex,
 } from '../../lib/labourKycFlow.js'
-import { saveKycDraft, loadKycDraft, clearKycDraft } from '../../lib/kycDraftStorage.js'
+import { saveKycDraft, loadKycDraft, clearKycDraft, dataUrlToFile } from '../../lib/kycDraftStorage.js'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
 import { LabourKycHero } from '../../components/labour/kyc/LabourKycHero.jsx'
@@ -83,7 +83,9 @@ export function AppKycPage() {
   const hasValidSlot = (slotValue) => {
     if (!slotValue) return false
     if (typeof slotValue === 'string') return Boolean(slotValue.trim())
-    if (typeof slotValue === 'object') return Boolean(slotValue.file || slotValue.previewUrl)
+    if (typeof slotValue === 'object') {
+      return Boolean(slotValue.file || slotValue.previewUrl || slotValue.dataUrl)
+    }
     return false
   }
 
@@ -235,7 +237,7 @@ export function AppKycPage() {
       // Parallel upload of any staged local files
       const uploadSlot = async (slotId, label, slotValue) => {
         if (!slotValue) return null
-        if (typeof slotValue === 'string' && slotValue.trim()) {
+        if (typeof slotValue === 'string' && slotValue.trim() && !slotValue.startsWith('data:')) {
           return { label, url: slotValue, type: slotId }
         }
         if (typeof slotValue === 'object' && slotValue.file) {
@@ -244,7 +246,17 @@ export function AppKycPage() {
           if (!remoteUrl) throw new Error(`Failed to upload ${label}`)
           return { label, url: remoteUrl, type: slotId }
         }
-        if (typeof slotValue === 'object' && slotValue.previewUrl && !slotValue.previewUrl.startsWith('blob:')) {
+        const rawDataUrl = typeof slotValue === 'object' ? (slotValue.dataUrl || slotValue.previewUrl) : slotValue
+        if (typeof rawDataUrl === 'string' && rawDataUrl.startsWith('data:')) {
+          const file = dataUrlToFile(rawDataUrl, `${slotId}.jpg`, 'image/jpeg')
+          if (file) {
+            const uploaded = await uploadDocument(file, UPLOAD_FOLDERS.KYC_DOCUMENTS)
+            const remoteUrl = assetUrlFromUpload(uploaded)
+            if (!remoteUrl) throw new Error(`Failed to upload ${label}`)
+            return { label, url: remoteUrl, type: slotId }
+          }
+        }
+        if (typeof slotValue === 'object' && slotValue.previewUrl && !slotValue.previewUrl.startsWith('blob:') && !slotValue.previewUrl.startsWith('data:')) {
           return { label, url: slotValue.previewUrl, type: slotId }
         }
         return null

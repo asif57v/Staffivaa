@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { KycImageCropperModal } from './KycImageCropperModal.jsx'
 import { KycImageLightboxModal } from './KycImageLightboxModal.jsx'
+import { compressImageToDataUrl } from '../../../lib/cropImage.js'
 
 /**
  * KycDocumentUploadField
@@ -28,8 +29,8 @@ export function KycDocumentUploadField({
   label,
   description,
   required = false,
-  value, // Either { file: File, previewUrl: string } or string URL
-  onChange, // ({ file: File, previewUrl: string }) => void
+  value, // Either { file: File, previewUrl: string, dataUrl: string } or string URL
+  onChange, // ({ file: File, previewUrl: string, dataUrl: string }) => void
   onDelete, // () => void
   aspectRatio = 1.6, // ~1.6 for card-like IDs (Aadhaar/PAN), 1.0 for selfie
   cropShape = 'rect', // 'rect' | 'round'
@@ -44,10 +45,10 @@ export function KycDocumentUploadField({
   const [isLightboxOpen, setIsLightboxOpen] = useState(false)
 
   // Extract previewUrl from value object or string URL
-  const previewUrl = typeof value === 'object' && value !== null ? value.previewUrl : value || ''
+  const previewUrl = typeof value === 'object' && value !== null ? (value.previewUrl || value.dataUrl) : value || ''
   const isStagedLocally = Boolean(typeof value === 'object' && value?.file)
 
-  // Clean up previous Object URLs on unmount
+  // Clean up previous Object URLs on unmount if it was a temporary blob
   useEffect(() => {
     return () => {
       if (previewUrl && previewUrl.startsWith('blob:')) {
@@ -56,7 +57,7 @@ export function KycDocumentUploadField({
     }
   }, [previewUrl])
 
-  const handleFileSelect = (e) => {
+  const handleFileSelect = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -75,12 +76,27 @@ export function KycDocumentUploadField({
 
     setLocalError('')
 
-    // Stage file locally via URL.createObjectURL (no server upload yet!)
+    // 1. Stage immediate local object URL for instant UI response
     const objectUrl = URL.createObjectURL(file)
     onChange?.({
       file,
       previewUrl: objectUrl,
+      dataUrl: objectUrl,
     })
+
+    // 2. Asynchronously compress to mobile-optimized Data URL for rock-solid draft persistence
+    try {
+      const compressedDataUrl = await compressImageToDataUrl(file)
+      if (compressedDataUrl) {
+        onChange?.({
+          file,
+          previewUrl: compressedDataUrl,
+          dataUrl: compressedDataUrl,
+        })
+      }
+    } catch (err) {
+      console.warn('[KycDocumentUploadField] Compression error:', err)
+    }
   }
 
   const handleDelete = (e) => {
@@ -105,15 +121,16 @@ export function KycDocumentUploadField({
     setIsLightboxOpen(true)
   }
 
-  const handleSaveCrop = (croppedFile, croppedPreviewUrl) => {
-    // Revoke old preview url if it was a blob
+  const handleSaveCrop = (croppedFile, croppedPreviewUrl, dataUrl) => {
     if (previewUrl && previewUrl.startsWith('blob:')) {
       URL.revokeObjectURL(previewUrl)
     }
     setIsCropperOpen(false)
+    const effectiveUrl = dataUrl || croppedPreviewUrl
     onChange?.({
       file: croppedFile,
-      previewUrl: croppedPreviewUrl,
+      previewUrl: effectiveUrl,
+      dataUrl: effectiveUrl,
     })
   }
 
