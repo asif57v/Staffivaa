@@ -108,27 +108,51 @@ export function AppKycPage() {
     submit: 'Not submitted',
   }
 
+  // Keep latest form state in a ref so unmount/pagehide handlers always have newest values
+  const latestStateRef = useRef({ aadhaar: '', pan: '', photos: {}, userId: user?._id })
+  const isLoadedRef = useRef(false)
+
+  useEffect(() => {
+    latestStateRef.current = { aadhaar, pan, photos, userId: user?._id }
+  }, [aadhaar, pan, photos, user?._id])
+
   // Load persistent draft on mount / user change
   useEffect(() => {
     let cancelled = false
     async function initDraft() {
       if (ui.phase === 'verified') {
         setDraftLoaded(true)
+        isLoadedRef.current = true
         return
       }
       try {
         const draft = await loadKycDraft(user?._id)
         if (!cancelled && draft) {
+          const hasDraftText = Boolean(draft.aadhaar || draft.pan)
+          const hasDraftPhotos = draft.photos && Object.keys(draft.photos).length > 0
+
           if (draft.aadhaar) setAadhaar(digitsOnly(draft.aadhaar))
           if (draft.pan) setPan(normalizePan(draft.pan))
-          if (draft.photos && Object.keys(draft.photos).length > 0) {
+          if (hasDraftPhotos) {
             setPhotos(draft.photos)
+          }
+
+          if (hasDraftText || hasDraftPhotos) {
+            latestStateRef.current = {
+              aadhaar: digitsOnly(draft.aadhaar || ''),
+              pan: normalizePan(draft.pan || ''),
+              photos: draft.photos || {},
+              userId: user?._id,
+            }
           }
         }
       } catch (err) {
         console.warn('[AppKycPage] Failed to restore draft:', err)
       } finally {
-        if (!cancelled) setDraftLoaded(true)
+        if (!cancelled) {
+          setDraftLoaded(true)
+          isLoadedRef.current = true
+        }
       }
     }
     initDraft()
@@ -139,7 +163,7 @@ export function AppKycPage() {
 
   // Auto-save draft when fields or photos change (after initial draft load)
   useEffect(() => {
-    if (!draftLoaded || ui.phase === 'verified') return
+    if (!draftLoaded || !isLoadedRef.current || ui.phase === 'verified') return
     const timer = setTimeout(() => {
       saveKycDraft({
         aadhaar,
@@ -147,9 +171,34 @@ export function AppKycPage() {
         photos,
         userId: user?._id,
       })
-    }, 400)
+    }, 200)
     return () => clearTimeout(timer)
   }, [aadhaar, pan, photos, draftLoaded, user?._id, ui.phase])
+
+  // Guaranteed immediate save on unmount (when worker taps back / navigates away / closes app)
+  useEffect(() => {
+    const handleSaveOnExit = () => {
+      if (!isLoadedRef.current || ui.phase === 'verified') return
+      const current = latestStateRef.current
+      if (current && (current.aadhaar || current.pan || (current.photos && Object.keys(current.photos).length > 0))) {
+        saveKycDraft(current)
+      }
+    }
+
+    window.addEventListener('pagehide', handleSaveOnExit)
+    window.addEventListener('beforeunload', handleSaveOnExit)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') handleSaveOnExit()
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      handleSaveOnExit()
+      window.removeEventListener('pagehide', handleSaveOnExit)
+      window.removeEventListener('beforeunload', handleSaveOnExit)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [ui.phase])
 
   const handleSubmit = async () => {
     setBanner(null)
