@@ -76,7 +76,8 @@ export function AppKycPage() {
   const normalizedPan = normalizePan(pan)
   const panValid = normalizedPan.length === 10
   const detailsReady = isResubmit || (aadhaarDigits === 12 && panValid)
-  const canSubmit = detailsReady && !busy
+  const hasMandatoryPhotos = Boolean(photos.aadhaar_front) && Boolean(photos.aadhaar_back) && Boolean(photos.pan)
+  const canSubmit = (isResubmit ? detailsReady : (detailsReady && hasMandatoryPhotos)) && !busy
   const workflowStep = kycWorkflowStepIndex({
     kycStatus: kyc,
     submittedAt,
@@ -119,7 +120,19 @@ export function AppKycPage() {
         return
       }
       if (!panValid) {
-        setBanner({ variant: 'error', message: 'Enter a valid PAN number.' })
+        setBanner({ variant: 'error', message: 'Enter a valid 10-character PAN number.' })
+        return
+      }
+      if (!photos.aadhaar_front) {
+        setBanner({ variant: 'error', message: 'Please upload Aadhaar Card (Front side photo).' })
+        return
+      }
+      if (!photos.aadhaar_back) {
+        setBanner({ variant: 'error', message: 'Please upload Aadhaar Card (Back side photo).' })
+        return
+      }
+      if (!photos.pan) {
+        setBanner({ variant: 'error', message: 'Please upload PAN Card photo.' })
         return
       }
     } else if ((d.length > 0 && d.length !== 12) || (normalizedPan.length > 0 && !panValid)) {
@@ -131,16 +144,16 @@ export function AppKycPage() {
       const photoList = [
         photos.aadhaar_front ? { label: 'Aadhaar Card (Front)', url: photos.aadhaar_front, type: 'aadhaar_front' } : null,
         photos.aadhaar_back ? { label: 'Aadhaar Card (Back)', url: photos.aadhaar_back, type: 'aadhaar_back' } : null,
+        photos.pan ? { label: 'PAN Card', url: photos.pan, type: 'pan' } : null,
         photos.selfie ? { label: 'Worker Selfie', url: photos.selfie, type: 'selfie' } : null,
-        photos.pan ? { label: 'PAN Card / Certificate', url: photos.pan, type: 'pan' } : null,
       ].filter(Boolean)
 
       const payload = {
         photos: photoList,
         frontImageUrl: photos.aadhaar_front || '',
         backImageUrl: photos.aadhaar_back || '',
-        selfieUrl: photos.selfie || '',
         panImageUrl: photos.pan || '',
+        selfieUrl: photos.selfie || '',
       }
       if (!isResubmit || d.length === 12) payload.aadhaar = d
       if (!isResubmit || panValid) payload.pan = normalizedPan
@@ -304,7 +317,7 @@ export function AppKycPage() {
             </p>
           ) : (
             <p className="mt-1 text-xs leading-relaxed text-slate-600">
-              Please take clear photos or choose from your gallery: Aadhaar front, Aadhaar back, your live selfie, and optional PAN / skill certificate.
+              Please upload clear photos: Aadhaar front, Aadhaar back, and PAN card are mandatory. Worker selfie is optional.
             </p>
           )}
 
@@ -327,9 +340,31 @@ export function AppKycPage() {
                 id="aadhaar"
                 inputMode="numeric"
                 autoComplete="off"
+                maxLength={12}
                 placeholder="XXXX XXXX XXXX"
                 value={aadhaar}
-                onChange={(e) => setAadhaar(digitsOnly(e.target.value))}
+                onChange={(e) => {
+                  const val = digitsOnly(e.target.value)
+                  setAadhaar(val)
+                  if (val.length === 12) {
+                    const panInput = document.getElementById('pan')
+                    if (panInput && !pan) {
+                      panInput.focus()
+                    } else {
+                      e.target.blur()
+                    }
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const panInput = document.getElementById('pan')
+                    if (panInput && !pan) {
+                      panInput.focus()
+                    } else {
+                      e.currentTarget.blur()
+                    }
+                  }
+                }}
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 font-mono text-lg font-semibold tracking-[0.2em] text-slate-900 outline-none focus:ring-2 focus:ring-violet-400/40"
               />
               <p className="mt-1 text-right text-xs font-bold text-slate-400">{aadhaarDigits}/12</p>
@@ -341,9 +376,21 @@ export function AppKycPage() {
               <input
                 id="pan"
                 autoComplete="off"
+                maxLength={10}
                 placeholder="ABCDE1234F"
                 value={pan}
-                onChange={(e) => setPan(normalizePan(e.target.value))}
+                onChange={(e) => {
+                  const val = normalizePan(e.target.value)
+                  setPan(val)
+                  if (val.length === 10) {
+                    e.target.blur()
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur()
+                  }
+                }}
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 font-mono text-lg font-semibold uppercase tracking-[0.18em] text-slate-900 outline-none focus:ring-2 focus:ring-violet-400/40"
               />
               <p className={`mt-1 text-right text-xs font-bold ${pan && !panValid ? 'text-rose-500' : 'text-slate-400'}`}>

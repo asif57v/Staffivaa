@@ -53,7 +53,7 @@ export function getKycUiState(labourProfile) {
   return {
     phase: 'submit',
     title: 'Complete your KYC',
-    subtitle: 'Upload Aadhaar photos and selfie from camera or gallery to unlock jobs.',
+    subtitle: 'Upload Aadhaar card, PAN card, and optional selfie to unlock jobs.',
     tone: 'violet',
   }
 }

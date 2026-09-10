@@ -35,6 +35,7 @@ import { readLabourPresenceOnline } from '../../hooks/useLabourPresence.js'
 import { readApiErrorPayload, readLabourWalletPolicy, readWalletGateFromError } from '../../lib/labourWalletPolicy.js'
 import { useGetWalletBalanceQuery } from '../../store/api/walletApi.js'
 import { InsufficientWalletModal } from '../../components/labour/InsufficientWalletModal.jsx'
+import { KycRequiredModal } from '../../components/labour/KycRequiredModal.jsx'
 
 function isApiAssignment(job) {
   return Boolean(job?.requestId) && /^[a-f0-9]{24}$/i.test(String(job.id))
@@ -83,8 +84,10 @@ export function AppJobsPage() {
   const [toast, setToast] = useState('')
   const [showAllHistory, setShowAllHistory] = useState(false)
   const [walletGate, setWalletGate] = useState(null)
+  const [kycRequiredModalOpen, setKycRequiredModalOpen] = useState(false)
 
-  const kycOk = user?.labourProfile?.kycStatus === KYC_STATUS.VERIFIED
+  const kycStatus = user?.labourProfile?.kycStatus
+  const kycOk = kycStatus === KYC_STATUS.VERIFIED || kycStatus === 'approved'
 
   useEffect(() => {
     const next =
@@ -266,7 +269,7 @@ export function AppJobsPage() {
 
   const handleStartAccept = (id) => {
     if (!kycOk) {
-      showToast('Complete Aadhaar KYC to accept jobs.')
+      setKycRequiredModalOpen(true)
       return
     }
     setConfirmingOfferId((prev) => (prev === id ? null : id))
@@ -278,7 +281,10 @@ export function AppJobsPage() {
   )
 
   const handleConfirmAccept = async (offer) => {
-    if (!kycOk) return
+    if (!kycOk) {
+      setKycRequiredModalOpen(true)
+      return
+    }
     if (!readLabourPresenceOnline()) {
       showToast('You are currently OFFLINE. Please turn ON your status from Home screen to accept this job.')
       return
@@ -315,6 +321,11 @@ export function AppJobsPage() {
       } catch (e) {
         console.error('Accept error:', e)
         const payload = readApiErrorPayload(e)
+        if (payload?.code === 'KYC_NOT_VERIFIED') {
+          setConfirmingOfferId(null)
+          setKycRequiredModalOpen(true)
+          return
+        }
         const gate = readWalletGateFromError(e, walletPolicy)
         if (gate) {
           setWalletGate(gate)
@@ -645,6 +656,13 @@ export function AppJobsPage() {
         requiredAmount={walletGate?.requiredAmount}
         context="job"
         onClose={() => setWalletGate(null)}
+      />
+
+      <KycRequiredModal
+        open={kycRequiredModalOpen}
+        onClose={() => setKycRequiredModalOpen(false)}
+        kycStatus={user?.labourProfile?.kycStatus}
+        kycSubmittedAt={user?.labourProfile?.kycSubmittedAt}
       />
     </div>
   )

@@ -1,5 +1,5 @@
 import mongoose from 'mongoose'
-import { USER_ROLES } from '../constants/roles.js'
+import { USER_ROLES, KYC_STATUS } from '../constants/roles.js'
 import { REQUEST_STATUS, ASSIGNMENT_STATUS, REQUEST_SOURCE } from '../constants/workforceConstants.js'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { Allocation } from '../models/Allocation.js'
@@ -311,6 +311,23 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
     }
 
     const labourUser = await User.findById(req.user._id)
+    if (!labourUser) return sendError(res, { message: 'User not found', statusCode: HTTP_STATUS.NOT_FOUND })
+
+    // KYC Verification Guard: Worker must have verified/approved KYC before accepting jobs
+    const kycStatus = labourUser.labourProfile?.kycStatus
+    const isKycApproved = kycStatus === KYC_STATUS.VERIFIED || kycStatus === 'approved'
+    if (!isKycApproved) {
+      return sendError(res, {
+        message: 'Apni KYC complete karo job accept karne ke liye. (KYC verification is required to accept jobs).',
+        statusCode: HTTP_STATUS.FORBIDDEN,
+        code: 'KYC_NOT_VERIFIED',
+        errors: {
+          kycStatus: kycStatus || 'pending',
+          kycSubmittedAt: labourUser.labourProfile?.kycSubmittedAt || null,
+        },
+      })
+    }
+
     if (labourUser && labourUser.labourProfile?.availabilityStatus === 'offline') {
       labourUser.labourProfile.availabilityStatus = 'available'
       await labourUser.save()

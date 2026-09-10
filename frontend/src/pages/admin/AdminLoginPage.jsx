@@ -8,12 +8,17 @@ import { ArrowLeft, Lock, Mail, ShieldCheck, CheckCircle2, ArrowRight, Eye, EyeO
 import authBg from '../../assets/auth-bg.png'
 
 function handleInputFocus(e) {
-  const container = e.target.closest('div[id^="field-"]') || e.target.parentElement || e.target
+  const target = e.target
   setTimeout(() => {
     try {
-      container.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      if (document.activeElement === target) {
+        const rect = target.getBoundingClientRect()
+        if (rect.bottom > window.innerHeight - 80 || rect.top < 60) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        }
+      }
     } catch (err) {}
-  }, 300)
+  }, 200)
 }
 
 /**

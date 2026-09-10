@@ -46,6 +46,7 @@ import {
 import { readApiErrorPayload, readLabourWalletPolicy, readWalletGateFromError } from '../lib/labourWalletPolicy.js'
 import { useGetWalletBalanceQuery } from '../store/api/walletApi.js'
 import { InsufficientWalletModal } from '../components/labour/InsufficientWalletModal.jsx'
+import { KycRequiredModal } from '../components/labour/KycRequiredModal.jsx'
 import { WorkerLiveLocationBridge } from '../components/labour/WorkerLiveLocationBridge.jsx'
 import { readLabourPresenceOnline, writeLabourPresenceOnline } from '../hooks/useLabourPresence.js'
 
@@ -80,6 +81,7 @@ export function AppShell() {
     [apiData, walletData, user],
   )
   const [walletGate, setWalletGate] = useState(null)
+  const [kycRequiredModalOpen, setKycRequiredModalOpen] = useState(false)
   const [localDemo, setLocalDemo] = useState(() => loadJobDemoState())
   const [incomingJob, setIncomingJob] = useState(null)
   const [isAcceptingPopup, setIsAcceptingPopup] = useState(false)
@@ -480,6 +482,17 @@ export function AppShell() {
     }
 
     stopGlobalRingSound();
+
+    // KYC Verification Guard: Worker must be verified/approved before accepting
+    const kycStatus = user?.labourProfile?.kycStatus
+    const isKycApproved = kycStatus === KYC_STATUS.VERIFIED || kycStatus === 'approved'
+    if (!isKycApproved) {
+      setIncomingJob(null)
+      incomingJobRef.current = null
+      setKycRequiredModalOpen(true)
+      return
+    }
+
     if (walletPolicy.isLowBalance) {
       setWalletGate({
         balance: walletPolicy.balance,
@@ -516,6 +529,12 @@ export function AppShell() {
     } catch (e) {
       console.error('Popup accept error:', e);
       const payload = readApiErrorPayload(e)
+      if (payload?.code === 'KYC_NOT_VERIFIED') {
+        setIncomingJob(null)
+        incomingJobRef.current = null
+        setKycRequiredModalOpen(true)
+        return
+      }
       const gate = readWalletGateFromError(e, walletPolicy)
       if (gate) {
         setWalletGate(gate)
@@ -525,7 +544,7 @@ export function AppShell() {
     } finally {
       setIsAcceptingPopup(false);
     }
-  }, [incomingJob, respondAssignment, navigate, dispatchAlert, stopGlobalRingSound, walletPolicy]);
+  }, [incomingJob, respondAssignment, navigate, dispatchAlert, stopGlobalRingSound, walletPolicy, user]);
 
   const handlePopupDecline = useCallback(async () => {
     stopGlobalRingSound();
@@ -1258,6 +1277,7 @@ export function AppShell() {
           onTimeout={handlePopupTimeout}
           isAccepting={isAcceptingPopup}
           walletPolicy={walletPolicy}
+          isKycApproved={user?.labourProfile?.kycStatus === KYC_STATUS.VERIFIED || user?.labourProfile?.kycStatus === 'approved'}
         />
       )}
 
@@ -1276,6 +1296,13 @@ export function AppShell() {
         requiredAmount={walletGate?.requiredAmount}
         context="job"
         onClose={() => setWalletGate(null)}
+      />
+
+      <KycRequiredModal
+        open={kycRequiredModalOpen}
+        onClose={() => setKycRequiredModalOpen(false)}
+        kycStatus={user?.labourProfile?.kycStatus}
+        kycSubmittedAt={user?.labourProfile?.kycSubmittedAt}
       />
     </div>
   )

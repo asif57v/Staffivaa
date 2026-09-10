@@ -18,31 +18,38 @@ import { ACCOUNT_STATUS_COLORS, ACCOUNT_STATUS_LABELS, ACCOUNT_STATUSES } from '
 import { formatLastLoginDisplay } from '../../lib/formatAdminLastLogin.js'
 import { AdminConfirmActionDialog } from '../../components/admin/AdminConfirmActionDialog.jsx'
 
-function getWorkerKycDocumentSlots(labourProfile) {
+function getWorkerKycDocumentSlots(labourProfile, user = null) {
   if (!labourProfile) return []
   const photos = Array.isArray(labourProfile.kycPhotos) ? labourProfile.kycPhotos : []
 
-  const findUrl = (type, key, labelMatch) => {
-    if (labourProfile[key]) return labourProfile[key]
-    const p = photos.find(
-      (item) => item?.type === type || (item?.label && item.label.toLowerCase().includes(labelMatch)),
-    )
-    return p?.url || ''
+  const findUrl = (type, keys, labelMatches) => {
+    for (const key of keys) {
+      if (labourProfile[key]) return labourProfile[key]
+    }
+    const p = photos.find((item) => {
+      if (!item?.url) return false
+      if (item.type && item.type.toLowerCase() === type.toLowerCase()) return true
+      const lbl = (item.label || '').toLowerCase()
+      return labelMatches.some((match) => lbl.includes(match.toLowerCase()))
+    })
+    if (p?.url) return p.url
+    if (type === 'selfie' && user?.profileImageUrl) return user.profileImageUrl
+    return ''
   }
 
-  const frontUrl = findUrl('aadhaar_front', 'kycFrontImageUrl', 'front')
-  const backUrl = findUrl('aadhaar_back', 'kycBackImageUrl', 'back')
-  const selfieUrl = findUrl('selfie', 'kycSelfieUrl', 'selfie')
-  const panUrl = findUrl('pan', 'kycPanImageUrl', 'pan')
+  const frontUrl = findUrl('aadhaar_front', ['kycFrontImageUrl', 'kycFrontImageDataUrl', 'frontImageUrl'], ['front', 'aadhaar front', 'aadhar front'])
+  const backUrl = findUrl('aadhaar_back', ['kycBackImageUrl', 'kycBackImageDataUrl', 'backImageUrl'], ['back', 'aadhaar back', 'aadhar back'])
+  const panUrl = findUrl('pan', ['kycPanImageUrl', 'panImageUrl'], ['pan', 'pancard', 'pan card'])
+  const selfieUrl = findUrl('selfie', ['kycSelfieUrl', 'selfieUrl'], ['selfie', 'face', 'photo', 'worker selfie'])
 
   const slots = [
     { id: 'aadhaar_front', label: 'Aadhaar Card (Front)', url: frontUrl, isRequired: true },
     { id: 'aadhaar_back', label: 'Aadhaar Card (Back)', url: backUrl, isRequired: true },
-    { id: 'selfie', label: 'Worker Selfie / Face Photo', url: selfieUrl, isRequired: true },
-    { id: 'pan', label: 'PAN Card / Certificate', url: panUrl, isRequired: false },
+    { id: 'pan', label: 'PAN Card / Certificate', url: panUrl, isRequired: true },
+    { id: 'selfie', label: 'Worker Selfie / Face Photo', url: selfieUrl, isRequired: false },
   ]
 
-  const primaryUrls = new Set([frontUrl, backUrl, selfieUrl, panUrl].filter(Boolean))
+  const primaryUrls = new Set([frontUrl, backUrl, panUrl, selfieUrl].filter(Boolean))
   const extras = photos
     .filter((p) => p?.url && !primaryUrls.has(p.url))
     .map((p, i) => ({
@@ -55,8 +62,8 @@ function getWorkerKycDocumentSlots(labourProfile) {
   return [...slots, ...extras]
 }
 
-function getWorkerKycPhotos(labourProfile) {
-  return getWorkerKycDocumentSlots(labourProfile).filter((s) => Boolean(s.url))
+function getWorkerKycPhotos(labourProfile, user = null) {
+  return getWorkerKycDocumentSlots(labourProfile, user).filter((s) => Boolean(s.url))
 }
 
 function StatusBadge({ status, active }) {
@@ -444,7 +451,7 @@ export function AdminUserDetailsPage() {
                             KYC Photos & Documents
                           </p>
                           {(() => {
-                            const slots = getWorkerKycDocumentSlots(user.labourProfile)
+                            const slots = getWorkerKycDocumentSlots(user.labourProfile, user)
                             const uploadedCount = slots.filter((s) => Boolean(s.url)).length
                             if (uploadedCount === 0) {
                               return (
@@ -462,7 +469,7 @@ export function AdminUserDetailsPage() {
                         </div>
 
                         {(() => {
-                          const slots = getWorkerKycDocumentSlots(user.labourProfile)
+                          const slots = getWorkerKycDocumentSlots(user.labourProfile, user)
                           const uploadedCount = slots.filter((s) => Boolean(s.url)).length
 
                           return (
@@ -560,14 +567,17 @@ export function AdminUserDetailsPage() {
                         <div className="flex gap-3 pt-4 border-t border-slate-100">
                           <button
                             onClick={() => {
-                              const photos = getWorkerKycPhotos(user.labourProfile)
-                              const hasDocs = photos.length > 0 || Boolean(user.labourProfile?.kycVideoUrl)
+                              const photos = getWorkerKycPhotos(user.labourProfile, user)
+                              const hasAadhaarFront = Boolean(user.labourProfile?.kycFrontImageUrl || user.labourProfile?.kycFrontImageDataUrl)
+                              const hasAadhaarBack = Boolean(user.labourProfile?.kycBackImageUrl || user.labourProfile?.kycBackImageDataUrl)
+                              const hasPan = Boolean(user.labourProfile?.kycPanImageUrl)
+                              const hasMandatoryDocs = (hasAadhaarFront && hasAadhaarBack && hasPan) || photos.length >= 3
                               openDialog({
-                                title: hasDocs ? 'Approve KYC' : '⚠️ No Documents Submitted',
-                                description: hasDocs
+                                title: hasMandatoryDocs ? 'Approve KYC' : '⚠️ Missing Mandatory Documents',
+                                description: hasMandatoryDocs
                                   ? 'Are you sure you want to approve this labour account? They will be able to start accepting jobs immediately.'
-                                  : 'This worker has NOT submitted KYC photos or video yet. Are you sure you still want to verify and approve this account?',
-                                confirmText: hasDocs ? 'Approve' : 'Yes, Verify Anyway',
+                                  : 'This worker has NOT submitted all mandatory KYC documents (Aadhaar Front, Back, and PAN Card). Are you sure you still want to verify and approve this account anyway?',
+                                confirmText: hasMandatoryDocs ? 'Approve' : 'Yes, Verify Anyway',
                                 onConfirm: () => handleKycReview('approved', '')
                               })
                             }}

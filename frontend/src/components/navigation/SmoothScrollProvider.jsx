@@ -7,14 +7,14 @@ import {
 } from '../../lib/lenisController.js'
 
 const LENIS_DISABLED_ROUTE_RE =
-  /^\/(admin|enterprise|corporate|vendor)(\/|$)|\/app\/(navigation|booking\/flow)/
+  /^\/(admin|enterprise|corporate|vendor|auth)(\/|$)|\/app\/(navigation|booking\/flow|kyc|work-categories|profile)/
 
 const lenisOptions = {
   lerp: 0.1,
   duration: 1.15,
   smoothWheel: true,
-  syncTouch: true,
-  touchMultiplier: 1.1,
+  syncTouch: false,
+  touchMultiplier: 1,
   wheelMultiplier: 1,
 }
 

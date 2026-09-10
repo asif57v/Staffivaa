@@ -48,6 +48,7 @@ export function IncomingJobPopup({
   onTimeout,
   isAccepting,
   walletPolicy,
+  isKycApproved = true,
 }) {
   const navigate = useNavigate()
   const totalSeconds = Math.min(60, Number(job?.timeoutSeconds) || 60)
@@ -273,11 +274,16 @@ export function IncomingJobPopup({
             
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-amber-300">
                     <Briefcase className="h-3 w-3" />
                     New Job Request
                   </span>
+                  {!isKycApproved && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/30 px-2.5 py-1 text-[10px] font-extrabold text-amber-200 border border-amber-400/40">
+                      ⚠️ KYC Required
+                    </span>
+                  )}
                 </div>
                 <h3 className="text-[17px] font-extrabold text-white leading-tight truncate">
                   {job.categoryName || 'Worker'} Needed
@@ -380,7 +386,22 @@ export function IncomingJobPopup({
 
           {/* Action Buttons */}
           <div className="px-5 pb-5 pt-1">
-            {needsRecharge ? (
+            {!isKycApproved ? (
+              <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-semibold text-amber-900 flex items-center justify-between gap-2">
+                <span>⚠️ KYC verification required to accept.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    stopAudio()
+                    if (timerRef.current) clearInterval(timerRef.current)
+                    navigate('/app/kyc')
+                  }}
+                  className="font-bold underline text-amber-950 shrink-0"
+                >
+                  Verify Now
+                </button>
+              </div>
+            ) : needsRecharge ? (
               <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-semibold text-amber-900">
                 Wallet balance ₹{walletBalance.toLocaleString('en-IN')}
                 {minimumRequired > 0
@@ -406,9 +427,11 @@ export function IncomingJobPopup({
                 onClick={handleAccept}
                 disabled={isAccepting}
                 className={`ijp-accept-btn col-span-3 flex items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-extrabold text-white shadow-lg transition-all active:scale-95 disabled:opacity-60 ${
-                  needsRecharge
-                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600'
-                    : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
+                  !isKycApproved
+                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700'
+                    : needsRecharge
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600'
+                      : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'
                 }`}
               >
                 {isAccepting ? (
@@ -418,9 +441,11 @@ export function IncomingJobPopup({
                 )}
                 {isAccepting
                   ? 'Accepting...'
-                  : needsRecharge
-                    ? 'Recharge to Accept'
-                    : 'Accept Job'}
+                  : !isKycApproved
+                    ? 'Complete KYC to Accept'
+                    : needsRecharge
+                      ? 'Recharge to Accept'
+                      : 'Accept Job'}
               </button>
             </div>
           </div>

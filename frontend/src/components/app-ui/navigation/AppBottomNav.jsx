@@ -12,13 +12,11 @@ export function AppBottomNav({ items }) {
   const reduce = useReducedMotion()
   const keyboardOpen = useKeyboardOpen()
 
-  // Hide completely when keyboard is open — no floating bar above keyboard
-  if (keyboardOpen) return null
-
-
   return (
     <nav
-      className="pointer-events-auto fixed bottom-0 left-1/2 z-30 flex w-full max-w-[430px] -translate-x-1/2 justify-center bg-white border-t border-slate-200/80 shadow-[0_-2px_12px_rgba(0,0,0,0.04)]"
+      className={`pointer-events-auto fixed bottom-0 left-1/2 z-30 flex w-full max-w-[430px] -translate-x-1/2 justify-center bg-white border-t border-slate-200/80 shadow-[0_-2px_12px_rgba(0,0,0,0.04)] transition-all duration-150 ${
+        keyboardOpen ? 'opacity-0 pointer-events-none translate-y-full' : 'opacity-100'
+      }`}
       style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 2px)', paddingTop: '2px' }}
       aria-label="Bottom navigation"
     >

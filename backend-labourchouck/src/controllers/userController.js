@@ -235,14 +235,75 @@ export const submitLabourKycDocuments = asyncHandler(async (req, res) => {
   }
 
   const photos = Array.isArray(req.body.photos) ? req.body.photos : []
-  const frontUrl = normalizeStoredMediaUrl(req.body.frontImageUrl || req.body.kycFrontImageUrl || photos.find((p) => p.type === 'aadhaar_front' || p.label?.toLowerCase().includes('front'))?.url)
-  const backUrl = normalizeStoredMediaUrl(req.body.backImageUrl || req.body.kycBackImageUrl || photos.find((p) => p.type === 'aadhaar_back' || p.label?.toLowerCase().includes('back'))?.url)
-  const selfieUrl = normalizeStoredMediaUrl(req.body.selfieUrl || req.body.kycSelfieUrl || photos.find((p) => p.type === 'selfie' || p.label?.toLowerCase().includes('selfie') || p.label?.toLowerCase().includes('photo'))?.url)
-  const panUrl = normalizeStoredMediaUrl(req.body.panImageUrl || req.body.kycPanImageUrl || photos.find((p) => p.type === 'pan' || p.label?.toLowerCase().includes('pan'))?.url)
+  const frontUrl = normalizeStoredMediaUrl(
+    req.body.frontImageUrl ||
+      req.body.kycFrontImageUrl ||
+      photos.find((p) => p.type === 'aadhaar_front' || p.type === 'front' || p.label?.toLowerCase().includes('front'))?.url ||
+      (isVideoOnlyResubmit ? lp.kycFrontImageUrl : ''),
+  )
+  const backUrl = normalizeStoredMediaUrl(
+    req.body.backImageUrl ||
+      req.body.kycBackImageUrl ||
+      photos.find((p) => p.type === 'aadhaar_back' || p.type === 'back' || p.label?.toLowerCase().includes('back'))?.url ||
+      (isVideoOnlyResubmit ? lp.kycBackImageUrl : ''),
+  )
+  const panUrl = normalizeStoredMediaUrl(
+    req.body.panImageUrl ||
+      req.body.kycPanImageUrl ||
+      photos.find((p) => p.type === 'pan' || p.label?.toLowerCase().includes('pan'))?.url ||
+      (isVideoOnlyResubmit ? lp.kycPanImageUrl : ''),
+  )
+  const selfieUrl = normalizeStoredMediaUrl(
+    req.body.selfieUrl ||
+      req.body.kycSelfieUrl ||
+      photos.find((p) => p.type === 'selfie' || p.label?.toLowerCase().includes('selfie') || p.label?.toLowerCase().includes('photo'))?.url ||
+      (isVideoOnlyResubmit ? lp.kycSelfieUrl : ''),
+  )
   const videoUrl = normalizeStoredMediaUrl(req.body.videoUrl)
 
-  const hasPhotos = Boolean(frontUrl || backUrl || selfieUrl || photos.length > 0)
-  const hasVideo = Boolean(videoUrl)
+  // Mandatory checks: Aadhaar Front, Aadhaar Back, and PAN Card must be uploaded
+  if (!frontUrl) {
+    return sendError(res, {
+      message: 'Aadhaar card front photo is mandatory. Please upload a clear photo.',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+      code: 'MISSING_AADHAAR_FRONT',
+    })
+  }
+  if (!backUrl) {
+    return sendError(res, {
+      message: 'Aadhaar card back photo is mandatory. Please upload a clear photo.',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+      code: 'MISSING_AADHAAR_BACK',
+    })
+  }
+  if (!panUrl) {
+    return sendError(res, {
+      message: 'PAN card photo is mandatory. Please upload a clear photo.',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+      code: 'MISSING_PAN_PHOTO',
+    })
+  }
+
+  // Construct comprehensive kycPhotos array
+  const allKycPhotos = []
+  if (frontUrl) allKycPhotos.push({ label: 'Aadhaar Card (Front)', url: frontUrl, type: 'aadhaar_front', uploadedAt: new Date() })
+  if (backUrl) allKycPhotos.push({ label: 'Aadhaar Card (Back)', url: backUrl, type: 'aadhaar_back', uploadedAt: new Date() })
+  if (panUrl) allKycPhotos.push({ label: 'PAN Card / Certificate', url: panUrl, type: 'pan', uploadedAt: new Date() })
+  if (selfieUrl) allKycPhotos.push({ label: 'Worker Selfie / Face Photo', url: selfieUrl, type: 'selfie', uploadedAt: new Date() })
+
+  const knownUrls = new Set([frontUrl, backUrl, panUrl, selfieUrl].filter(Boolean))
+  for (const p of photos) {
+    const pUrl = normalizeStoredMediaUrl(p.url) || p.url
+    if (pUrl && !knownUrls.has(pUrl)) {
+      allKycPhotos.push({
+        label: p.label || 'Additional Document',
+        url: pUrl,
+        type: p.type || 'other',
+        uploadedAt: new Date(),
+      })
+      knownUrls.add(pUrl)
+    }
+  }
 
   req.user.labourProfile = req.user.labourProfile || {}
   req.user.labourProfile.kycStatus = KYC_STATUS.PENDING
@@ -256,16 +317,9 @@ export const submitLabourKycDocuments = asyncHandler(async (req, res) => {
   }
   req.user.labourProfile.kycFrontImageUrl = frontUrl || ''
   req.user.labourProfile.kycBackImageUrl = backUrl || ''
-  req.user.labourProfile.kycSelfieUrl = selfieUrl || ''
   req.user.labourProfile.kycPanImageUrl = panUrl || ''
-  req.user.labourProfile.kycPhotos = photos
-    .map((p) => ({
-      label: p.label || 'Document',
-      url: normalizeStoredMediaUrl(p.url) || p.url,
-      type: p.type || 'other',
-      uploadedAt: new Date(),
-    }))
-    .filter((p) => Boolean(p.url))
+  req.user.labourProfile.kycSelfieUrl = selfieUrl || ''
+  req.user.labourProfile.kycPhotos = allKycPhotos
 
   if (videoUrl) {
     req.user.labourProfile.kycVideoUrl = videoUrl

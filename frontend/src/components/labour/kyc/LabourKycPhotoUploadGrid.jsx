@@ -18,15 +18,15 @@ const KYC_SLOTS = [
     required: true,
   },
   {
-    id: 'selfie',
-    label: 'Worker Selfie / Live Face Photo',
-    desc: 'Clear face photo taken in good lighting',
+    id: 'pan',
+    label: 'PAN Card',
+    desc: 'Clear photo of your PAN card',
     required: true,
   },
   {
-    id: 'pan',
-    label: 'PAN Card / Certificate',
-    desc: 'PAN card or any skill/trade certificate',
+    id: 'selfie',
+    label: 'Worker Selfie / Live Face Photo',
+    desc: 'Clear face photo (optional)',
     required: false,
   },
 ]
@@ -79,7 +79,7 @@ export function LabourKycPhotoUploadGrid({ photos = {}, onChange, disabled = fal
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-slate-500">KYC Photos & Documents</p>
-          <p className="text-xs text-slate-600">Take clear photos with camera or gallery (optional — can submit without photos).</p>
+          <p className="text-xs text-slate-600">Upload clear photos: Aadhaar card & PAN card are mandatory; Selfie is optional.</p>
         </div>
       </div>
 

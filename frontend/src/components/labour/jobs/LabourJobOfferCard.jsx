@@ -38,6 +38,11 @@ export function LabourJobOfferCard({
               ) : (
                 <AppBadge variant="neutral">New</AppBadge>
               )}
+              {!kycOk && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold text-amber-900 ring-1 ring-amber-300/80">
+                  ⚠️ KYC Required
+                </span>
+              )}
               {offer.sourceType ? (
                 <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
                   {sourceTypeLabel(offer.sourceType)}
@@ -99,12 +104,12 @@ export function LabourJobOfferCard({
         </button>
 
         {!kycOk ? (
-          <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-950 ring-1 ring-amber-200/70">
-            <Link to="/app/kyc" className="font-bold text-brand underline underline-offset-2">
-              Verify Aadhaar
-            </Link>{' '}
-            to accept this assignment.
-          </p>
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-950 ring-1 ring-amber-200/70">
+            <span>Aadhaar & PAN KYC verification required to accept.</span>
+            <Link to="/app/kyc" className="font-bold text-brand underline underline-offset-2 shrink-0">
+              Verify Now
+            </Link>
+          </div>
         ) : hasActiveJob ? (
           <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-950 ring-1 ring-amber-200/70">
             You must complete or cancel your active job before accepting a new one.
@@ -133,13 +138,13 @@ export function LabourJobOfferCard({
             </AppButton>
             <AppPrimaryButton
               type="button"
-              className={`py-2.5 text-xs ${(!kycOk || hasActiveJob) ? 'opacity-50' : ''}`}
+              className={`py-2.5 text-xs ${hasActiveJob ? 'opacity-50 cursor-not-allowed' : !kycOk ? 'bg-amber-600 hover:bg-amber-700' : ''}`}
               onClick={() => {
-                if (!kycOk || hasActiveJob) return
+                if (hasActiveJob) return
                 onStartAccept(offer.id)
               }}
             >
-              Accept job
+              {!kycOk ? 'Complete KYC to Accept' : 'Accept job'}
               <ChevronRight className="h-4 w-4" aria-hidden />
             </AppPrimaryButton>
           </div>
