@@ -45,6 +45,7 @@ const AdminReportsPage = lazy(() => import('./pages/admin/AdminReportsPage.jsx')
 const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage.jsx').then(m => ({ default: m.AdminSettingsPage })))
 
 const AdminPromotionsOffersPage = lazy(() => import('./pages/admin/marketing/AdminPromotionsOffersPage.jsx').then(m => ({ default: m.AdminPromotionsOffersPage })))
+const AdminPopularServicesPage = lazy(() => import('./pages/admin/marketing/AdminPopularServicesPage.jsx').then(m => ({ default: m.AdminPopularServicesPage })))
 const AdminSponsoredAdsPage = lazy(() => import('./pages/admin/marketing/AdminSponsoredAdsPage.jsx').then(m => ({ default: m.AdminSponsoredAdsPage })))
 const AdminBannerManagementPage = lazy(() => import('./pages/admin/marketing/AdminBannerManagementPage.jsx').then(m => ({ default: m.AdminBannerManagementPage })))
 const AdminCampaignAnalyticsPage = lazy(() => import('./pages/admin/marketing/AdminCampaignAnalyticsPage.jsx').then(m => ({ default: m.AdminCampaignAnalyticsPage })))
@@ -188,6 +189,7 @@ function App() {
               <Route path="commission" element={<AdminCommissionPage />} />
               <Route path="reports" element={<AdminReportsPage />} />
               <Route path="settings" element={<AdminSettingsPage />} />
+              <Route path="marketing/popular-services" element={<AdminPopularServicesPage />} />
               <Route path="marketing/promotions" element={<AdminPromotionsOffersPage />} />
               <Route path="marketing/ads" element={<AdminSponsoredAdsPage />} />
               <Route path="marketing/banners" element={<AdminBannerManagementPage />} />

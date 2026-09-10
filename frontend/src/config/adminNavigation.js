@@ -30,6 +30,7 @@ import {
   Building2,
   ShieldCheck,
   FileText,
+  Sparkles,
 } from 'lucide-react'
 
 /**
@@ -114,6 +115,7 @@ export const ADMIN_NAV_SECTIONS = [
   {
     title: 'Marketing Center',
     items: [
+      { to: '/admin/marketing/popular-services', label: 'Popular Services', icon: Sparkles },
       { to: '/admin/marketing/promotions', label: 'Promotions & Offers', icon: Megaphone },
       { to: '/admin/marketing/ads', label: 'Sponsored Ads', icon: MonitorPlay },
       { to: '/admin/marketing/banners', label: 'Banner Management', icon: ImagePlus },

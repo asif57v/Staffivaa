@@ -1,8 +1,11 @@
+import React, { useState, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { Star, Zap } from 'lucide-react'
+import { apiClient } from '../../../api/http.js'
 
-const POPULAR_SERVICES = [
+const DEFAULT_POPULAR_SERVICES = [
   {
+    _id: 'ac-repair',
     id: 'ac-repair',
     title: 'AC repair & service',
     image: '/service_ac.png',
@@ -14,6 +17,7 @@ const POPULAR_SERVICES = [
     isInstant: true,
   },
   {
+    _id: 'intense-cleaning',
     id: 'intense-cleaning',
     title: 'Intense cleaning (2 bathrooms)',
     image: '/service_cleaning_realistic.png',
@@ -25,6 +29,7 @@ const POPULAR_SERVICES = [
     isInstant: false,
   },
   {
+    _id: 'plumbing',
     id: 'plumbing',
     title: 'Tap & pipe repair',
     image: '/service_plumber.png',
@@ -36,6 +41,7 @@ const POPULAR_SERVICES = [
     isInstant: true,
   },
   {
+    _id: 'electrician',
     id: 'electrician',
     title: 'Switch & wire repair',
     image: '/service_electrician.png',
@@ -45,11 +51,33 @@ const POPULAR_SERVICES = [
     originalPrice: 149,
     discount: '33% OFF',
     isInstant: true,
-  }
+  },
 ]
 
 export function PopularServicesSection({ onBook }) {
   const reduce = useReducedMotion()
+  const [services, setServices] = useState(DEFAULT_POPULAR_SERVICES)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    let isMounted = true
+    const fetchPopularServices = async () => {
+      try {
+        const res = await apiClient.get('/marketing/popular-services')
+        if (isMounted && res.data.success && res.data.data?.services?.length > 0) {
+          setServices(res.data.data.services)
+        }
+      } catch (err) {
+        // graceful fallback to default cards
+      }
+    }
+    fetchPopularServices()
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  if (!services || services.length === 0) return null
 
   return (
     <motion.section
@@ -66,22 +94,25 @@ export function PopularServicesSection({ onBook }) {
       </div>
 
       <div className="flex gap-3.5 overflow-x-auto -mx-3 px-3 pb-3 pt-1 scrollbar-none [&::-webkit-scrollbar]:hidden touch-pan-y touch-pan-x [-webkit-overflow-scrolling:touch]">
-        {POPULAR_SERVICES.map((service, idx) => (
+        {services.map((service) => (
           <div
-            key={service.id}
+            key={service._id || service.id || service.title}
             className="group relative flex w-[165px] min-w-[165px] shrink-0 cursor-pointer flex-col overflow-hidden rounded-2xl bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] ring-1 ring-slate-100 transition-all hover:shadow-[0_8px_16px_rgba(0,0,0,0.08)] active:scale-[0.97]"
             onClick={() => onBook?.(service)}
           >
-            {/* Image Container */}
-            <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
+            {/* Image Container with full image contain */}
+            <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-50 flex items-center justify-center p-2">
               <img
                 src={service.image}
                 alt={service.title}
-                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                className="max-h-full max-w-full w-auto h-auto object-contain transition-transform duration-500 group-hover:scale-105"
                 loading="lazy"
+                onError={(e) => {
+                  e.currentTarget.src = '/service_ac.png'
+                }}
               />
               {service.discount && (
-                <div className="absolute left-0 top-0 rounded-br-lg bg-[#059669] px-2 py-1 text-[10px] font-bold text-white shadow-sm">
+                <div className="absolute left-2 top-2 rounded-md bg-[#059669] px-1.5 py-0.5 text-[9px] font-bold text-white shadow-xs">
                   {service.discount}
                 </div>
               )}
@@ -96,7 +127,7 @@ export function PopularServicesSection({ onBook }) {
               <div className="mt-1.5 flex items-center gap-1.5 text-[12px] font-medium text-slate-600">
                 <span className="flex items-center gap-0.5 text-slate-700">
                   <Star className="h-3 w-3 fill-slate-700 text-slate-700" />
-                  {service.rating}
+                  {service.rating || '4.8'}
                 </span>
                 <span className="h-1 w-1 rounded-full bg-slate-300" />
                 {service.isInstant ? (
@@ -105,7 +136,7 @@ export function PopularServicesSection({ onBook }) {
                     Instant
                   </span>
                 ) : (
-                  <span className="text-slate-500">{service.reviews}</span>
+                  <span className="text-slate-500">{service.reviews || '10k'}</span>
                 )}
               </div>
 
@@ -124,3 +155,4 @@ export function PopularServicesSection({ onBook }) {
     </motion.section>
   )
 }
+

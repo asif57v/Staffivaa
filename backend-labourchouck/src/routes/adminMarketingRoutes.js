@@ -7,6 +7,12 @@ const router = Router()
 // Protect all routes - restrict to admin only
 router.use(protect, restrictTo('admin'))
 
+// Popular Services
+router.get('/popular-services', adminMarketingController.getPopularServices)
+router.post('/popular-services', adminMarketingController.createPopularService)
+router.patch('/popular-services/:id', adminMarketingController.updatePopularService)
+router.delete('/popular-services/:id', adminMarketingController.deletePopularService)
+
 // Offers
 router.get('/offers', adminMarketingController.getOffers)
 router.post('/offers', adminMarketingController.createOffer)
