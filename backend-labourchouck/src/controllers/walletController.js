@@ -10,6 +10,8 @@ import { asyncHandler } from '../utils/asyncHandler.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
 import { emitToUser } from '../utils/socket.js'
 
+import { paymentService } from '../services/paymentService.js'
+
 export const createAddMoneyOrder = asyncHandler(async (req, res) => {
   const amount = Number(req.body.amount)
 
@@ -24,20 +26,23 @@ export const createAddMoneyOrder = asyncHandler(async (req, res) => {
     })
   }
 
-  const options = {
-    amount: Math.round(amount * 100), // Razorpay works in paise
+  const idempotencyKey = req.body.idempotencyKey || req.headers['x-idempotency-key'] || null
+  const { payment } = await paymentService.createOrGetPayment({
+    userId: req.user._id,
+    amount,
     currency: 'INR',
-    receipt: `receipt_${req.user._id}_${Date.now()}`,
-  }
-
-  const order = await razorpay.orders.create(options)
+    purpose: 'WALLET_TOPUP',
+    idempotencyKey,
+    metadata: { role: req.user.role },
+  })
 
   res.status(200).json({
     status: 'success',
     data: {
-      orderId: order.id,
-      amount: order.amount,
-      currency: order.currency,
+      orderId: payment.gatewayOrderId,
+      systemOrderId: payment.orderId,
+      amount: Math.round(payment.amount * 100),
+      currency: payment.currency,
       key: process.env.RAZORPAY_KEY_ID,
       keyId: process.env.RAZORPAY_KEY_ID,
     },
@@ -51,58 +56,42 @@ export const verifyAddMoneyPayment = asyncHandler(async (req, res) => {
     return res.status(400).json({ status: 'fail', message: 'Missing payment verification data' })
   }
 
-  const body = razorpay_order_id + '|' + razorpay_payment_id
-
-  const expectedSignature = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET).update(body.toString()).digest('hex')
-
-  let isAuthentic = false;
-  try {
-    const generatedBuffer = Buffer.from(expectedSignature, 'hex');
-    const providedBuffer = Buffer.from(razorpay_signature, 'hex');
-    if (generatedBuffer.length === providedBuffer.length && crypto.timingSafeEqual(generatedBuffer, providedBuffer)) {
-      isAuthentic = true;
-    }
-  } catch (e) {
-    isAuthentic = false;
-  }
+  const isAuthentic = paymentService.verifyPaymentSignature({
+    gatewayOrderId: razorpay_order_id,
+    gatewayPaymentId: razorpay_payment_id,
+    gatewaySignature: razorpay_signature,
+  })
 
   if (!isAuthentic) {
+    await paymentService.recordPaymentFailure({
+      gatewayOrderId: razorpay_order_id,
+      failureReason: 'Payment verification failed: Invalid signature',
+    })
     return res.status(400).json({ status: 'fail', message: 'Payment verification failed: Invalid signature' })
   }
+
+  // Idempotently process payment & credit wallet
+  const result = await paymentService.processPaymentSuccess({
+    gatewayOrderId: razorpay_order_id,
+    gatewayPaymentId: razorpay_payment_id,
+    paymentMethod: 'razorpay',
+    source: 'frontend',
+  })
 
   const user = await User.findById(req.user._id)
   if (!user) {
     return res.status(404).json({ status: 'fail', message: 'User not found' })
   }
 
-  user.walletBalance = (user.walletBalance || 0) + Number(amount)
-  await user.save()
-
-  const transaction = await WalletTransaction.create({
-    transactionId: razorpay_payment_id,
-    payerId: user._id,
-    payerName: user.fullName,
-    payerType: 'user',
-    type: 'Credit',
-    source: 'Razorpay Add Money',
-    amount: amount,
-    balanceAfter: user.walletBalance,
-    paymentMethod: 'razorpay',
-    status: 'Completed',
+  const transaction = await WalletTransaction.findOne({
     razorpayOrderId: razorpay_order_id,
-    razorpayPaymentId: razorpay_payment_id,
-  })
-
-  try {
-    emitToUser(user.role || 'labour', user._id.toString(), 'wallet_updated', {
-      walletBalance: user.walletBalance,
-      transaction,
-    })
-  } catch (err) {}
+  }).sort({ createdAt: -1 })
 
   res.status(200).json({
     status: 'success',
-    message: 'Payment successful, wallet updated',
+    message: result.alreadyProcessed
+      ? 'Payment already verified and wallet updated'
+      : 'Payment successful, wallet updated',
     data: {
       balance: user.walletBalance,
       transaction,

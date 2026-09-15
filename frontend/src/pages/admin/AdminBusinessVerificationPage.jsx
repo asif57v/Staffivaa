@@ -505,6 +505,28 @@ export function AdminBusinessVerificationPage() {
                           {tab === 'vendor' && u.contractorProfile?.gstNumber ? (
                             <p className="font-mono text-xs text-slate-600">GST {u.contractorProfile.gstNumber}</p>
                           ) : null}
+                          {tab === 'vendor' && (() => {
+                            const cats = u.contractorProfile?.categoryIds || []
+                            const catNames = cats.map((c) => (c && typeof c === 'object' && c.name ? c.name : (typeof c === 'string' ? c : null))).filter(Boolean)
+                            const skills = Array.isArray(u.contractorProfile?.skills) ? u.contractorProfile.skills : []
+                            const all = Array.from(new Set([...catNames, ...skills]))
+                            if (!all.length) return null
+                            return (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {all.slice(0, 2).map((s, idx) => (
+                                  <span key={idx} className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-slate-800 border border-amber-200">
+                                    <span className="h-1 w-1 rounded-full bg-[#FFC107]" />
+                                    {s}
+                                  </span>
+                                ))}
+                                {all.length > 2 && (
+                                  <span className="inline-flex items-center rounded bg-slate-100 px-1 py-0.5 text-[9px] font-semibold text-slate-600">
+                                    +{all.length - 2}
+                                  </span>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </td>
                         <td className="px-4 py-3">
                           <p className="font-mono text-xs">+91 {u.phone || '—'}</p>

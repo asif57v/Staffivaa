@@ -31,10 +31,12 @@ import adminEnterpriseRoutes from './adminEnterpriseRoutes.js'
 import enterpriseWalletRoutes from './enterpriseWalletRoutes.js'
 import adminEnterpriseWalletRoutes from './adminEnterpriseWalletRoutes.js'
 import legalRoutes from './legalRoutes.js'
+import paymentUniversalRoutes from './paymentUniversalRoutes.js'
 
 const router = Router()
 
 router.use('/webhooks', webhookRoutes)
+router.use('/payments', paymentUniversalRoutes)
 
 router.use('/auth', authRoutes)
 router.use('/users', userRoutes)

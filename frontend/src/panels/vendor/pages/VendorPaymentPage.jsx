@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2, FileText, Banknote, Building2, Calendar, Users
 import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
 import { useGetVendorJobsQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation } from '../../../store/api/workforceApi.js'
 import { loadRazorpayScript } from '../../../lib/razorpay.js'
+import { usePaymentReconciliation } from '../../../hooks/usePaymentReconciliation.js'
 
 function formatDate(d) {
   if (!d) return '—'
@@ -14,14 +15,22 @@ export function VendorPaymentPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   
-  const { data, isLoading, isError } = useGetVendorJobsQuery()
+  const { data, isLoading, isError, refetch } = useGetVendorJobsQuery()
   const [createOrder, { isLoading: isCreatingOrder }] = useCreateRazorpayOrderMutation()
   const [verifyPayment, { isLoading: isVerifying }] = useVerifyRazorpayPaymentMutation()
 
   const [paymentSuccess, setPaymentSuccess] = useState(false)
 
+  const { savePendingPayment, clearPendingPayment, checkStatus } = usePaymentReconciliation({
+    onPaymentSuccess: () => {
+      setPaymentSuccess(true)
+      refetch()
+    },
+  })
+
   const allocation = (data?.allocations ?? []).find((a) => String(a._id) === String(id))
   const request = allocation?.requestId
+  const isAlreadyPaid = request?.vendorPlatformFeeStatus === 'paid'
 
   if (isLoading) {
     return (
@@ -50,6 +59,7 @@ export function VendorPaymentPage() {
 
       if (orderData?.bypassPayment || orderData?.data?.bypassPayment) {
         setPaymentSuccess(true)
+        refetch()
         return
       }
 
@@ -59,13 +69,20 @@ export function VendorPaymentPage() {
         return
       }
 
+      const activeOrderId = orderData.orderId
+      savePendingPayment({
+        orderId: activeOrderId,
+        purpose: 'WORKFORCE_REQUEST_PLATFORM_FEE',
+        requestId: request._id,
+      })
+
       const options = {
         key: orderData.keyId,
         amount: orderData.amount,
         currency: orderData.currency,
         name: 'Staffivaa',
         description: `Platform Fee for ${request.reference}`,
-        order_id: orderData.orderId,
+        order_id: activeOrderId,
         handler: async function (response) {
           try {
             await verifyPayment({
@@ -74,11 +91,24 @@ export function VendorPaymentPage() {
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature
             }).unwrap()
+            clearPendingPayment()
             setPaymentSuccess(true)
+            refetch()
           } catch (err) {
             console.error('Payment Verification Failed', err)
-            alert('Payment verification failed. Please contact support.')
+            const reconciled = await checkStatus(response.razorpay_order_id)
+            if (reconciled?.status === 'SUCCESS') {
+              setPaymentSuccess(true)
+              refetch()
+            } else {
+              alert('Payment verification failed. If money was debited, it will be automatically reconciled.')
+            }
           }
+        },
+        modal: {
+          ondismiss: function () {
+            checkStatus(activeOrderId)
+          },
         },
         theme: {
           color: '#FFC107'
@@ -88,6 +118,7 @@ export function VendorPaymentPage() {
       const rzp = new window.Razorpay(options)
       rzp.on('payment.failed', function (response){
         console.error('Payment Failed', response.error)
+        clearPendingPayment()
         alert('Payment failed. Please try again.')
       })
       rzp.open()
@@ -97,7 +128,7 @@ export function VendorPaymentPage() {
     }
   }
 
-  if (paymentSuccess) {
+  if (paymentSuccess || isAlreadyPaid) {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center">
         <div className="h-20 w-20 rounded-full bg-emerald-100 flex items-center justify-center mb-6">

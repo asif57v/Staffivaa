@@ -21,6 +21,7 @@ import {
   bookingConfirmedLabourNotif,
   labourProceedToSiteNotif,
 } from '../utils/bookingNotificationCopy.js'
+import { paymentService } from '../services/paymentService.js'
 
 // Cache the instance
 let razorpayInstance = null
@@ -300,26 +301,32 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
     return sendSuccess(res, { data: { bypassPayment: true, message: 'Platform fee waived (Free)' } });
   }
 
-  const razorpay = getRazorpayInstance()
-  
-  const options = {
-    amount: totalAmount * 100, // Amount in paise
+  const idempotencyKey = req.body?.idempotencyKey || req.headers?.['x-idempotency-key'] || null
+  const { payment } = await paymentService.createOrGetPayment({
+    userId: req.user._id,
+    amount: totalAmount,
     currency: 'INR',
-    receipt: `${request.reference}-${isLabour ? 'LAB' : 'USR'}`,
-  }
-
-  const order = await razorpay.orders.create(options)
+    purpose: 'WORKFORCE_REQUEST_PLATFORM_FEE',
+    idempotencyKey,
+    metadata: {
+      requestId: request._id,
+      reference: request.reference,
+      isLabour,
+      isVendorFee,
+      isCorporateFee,
+    },
+  })
 
   if (isLabour) {
-    request.labourRazorpayOrderId = order.id;
+    request.labourRazorpayOrderId = payment.gatewayOrderId;
   } else {
-    request.userRazorpayOrderId = order.id;
+    request.userRazorpayOrderId = payment.gatewayOrderId;
   }
   // Refresh platform fee pending timestamp on payment creation attempt
   request.platformFeePendingAt = new Date();
   await request.save()
 
-  sendSuccess(res, { data: { keyId: process.env.RAZORPAY_KEY_ID, orderId: order.id, amount: options.amount, currency: options.currency } })
+  sendSuccess(res, { data: { keyId: process.env.RAZORPAY_KEY_ID, orderId: payment.gatewayOrderId, amount: Math.round(payment.amount * 100), currency: payment.currency } })
 })
 
 export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
@@ -370,6 +377,10 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
     }
 
     await request.save()
+    await paymentService.recordPaymentFailure({
+      gatewayOrderId: razorpay_order_id,
+      failureReason: 'Payment verification failed: Invalid signature',
+    })
     triggerBookingNotif({
       userId: req.user._id,
       copy: paymentFailedNotif(),
@@ -378,6 +389,14 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
     }).catch(() => {})
     return sendError(res, { message: 'Payment verification failed', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
+
+  // Idempotently process Payment record
+  await paymentService.processPaymentSuccess({
+    gatewayOrderId: razorpay_order_id,
+    gatewayPaymentId: razorpay_payment_id,
+    paymentMethod: 'razorpay',
+    source: 'frontend',
+  })
 
   if (isLabourOrder) {
     if (request.status === 'vendor_platform_fee_pending') {
@@ -632,16 +651,18 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
 
   // --- Wallet Ledger Integration ---
   try {
-    const razorpay = getRazorpayInstance()
-    const order = await razorpay.orders.fetch(razorpay_order_id)
-    const amountPaid = (order.amount_paid ? order.amount_paid : order.amount) / 100
+    const existingLedgerTxn = await WalletTransaction.findOne({ razorpayOrderId: razorpay_order_id })
+    if (!existingLedgerTxn) {
+      const razorpay = getRazorpayInstance()
+      const order = await razorpay.orders.fetch(razorpay_order_id)
+      const amountPaid = (order.amount_paid ? order.amount_paid : order.amount) / 100
 
-    if (amountPaid > 0) {
-      let payerType = 'system';
-      if (req.user.role === 'individual') payerType = 'user';
-      else if (req.user.role === 'labour') payerType = 'labour';
-      else if (req.user.role === 'contractor') payerType = 'vendor';
-      else if (req.user.role === 'corporate') payerType = 'corporate';
+      if (amountPaid > 0) {
+        let payerType = 'system';
+        if (req.user.role === 'individual') payerType = 'user';
+        else if (req.user.role === 'labour') payerType = 'labour';
+        else if (req.user.role === 'contractor') payerType = 'vendor';
+        else if (req.user.role === 'corporate') payerType = 'corporate';
 
       const updatePayload = {
         $inc: {
@@ -659,30 +680,31 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
       if (payerType === 'vendor') updatePayload.$inc.vendorRevenue = amountPaid;
       if (payerType === 'corporate') updatePayload.$inc.corporateRevenue = amountPaid;
 
-      await Wallet.findOneAndUpdate(
-        { singletonId: 'ADMIN_WALLET' },
-        updatePayload,
-        { new: true, upsert: true }
-      )
+        await Wallet.findOneAndUpdate(
+          { singletonId: 'ADMIN_WALLET' },
+          updatePayload,
+          { new: true, upsert: true }
+        )
 
-      await WalletTransaction.create({
-        transactionId: `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        bookingId: request._id,
-        clientId: request.clientId,
-        payerId: req.user._id,
-        payerName: req.user.fullName || req.user.companyName || 'Unknown',
-        payerType,
-        platform_fee: true,
-        type: 'Credit',
-        source: `${payerType.charAt(0).toUpperCase() + payerType.slice(1)} Platform Fee`,
-        amount: amountPaid,
-        status: 'Completed',
-        razorpayOrderId: razorpay_order_id,
-        razorpayPaymentId: razorpay_payment_id
-      })
+        await WalletTransaction.create({
+          transactionId: `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          bookingId: request._id,
+          clientId: request.clientId,
+          payerId: req.user._id,
+          payerName: req.user.fullName || req.user.companyName || 'Unknown',
+          payerType,
+          platform_fee: true,
+          type: 'Credit',
+          source: `${payerType.charAt(0).toUpperCase() + payerType.slice(1)} Platform Fee`,
+          amount: amountPaid,
+          status: 'Completed',
+          razorpayOrderId: razorpay_order_id,
+          razorpayPaymentId: razorpay_payment_id
+        })
+      }
     }
   } catch (err) {
-    console.error('Wallet Ledger Error:', err)
+    console.error('Wallet Ledger & Payment Service Error:', err)
   }
   // --- End Wallet Ledger ---
 

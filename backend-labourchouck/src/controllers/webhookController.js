@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+import { paymentService } from '../services/paymentService.js'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { emitRequestStatusUpdate } from '../utils/socket.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
@@ -12,14 +13,21 @@ import {
 } from '../utils/bookingNotificationCopy.js'
 
 export const razorpayWebhook = async (req, res) => {
-  const secret = process.env.RAZORPAY_WEBHOOK_SECRET
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET ? process.env.RAZORPAY_WEBHOOK_SECRET.trim() : null
 
-  if (!secret) return res.status(200).send('Webhook secret not configured')
+  if (!secret) {
+    console.warn('[Webhook] RAZORPAY_WEBHOOK_SECRET is not configured on the server.')
+    return res.status(200).send('Webhook secret not configured')
+  }
 
   const signature = req.headers['x-razorpay-signature']
-  const body = JSON.stringify(req.body)
+  if (!signature) {
+    return res.status(400).send('Missing x-razorpay-signature header')
+  }
 
-  const expectedSignature = crypto.createHmac('sha256', secret).update(body).digest('hex')
+  // Use the raw byte stream buffer captured by express verify callback, or fallback to JSON stringify
+  const payloadToVerify = req.rawBody ? req.rawBody : JSON.stringify(req.body)
+  const expectedSignature = crypto.createHmac('sha256', secret).update(payloadToVerify).digest('hex')
 
   let isAuthentic = false
   try {
@@ -33,149 +41,144 @@ export const razorpayWebhook = async (req, res) => {
   }
 
   if (!isAuthentic) {
+    console.error('[Webhook] Invalid Razorpay webhook signature')
     return res.status(400).send('Invalid signature')
   }
 
-  const event = req.body.event
-  const paymentEntity = req.body.payload.payment.entity
-  const orderId = paymentEntity.order_id
+  const event = req.body?.event
+  const paymentPayload = req.body?.payload?.payment?.entity
+  const orderId = paymentPayload?.order_id || req.body?.payload?.order?.entity?.id
 
-  if (event === 'payment.captured') {
-    // Find the request with this order ID
-    const request = await WorkforceRequest.findOne({
-      $or: [
-        { labourRazorpayOrderId: orderId },
-        { userRazorpayOrderId: orderId }
-      ]
-    })
+  console.log(`[Webhook] Received Razorpay event: ${event} for order: ${orderId}`)
 
-    if (request) {
-      const isLabourOrder = request.labourRazorpayOrderId === orderId
-      const isUserOrder = request.userRazorpayOrderId === orderId
-      const wasAlreadyPaid =
-        (isLabourOrder && request.labourPaymentStatus === 'paid') ||
-        (isUserOrder && request.userPaymentStatus === 'paid')
-
-      if (isLabourOrder) {
-        request.labourPaymentStatus = 'paid'
-      } else if (isUserOrder) {
-        request.userPaymentStatus = 'paid'
+  if (event === 'payment.captured' || event === 'order.paid') {
+    if (orderId && paymentPayload) {
+      try {
+        // Universal payment service handles User Wallet, Enterprise Wallet, Booking, and Commission idempotently
+        await paymentService.processPaymentSuccess({
+          gatewayOrderId: orderId,
+          gatewayPaymentId: paymentPayload.id,
+          paymentMethod: paymentPayload.method || 'razorpay',
+          source: 'webhook',
+          gatewayResponse: paymentPayload,
+        })
+      } catch (svcErr) {
+        console.error('[Webhook] paymentService.processPaymentSuccess error:', svcErr)
       }
+    }
 
-      const isLabourPaidOrWaived = request.labourPaymentStatus === 'paid' || (request.labourPlatformFee !== undefined && request.labourPlatformFee === 0);
+    // Direct WorkforceRequest notifications fallback check
+    if (orderId) {
+      try {
+        const request = await WorkforceRequest.findOne({
+          $or: [{ labourRazorpayOrderId: orderId }, { userRazorpayOrderId: orderId }],
+        })
 
-      // Both parties must settle platform fee before booking unlocks (unless labour fee is ₹0).
-      if (request.userPaymentStatus === 'paid' && isLabourPaidOrWaived) {
-        request.platformFeePaymentLifecycle = 'completed'
-        if (request.status !== 'quotation_unlocked') {
-          request.status = request.sourceType === 'corporate' ? 'project_active' : 'confirmed'
+        if (request) {
+          const isLabourOrder = request.labourRazorpayOrderId === orderId
+          const isUserOrder = request.userRazorpayOrderId === orderId
+          const reqRef = request.reference || request._id.toString().slice(-6)
+
+          const bothPaid =
+            request.userPaymentStatus === 'paid' &&
+            (request.labourPaymentStatus === 'paid' ||
+              (request.labourPlatformFee !== undefined && request.labourPlatformFee === 0))
+
+          if (bothPaid) {
+            if (request.clientId) {
+              const copy = bookingConfirmedUserNotif(reqRef)
+              triggerNotification({
+                userId: request.clientId,
+                title: copy.title,
+                body: copy.body,
+                type: copy.type,
+                relatedId: request._id,
+                relatedModel: 'WorkforceRequest',
+                url: '/app/bookings',
+              }).catch(() => {})
+            }
+            if (request.labourId) {
+              const copy = bookingConfirmedLabourNotif(reqRef)
+              triggerNotification({
+                userId: request.labourId,
+                title: copy.title,
+                body: copy.body,
+                type: copy.type,
+                relatedId: request._id,
+                relatedModel: 'WorkforceRequest',
+                url: '/app/jobs',
+              }).catch(() => {})
+            }
+          } else if (isUserOrder) {
+            if (request.clientId) {
+              const copy = paymentSuccessUserNotif()
+              triggerNotification({
+                userId: request.clientId,
+                title: copy.title,
+                body: copy.body,
+                type: copy.type,
+                relatedId: request._id,
+                relatedModel: 'WorkforceRequest',
+                url: '/app/bookings',
+              }).catch(() => {})
+            }
+            if (request.labourId && request.labourPaymentStatus !== 'paid') {
+              const copy = counterpartPaidLabourNotif()
+              triggerNotification({
+                userId: request.labourId,
+                title: copy.title,
+                body: copy.body,
+                type: copy.type,
+                relatedId: request._id,
+                relatedModel: 'WorkforceRequest',
+                url: '/app/jobs',
+              }).catch(() => {})
+            }
+          } else if (isLabourOrder) {
+            if (request.labourId) {
+              const copy = paymentSuccessLabourNotif()
+              triggerNotification({
+                userId: request.labourId,
+                title: copy.title,
+                body: copy.body,
+                type: copy.type,
+                relatedId: request._id,
+                relatedModel: 'WorkforceRequest',
+                url: '/app/jobs',
+              }).catch(() => {})
+            }
+            if (request.clientId && request.userPaymentStatus !== 'paid') {
+              const copy = counterpartPaidUserNotif()
+              triggerNotification({
+                userId: request.clientId,
+                title: copy.title,
+                body: copy.body,
+                type: copy.type,
+                relatedId: request._id,
+                relatedModel: 'WorkforceRequest',
+                url: '/app/bookings',
+              }).catch(() => {})
+            }
+          }
         }
-        request.cancelReason = null
-
-        import('../models/Assignment.js').then(({ Assignment }) => {
-          Assignment.updateMany({ requestId: request._id, status: 'cancelled' }, { status: 'accepted' }).catch(e => console.error(e));
-        }).catch(e => console.error(e));
-      } else if (request.userPaymentStatus === 'paid' || request.labourPaymentStatus === 'paid') {
-        request.platformFeePaymentLifecycle = 'partial'
-        // Individual bookings must stay locked until labour also pays
-        if (request.sourceType !== 'corporate' && !['on_site', 'in_progress', 'completed'].includes(request.status)) {
-          request.status = 'platform_fee_pending'
-        }
+      } catch (notifErr) {
+        console.error('[Webhook] Booking notification error:', notifErr.message)
       }
-
-      await request.save()
-      emitRequestStatusUpdate(request._id.toString(), {
-        requestId: request._id.toString(),
-        requestStatus: request.status
-      })
-
-      // Dedicated push for individual dual-payment flow (skip if this order was already marked paid)
-      if (!wasAlreadyPaid && request.sourceType !== 'corporate') {
-        const reqRef = request.reference || request._id.toString().slice(-6)
-        const bothPaid =
-          request.userPaymentStatus === 'paid' &&
-          (request.labourPaymentStatus === 'paid' ||
-            (request.labourPlatformFee !== undefined && request.labourPlatformFee === 0))
-
-        if (bothPaid) {
-          if (request.clientId) {
-            const copy = bookingConfirmedUserNotif(reqRef)
-            triggerNotification({
-              userId: request.clientId,
-              title: copy.title,
-              body: copy.body,
-              type: copy.type,
-              relatedId: request._id,
-              relatedModel: 'WorkforceRequest',
-              url: '/app/bookings',
-            }).catch(() => {})
-          }
-          if (request.labourId) {
-            const copy = bookingConfirmedLabourNotif(reqRef)
-            triggerNotification({
-              userId: request.labourId,
-              title: copy.title,
-              body: copy.body,
-              type: copy.type,
-              relatedId: request._id,
-              relatedModel: 'WorkforceRequest',
-              url: '/app/jobs',
-            }).catch(() => {})
-          }
-        } else if (isUserOrder) {
-          if (request.clientId) {
-            const copy = paymentSuccessUserNotif()
-            triggerNotification({
-              userId: request.clientId,
-              title: copy.title,
-              body: copy.body,
-              type: copy.type,
-              relatedId: request._id,
-              relatedModel: 'WorkforceRequest',
-              url: '/app/bookings',
-            }).catch(() => {})
-          }
-          if (request.labourId && request.labourPaymentStatus !== 'paid') {
-            const copy = counterpartPaidLabourNotif()
-            triggerNotification({
-              userId: request.labourId,
-              title: copy.title,
-              body: copy.body,
-              type: copy.type,
-              relatedId: request._id,
-              relatedModel: 'WorkforceRequest',
-              url: '/app/jobs',
-            }).catch(() => {})
-          }
-        } else if (isLabourOrder) {
-          if (request.labourId) {
-            const copy = paymentSuccessLabourNotif()
-            triggerNotification({
-              userId: request.labourId,
-              title: copy.title,
-              body: copy.body,
-              type: copy.type,
-              relatedId: request._id,
-              relatedModel: 'WorkforceRequest',
-              url: '/app/jobs',
-            }).catch(() => {})
-          }
-          if (request.clientId && request.userPaymentStatus !== 'paid') {
-            const copy = counterpartPaidUserNotif()
-            triggerNotification({
-              userId: request.clientId,
-              title: copy.title,
-              body: copy.body,
-              type: copy.type,
-              relatedId: request._id,
-              relatedModel: 'WorkforceRequest',
-              url: '/app/bookings',
-            }).catch(() => {})
-          }
-        }
+    }
+  } else if (event === 'payment.failed') {
+    if (orderId && paymentPayload) {
+      try {
+        await paymentService.recordPaymentFailure({
+          gatewayOrderId: orderId,
+          failureReason: paymentPayload.error_description || 'Payment failed on gateway',
+          gatewayResponse: paymentPayload,
+        })
+      } catch (err) {
+        console.error('[Webhook] recordPaymentFailure error:', err)
       }
     }
   }
 
-  res.status(200).send('Webhook received')
+  // Always return 200 OK to acknowledge receipt to Razorpay
+  res.status(200).send('Webhook processed successfully')
 }

@@ -13,6 +13,8 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 })
 
+import { paymentService } from '../services/paymentService.js'
+
 // --- Vendor APIs ---
 
 export const getVendorCommissions = asyncHandler(async (req, res) => {
@@ -31,17 +33,29 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Commission already paid or waived', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
 
-  const options = {
-    amount: Math.round(commission.commissionAmount * 100), // in paise
+  const idempotencyKey = req.body?.idempotencyKey || req.headers?.['x-idempotency-key'] || null
+  const { payment } = await paymentService.createOrGetPayment({
+    userId: req.user._id,
+    amount: commission.commissionAmount,
     currency: 'INR',
-    receipt: `comm_rcpt_${commission._id}`
-  }
+    purpose: 'COMMISSION',
+    idempotencyKey,
+    metadata: {
+      commissionId: commission._id,
+      vendorId: req.user._id,
+    },
+  })
 
-  const order = await razorpay.orders.create(options)
-  commission.paymentGatewayOrderId = order.id
+  commission.paymentGatewayOrderId = payment.gatewayOrderId
   await commission.save()
 
-  sendSuccess(res, { data: { orderId: order.id, amount: options.amount } })
+  sendSuccess(res, {
+    data: {
+      orderId: payment.gatewayOrderId,
+      systemOrderId: payment.orderId,
+      amount: Math.round(payment.amount * 100),
+    },
+  })
 })
 
 export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
@@ -49,21 +63,20 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
   const commission = await Commission.findOne({ _id: req.params.id, vendorId: req.user._id })
   if (!commission) return sendError(res, { message: 'Commission not found', statusCode: HTTP_STATUS.NOT_FOUND })
 
-  const body = razorpay_order_id + '|' + razorpay_payment_id
-  const expectedSignature = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET).update(body.toString()).digest('hex')
-
-  let isAuthentic = false;
-  try {
-    const generatedBuffer = Buffer.from(expectedSignature, 'hex');
-    const providedBuffer = Buffer.from(razorpay_signature, 'hex');
-    if (generatedBuffer.length === providedBuffer.length) {
-      isAuthentic = crypto.timingSafeEqual(generatedBuffer, providedBuffer);
-    }
-  } catch (err) {
-    isAuthentic = false;
-  }
+  const isAuthentic = paymentService.verifyPaymentSignature({
+    gatewayOrderId: razorpay_order_id,
+    gatewayPaymentId: razorpay_payment_id,
+    gatewaySignature: razorpay_signature,
+  })
 
   if (isAuthentic) {
+    await paymentService.processPaymentSuccess({
+      gatewayOrderId: razorpay_order_id,
+      gatewayPaymentId: razorpay_payment_id,
+      paymentMethod: 'razorpay',
+      source: 'frontend',
+    })
+
     const updated = await CommissionService.processPayment(
       commission._id,
       commission.commissionAmount,
@@ -72,6 +85,10 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
     )
     sendSuccess(res, { data: { commission: updated } })
   } else {
+    await paymentService.recordPaymentFailure({
+      gatewayOrderId: razorpay_order_id,
+      failureReason: 'Invalid payment signature',
+    })
     sendError(res, { message: 'Invalid payment signature', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
 })

@@ -26,6 +26,7 @@ export async function fetchAdminUsers(params = {}) {
   if (params.role) sp.set('role', params.role)
   if (params.status && params.status !== 'all') sp.set('status', params.status)
   if (params.kycStatus && params.kycStatus !== 'all') sp.set('kycStatus', params.kycStatus)
+  if (params.skill && params.skill !== 'all') sp.set('skill', params.skill)
   sp.set('page', String(Math.max(1, params.page ?? 1)))
   sp.set('limit', String(Math.min(100, Math.max(1, params.limit ?? 20))))
   const json = await apiRequest(`/users?${sp.toString()}`)
@@ -67,5 +68,10 @@ export async function updateUserSkillsAdmin(userId, { categoryIds, skills, reaso
 export async function getUserTimelineAdmin(userId) {
   const json = await apiRequest(`/users/${userId}/timeline`)
   return json.data?.logs ?? []
+}
+
+export async function fetchUserTransactionsAdmin(userId) {
+  const json = await apiRequest(`/admin/wallet/transactions?userId=${userId}&limit=50`)
+  return json.data?.transactions ?? []
 }
 

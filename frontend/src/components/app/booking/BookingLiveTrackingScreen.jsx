@@ -48,6 +48,7 @@ import {
   notifyWorkerCancelledBooking,
 } from '../../../lib/individualBookings.js'
 import { useGoogleMapsLoader } from '../../../hooks/useGoogleMapsLoader.js'
+import { usePaymentReconciliation } from '../../../hooks/usePaymentReconciliation.js'
 
 export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCancel }) {
   const requestId = booking?.requestId || booking?._id
@@ -81,6 +82,12 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
 
   const [createOrder, { isLoading: isCreatingOrder }] = useCreateRazorpayOrderMutation()
   const [verifyPayment, { isLoading: isVerifying }] = useVerifyRazorpayPaymentMutation()
+
+  const { savePendingPayment, clearPendingPayment, checkStatus } = usePaymentReconciliation({
+    onPaymentSuccess: () => {
+      refetch()
+    },
+  })
 
   const [isExtraWorkModalOpen, setIsExtraWorkModalOpen] = useState(false)
   const { data: extraWorkData, refetch: refetchExtraWork } = useGetExtraWorkQuery(requestId, { skip: !requestId })
@@ -129,13 +136,20 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
         return
       }
 
+      const activeOrderId = order.orderId
+      savePendingPayment({
+        orderId: activeOrderId,
+        purpose: 'WORKFORCE_REQUEST_PLATFORM_FEE',
+        requestId,
+      })
+
       const options = {
         key: order.keyId,
         amount: order.amount,
         currency: order.currency,
         name: 'Staffivaa',
         description: 'Booking Payment',
-        order_id: order.orderId,
+        order_id: activeOrderId,
         handler: async function (response) {
           try {
             await verifyPayment({
@@ -144,11 +158,22 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
             }).unwrap()
+            clearPendingPayment()
             await refetch()
           } catch (err) {
             console.error('Payment verification failed', err)
-            alert('Payment verification failed. Please contact support.')
+            const reconciled = await checkStatus(response.razorpay_order_id)
+            if (reconciled?.status === 'SUCCESS') {
+              await refetch()
+            } else {
+              alert('Payment verification failed. If money was debited, it will be automatically reconciled.')
+            }
           }
+        },
+        modal: {
+          ondismiss: function () {
+            checkStatus(activeOrderId)
+          },
         },
         theme: {
           color: '#FFD100',
@@ -158,6 +183,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
       const rzp1 = new window.Razorpay(options)
       rzp1.on('payment.failed', function (response) {
         console.error(response.error)
+        clearPendingPayment()
       })
       rzp1.open()
     } catch (err) {

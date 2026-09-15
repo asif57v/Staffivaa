@@ -26,7 +26,14 @@ app.use(
 )
 app.options('*', cors({ credentials: true, origin: true }))
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
-app.use(express.json({ limit: '12mb' }))
+app.use(
+  express.json({
+    limit: '12mb',
+    verify: (req, _res, buf) => {
+      req.rawBody = buf
+    },
+  }),
+)
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'labourchowck-api' })

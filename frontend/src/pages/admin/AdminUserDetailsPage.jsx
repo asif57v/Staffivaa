@@ -9,7 +9,8 @@ import {
 } from 'lucide-react'
 import {
   fetchAdminUserById, patchUserStatusAdmin, addAdminNote,
-  updateUserWalletAdmin, getUserTimelineAdmin, reviewLabourKycAdmin
+  updateUserWalletAdmin, getUserTimelineAdmin, reviewLabourKycAdmin,
+  fetchUserTransactionsAdmin
 } from '../../api/adminUsersApi.js'
 import { ApiError, apiRequest } from '../../api/http.js'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
@@ -196,6 +197,7 @@ export function AdminUserDetailsPage() {
   const { id } = useParams()
   const [user, setUser] = useState(null)
   const [timeline, setTimeline] = useState([])
+  const [walletTransactions, setWalletTransactions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState('overview') // overview, skills, role, wallet, timeline
@@ -210,11 +212,15 @@ export function AdminUserDetailsPage() {
     setLoading(true)
     setError('')
     try {
-      const userData = await fetchAdminUserById(id)
+      const [userData, logs, txs] = await Promise.all([
+        fetchAdminUserById(id),
+        getUserTimelineAdmin(id).catch(() => []),
+        fetchUserTransactionsAdmin(id).catch(() => []),
+      ])
       if (userData) {
         setUser(userData)
-        const logs = await getUserTimelineAdmin(id)
         setTimeline(logs)
+        setWalletTransactions(txs)
       } else {
         setError('User not found')
       }
@@ -248,8 +254,12 @@ export function AdminUserDetailsPage() {
     try {
       const updatedUser = await updateUserWalletAdmin(id, action, amount, reason)
       setUser(updatedUser)
-      const logs = await getUserTimelineAdmin(id)
+      const [logs, txs] = await Promise.all([
+        getUserTimelineAdmin(id).catch(() => []),
+        fetchUserTransactionsAdmin(id).catch(() => []),
+      ])
       setTimeline(logs)
+      setWalletTransactions(txs)
       closeDialog()
     } catch (e) {
       alert(e.message)
@@ -334,17 +344,19 @@ export function AdminUserDetailsPage() {
   const currentStatus = user.accountStatus || (user.isActive !== false ? ACCOUNT_STATUSES.ACTIVE : ACCOUNT_STATUSES.DELETED)
 
   const isWorker = user.role === USER_ROLES.LABOUR || Boolean(user.labourProfile)
+  const isContractor = user.role === USER_ROLES.CONTRACTOR || Boolean(user.contractorProfile)
+  const hasSkillsTab = isWorker || isContractor
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: UserIcon },
-    ...(isWorker ? [{ id: 'skills', label: 'Skills & Categories', icon: Wrench }] : []),
+    ...(hasSkillsTab ? [{ id: 'skills', label: isContractor ? 'Trades & Capabilities' : 'Skills & Categories', icon: Wrench }] : []),
     { id: 'role', label: 'Role Specifics', icon: ShieldCheck },
     { id: 'wallet', label: 'Wallet & Finance', icon: Wallet },
     { id: 'timeline', label: 'Activity Timeline', icon: History }
   ]
 
-  const assignedCategories = user.labourProfile?.categoryIds || []
-  const customSkillTags = user.labourProfile?.skills || []
+  const assignedCategories = (isContractor ? user.contractorProfile?.categoryIds : user.labourProfile?.categoryIds) || []
+  const customSkillTags = (isContractor ? user.contractorProfile?.skills : user.labourProfile?.skills) || []
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-20">
@@ -628,11 +640,11 @@ export function AdminUserDetailsPage() {
                     </div>
                   </GlassPanel>
 
-                  {isWorker && (
+                  {hasSkillsTab && (
                     <GlassPanel className="p-6">
                       <div className="mb-4 flex items-center justify-between">
                         <h2 className="text-sm font-bold uppercase tracking-wide text-slate-400">
-                          Skills & Specializations
+                          {isContractor ? 'Workforce Trades & Capabilities' : 'Skills & Specializations'}
                         </h2>
                         <button
                           type="button"
@@ -646,13 +658,15 @@ export function AdminUserDetailsPage() {
                       {assignedCategories.length === 0 && customSkillTags.length === 0 ? (
                         <div className="flex h-32 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-center p-4">
                           <HardHat className="h-6 w-6 text-slate-300" />
-                          <p className="mt-1 text-xs font-semibold text-slate-600">No skills assigned yet</p>
+                          <p className="mt-1 text-xs font-semibold text-slate-600">
+                            {isContractor ? 'No workforce trades assigned yet' : 'No skills assigned yet'}
+                          </p>
                           <button
                             type="button"
                             onClick={() => setIsSkillsModalOpen(true)}
                             className="mt-2 text-xs font-bold text-brand underline cursor-pointer"
                           >
-                            + Assign Skills & Roles
+                            {isContractor ? '+ Assign Trades & Capabilities' : '+ Assign Skills & Roles'}
                           </button>
                         </div>
                       ) : (
@@ -692,7 +706,7 @@ export function AdminUserDetailsPage() {
                     </GlassPanel>
                   )}
 
-                  <GlassPanel className={`p-6 ${!isWorker ? '' : 'sm:col-span-2'}`}>
+                  <GlassPanel className={`p-6 ${!hasSkillsTab ? '' : 'sm:col-span-2'}`}>
                     <h2 className="mb-5 text-sm font-bold uppercase tracking-wide text-slate-400">Platform Usage</h2>
                     <div className="flex h-32 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-center">
                       <Activity className="mx-auto h-8 w-8 text-slate-300" />
@@ -703,7 +717,7 @@ export function AdminUserDetailsPage() {
                 </div>
               )}
 
-              {activeTab === 'skills' && isWorker && (
+              {activeTab === 'skills' && hasSkillsTab && (
                 <div className="space-y-6">
                   <GlassPanel className="p-6">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
@@ -712,9 +726,13 @@ export function AdminUserDetailsPage() {
                           <HardHat className="h-6 w-6" />
                         </div>
                         <div>
-                          <h2 className="text-base font-bold text-slate-900">Worker Skills & Work Categories</h2>
+                          <h2 className="text-base font-bold text-slate-900">
+                            {isContractor ? 'Vendor Workforce Trades & Capabilities' : 'Worker Skills & Work Categories'}
+                          </h2>
                           <p className="text-xs text-slate-500">
-                            Assigned trade roles determine which construction and marketplace jobs this worker receives.
+                            {isContractor
+                              ? 'Assigned trade roles determine which vendor allocations and project tenders this vendor can supply.'
+                              : 'Assigned trade roles determine which construction and marketplace jobs this worker receives.'}
                           </p>
                         </div>
                       </div>
@@ -723,7 +741,7 @@ export function AdminUserDetailsPage() {
                         onClick={() => setIsSkillsModalOpen(true)}
                         className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-brand/90 cursor-pointer"
                       >
-                        <Wrench className="h-4 w-4" /> Manage Skills & Roles
+                        <Wrench className="h-4 w-4" /> {isContractor ? 'Manage Workforce Trades' : 'Manage Skills & Roles'}
                       </button>
                     </div>
 
@@ -732,16 +750,20 @@ export function AdminUserDetailsPage() {
                         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-400">
                           <Wrench className="h-7 w-7" />
                         </div>
-                        <p className="text-base font-bold text-slate-800">No Skills Configured</p>
+                        <p className="text-base font-bold text-slate-800">
+                          {isContractor ? 'No Trades Configured' : 'No Skills Configured'}
+                        </p>
                         <p className="text-xs text-slate-500 max-w-md mx-auto">
-                          This worker has not selected any trade skills yet. Assign skills so they can be matched to workforce allocations and client bookings.
+                          {isContractor
+                            ? 'This vendor has not registered any workforce trades yet. Assign trade skills so they can be matched with tenders and crew allocations.'
+                            : 'This worker has not selected any trade skills yet. Assign skills so they can be matched to workforce allocations and client bookings.'}
                         </p>
                         <button
                           type="button"
                           onClick={() => setIsSkillsModalOpen(true)}
                           className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800 cursor-pointer"
                         >
-                          + Assign Trade Skills Now
+                          {isContractor ? '+ Assign Workforce Trades Now' : '+ Assign Trade Skills Now'}
                         </button>
                       </div>
                     ) : (
@@ -1757,6 +1779,84 @@ export function AdminUserDetailsPage() {
                       </button>
                     </GlassPanel>
                   </div>
+
+                  {/* Transaction History Ledger */}
+                  <GlassPanel className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900">Wallet Transaction History</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">Real-time ledger of online recharges, payouts, platform deductions, and admin adjustments</p>
+                      </div>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                        {walletTransactions.length} transaction{walletTransactions.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+
+                    {walletTransactions.length === 0 ? (
+                      <div className="py-12 text-center text-xs font-medium text-slate-400">
+                        No transactions recorded yet for this user's wallet.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                              <th className="pb-3">Date & Time</th>
+                              <th className="pb-3">Type</th>
+                              <th className="pb-3">Source / Details</th>
+                              <th className="pb-3">Method</th>
+                              <th className="pb-3 text-right">Amount</th>
+                              <th className="pb-3 text-right">Balance After</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100/80">
+                            {walletTransactions.map((tx) => {
+                              const isCredit = tx.type === 'Credit' || tx.type === 'Refund'
+                              return (
+                                <tr key={tx._id || tx.transactionId} className="hover:bg-slate-50/60 transition">
+                                  <td className="py-3 font-medium text-slate-600 whitespace-nowrap">
+                                    {new Date(tx.createdAt).toLocaleString()}
+                                  </td>
+                                  <td className="py-3">
+                                    <span
+                                      className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                                        isCredit
+                                          ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200'
+                                          : 'bg-rose-50 text-rose-800 ring-1 ring-rose-200'
+                                      }`}
+                                    >
+                                      {tx.type}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 font-semibold text-slate-900">
+                                    <div>{tx.source || 'Wallet Transaction'}</div>
+                                    {tx.transactionId ? (
+                                      <div className="text-[10px] font-mono font-normal text-slate-400 mt-0.5">
+                                        Ref: {tx.transactionId}
+                                      </div>
+                                    ) : null}
+                                  </td>
+                                  <td className="py-3 uppercase text-[10px] font-semibold text-slate-500 whitespace-nowrap">
+                                    {tx.paymentMethod || '—'}
+                                  </td>
+                                  <td
+                                    className={`py-3 text-right font-black text-sm whitespace-nowrap ${
+                                      isCredit ? 'text-emerald-600' : 'text-rose-600'
+                                    }`}
+                                  >
+                                    {isCredit ? '+' : '-'}₹{tx.amount?.toLocaleString()}
+                                  </td>
+                                  <td className="py-3 text-right font-mono font-bold text-slate-800 whitespace-nowrap">
+                                    ₹{tx.balanceAfter?.toLocaleString() ?? '—'}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </GlassPanel>
                 </div>
               )}
 

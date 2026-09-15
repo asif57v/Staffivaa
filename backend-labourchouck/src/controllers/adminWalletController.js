@@ -108,7 +108,7 @@ export const getWalletSummary = asyncHandler(async (req, res) => {
 })
 
 export const getTransactions = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, type, status, dateFrom, dateTo, search, payerType } = req.query
+  const { page = 1, limit = 10, type, status, dateFrom, dateTo, search, payerType, userId } = req.query
   const query = {}
 
   if (type) query.type = type
@@ -125,24 +125,66 @@ export const getTransactions = asyncHandler(async (req, res) => {
     }
   }
 
+  const andParts = []
+  if (userId) {
+    andParts.push({
+      $or: [{ payerId: userId }, { labourId: userId }, { clientId: userId }],
+    })
+  }
   if (search) {
-    query.$or = [
-      { transactionId: { $regex: search, $options: 'i' } },
-      { source: { $regex: search, $options: 'i' } },
-      { payerName: { $regex: search, $options: 'i' } },
-      { razorpayPaymentId: { $regex: search, $options: 'i' } },
-    ]
+    andParts.push({
+      $or: [
+        { transactionId: { $regex: search, $options: 'i' } },
+        { source: { $regex: search, $options: 'i' } },
+        { payerName: { $regex: search, $options: 'i' } },
+        { razorpayPaymentId: { $regex: search, $options: 'i' } },
+      ],
+    })
+  }
+  if (andParts.length) {
+    query.$and = andParts
   }
 
   const skip = (parseInt(page) - 1) * parseInt(limit)
   
-  const transactions = await WalletTransaction.find(query)
-    .populate('bookingId', 'title reference projectName')
-    .populate('clientId', 'fullName email')
+  const transactionsRaw = await WalletTransaction.find(query)
+    .populate({
+      path: 'bookingId',
+      select: 'title reference projectName clientId labourId',
+      populate: [
+        { path: 'clientId', select: 'fullName email phone companyName' },
+        { path: 'labourId', select: 'fullName email phone' },
+      ],
+    })
+    .populate('clientId', 'fullName email phone companyName')
+    .populate('payerId', 'fullName email phone enterpriseProfile companyName')
+    .populate('labourId', 'fullName email phone')
+    .populate('userId', 'fullName email phone enterpriseProfile companyName')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit))
     .lean()
+
+  const transactions = transactionsRaw.map((tx) => {
+    const resolvedName =
+      tx.payerName ||
+      tx.payerId?.enterpriseProfile?.companyName ||
+      tx.payerId?.fullName ||
+      tx.userId?.enterpriseProfile?.companyName ||
+      tx.userId?.fullName ||
+      tx.labourId?.fullName ||
+      tx.clientId?.companyName ||
+      tx.clientId?.fullName ||
+      tx.bookingId?.labourId?.fullName ||
+      tx.bookingId?.clientId?.companyName ||
+      tx.bookingId?.clientId?.fullName ||
+      null
+
+    return {
+      ...tx,
+      payerName: resolvedName || tx.payerName || null,
+    }
+  })
 
   const total = await WalletTransaction.countDocuments(query)
 

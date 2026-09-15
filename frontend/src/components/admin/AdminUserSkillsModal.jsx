@@ -43,13 +43,15 @@ export function AdminUserSkillsModal({
       setSearch('')
       setNewSkillInput('')
 
-      const catIds = (user.labourProfile?.categoryIds || []).map((c) =>
+      const isContractor = user.role === 'contractor' || Boolean(user.contractorProfile)
+      const profile = isContractor ? user.contractorProfile : user.labourProfile
+      const catIds = (profile?.categoryIds || []).map((c) =>
         typeof c === 'object' && c._id ? String(c._id) : String(c)
       )
       setSelectedIds(new Set(catIds))
 
-      const existingSkills = Array.isArray(user.labourProfile?.skills)
-        ? [...user.labourProfile.skills]
+      const existingSkills = Array.isArray(profile?.skills)
+        ? [...profile.skills]
         : []
       setCustomSkills(existingSkills)
     }
@@ -178,10 +180,13 @@ export function AdminUserSkillsModal({
               </div>
               <div>
                 <h3 className="text-lg font-bold text-slate-900">
-                  Manage Worker Skills & Specializations
+                  {user?.role === 'contractor' || user?.contractorProfile
+                    ? 'Manage Vendor Trades & Capabilities'
+                    : 'Manage Worker Skills & Specializations'}
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Worker: <span className="font-semibold text-slate-800">{user?.fullName || 'Worker'}</span> (ID: {user?._id})
+                  {user?.role === 'contractor' || user?.contractorProfile ? 'Vendor' : 'Worker'}:{' '}
+                  <span className="font-semibold text-slate-800">{user?.fullName || 'User'}</span> (ID: {user?._id})
                 </p>
               </div>
             </div>

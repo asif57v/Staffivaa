@@ -60,6 +60,35 @@ export function AdminVerificationProfileDetails({ user, variant }) {
         {isCorporate ? <DetailRow label="Website" value={profile.website} /> : null}
       </DetailSection>
 
+      {!isCorporate && (
+        <DetailSection title="Workforce Trades & Capabilities">
+          {(() => {
+            const cats = profile.categoryIds || []
+            const catNames = cats
+              .map((c) => (c && typeof c === 'object' && c.name ? c.name : (typeof c === 'string' ? c : null)))
+              .filter(Boolean)
+            const skills = Array.isArray(profile.skills) ? profile.skills : []
+            const all = Array.from(new Set([...catNames, ...skills]))
+            if (all.length === 0) {
+              return <p className="text-xs text-slate-400 italic">No workforce trades selected yet</p>
+            }
+            return (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {all.map((s, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-1 text-xs font-bold text-slate-800 shadow-2xs"
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#FFC107] shrink-0" />
+                    {s}
+                  </span>
+                ))}
+              </div>
+            )
+          })()}
+        </DetailSection>
+      )}
+
       <DetailSection title="Verification timeline">
         <DetailRow label="Status" value={isCorporate ? profile.status : profile.verificationStatus} />
         <DetailRow

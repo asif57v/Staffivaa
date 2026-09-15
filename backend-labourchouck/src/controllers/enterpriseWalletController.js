@@ -60,13 +60,15 @@ export const getEnterpriseWalletSummary = asyncHandler(async (req, res) => {
   })
 })
 
+import { paymentService } from '../services/paymentService.js'
+
 /** POST /api/enterprise/wallet/recharge/init - Create Razorpay Order */
 export const createRechargeOrder = asyncHandler(async (req, res) => {
   if (req.user.role !== USER_ROLES.ENTERPRISE) {
     return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
   }
 
-  const { amount } = req.body
+  const { amount, workerId, jobId, applicationId } = req.body
   const numAmount = Number(amount)
 
   if (!numAmount || numAmount < 1) {
@@ -81,40 +83,48 @@ export const createRechargeOrder = asyncHandler(async (req, res) => {
     })
   }
 
-  const receiptId = `RCPT_ENT_${Date.now()}`
-  const options = {
-    amount: Math.round(numAmount * 100), // Razorpay amount in paise
+  const idempotencyKey = req.body.idempotencyKey || req.headers['x-idempotency-key'] || null
+  const { payment } = await paymentService.createOrGetPayment({
+    userId: req.user._id,
+    amount: numAmount,
     currency: 'INR',
-    receipt: receiptId,
-    notes: {
+    purpose: 'ENTERPRISE_WALLET_RECHARGE',
+    idempotencyKey,
+    metadata: {
       enterpriseId: String(req.user._id),
       companyName: req.user.enterpriseProfile?.companyName || req.user.fullName || 'Enterprise',
-      purpose: 'Wallet Recharge',
+      workerId,
+      jobId,
+      applicationId,
     },
-  }
+  })
 
-  const order = await razorpay.orders.create(options)
+  const receiptId = `RCPT_ENT_${Date.now()}`
   const transactionId = `ENT-TXN-${Date.now()}`
 
-  // Create pending transaction record
-  await EnterpriseWalletTransaction.create({
-    transactionId,
-    enterpriseId: req.user._id,
-    amount: numAmount,
-    type: 'recharge',
-    status: 'pending',
-    paymentMethod: 'Razorpay',
-    description: 'Enterprise Wallet Recharge via Razorpay',
-    razorpayOrderId: order.id,
-    referenceNumber: receiptId,
-  })
+  // Create or sync pending transaction record
+  let existingTxn = await EnterpriseWalletTransaction.findOne({ razorpayOrderId: payment.gatewayOrderId })
+  if (!existingTxn) {
+    await EnterpriseWalletTransaction.create({
+      transactionId,
+      enterpriseId: req.user._id,
+      amount: numAmount,
+      type: 'recharge',
+      status: 'pending',
+      paymentMethod: 'Razorpay',
+      description: 'Enterprise Wallet Recharge via Razorpay',
+      razorpayOrderId: payment.gatewayOrderId,
+      referenceNumber: receiptId,
+    })
+  }
 
   return sendSuccess(res, {
     message: 'Recharge order created successfully',
     data: {
-      orderId: order.id,
-      amount: order.amount,
-      currency: order.currency,
+      orderId: payment.gatewayOrderId,
+      systemOrderId: payment.orderId,
+      amount: Math.round(payment.amount * 100),
+      currency: payment.currency,
       keyId: process.env.RAZORPAY_KEY_ID,
       transactionId,
       companyName: req.user.enterpriseProfile?.companyName || req.user.fullName,
@@ -136,28 +146,34 @@ export const verifyRechargePayment = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Incomplete payment parameters', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
 
-  // Signature verification using HMAC SHA256
-  const generatedSignature = crypto
-    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
-    .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-    .digest('hex')
-
-  const isSignatureValid = crypto.timingSafeEqual(
-    Buffer.from(generatedSignature, 'hex'),
-    Buffer.from(razorpay_signature, 'hex')
-  )
+  const isSignatureValid = paymentService.verifyPaymentSignature({
+    gatewayOrderId: razorpay_order_id,
+    gatewayPaymentId: razorpay_payment_id,
+    gatewaySignature: razorpay_signature,
+  })
 
   const transaction = await EnterpriseWalletTransaction.findOne({ razorpayOrderId: razorpay_order_id })
-  if (!transaction) {
-    return sendError(res, { message: 'Transaction record not found', statusCode: HTTP_STATUS.NOT_FOUND })
-  }
 
   if (!isSignatureValid) {
-    transaction.status = 'failed'
-    transaction.gatewayResponse = { error: 'Invalid payment signature' }
-    await transaction.save()
+    if (transaction) {
+      transaction.status = 'failed'
+      transaction.gatewayResponse = { error: 'Invalid payment signature' }
+      await transaction.save()
+    }
+    await paymentService.recordPaymentFailure({
+      gatewayOrderId: razorpay_order_id,
+      failureReason: 'Payment signature verification failed',
+    })
     return sendError(res, { message: 'Payment signature verification failed', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
+
+  // Idempotently process payment & credit wallet
+  await paymentService.processPaymentSuccess({
+    gatewayOrderId: razorpay_order_id,
+    gatewayPaymentId: razorpay_payment_id,
+    paymentMethod: paymentMethod || 'Razorpay',
+    source: 'frontend',
+  })
 
   // Credit Wallet
   let wallet = await EnterpriseWallet.findOne({ enterpriseId: req.user._id })

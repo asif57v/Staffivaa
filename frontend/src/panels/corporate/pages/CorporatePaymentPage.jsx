@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2, FileText, Banknote, Building2, Calendar, Users
 import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
 import { useGetRequestQuery, useCreateRazorpayOrderMutation, useVerifyRazorpayPaymentMutation } from '../../../store/api/workforceApi.js'
 import { loadRazorpayScript } from '../../../lib/razorpay.js'
+import { usePaymentReconciliation } from '../../../hooks/usePaymentReconciliation.js'
 
 function formatDate(d) {
   if (!d) return '—'
@@ -14,16 +15,25 @@ export function CorporatePaymentPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   
-  const { data, isLoading, isError } = useGetRequestQuery(id, { skip: !id })
+  const { data, isLoading, isError, refetch } = useGetRequestQuery(id, { skip: !id })
   const [createOrder, { isLoading: isCreatingOrder }] = useCreateRazorpayOrderMutation()
   const [verifyPayment, { isLoading: isVerifying }] = useVerifyRazorpayPaymentMutation()
 
   const [paymentSuccess, setPaymentSuccess] = useState(false)
 
+  const { savePendingPayment, clearPendingPayment, checkStatus } = usePaymentReconciliation({
+    onPaymentSuccess: () => {
+      setPaymentSuccess(true)
+      refetch()
+    },
+  })
+
   const request = data?.request
   const allocation = data?.allocation
   const assignments = data?.assignments ?? []
   const summary = data?.paymentSummary
+
+  const isAlreadyPaid = request?.corporatePlatformFeeStatus === 'paid'
 
   if (isLoading) {
     return (
@@ -52,6 +62,7 @@ export function CorporatePaymentPage() {
 
       if (orderData?.bypassPayment || orderData?.data?.bypassPayment) {
         setPaymentSuccess(true)
+        refetch()
         return
       }
 
@@ -61,13 +72,20 @@ export function CorporatePaymentPage() {
         return
       }
 
+      const activeOrderId = orderData.orderId
+      savePendingPayment({
+        orderId: activeOrderId,
+        purpose: 'WORKFORCE_REQUEST_PLATFORM_FEE',
+        requestId: id,
+      })
+
       const options = {
         key: orderData.keyId,
         amount: orderData.amount,
         currency: orderData.currency,
         name: 'Staffivaa',
         description: `Platform Fee for ${request.reference}`,
-        order_id: orderData.orderId,
+        order_id: activeOrderId,
         handler: async function (response) {
           try {
             await verifyPayment({
@@ -76,11 +94,24 @@ export function CorporatePaymentPage() {
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature
             }).unwrap()
+            clearPendingPayment()
             setPaymentSuccess(true)
+            refetch()
           } catch (err) {
             console.error('Payment Verification Failed', err)
-            alert('Payment verification failed. Please contact support.')
+            const reconciled = await checkStatus(response.razorpay_order_id)
+            if (reconciled?.status === 'SUCCESS') {
+              setPaymentSuccess(true)
+              refetch()
+            } else {
+              alert('Payment verification failed. If money was debited, it will be automatically reconciled.')
+            }
           }
+        },
+        modal: {
+          ondismiss: function () {
+            checkStatus(activeOrderId)
+          },
         },
         theme: {
           color: '#FFC107'
@@ -90,6 +121,7 @@ export function CorporatePaymentPage() {
       const rzp = new window.Razorpay(options)
       rzp.on('payment.failed', function (response){
         console.error('Payment Failed', response.error)
+        clearPendingPayment()
         alert('Payment failed. Please try again.')
       })
       rzp.open()
@@ -99,7 +131,7 @@ export function CorporatePaymentPage() {
     }
   }
 
-  if (paymentSuccess) {
+  if (paymentSuccess || isAlreadyPaid) {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center">
         <div className="h-20 w-20 rounded-full bg-emerald-100 flex items-center justify-center mb-6">

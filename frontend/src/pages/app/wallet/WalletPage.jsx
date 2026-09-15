@@ -11,6 +11,7 @@ import { useGetWalletBalanceQuery, useCreateWalletRechargeOrderMutation, useVeri
 import { useAuth } from '../../../hooks/useAuth'
 import { readLabourWalletPolicy } from '../../../lib/labourWalletPolicy.js'
 import { loadRazorpayScript } from '../../../lib/razorpay.js'
+import { usePaymentReconciliation } from '../../../hooks/usePaymentReconciliation.js'
 
 export function WalletPage() {
   const navigate = useNavigate()
@@ -37,6 +38,12 @@ export function WalletPage() {
   const [requestWithdrawal] = useRequestWithdrawalMutation()
   const [requestRefund, { isLoading: isRequestingRefund }] = useRequestRefundMutation()
 
+  const { savePendingPayment, clearPendingPayment, checkStatus } = usePaymentReconciliation({
+    onPaymentSuccess: () => {
+      refetch()
+    },
+  })
+
   const balance = walletData?.balance || 0
   const pendingBalance = walletData?.pendingBalance || 0
   const totalWithdrawn = walletData?.totalWithdrawn || 0
@@ -45,16 +52,22 @@ export function WalletPage() {
   const walletPolicy = readLabourWalletPolicy({ walletData, user })
   const { minimumRequired: minimumWalletRequired, isLowBalance: showLowBalanceBanner } = walletPolicy
 
-  const handleWithdraw = async (details) => {
+  const handleWithdraw = async (amount, details) => {
     setIsProcessing(true)
     try {
-      await requestWithdrawal(details).unwrap()
-      alert('Withdrawal request submitted successfully! It is now pending admin approval.')
+      await requestWithdrawal({
+        amount,
+        payoutType: details.type,
+        bankDetails: details.type === 'bank_transfer' ? details.bankDetails : undefined,
+        upiDetails: details.type === 'upi' ? details.upiDetails : undefined,
+      }).unwrap()
+
+      toast.success(`Withdrawal request for ₹${amount.toLocaleString('en-IN')} submitted successfully`)
       setIsWithdrawOpen(false)
       refetch()
     } catch (error) {
-      console.error('Failed to request withdrawal:', error)
-      alert(error?.data?.message || 'Failed to request withdrawal. Please try again.')
+      console.error('Withdrawal failed:', error)
+      toast.error(error?.data?.message || 'Withdrawal request failed. Please try again.')
     } finally {
       setIsProcessing(false)
     }
@@ -93,6 +106,12 @@ export function WalletPage() {
         throw new Error('Invalid payment order response from server')
       }
 
+      savePendingPayment({
+        orderId,
+        amount,
+        purpose: 'WALLET_TOPUP',
+      })
+
       const options = {
         key: razorpayKey,
         amount: String(orderAmount),
@@ -111,11 +130,15 @@ export function WalletPage() {
               amount,
             }).unwrap()
 
+            clearPendingPayment()
             toast.success(`₹${amount.toLocaleString('en-IN')} added to your wallet`)
             refetch()
           } catch (error) {
             console.error('Payment verification failed:', error)
-            toast.error(error?.data?.message || 'Payment verification failed. If money was deducted, it will be refunded.')
+            const reconciled = await checkStatus(response.razorpay_order_id)
+            if (!reconciled || reconciled.status !== 'SUCCESS') {
+              toast.error(error?.data?.message || 'Payment verification failed. If money was deducted, it will be automatically reconciled.')
+            }
           } finally {
             setIsPaymentProcessing(false)
           }
@@ -131,6 +154,7 @@ export function WalletPage() {
         modal: {
           ondismiss: function () {
             setIsPaymentProcessing(false)
+            checkStatus(orderId)
           },
         },
       }
@@ -138,6 +162,7 @@ export function WalletPage() {
       const rzp1 = new window.Razorpay(options)
       rzp1.on('payment.failed', function (response) {
         console.error('Payment Failed:', response.error)
+        clearPendingPayment()
         toast.error(response?.error?.description || 'Payment failed. Please try again.')
         setIsPaymentProcessing(false)
       })

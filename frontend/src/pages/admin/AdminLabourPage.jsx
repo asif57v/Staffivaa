@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
 import {
@@ -18,6 +18,7 @@ import {
   Camera,
 } from 'lucide-react'
 import { fetchAdminUserById, fetchAdminUsers, reviewLabourKycAdmin } from '../../api/adminUsersApi.js'
+import { fetchLabourCategoriesGrouped } from '../../api/labourCategoriesApi.js'
 import { ApiError } from '../../api/http.js'
 import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
@@ -155,6 +156,8 @@ export function AdminLabourPage() {
   const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('search')?.trim() || '')
   const [kycFilter, setKycFilter] = useState(() => readInitialKyc(searchParams))
   const [status, setStatus] = useState(() => readInitialStatus(searchParams))
+  const [skillFilter, setSkillFilter] = useState(() => searchParams.get('skill') || 'all')
+  const [categoryGroups, setCategoryGroups] = useState([])
   const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get('page')) || 1))
   const limit = 12
 
@@ -173,22 +176,39 @@ export function AdminLabourPage() {
   const [zoomImage, setZoomImage] = useState(null)
 
   useEffect(() => {
+    let cancelled = false
+    fetchLabourCategoriesGrouped()
+      .then((res) => {
+        if (!cancelled && res?.data?.groups) {
+          setCategoryGroups(res.data.groups)
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load category groups', err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 350)
     return () => window.clearTimeout(t)
   }, [searchInput])
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch, kycFilter, status])
+  }, [debouncedSearch, kycFilter, status, skillFilter])
 
   useEffect(() => {
     const next = new URLSearchParams()
     if (debouncedSearch) next.set('search', debouncedSearch)
     if (kycFilter !== 'all') next.set('kyc', kycFilter)
     if (status !== 'all') next.set('status', status)
+    if (skillFilter !== 'all') next.set('skill', skillFilter)
     if (page > 1) next.set('page', String(page))
     setSearchParams(next, { replace: true })
-  }, [debouncedSearch, kycFilter, status, page, setSearchParams])
+  }, [debouncedSearch, kycFilter, status, skillFilter, page, setSearchParams])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -199,6 +219,7 @@ export function AdminLabourPage() {
         role: USER_ROLES.LABOUR,
         status,
         kycStatus: kycFilter,
+        skill: skillFilter !== 'all' ? skillFilter : undefined,
         page,
         limit,
       })
@@ -213,11 +234,21 @@ export function AdminLabourPage() {
     } finally {
       setLoading(false)
     }
-  }, [debouncedSearch, kycFilter, status, page, limit])
+  }, [debouncedSearch, kycFilter, status, skillFilter, page, limit])
 
   useEffect(() => {
     load()
   }, [load])
+
+  const selectedSkillName = useMemo(() => {
+    if (!skillFilter || skillFilter === 'all') return ''
+    for (const g of categoryGroups) {
+      for (const c of g.categories || []) {
+        if (String(c._id) === String(skillFilter) || c.name === skillFilter) return c.name
+      }
+    }
+    return skillFilter
+  }, [skillFilter, categoryGroups])
 
   useEffect(() => {
     if (!reviewUserId) {
@@ -396,8 +427,8 @@ export function AdminLabourPage() {
       </div>
 
       <GlassPanel className="p-4 md:p-5">
-        <div className="flex items-center gap-3 w-full">
-          <div className="flex-1">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center w-full">
+          <div className="flex-1 min-w-[200px]">
             <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Search</label>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -410,7 +441,26 @@ export function AdminLabourPage() {
               />
             </div>
           </div>
-          <div className="w-40 shrink-0">
+          <div className="w-full sm:w-48 shrink-0">
+            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Skill / Trade</label>
+            <select
+              value={skillFilter}
+              onChange={(e) => setSkillFilter(e.target.value)}
+              className="w-full rounded-xl border border-slate-200/90 bg-white px-3 py-2.5 text-sm shadow-sm outline-none focus:ring-2 focus:ring-brand/35"
+            >
+              <option value="all">All skills / trades</option>
+              {categoryGroups.map((g) => (
+                <optgroup key={g._id} label={g.name}>
+                  {(g.categories || []).map((cat) => (
+                    <option key={cat._id} value={cat._id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+          <div className="w-full sm:w-40 shrink-0">
             <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">KYC status</label>
             <select
               value={kycFilter}
@@ -423,7 +473,7 @@ export function AdminLabourPage() {
               <option value={KYC_STATUS.FAILED}>Failed</option>
             </select>
           </div>
-          <div className="w-40 shrink-0">
+          <div className="w-full sm:w-40 shrink-0">
             <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Account</label>
             <select
               value={status}
@@ -436,10 +486,30 @@ export function AdminLabourPage() {
             </select>
           </div>
         </div>
-        <p className="mt-4 text-xs font-medium text-slate-500">
-          Showing {items.length} of {total} labour account{total === 1 ? '' : 's'}
-          {debouncedSearch ? ` · matching “${debouncedSearch}”` : ''}
-        </p>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-slate-500">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span>
+              Showing {items.length} of {total} labour account{total === 1 ? '' : 's'}
+              {debouncedSearch ? ` · matching “${debouncedSearch}”` : ''}
+              {kycFilter !== 'all' ? ` · KYC: “${kycFilter}”` : ''}
+            </span>
+            {selectedSkillName ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-slate-800 ring-1 ring-amber-300/80">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#FFC107] shrink-0" />
+                Skill: {selectedSkillName}
+                <button
+                  type="button"
+                  onClick={() => setSkillFilter('all')}
+                  className="ml-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  title="Clear skill filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ) : null}
+          </div>
+        </div>
       </GlassPanel>
 
       {error ? (

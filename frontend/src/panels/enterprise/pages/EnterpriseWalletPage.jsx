@@ -17,6 +17,7 @@ import {
   useVerifyInvoicePaymentMutation,
 } from '../../../store/api/enterpriseApi.js'
 import toast from 'react-hot-toast'
+import { usePaymentReconciliation } from '../../../hooks/usePaymentReconciliation.js'
 
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
@@ -39,6 +40,12 @@ function AddMoneyModal({ summary, onClose }) {
   const [createRechargeOrder, { isLoading: isCreating }] = useCreateRechargeOrderMutation()
   const [verifyPayment, { isLoading: isVerifying }] = useVerifyRechargePaymentMutation()
 
+  const { savePendingPayment, clearPendingPayment, checkStatus } = usePaymentReconciliation({
+    onPaymentSuccess: () => {
+      onClose()
+    },
+  })
+
   const quickAmounts = [5000, 10000, 25000, 50000]
 
   const handleProceedPayment = async (e) => {
@@ -60,6 +67,13 @@ function AddMoneyModal({ summary, onClose }) {
         toast.error('Razorpay SDK failed to load. Check internet connection.')
         return
       }
+
+      // Record pending payment in sessionStorage
+      savePendingPayment({
+        orderId: orderData.orderId,
+        amount: numAmount,
+        purpose: 'ENTERPRISE_WALLET_RECHARGE',
+      })
 
       // 2. Open Razorpay Checkout Modal
       const options = {
@@ -86,15 +100,28 @@ function AddMoneyModal({ summary, onClose }) {
               paymentMethod,
             }).unwrap()
 
+            clearPendingPayment()
             toast.success(`₹${numAmount.toLocaleString('en-IN')} added to wallet!`)
             onClose()
           } catch (err) {
-            toast.error(err?.data?.message || 'Payment verification failed')
+            const reconciled = await checkStatus(response.razorpay_order_id)
+            if (!reconciled || reconciled.status !== 'SUCCESS') {
+              toast.error(err?.data?.message || 'Payment verification failed')
+            }
           }
+        },
+        modal: {
+          ondismiss: function () {
+            checkStatus(orderData.orderId)
+          },
         },
       }
 
       const rzp = new window.Razorpay(options)
+      rzp.on('payment.failed', function (response) {
+        clearPendingPayment()
+        toast.error(response?.error?.description || 'Payment failed')
+      })
       rzp.open()
     } catch (err) {
       toast.error(err?.data?.message || 'Failed to initialize recharge')

@@ -443,9 +443,63 @@ function mergeAnd(base, extraClauses) {
   return next
 }
 
+async function buildSkillClause(skillRaw, roleTarget) {
+  const s = typeof skillRaw === 'string' ? skillRaw.trim() : ''
+  if (!s || s.toLowerCase() === 'all') return null
+
+  let categoryDoc = null
+  if (mongoose.Types.ObjectId.isValid(s)) {
+    categoryDoc = await LabourCategory.findById(s).lean()
+  }
+  if (!categoryDoc) {
+    categoryDoc = await LabourCategory.findOne({
+      $or: [
+        { name: new RegExp(`^${escapeRegexForMongo(s)}$`, 'i') },
+        { slug: s.toLowerCase() },
+      ],
+    }).lean()
+  }
+
+  const conditions = []
+  if (categoryDoc) {
+    const catId = categoryDoc._id
+    const catName = categoryDoc.name
+    const nameRegex = new RegExp(`^${escapeRegexForMongo(catName)}$`, 'i')
+    conditions.push(
+      { 'labourProfile.categoryIds': catId },
+      { 'contractorProfile.categoryIds': catId },
+      { 'labourProfile.skills': nameRegex },
+      { 'contractorProfile.skills': nameRegex },
+    )
+  } else {
+    if (mongoose.Types.ObjectId.isValid(s)) {
+      const objId = new mongoose.Types.ObjectId(s)
+      conditions.push(
+        { 'labourProfile.categoryIds': objId },
+        { 'contractorProfile.categoryIds': objId },
+      )
+    }
+    const rawRegex = new RegExp(escapeRegexForMongo(s), 'i')
+    conditions.push(
+      { 'labourProfile.skills': rawRegex },
+      { 'contractorProfile.skills': rawRegex },
+    )
+  }
+
+  if (roleTarget === USER_ROLES.LABOUR) {
+    const labourOnly = conditions.filter((c) => Object.keys(c)[0].startsWith('labourProfile'))
+    return labourOnly.length ? { $or: labourOnly } : null
+  }
+  if (roleTarget === USER_ROLES.CONTRACTOR) {
+    const contractorOnly = conditions.filter((c) => Object.keys(c)[0].startsWith('contractorProfile'))
+    return contractorOnly.length ? { $or: contractorOnly } : null
+  }
+  return conditions.length ? { $or: conditions } : null
+}
+
 /** Admin: list users with search, role, active/inactive, optional labour KYC filter, pagination */
 export const listUsers = asyncHandler(async (req, res) => {
-  const { search, role, status, kycStatus, page = 1, limit = 20 } = req.query
+  const { search, role, status, kycStatus, skill, page = 1, limit = 20 } = req.query
   const q = {}
   const andParts = []
 
@@ -478,6 +532,11 @@ export const listUsers = asyncHandler(async (req, res) => {
     andParts.push(buildSearchOrClause(searchTrim))
   }
 
+  const skillClause = await buildSkillClause(skill, role)
+  if (skillClause) {
+    andParts.push(skillClause)
+  }
+
   const kycRaw = typeof kycStatus === 'string' ? kycStatus.trim().toLowerCase() : ''
   const kycKey = kycRaw === '' || kycRaw === 'all' ? 'all' : kycRaw
   if (kycKey !== 'all' && !Object.values(KYC_STATUS).includes(kycKey)) {
@@ -488,24 +547,116 @@ export const listUsers = asyncHandler(async (req, res) => {
     })
   }
 
-  if (kycKey !== 'all') {
-    if (role && role !== USER_ROLES.LABOUR) {
-      return sendError(res, {
-        message: 'KYC filter applies to labour accounts only — use role=labour or omit role.',
-        statusCode: HTTP_STATUS.BAD_REQUEST,
-        code: 'KYC_REQUIRES_LABOUR',
-      })
-    }
-    q.role = USER_ROLES.LABOUR
-    if (kycKey === KYC_STATUS.PENDING) {
-      andParts.push({ $or: KYC_PENDING_CONDITIONS })
-    } else if (kycKey === KYC_STATUS.VERIFIED) {
-      andParts.push({ 'labourProfile.kycStatus': KYC_STATUS.VERIFIED })
-    } else if (kycKey === KYC_STATUS.FAILED) {
-      andParts.push({ 'labourProfile.kycStatus': KYC_STATUS.FAILED })
-    }
-  } else if (role) {
+  if (role) {
     q.role = role
+  }
+
+  if (kycKey !== 'all') {
+    const roleTarget = role || q.role
+    if (roleTarget === USER_ROLES.LABOUR) {
+      if (kycKey === KYC_STATUS.PENDING) {
+        andParts.push({ $or: KYC_PENDING_CONDITIONS })
+      } else if (kycKey === KYC_STATUS.VERIFIED) {
+        andParts.push({ 'labourProfile.kycStatus': KYC_STATUS.VERIFIED })
+      } else if (kycKey === KYC_STATUS.FAILED) {
+        andParts.push({ 'labourProfile.kycStatus': KYC_STATUS.FAILED })
+      }
+    } else if (roleTarget === USER_ROLES.CONTRACTOR) {
+      if (kycKey === 'pending') {
+        andParts.push({
+          $or: [
+            { 'contractorProfile.verificationStatus': 'pending' },
+            { 'contractorProfile.verificationStatus': null },
+            { 'contractorProfile.verificationStatus': { $exists: false } },
+          ],
+        })
+      } else if (kycKey === 'verified') {
+        andParts.push({ 'contractorProfile.verificationStatus': 'approved' })
+      } else if (kycKey === 'failed') {
+        andParts.push({ 'contractorProfile.verificationStatus': 'rejected' })
+      }
+    } else if (roleTarget === USER_ROLES.CORPORATE) {
+      if (kycKey === 'pending') {
+        andParts.push({
+          $or: [
+            { 'corporateProfile.status': 'pending' },
+            { 'corporateProfile.status': null },
+            { 'corporateProfile.status': { $exists: false } },
+          ],
+        })
+      } else if (kycKey === 'verified') {
+        andParts.push({ 'corporateProfile.status': 'approved' })
+      } else if (kycKey === 'failed') {
+        andParts.push({ 'corporateProfile.status': 'rejected' })
+      }
+    } else if (roleTarget === USER_ROLES.ENTERPRISE) {
+      if (kycKey === 'pending') {
+        andParts.push({
+          $or: [
+            { 'enterpriseProfile.status': 'pending' },
+            { 'enterpriseProfile.status': null },
+            { 'enterpriseProfile.status': { $exists: false } },
+          ],
+        })
+      } else if (kycKey === 'verified') {
+        andParts.push({ 'enterpriseProfile.status': 'approved' })
+      } else if (kycKey === 'failed') {
+        andParts.push({ 'enterpriseProfile.status': 'rejected' })
+      }
+    } else if (roleTarget === USER_ROLES.INDIVIDUAL) {
+      if (kycKey === 'verified') {
+        andParts.push({ isPhoneVerified: true })
+      } else if (kycKey === 'pending') {
+        andParts.push({ isPhoneVerified: { $ne: true } })
+      } else if (kycKey === 'failed') {
+        andParts.push({
+          $or: [
+            { accountStatus: { $in: ['blocked', 'suspended', 'deleted'] } },
+            { isActive: false },
+          ],
+        })
+      }
+    } else {
+      // Any / all roles
+      if (kycKey === 'verified') {
+        andParts.push({
+          $or: [
+            { 'labourProfile.kycStatus': KYC_STATUS.VERIFIED },
+            { 'contractorProfile.verificationStatus': 'approved' },
+            { 'corporateProfile.status': 'approved' },
+            { 'enterpriseProfile.status': 'approved' },
+            { role: 'individual', isPhoneVerified: true },
+          ],
+        })
+      } else if (kycKey === 'failed') {
+        andParts.push({
+          $or: [
+            { 'labourProfile.kycStatus': KYC_STATUS.FAILED },
+            { 'contractorProfile.verificationStatus': 'rejected' },
+            { 'corporateProfile.status': 'rejected' },
+            { 'enterpriseProfile.status': 'rejected' },
+            { role: 'individual', accountStatus: { $in: ['blocked', 'suspended', 'deleted'] } },
+            { role: 'individual', isActive: false },
+          ],
+        })
+      } else if (kycKey === 'pending') {
+        andParts.push({
+          $or: [
+            { $or: KYC_PENDING_CONDITIONS },
+            { 'contractorProfile.verificationStatus': 'pending' },
+            { 'contractorProfile.verificationStatus': null },
+            { 'contractorProfile.verificationStatus': { $exists: false } },
+            { 'corporateProfile.status': 'pending' },
+            { 'corporateProfile.status': null },
+            { 'corporateProfile.status': { $exists: false } },
+            { 'enterpriseProfile.status': 'pending' },
+            { 'enterpriseProfile.status': null },
+            { 'enterpriseProfile.status': { $exists: false } },
+            { role: 'individual', isPhoneVerified: { $ne: true } },
+          ],
+        })
+      }
+    }
   }
 
   if (andParts.length) {
@@ -516,25 +667,163 @@ export const listUsers = asyncHandler(async (req, res) => {
   const lim = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(limit) || 20))
   const skip = (pg - 1) * lim
 
-  let labourKycCounts = null
-  if (q.role === USER_ROLES.LABOUR) {
-    const statsBase = { role: USER_ROLES.LABOUR }
-    if (q.isActive !== undefined) statsBase.isActive = q.isActive
-    if (searchTrim) {
-      statsBase.$and = [buildSearchOrClause(searchTrim)]
-    }
-    const [pending, verified, failed, labourTotal] = await Promise.all([
+  const statsBase = {}
+  const currentRole = role || q.role
+  if (currentRole) statsBase.role = currentRole
+  if (q.isActive !== undefined) statsBase.isActive = q.isActive
+  if (q.accountStatus !== undefined) statsBase.accountStatus = q.accountStatus
+  const statsAnd = []
+  if (searchTrim) {
+    statsAnd.push(buildSearchOrClause(searchTrim))
+  }
+  if (skillClause) {
+    statsAnd.push(skillClause)
+  }
+  if (statsAnd.length) {
+    statsBase.$and = statsAnd
+  }
+
+  let summaryCounts = null
+
+  if (currentRole === USER_ROLES.LABOUR) {
+    const [pending, verified, failed, totalRole] = await Promise.all([
       User.countDocuments(mergeAnd(statsBase, [{ $or: KYC_PENDING_CONDITIONS }])),
       User.countDocuments(mergeAnd(statsBase, [{ 'labourProfile.kycStatus': KYC_STATUS.VERIFIED }])),
       User.countDocuments(mergeAnd(statsBase, [{ 'labourProfile.kycStatus': KYC_STATUS.FAILED }])),
       User.countDocuments(statsBase),
     ])
-    labourKycCounts = { pending, verified, failed, total: labourTotal }
+    summaryCounts = { pending, verified, failed, total: totalRole }
+  } else if (currentRole === USER_ROLES.CONTRACTOR) {
+    const [pending, verified, failed, totalRole] = await Promise.all([
+      User.countDocuments(
+        mergeAnd(statsBase, [
+          {
+            $or: [
+              { 'contractorProfile.verificationStatus': 'pending' },
+              { 'contractorProfile.verificationStatus': null },
+              { 'contractorProfile.verificationStatus': { $exists: false } },
+            ],
+          },
+        ]),
+      ),
+      User.countDocuments(mergeAnd(statsBase, [{ 'contractorProfile.verificationStatus': 'approved' }])),
+      User.countDocuments(mergeAnd(statsBase, [{ 'contractorProfile.verificationStatus': 'rejected' }])),
+      User.countDocuments(statsBase),
+    ])
+    summaryCounts = { pending, verified, failed, total: totalRole }
+  } else if (currentRole === USER_ROLES.CORPORATE) {
+    const [pending, verified, failed, totalRole] = await Promise.all([
+      User.countDocuments(
+        mergeAnd(statsBase, [
+          {
+            $or: [
+              { 'corporateProfile.status': 'pending' },
+              { 'corporateProfile.status': null },
+              { 'corporateProfile.status': { $exists: false } },
+            ],
+          },
+        ]),
+      ),
+      User.countDocuments(mergeAnd(statsBase, [{ 'corporateProfile.status': 'approved' }])),
+      User.countDocuments(mergeAnd(statsBase, [{ 'corporateProfile.status': 'rejected' }])),
+      User.countDocuments(statsBase),
+    ])
+    summaryCounts = { pending, verified, failed, total: totalRole }
+  } else if (currentRole === USER_ROLES.ENTERPRISE) {
+    const [pending, verified, failed, totalRole] = await Promise.all([
+      User.countDocuments(
+        mergeAnd(statsBase, [
+          {
+            $or: [
+              { 'enterpriseProfile.status': 'pending' },
+              { 'enterpriseProfile.status': null },
+              { 'enterpriseProfile.status': { $exists: false } },
+            ],
+          },
+        ]),
+      ),
+      User.countDocuments(mergeAnd(statsBase, [{ 'enterpriseProfile.status': 'approved' }])),
+      User.countDocuments(mergeAnd(statsBase, [{ 'enterpriseProfile.status': 'rejected' }])),
+      User.countDocuments(statsBase),
+    ])
+    summaryCounts = { pending, verified, failed, total: totalRole }
+  } else if (currentRole === USER_ROLES.INDIVIDUAL) {
+    const [pending, verified, failed, totalRole] = await Promise.all([
+      User.countDocuments(mergeAnd(statsBase, [{ isPhoneVerified: { $ne: true } }])),
+      User.countDocuments(mergeAnd(statsBase, [{ isPhoneVerified: true }])),
+      User.countDocuments(
+        mergeAnd(statsBase, [
+          {
+            $or: [
+              { accountStatus: { $in: ['blocked', 'suspended', 'deleted'] } },
+              { isActive: false },
+            ],
+          },
+        ]),
+      ),
+      User.countDocuments(statsBase),
+    ])
+    summaryCounts = { pending, verified, failed, total: totalRole }
+  } else {
+    // All roles combined
+    const [pending, verified, failed, totalAll] = await Promise.all([
+      User.countDocuments(
+        mergeAnd(statsBase, [
+          {
+            $or: [
+              { $or: KYC_PENDING_CONDITIONS },
+              { 'contractorProfile.verificationStatus': 'pending' },
+              { 'contractorProfile.verificationStatus': null },
+              { 'contractorProfile.verificationStatus': { $exists: false } },
+              { 'corporateProfile.status': 'pending' },
+              { 'corporateProfile.status': null },
+              { 'corporateProfile.status': { $exists: false } },
+              { 'enterpriseProfile.status': 'pending' },
+              { 'enterpriseProfile.status': null },
+              { 'enterpriseProfile.status': { $exists: false } },
+              { role: 'individual', isPhoneVerified: { $ne: true } },
+            ],
+          },
+        ]),
+      ),
+      User.countDocuments(
+        mergeAnd(statsBase, [
+          {
+            $or: [
+              { 'labourProfile.kycStatus': KYC_STATUS.VERIFIED },
+              { 'contractorProfile.verificationStatus': 'approved' },
+              { 'corporateProfile.status': 'approved' },
+              { 'enterpriseProfile.status': 'approved' },
+              { role: 'individual', isPhoneVerified: true },
+            ],
+          },
+        ]),
+      ),
+      User.countDocuments(
+        mergeAnd(statsBase, [
+          {
+            $or: [
+              { 'labourProfile.kycStatus': KYC_STATUS.FAILED },
+              { 'contractorProfile.verificationStatus': 'rejected' },
+              { 'corporateProfile.status': 'rejected' },
+              { 'enterpriseProfile.status': 'rejected' },
+              { role: 'individual', accountStatus: { $in: ['blocked', 'suspended', 'deleted'] } },
+              { role: 'individual', isActive: false },
+            ],
+          },
+        ]),
+      ),
+      User.countDocuments(statsBase),
+    ])
+    summaryCounts = { pending, verified, failed, total: totalAll }
   }
+
+  const labourKycCounts = summaryCounts
 
   const [items, total] = await Promise.all([
     User.find(q)
       .populate({ path: 'labourProfile.categoryIds', select: 'name slug isActive' })
+      .populate({ path: 'contractorProfile.categoryIds', select: 'name slug isActive' })
       .sort({ lastLoginAt: -1, createdAt: -1 })
       .skip(skip)
       .limit(lim)
@@ -557,6 +846,7 @@ export const listUsers = asyncHandler(async (req, res) => {
       page: pg,
       limit: lim,
       pages: Math.max(1, Math.ceil(total / lim)),
+      summaryCounts,
       labourKycCounts,
     },
   })
@@ -1034,6 +1324,26 @@ export const updateUserWalletAdmin = asyncHandler(async (req, res) => {
 
   await user.save()
 
+  if (action === 'add' || action === 'deduct') {
+    try {
+      const { WalletTransaction } = await import('../models/WalletTransaction.js')
+      await WalletTransaction.create({
+        transactionId: `ADM_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        payerId: user._id,
+        payerName: user.fullName || 'User',
+        payerType: user.role === 'labour' ? 'labour' : user.role === 'contractor' ? 'vendor' : user.role === 'corporate' ? 'corporate' : 'user',
+        type: action === 'add' ? 'Credit' : 'Debit',
+        source: `Admin Adjustment: ${reason}`,
+        amount: amount,
+        balanceAfter: user.walletBalance,
+        paymentMethod: 'admin',
+        status: 'Completed',
+      })
+    } catch (err) {
+      console.error('Failed to create WalletTransaction for admin adjustment', err)
+    }
+  }
+
   await logAudit({
     adminId: req.user._id,
     action: `Wallet ${action}`,
@@ -1059,9 +1369,10 @@ export const updateUserSkillsAdmin = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'User not found', statusCode: HTTP_STATUS.NOT_FOUND, code: 'NOT_FOUND' })
   }
 
-  user.labourProfile = user.labourProfile || {}
-  const oldCategories = user.labourProfile.categoryIds || []
-  const oldSkills = user.labourProfile.skills || []
+  const targetKey = user.role === USER_ROLES.CONTRACTOR ? 'contractorProfile' : 'labourProfile'
+  user[targetKey] = user[targetKey] || {}
+  const oldCategories = user[targetKey].categoryIds || []
+  const oldSkills = user[targetKey].skills || []
 
   if (Array.isArray(categoryIds)) {
     const unique = [...new Set(categoryIds.map((id) => String(id)))]
@@ -1069,23 +1380,23 @@ export const updateUserSkillsAdmin = asyncHandler(async (req, res) => {
       _id: { $in: unique },
       isActive: true,
     })
-    user.labourProfile.categoryIds = categories.map((c) => c._id)
+    user[targetKey].categoryIds = categories.map((c) => c._id)
   }
 
   if (Array.isArray(skills)) {
-    user.labourProfile.skills = skills.map((s) => String(s).trim()).filter(Boolean)
+    user[targetKey].skills = skills.map((s) => String(s).trim()).filter(Boolean)
   }
 
   await user.save()
 
   await logAudit({
     adminId: req.user._id,
-    action: 'Updated Worker Skills & Categories',
+    action: user.role === USER_ROLES.CONTRACTOR ? 'Updated Vendor Trades & Capabilities' : 'Updated Worker Skills & Categories',
     previousValue: { categoryIds: oldCategories, skills: oldSkills },
-    newValue: { categoryIds: user.labourProfile.categoryIds, skills: user.labourProfile.skills },
+    newValue: { categoryIds: user[targetKey].categoryIds, skills: user[targetKey].skills },
     module: 'User Management',
     targetUser: user._id,
-    reason: reason || 'Admin updated worker skills & categories',
+    reason: reason || (user.role === USER_ROLES.CONTRACTOR ? 'Admin updated vendor workforce trades' : 'Admin updated worker skills & categories'),
     req,
   })
 

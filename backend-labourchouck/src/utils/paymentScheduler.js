@@ -105,7 +105,41 @@ export async function runPaymentSchedulerChecks() {
         }).catch((err) => console.error('[Notification Error]:', err.message))
       }
     }
+
+    // 2. Reconcile any orphaned/pending payments with Razorpay
+    await reconcilePendingPayments()
   } catch (error) {
     console.error('[Payment Scheduler Error]:', error.message)
+  }
+}
+
+/**
+ * Reconciles CREATED / PENDING payments older than 3 minutes by querying Razorpay API
+ */
+async function reconcilePendingPayments() {
+  try {
+    const { Payment } = await import('../models/Payment.js')
+    const { paymentService } = await import('../services/paymentService.js')
+
+    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000)
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+
+    const pendingPayments = await Payment.find({
+      status: { $in: ['CREATED', 'PENDING'] },
+      gatewayOrderId: { $exists: true, $ne: null },
+      createdAt: { $lte: threeMinutesAgo, $gte: oneDayAgo },
+    })
+      .sort({ createdAt: -1 })
+      .limit(20)
+
+    for (const p of pendingPayments) {
+      try {
+        await paymentService.reconcilePaymentWithGateway(p.gatewayOrderId)
+      } catch (recErr) {
+        console.error(`[Payment Reconciliation Error for ${p.gatewayOrderId}]:`, recErr.message)
+      }
+    }
+  } catch (err) {
+    console.error('[Pending Payments Reconciliation Job Error]:', err.message)
   }
 }

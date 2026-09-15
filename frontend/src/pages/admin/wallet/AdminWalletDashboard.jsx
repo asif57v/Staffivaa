@@ -699,7 +699,9 @@ export function AdminWalletDashboard() {
                         <div className="text-[10px] text-slate-400 mt-0.5 font-semibold">{tx.source}</div>
                       </td>
                       <td className="px-5 py-3.5 whitespace-nowrap">
-                        <div className="text-slate-900 font-semibold">{tx.payerName || tx.clientId?.fullName || '—'}</div>
+                        <div className="text-slate-900 font-semibold">
+                          {tx.payerName || tx.clientId?.fullName || tx.payerId?.fullName || tx.payerId?.enterpriseProfile?.companyName || tx.labourId?.fullName || tx.bookingId?.labourId?.fullName || tx.bookingId?.clientId?.fullName || '—'}
+                        </div>
                         {tx.bookingId?.reference && (
                           <div className="text-xs text-slate-400 font-mono mt-0.5">{tx.bookingId.reference}</div>
                         )}
