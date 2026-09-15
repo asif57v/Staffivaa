@@ -193,6 +193,17 @@ export function AuthEntryPage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (isDropdownOpen && dropdownRef.current) {
+      const timer = setTimeout(() => {
+        try {
+          dropdownRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        } catch (err) {}
+      }, 120)
+      return () => clearTimeout(timer)
+    }
+  }, [isDropdownOpen])
+
   const filteredSkills = useMemo(() => {
     if (!skillSearch.trim()) return categories
     const q = skillSearch.toLowerCase().trim()
@@ -551,7 +562,7 @@ export function AuthEntryPage() {
               background: '#ffffff',
               borderRadius: '24px 24px 0 0',
               marginTop: -16,
-              padding: '28px 20px 40px',
+              padding: '28px 20px 90px',
               position: 'relative',
               zIndex: 2,
               boxShadow: '0 -4px 40px rgba(0,0,0,0.25)',
@@ -1086,7 +1097,7 @@ export function AuthEntryPage() {
                                   </div>
 
                                   {/* Scrollable list of skills */}
-                                  <div style={{ maxHeight: 220, overflowY: 'auto', padding: '4px 0' }}>
+                                  <div style={{ maxHeight: 180, overflowY: 'auto', padding: '4px 0' }}>
                                     {loadingCategories ? (
                                       <p style={{ fontSize: 12, color: '#94a3b8', padding: '16px', textAlign: 'center', margin: 0 }}>
                                         Loading skills catalogue…
@@ -1154,19 +1165,33 @@ export function AuthEntryPage() {
                                   </div>
 
                                   {/* Dropdown Footer Done button */}
-                                  <div style={{ padding: '8px 12px', borderTop: '1px solid #f1f5f9', background: '#fafafa', display: 'flex', justifyContent: 'flex-end' }}>
+                                  <div
+                                    style={{
+                                      padding: '10px 14px calc(18px + env(safe-area-inset-bottom, 0px)) 14px',
+                                      borderTop: '1px solid #f1f5f9',
+                                      background: '#fafafa',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                    }}
+                                  >
+                                    <span style={{ fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>
+                                      {vendorSkills.length > 0 ? `${vendorSkills.length} selected` : 'Select skills'}
+                                    </span>
                                     <button
                                       type="button"
                                       onClick={() => setIsDropdownOpen(false)}
                                       style={{
-                                        padding: '6px 14px',
-                                        borderRadius: 10,
+                                        padding: '8px 22px',
+                                        borderRadius: 12,
                                         border: 'none',
                                         background: '#0f172a',
                                         color: '#fff',
-                                        fontSize: 12,
-                                        fontWeight: 700,
+                                        fontSize: 13,
+                                        fontWeight: 800,
                                         cursor: 'pointer',
+                                        boxShadow: '0 2px 8px rgba(15, 23, 42, 0.25)',
+                                        marginBottom: 2,
                                       }}
                                     >
                                       Done
