@@ -22,7 +22,9 @@ import {
   RotateCcw,
   UploadCloud,
   History,
-  User as UserIcon
+  User as UserIcon,
+  Camera,
+  Eye,
 } from 'lucide-react'
 import { CORPORATE_DOCUMENT_LABELS } from '../../constants/corporateVerification.js'
 import { VENDOR_DOCUMENT_LABELS, VENDOR_TYPE_LABELS } from '../../constants/vendorVerification.js'
@@ -42,67 +44,126 @@ import {
   useReviewVendorMutation,
 } from '../../store/api/workforceApi.js'
 
+function getAdminKycDocumentSlots(profile, user = null, variant = 'contractor') {
+  if (!profile) return []
+  const photos = Array.isArray(profile.kycPhotos) ? profile.kycPhotos : []
+  const docs = Array.isArray(profile.documents) ? profile.documents : []
+
+  const findUrl = (type, keys, labelMatches) => {
+    for (const key of keys) {
+      if (profile[key]) return profile[key]
+    }
+    const p = photos.find((item) => {
+      if (!item?.url) return false
+      if (item.type && item.type.toLowerCase() === type.toLowerCase()) return true
+      const lbl = (item.label || '').toLowerCase()
+      return labelMatches.some((match) => lbl.includes(match.toLowerCase()))
+    })
+    if (p?.url) return p.url
+    const d = docs.find((item) => {
+      if (!item?.url) return false
+      const dtype = (item.documentType || '').toLowerCase()
+      if (dtype === type.toLowerCase()) return true
+      const lbl = (item.label || '').toLowerCase()
+      return labelMatches.some((match) => lbl.includes(match.toLowerCase()))
+    })
+    if (d?.url) return d.url
+    if (type === 'selfie' && user?.profileImageUrl) return user.profileImageUrl
+    return ''
+  }
+
+  const frontUrl = findUrl('aadhaar_front', ['kycFrontImageUrl', 'frontImageUrl'], ['front', 'aadhaar front', 'aadhar front', 'signatory id', 'proprietor id'])
+  const backUrl = findUrl('aadhaar_back', ['kycBackImageUrl', 'backImageUrl'], ['back', 'aadhaar back', 'aadhar back'])
+  const panUrl = findUrl('pan', ['kycPanImageUrl', 'panImageUrl'], ['pan', 'pancard', 'pan card'])
+  const selfieUrl = findUrl('selfie', ['kycSelfieUrl', 'selfieUrl'], ['selfie', 'face', 'photo', 'proprietor selfie', 'representative selfie', 'signatory photo'])
+
+  const isCorp = variant === 'corporate'
+
+  const slots = [
+    { id: 'aadhaar_front', label: isCorp ? 'Signatory Aadhaar (Front)' : 'Aadhaar Card (Front)', url: frontUrl, isRequired: true },
+    { id: 'aadhaar_back', label: isCorp ? 'Signatory Aadhaar (Back)' : 'Aadhaar Card (Back)', url: backUrl, isRequired: true },
+    { id: 'pan', label: isCorp ? 'Company PAN Card' : 'Business PAN Card', url: panUrl, isRequired: true },
+    { id: 'selfie', label: isCorp ? 'Signatory Live Photo' : 'Proprietor Live Photo', url: selfieUrl, isRequired: false },
+  ]
+
+  const primaryUrls = new Set([frontUrl, backUrl, panUrl, selfieUrl].filter(Boolean))
+  const extraPhotos = photos
+    .filter((p) => p?.url && !primaryUrls.has(p.url))
+    .map((p, i) => ({
+      id: `photo_extra_${i}`,
+      label: p.label || `Photo Document #${i + 1}`,
+      url: p.url,
+      isRequired: false,
+    }))
+
+  return [...slots, ...extraPhotos]
+}
+
 const FILTERS = [
-  { value: 'submitted', label: 'Needs review' },
-  { value: 'all', label: 'All accounts' },
-  { value: 'draft', label: 'Docs uploaded, not submitted' },
-  { value: 'not_submitted', label: 'No documents yet' },
-  { value: 'approved', label: 'Approved' },
-  { value: 'rejected', label: 'Rejected' },
+  { value: 'submitted', label: 'Needs Review' },
+  { value: 'draft', label: 'In Progress (Draft)' },
+  { value: 'approved', label: 'Verified' },
+  { value: 'rejected', label: 'Failed / Rejected' },
+  { value: 'not_submitted', label: 'Not Verified (No Docs)' },
 ]
 
 function StatusPill({ status, submittedAt, hasDocuments, variant }) {
-  const approved = variant === 'corporate' ? status === CORPORATE_STATUS.APPROVED : status === 'approved'
-  const rejected = variant === 'corporate' ? status === CORPORATE_STATUS.REJECTED : status === 'rejected'
-  if (approved) {
+  if (status === 'approved' || status === CORPORATE_STATUS.APPROVED) {
     return (
-      <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-emerald-900 ring-1 ring-emerald-200/80">
-        Approved
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 ring-1 ring-emerald-200">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+        Verified
       </span>
     )
   }
-  if (rejected) {
+  if (status === 'rejected' || status === CORPORATE_STATUS.REJECTED) {
     return (
-      <span className="inline-flex rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-rose-900 ring-1 ring-rose-200/80">
-        Rejected
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-rose-800 ring-1 ring-rose-200">
+        <span className="h-1.5 w-1.5 rounded-full bg-rose-600" />
+        Failed
       </span>
     )
   }
   if (submittedAt) {
     return (
-      <span className="inline-flex rounded-full bg-yellow-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-yellow-900 ring-1 ring-yellow-200/80">
-        Pending
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-800 ring-1 ring-sky-200">
+        <span className="h-1.5 w-1.5 rounded-full bg-sky-600" />
+        Not Verified · In Review
       </span>
     )
   }
   if (hasDocuments) {
     return (
-      <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-900 ring-1 ring-amber-200/80">
-        Docs uploaded
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-200">
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />
+        Not Verified · Draft
       </span>
     )
   }
   return (
-    <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-slate-600 ring-1 ring-slate-200/80">
-      Incomplete
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+      <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+      Not Verified
     </span>
   )
 }
 
 function EnterpriseBadge({ status }) {
   const badges = {
-    approved: 'bg-emerald-50 text-emerald-900 ring-emerald-200/80',
-    pending: 'bg-yellow-50 text-yellow-900 ring-yellow-200/80',
-    rejected: 'bg-rose-50 text-rose-900 ring-rose-200/80',
-    on_hold: 'bg-orange-50 text-orange-900 ring-orange-200/80',
-    suspended: 'bg-blue-50 text-blue-900 ring-blue-200/80',
-    blocked: 'bg-slate-50 text-slate-900 ring-slate-200/80'
+    pending: { color: 'bg-amber-50 text-amber-800 ring-amber-200', label: 'Not Verified' },
+    under_review: { color: 'bg-sky-50 text-sky-800 ring-sky-200', label: 'Not Verified (In Review)' },
+    verified: { color: 'bg-emerald-50 text-emerald-800 ring-emerald-200', label: 'Verified' },
+    approved: { color: 'bg-emerald-50 text-emerald-800 ring-emerald-200', label: 'Verified' },
+    rejected: { color: 'bg-rose-50 text-rose-800 ring-rose-200', label: 'Failed' },
+    on_hold: { color: 'bg-orange-50 text-orange-800 ring-orange-200', label: 'On Hold' },
+    suspended: { color: 'bg-blue-50 text-blue-800 ring-blue-200', label: 'Suspended' },
+    blocked: { color: 'bg-slate-50 text-slate-800 ring-slate-200', label: 'Blocked' },
   }
-  const colors = badges[status] || badges.pending
+  const config = badges[status] || badges.pending
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide ring-1 ${colors}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide ring-1 ${config.color}`}>
       <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
-      {status.replace('_', ' ')}
+      {config.label}
     </span>
   )
 }
@@ -137,6 +198,7 @@ export function AdminBusinessVerificationPage() {
   const [reviewNote, setReviewNote] = useState('')
   const [detailError, setDetailError] = useState('')
   const [dialogConfig, setDialogConfig] = useState({ isOpen: false })
+  const [zoomImage, setZoomImage] = useState(null)
 
   const isCorporate = tab === 'corporate'
   const queryParams = { filter, search: debouncedSearch, page, limit }
@@ -420,7 +482,10 @@ export function AdminBusinessVerificationPage() {
                   ))
                 : items.map((u) => {
                     const prof = profileFor(u, tab)
-                    const hasDocs = (prof?.documents?.length ?? 0) > 0
+                    const photoCount = (Array.isArray(prof?.kycPhotos) ? prof.kycPhotos.length : 0) +
+                      (prof?.kycFrontImageUrl ? 1 : 0) + (prof?.kycPanImageUrl ? 1 : 0)
+                    const totalDocs = (prof?.documents?.length ?? 0) + photoCount
+                    const hasDocs = totalDocs > 0
                     return (
                       <tr key={u._id} className="border-b border-slate-100 hover:bg-slate-50/60">
                         <td className="px-4 py-3">
@@ -454,7 +519,7 @@ export function AdminBusinessVerificationPage() {
                           />
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-600">
-                          {prof?.documents?.length ?? 0} file{(prof?.documents?.length ?? 0) === 1 ? '' : 's'}
+                          {totalDocs} item{totalDocs === 1 ? '' : 's'}
                         </td>
                         <td className="px-4 py-3">
                           <button
@@ -603,16 +668,16 @@ export function AdminBusinessVerificationPage() {
                           onClick={() => runReview('rejected')}
                           className="flex-1 rounded-xl bg-white border border-rose-200 px-4 py-2.5 text-sm font-bold text-rose-600 shadow-sm transition hover:bg-rose-50 disabled:opacity-50"
                         >
-                          Reject Verification
+                          Reject (Mark as Failed)
                         </button>
                         <button
                           type="button"
-                          disabled={reviewBusy || !(p?.documents?.length > 0)}
+                          disabled={reviewBusy || !((p?.documents?.length > 0) || (p?.kycPhotos?.length > 0) || Boolean(p?.kycFrontImageUrl) || Boolean(p?.kycPanImageUrl))}
                           onClick={() => runReview('approved')}
                           className="flex-1 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-brand/90 disabled:opacity-50 flex items-center justify-center gap-2"
                         >
                           {reviewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                          Approve Verification
+                          Approve (Verify Account)
                         </button>
                       </div>
                     </div>
@@ -622,7 +687,7 @@ export function AdminBusinessVerificationPage() {
                     <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
                       <div className="flex items-center gap-2 mb-2">
                         <ShieldAlert className="h-5 w-5 text-rose-600" />
-                        <h3 className="text-sm font-bold text-rose-900">Verification Rejected</h3>
+                        <h3 className="text-sm font-bold text-rose-900">Verification Failed (Rejected)</h3>
                       </div>
                       <p className="text-sm text-rose-700">Reason: {p?.reviewNote || 'No reason provided.'}</p>
                       
@@ -783,13 +848,117 @@ export function AdminBusinessVerificationPage() {
                   {/* Details block from existing logic */}
                   <AdminVerificationProfileDetails user={detailUser} variant={tab} />
 
+                  {/* Identity & KYC Verification Photos Grid */}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          {tab === 'corporate' ? 'Authorized Signatory & Company KYC' : 'Proprietor & Contractor KYC Photos'}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Aadhaar (Front & Back), PAN Card, and Live Face Selfie
+                        </p>
+                      </div>
+                      {(() => {
+                        const kycSlots = getAdminKycDocumentSlots(p, detailUser, tab)
+                        const uploadedCount = kycSlots.filter((s) => Boolean(s.url)).length
+                        return (
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full border ${
+                            uploadedCount === 0
+                              ? 'text-amber-700 bg-amber-50 border-amber-200'
+                              : 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                          }`}>
+                            {uploadedCount === 0 ? '⚠️ No Photos Uploaded' : `✓ ${uploadedCount} Uploaded`}
+                          </span>
+                        )
+                      })()}
+                    </div>
+
+                    {(() => {
+                      const kycSlots = getAdminKycDocumentSlots(p, detailUser, tab)
+                      return (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {kycSlots.map((slot) => (
+                            <div
+                              key={slot.id}
+                              className={`group relative overflow-hidden rounded-xl border transition ${
+                                slot.url ? 'border-emerald-200 bg-white shadow-sm' : 'border-dashed border-slate-200 bg-slate-50/70'
+                              }`}
+                            >
+                              {slot.url ? (
+                                <div className="relative aspect-4/3 w-full overflow-hidden bg-slate-900/10">
+                                  {slot.url.toLowerCase().endsWith('.pdf') ? (
+                                    <div className="h-full w-full flex flex-col items-center justify-center p-2 text-center bg-slate-50">
+                                      <FileText className="h-8 w-8 text-brand mb-1" />
+                                      <span className="text-[10px] font-bold text-slate-600">PDF Document</span>
+                                    </div>
+                                  ) : (
+                                    <img
+                                      src={slot.url}
+                                      alt={slot.label}
+                                      className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                                    />
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (slot.url.toLowerCase().endsWith('.pdf')) {
+                                        window.open(slot.url, '_blank')
+                                      } else {
+                                        setZoomImage({ url: slot.url, title: slot.label })
+                                      }
+                                    }}
+                                    className="absolute inset-0 flex items-center justify-center bg-slate-950/40 opacity-0 transition group-hover:opacity-100 text-white font-bold text-xs gap-1.5 cursor-pointer"
+                                  >
+                                    <Eye className="h-4 w-4" /> View
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="aspect-4/3 w-full flex flex-col items-center justify-center p-2 text-center bg-slate-100/50">
+                                  <Camera className="h-6 w-6 text-slate-300 mb-1" />
+                                  <span className="text-[10px] font-bold text-slate-400">No photo</span>
+                                </div>
+                              )}
+
+                              <div className="p-2.5 bg-white border-t border-slate-100 flex flex-col gap-1">
+                                <p className="text-[11px] font-bold text-slate-800 truncate" title={slot.label}>
+                                  {slot.label}
+                                </p>
+                                <div className="flex items-center justify-between mt-0.5">
+                                  {slot.url ? (
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                      ✓ Uploaded
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                      {slot.isRequired ? '❌ Required' : '— Optional'}
+                                    </span>
+                                  )}
+                                  {slot.url && !slot.url.toLowerCase().endsWith('.pdf') ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setZoomImage({ url: slot.url, title: slot.label })}
+                                      className="text-brand hover:text-brand/80 text-[10px] font-bold shrink-0 ml-1 cursor-pointer"
+                                    >
+                                      Zoom
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })()}
+                  </div>
+
                   {/* Documents Section */}
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <p className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-400">Submitted Documents</p>
+                    <p className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-400">Additional Business Certificates & Documents</p>
                     {(p?.documents ?? []).length === 0 ? (
                       <div className="rounded-xl border border-slate-100 bg-slate-50 p-6 text-center text-slate-500">
                         <FileText className="mx-auto h-8 w-8 text-slate-300 mb-2" />
-                        <p className="text-sm font-semibold">No documents uploaded.</p>
+                        <p className="text-sm font-semibold">No additional documents uploaded.</p>
                       </div>
                     ) : (
                       <ul className="space-y-3">
@@ -926,6 +1095,41 @@ export function AdminBusinessVerificationPage() {
           </motion.div>
         </div>
       ) : null}
+
+      {/* Lightbox / Zoom Modal */}
+      {zoomImage && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" onClick={() => setZoomImage(null)}>
+          <div className="relative max-h-[90vh] max-w-3xl w-full overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 bg-slate-50">
+              <span className="text-sm font-bold text-slate-800">{zoomImage.title || 'Document Preview'}</span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={zoomImage.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 transition"
+                >
+                  Open Original
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setZoomImage(null)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-4 bg-slate-900/5 flex items-center justify-center max-h-[75vh] overflow-auto">
+              <img
+                src={zoomImage.url}
+                alt={zoomImage.title || 'Document'}
+                className="max-h-[70vh] w-auto rounded-xl object-contain shadow-md"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

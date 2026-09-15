@@ -42,15 +42,22 @@ export function VendorPaymentPage() {
     )
   }
 
+  const isFree = Number(request?.vendorPlatformFeeAmount ?? 0) <= 0
+
   const handlePayment = async () => {
     try {
+      const orderData = await createOrder(request._id).unwrap()
+
+      if (orderData?.bypassPayment || orderData?.data?.bypassPayment) {
+        setPaymentSuccess(true)
+        return
+      }
+
       const isLoaded = await loadRazorpayScript()
       if (!isLoaded) {
         alert('Razorpay SDK failed to load. Are you online?')
         return
       }
-
-      const orderData = await createOrder(request._id).unwrap()
 
       const options = {
         key: orderData.keyId,
@@ -86,7 +93,7 @@ export function VendorPaymentPage() {
       rzp.open()
     } catch (err) {
       console.error('Failed to initiate payment', err)
-      alert(err?.data?.message || 'Failed to initiate payment.')
+      alert(err?.data?.message || err?.message || 'Failed to initiate payment.')
     }
   }
 
@@ -96,9 +103,13 @@ export function VendorPaymentPage() {
         <div className="h-20 w-20 rounded-full bg-emerald-100 flex items-center justify-center mb-6">
           <CheckCircle2 className="h-10 w-10 text-emerald-600" />
         </div>
-        <h2 className="text-2xl font-black text-slate-900 mb-2">Payment Successful</h2>
+        <h2 className="text-2xl font-black text-slate-900 mb-2">
+          {isFree ? 'Platform Fee Waived (Free)' : 'Payment Successful'}
+        </h2>
         <p className="text-slate-500 font-medium max-w-sm mx-auto mb-8">
-          Your platform fee payment has been processed successfully. You can now start assigning workers!
+          {isFree
+            ? 'Your vendor platform fee is completely free! You can now start assigning workers.'
+            : 'Your platform fee payment has been processed successfully. You can now start assigning workers!'}
         </p>
         <div className="w-full max-w-xs space-y-3">
           <Link to={`/vendor/jobs/${id}`} className="flex w-full items-center justify-center rounded-[16px] bg-[#FFC107] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800]">
@@ -169,14 +180,26 @@ export function VendorPaymentPage() {
           <div className="space-y-3 mb-4">
             <div className="flex justify-between items-center text-[14px] text-yellow-400 font-bold">
               <span>Vendor Platform Fee</span>
-              <span>₹{request.vendorPlatformFeeAmount ?? 0}</span>
+              <span>
+                {isFree ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-black uppercase tracking-wide text-emerald-400 ring-1 ring-emerald-500/40">
+                    Free
+                  </span>
+                ) : (
+                  `₹${request.vendorPlatformFeeAmount ?? 0}`
+                )}
+              </span>
             </div>
           </div>
           
           <div className="pt-4 border-t border-slate-700/50 flex justify-between items-center">
             <span className="text-[16px] font-bold text-slate-200">Amount to Pay</span>
             <span className="text-[24px] font-black text-[#FFC107]">
-              ₹{request.vendorPlatformFeeAmount ?? 0}
+              {isFree ? (
+                <span className="text-emerald-400">Free</span>
+              ) : (
+                `₹${request.vendorPlatformFeeAmount ?? 0}`
+              )}
             </span>
           </div>
         </AppSurface>
@@ -188,7 +211,7 @@ export function VendorPaymentPage() {
         <button 
           onClick={handlePayment}
           disabled={isCreatingOrder || isVerifying || request.vendorPlatformFeeStatus === 'paid'}
-          className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#FFC107] py-4 text-[16px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#FFC107] py-4 text-[16px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm disabled:opacity-50 cursor-pointer"
         >
           {isCreatingOrder || isVerifying ? (
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-900 border-t-transparent" />
@@ -196,6 +219,8 @@ export function VendorPaymentPage() {
             <>
               <CheckCircle2 className="h-5 w-5" /> Paid
             </>
+          ) : isFree ? (
+            'Proceed for Free (Unlock Next Step)'
           ) : (
             <>
               Pay ₹{request.vendorPlatformFeeAmount ?? 0} Securely

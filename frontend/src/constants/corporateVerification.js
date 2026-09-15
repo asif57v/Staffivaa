@@ -1,5 +1,9 @@
 /** Keep in sync with backend `corporateVerification.js` */
 export const CORPORATE_DOCUMENT_TYPES = {
+  AADHAAR_FRONT: 'aadhaar_front',
+  AADHAAR_BACK: 'aadhaar_back',
+  PAN: 'pan',
+  SELFIE: 'selfie',
   COMPANY_REGISTRATION: 'company_registration',
   GST_CERTIFICATE: 'gst_certificate',
   PAN_CARD: 'pan_card',
@@ -10,6 +14,10 @@ export const CORPORATE_DOCUMENT_TYPES = {
 }
 
 export const CORPORATE_DOCUMENT_OPTIONS = [
+  { value: CORPORATE_DOCUMENT_TYPES.AADHAAR_FRONT, label: 'Authorized Signatory Aadhaar (Front)' },
+  { value: CORPORATE_DOCUMENT_TYPES.AADHAAR_BACK, label: 'Authorized Signatory Aadhaar (Back)' },
+  { value: CORPORATE_DOCUMENT_TYPES.PAN, label: 'Company / Director PAN Card' },
+  { value: CORPORATE_DOCUMENT_TYPES.SELFIE, label: 'Authorized Representative Selfie / Live Face Photo' },
   { value: CORPORATE_DOCUMENT_TYPES.COMPANY_REGISTRATION, label: 'Company registration / COI' },
   { value: CORPORATE_DOCUMENT_TYPES.GST_CERTIFICATE, label: 'GST registration certificate' },
   { value: CORPORATE_DOCUMENT_TYPES.PAN_CARD, label: 'Company PAN card' },
@@ -22,6 +30,7 @@ export const CORPORATE_DOCUMENT_OPTIONS = [
 export const CORPORATE_DOCUMENT_LABELS = Object.fromEntries(
   CORPORATE_DOCUMENT_OPTIONS.map((o) => [o.value, o.label]),
 )
+
 
 export const INDIAN_STATES = [
   'Andhra Pradesh',

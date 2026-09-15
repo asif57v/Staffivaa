@@ -25,7 +25,10 @@ function isPanFieldComplete(pan) {
 export function getCorporateVerificationChecklist(profile = {}) {
   const gst = normalizeGst(profile.gstNumber)
   const hasGst = gst.length > 0
-  const docCount = Array.isArray(profile.documents) ? profile.documents.length : 0
+  const docCount =
+    (Array.isArray(profile.documents) ? profile.documents.length : 0) +
+    (Array.isArray(profile.kycPhotos) ? profile.kycPhotos.length : 0) +
+    (profile.kycFrontImageUrl || profile.kycBackImageUrl || profile.kycPanImageUrl || profile.kycSelfieUrl ? 1 : 0)
 
   return [
     {
@@ -73,11 +76,11 @@ export function getCorporateVerificationChecklist(profile = {}) {
     },
     {
       id: 'doc_any',
-      label: 'At least one verification document',
+      label: 'Additional business certificates / documents (Optional)',
       done: docCount > 0,
-      required: true,
-      section: 'documents',
-      hint: 'Upload any one type — only one document is mandatory',
+      required: false,
+      section: 'optional',
+      hint: 'GST certificate, certificate of incorporation, trade license, etc.',
     },
     {
       id: 'gst_number',
@@ -122,7 +125,7 @@ export function getCorporateVerificationProgress(profile = {}) {
   }
 }
 
-export function buildProfileFromForm(form) {
+export function buildProfileFromForm(form = {}) {
   return {
     companyName: form.companyName,
     gstNumber: form.gstNumber,
@@ -136,5 +139,10 @@ export function buildProfileFromForm(form) {
     contactEmail: form.contactEmail,
     website: form.website,
     documents: form.documents,
+    kycPhotos: form.kycPhotos,
+    kycFrontImageUrl: form.kycFrontImageUrl,
+    kycBackImageUrl: form.kycBackImageUrl,
+    kycPanImageUrl: form.kycPanImageUrl,
+    kycSelfieUrl: form.kycSelfieUrl,
   }
 }

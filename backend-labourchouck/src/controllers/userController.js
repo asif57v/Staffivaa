@@ -1050,6 +1050,50 @@ export const updateUserWalletAdmin = asyncHandler(async (req, res) => {
   return sendSuccess(res, { message: `Wallet updated successfully`, data: { user: populatedUser.toSafeObject() } })
 })
 
+/** Admin: update worker skills & labour categories */
+export const updateUserSkillsAdmin = asyncHandler(async (req, res) => {
+  const { categoryIds, skills, reason } = req.body
+
+  const user = await User.findById(req.params.id)
+  if (!user) {
+    return sendError(res, { message: 'User not found', statusCode: HTTP_STATUS.NOT_FOUND, code: 'NOT_FOUND' })
+  }
+
+  user.labourProfile = user.labourProfile || {}
+  const oldCategories = user.labourProfile.categoryIds || []
+  const oldSkills = user.labourProfile.skills || []
+
+  if (Array.isArray(categoryIds)) {
+    const unique = [...new Set(categoryIds.map((id) => String(id)))]
+    const categories = await LabourCategory.find({
+      _id: { $in: unique },
+      isActive: true,
+    })
+    user.labourProfile.categoryIds = categories.map((c) => c._id)
+  }
+
+  if (Array.isArray(skills)) {
+    user.labourProfile.skills = skills.map((s) => String(s).trim()).filter(Boolean)
+  }
+
+  await user.save()
+
+  await logAudit({
+    adminId: req.user._id,
+    action: 'Updated Worker Skills & Categories',
+    previousValue: { categoryIds: oldCategories, skills: oldSkills },
+    newValue: { categoryIds: user.labourProfile.categoryIds, skills: user.labourProfile.skills },
+    module: 'User Management',
+    targetUser: user._id,
+    reason: reason || 'Admin updated worker skills & categories',
+    req,
+  })
+
+  const populatedUser = await User.findById(user._id).populate({ path: 'adminNotes.addedBy', select: 'fullName email profileImageUrl role' })
+  await populateLabourCategories(populatedUser)
+  return sendSuccess(res, { message: 'Skills updated successfully', data: { user: populatedUser.toSafeObject({ includeLabourKycImages: true }) } })
+})
+
 /** Admin: get user timeline (audit logs) */
 export const getUserTimelineAdmin = asyncHandler(async (req, res) => {
   const { AuditLog } = await import('../models/AuditLog.js')

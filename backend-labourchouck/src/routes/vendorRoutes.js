@@ -9,6 +9,7 @@ import {
   removeVendorDocument,
   listVendorCrew,
   linkVendorCrew,
+  addVendorWorker,
   getVendorDashboard,
   listVendorJobs,
   acceptVendorJob,
@@ -46,6 +47,7 @@ router.post('/verification/submit', submitVendorVerification)
 router.get('/dashboard', getVendorDashboard)
 router.get('/crew', listVendorCrew)
 router.post('/crew/link', linkVendorCrew)
+router.post('/crew/add', requireActiveAccount(), addVendorWorker)
 router.get('/jobs', listVendorJobs)
 router.post('/jobs/:id/accept', requireActiveAccount(), acceptVendorJob)
 router.post('/jobs/:id/assign', requireActiveAccount(), assignWorkforce)

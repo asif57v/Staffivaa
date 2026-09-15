@@ -42,7 +42,7 @@ function validateMediaFile(file, folder) {
     }
     return null
   }
-  if (!IMAGE_MIMES.has(file.mimetype)) {
+  if (!IMAGE_MIMES.has(file.mimetype) && !file.mimetype?.startsWith('image/')) {
     return 'This folder accepts images only (JPEG, PNG, WebP, GIF)'
   }
   if (file.size > MEDIA_IMAGE_MAX) {
@@ -63,9 +63,11 @@ function resourceTypeForMedia(folder, mimetype) {
   return 'image'
 }
 
-function resourceTypeForDocument(mimetype) {
-  if (mimetype === 'application/pdf') return 'raw'
-  return 'image'
+function resourceTypeForDocument(mimetype, originalName = '') {
+  const mime = String(mimetype || '').toLowerCase()
+  const name = String(originalName || '').toLowerCase()
+  if (mime.includes('pdf') || name.endsWith('.pdf')) return 'raw'
+  return 'auto'
 }
 
 /** GET /uploads/config — allowed folders for the signed-in role */
@@ -175,7 +177,7 @@ export const uploadDocument = asyncHandler(async (req, res) => {
     folder,
     userId: req.user._id,
     originalName: req.file.originalname,
-    resourceType: resourceTypeForDocument(req.file.mimetype),
+    resourceType: resourceTypeForDocument(req.file.mimetype, req.file.originalname),
   })
 
   return sendSuccess(res, {

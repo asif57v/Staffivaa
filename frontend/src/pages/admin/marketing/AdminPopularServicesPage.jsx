@@ -377,12 +377,12 @@ export function AdminPopularServicesPage() {
                     : 'border-slate-200/50 opacity-60 bg-slate-50/50'
                 }`}
               >
-                {/* Image Container with full image contain */}
-                <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-50 flex items-center justify-center p-3 border-b border-slate-100">
+                {/* Image Container with full-bleed edge-to-edge cover */}
+                <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100 border-b border-slate-100">
                   <img
                     src={service.image}
                     alt={service.title}
-                    className="max-h-full max-w-full w-auto h-auto object-contain transition-transform duration-300 group-hover:scale-105"
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                     onError={(e) => {
                       e.currentTarget.src = '/service_ac.png'
                     }}
@@ -795,16 +795,16 @@ export function AdminPopularServicesPage() {
                   <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Live App Preview</p>
 
                   <div className="w-[165px] rounded-2xl bg-white shadow-md ring-1 ring-slate-100 overflow-hidden flex flex-col">
-                    <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-50 flex items-center justify-center p-2 border-b border-slate-100">
+                    <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100 border-b border-slate-100">
                       {formData.image ? (
-                        <img src={formData.image} alt="" className="max-h-full max-w-full w-auto h-auto object-contain" />
+                        <img src={formData.image} alt="" className="h-full w-full object-cover" />
                       ) : (
                         <div className="h-full w-full flex items-center justify-center text-slate-300">
                           <ImageIcon className="w-8 h-8" />
                         </div>
                       )}
                       {formData.discount && (
-                        <div className="absolute left-1.5 top-1.5 rounded-md bg-[#059669] px-1.5 py-0.5 text-[9px] font-bold text-white shadow-xs">
+                        <div className="absolute left-0 top-0 rounded-br-lg bg-[#059669] px-2 py-0.5 text-[9px] font-bold text-white shadow-xs">
                           {formData.discount}
                         </div>
                       )}

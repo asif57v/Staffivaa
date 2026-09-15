@@ -21,6 +21,9 @@ import {
   getAdminEnterprisePayrolls,
   reviewEnterprisePayroll,
   releaseEnterpriseSalary,
+  sendPayrollPaymentRequest,
+  getAdminEnterpriseAttendance,
+  getAdminWorkerAttendanceDetail,
 } from '../controllers/enterprisePayrollController.js'
 
 const router = express.Router()
@@ -47,9 +50,15 @@ router.post('/joining-payments/:id/extend-due-date', extendInvoiceDueDate)
 router.post('/joining-payments/:id/mark-paid-offline', markInvoicePaidOffline)
 router.post('/joining-payments/:id/cancel-invoice', cancelInvoice)
 
+// Live Enterprise Attendance Monitoring
+router.get('/attendance', getAdminEnterpriseAttendance)
+router.get('/attendance/:workerId', getAdminWorkerAttendanceDetail)
+
 // Enterprise Payroll Review & Atomic Salary Release
 router.get('/payrolls', getAdminEnterprisePayrolls)
 router.patch('/payrolls/:id/review', reviewEnterprisePayroll)
+router.post('/payrolls/:id/send-payment-request', sendPayrollPaymentRequest)
 router.post('/payrolls/:id/release', releaseEnterpriseSalary)
 
 export default router
+

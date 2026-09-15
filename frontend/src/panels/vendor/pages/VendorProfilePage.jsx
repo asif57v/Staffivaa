@@ -16,7 +16,12 @@ import {
   Trash2,
   Upload,
   Users,
+  Hammer,
+  Pencil,
+  Plus,
 } from 'lucide-react'
+import { VendorSkillsModal } from '../../../components/vendor/VendorSkillsModal.jsx'
+import { fetchLabourCategoriesGrouped } from '../../../api/labourCategoriesApi.js'
 import { assetUrlFromUpload, uploadDocument } from '../../../api/uploadApi.js'
 import { UPLOAD_FOLDERS } from '../../../constants/uploadFolders.js'
 import {
@@ -44,8 +49,10 @@ import {
 import { CorporateVerificationChecklist } from '../../../components/corporate/CorporateVerificationChecklist.jsx'
 import { VendorVerificationHero } from '../../../components/vendor/VendorVerificationHero.jsx'
 import { LabourKycWorkflowTimeline } from '../../../components/labour/kyc/LabourKycWorkflowTimeline.jsx'
+import { BusinessKycPhotoUploadGrid } from '../../../components/business/BusinessKycPhotoUploadGrid.jsx'
 import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
 import { GlassPanel } from '../../../components/ui/GlassPanel.jsx'
+import { dataUrlToFile } from '../../../lib/kycDraftStorage.js'
 import {
   useAddVendorDocumentMutation,
   usePatchVendorMeMutation,
@@ -58,6 +65,43 @@ const inputClass =
 const labelClass = 'mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500'
 
 const BENEFIT_ICONS = [Briefcase, Users, IndianRupee]
+
+function profileToPhotos(p) {
+  if (!p) return {}
+  const res = {}
+  if (p.kycFrontImageUrl) res.aadhaar_front = p.kycFrontImageUrl
+  if (p.kycBackImageUrl) res.aadhaar_back = p.kycBackImageUrl
+  if (p.kycPanImageUrl) res.pan = p.kycPanImageUrl
+  if (p.kycSelfieUrl) res.selfie = p.kycSelfieUrl
+  if (Array.isArray(p.kycPhotos)) {
+    for (const ph of p.kycPhotos) {
+      if (ph?.url) {
+        if (ph.type === 'aadhaar_front' && !res.aadhaar_front) res.aadhaar_front = ph.url
+        if (ph.type === 'aadhaar_back' && !res.aadhaar_back) res.aadhaar_back = ph.url
+        if (ph.type === 'pan' && !res.pan) res.pan = ph.url
+        if (ph.type === 'selfie' && !res.selfie) res.selfie = ph.url
+      }
+    }
+  }
+  if (Array.isArray(p.documents)) {
+    for (const d of p.documents) {
+      if (d?.url) {
+        const type = (d.documentType || '').toLowerCase()
+        const label = (d.label || '').toLowerCase()
+        if ((type === 'aadhaar_front' || label.includes('aadhaar front') || label.includes('aadhar front')) && !res.aadhaar_front) {
+          res.aadhaar_front = d.url
+        } else if ((type === 'aadhaar_back' || label.includes('aadhaar back') || label.includes('aadhar back')) && !res.aadhaar_back) {
+          res.aadhaar_back = d.url
+        } else if ((type === 'pan' || type === 'pan_card' || label.includes('pan')) && !res.pan) {
+          res.pan = d.url
+        } else if ((type === 'selfie' || label.includes('selfie')) && !res.selfie) {
+          res.selfie = d.url
+        }
+      }
+    }
+  }
+  return res
+}
 
 function profileToForm(profile, user) {
   return {
@@ -90,8 +134,48 @@ export function VendorProfilePage() {
 
   const [isEditing, setIsEditing] = useState(false)
   const canEdit = (!isApproved && !inReview) || isEditing
+  const [isSkillsModalOpen, setIsSkillsModalOpen] = useState(false)
+  const [categoriesCatalogue, setCategoriesCatalogue] = useState([])
+
+  useEffect(() => {
+    fetchLabourCategoriesGrouped()
+      .then((res) => {
+        const groups = res?.data?.groups || []
+        const flat = []
+        for (const g of groups) {
+          for (const c of g.categories || []) {
+            flat.push(c)
+          }
+        }
+        setCategoriesCatalogue(flat)
+      })
+      .catch(() => {})
+  }, [])
+
+  const vendorSkills = useMemo(() => {
+    const directSkills = Array.isArray(user?.contractorProfile?.skills)
+      ? user.contractorProfile.skills.map((s) => String(s).trim()).filter(Boolean)
+      : []
+
+    const idMap = new Map()
+    for (const c of categoriesCatalogue) {
+      if (c._id) idMap.set(String(c._id), c.name)
+    }
+
+    const fromCatIds = Array.isArray(user?.contractorProfile?.categoryIds)
+      ? user.contractorProfile.categoryIds.map((c) => {
+          if (!c) return null
+          if (typeof c === 'object' && c.name) return c.name
+          const id = typeof c === 'object' ? String(c._id) : String(c)
+          return idMap.get(id) || null
+        }).filter(Boolean)
+      : []
+
+    return Array.from(new Set([...directSkills, ...fromCatIds]))
+  }, [user?.contractorProfile?.skills, user?.contractorProfile?.categoryIds, categoriesCatalogue])
 
   const [form, setForm] = useState(() => profileToForm(profile, user))
+  const [photos, setPhotos] = useState(() => profileToPhotos(profile))
   const [docType, setDocType] = useState(VENDOR_DOCUMENT_TYPES.SHOP_ESTABLISHMENT)
   const [uploading, setUploading] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -156,7 +240,8 @@ export function VendorProfilePage() {
 
   useEffect(() => {
     setForm(profileToForm(profile, user))
-  }, [user?._id, profile?.businessName])
+    setPhotos(profileToPhotos(profile))
+  }, [user?._id, profile?.businessName, profile?.kycFrontImageUrl, profile?.kycPanImageUrl])
 
   useEffect(() => {
     const hints = VENDOR_TYPE_DOCUMENT_HINTS[form.vendorType]
@@ -166,8 +251,17 @@ export function VendorProfilePage() {
   }, [form.vendorType])
 
   const draftProfile = useMemo(
-    () => buildVendorProfileFromForm({ ...form, documents }),
-    [form, documents],
+    () =>
+      buildVendorProfileFromForm({
+        ...form,
+        documents,
+        kycPhotos: Object.values(photos).filter(Boolean),
+        kycFrontImageUrl: photos.aadhaar_front,
+        kycBackImageUrl: photos.aadhaar_back,
+        kycPanImageUrl: photos.pan,
+        kycSelfieUrl: photos.selfie,
+      }),
+    [form, documents, photos],
   )
   const progress = useMemo(() => getVendorVerificationProgress(draftProfile), [draftProfile])
   const ui = getBusinessVerificationUiState({ status, submittedAt, reviewNote, isApproved })
@@ -176,7 +270,7 @@ export function VendorProfilePage() {
     status,
     submittedAt,
     hasDetails: progress.formComplete,
-    docCount: documents.length,
+    docCount: documents.length + Object.keys(photos).length,
     isApproved,
   })
 
@@ -193,12 +287,58 @@ export function VendorProfilePage() {
     if (res?.user) dispatch(setUser(res.user))
   }
 
-  const patchBody = () => ({
+  const uploadAllPhotos = async (currentPhotos) => {
+    const uploadSlot = async (slotId, label, slotValue) => {
+      if (!slotValue) return null
+      if (typeof slotValue === 'string' && slotValue.trim() && !slotValue.startsWith('data:') && !slotValue.startsWith('blob:')) {
+        return { label, url: slotValue, type: slotId }
+      }
+      if (typeof slotValue === 'object' && slotValue.file) {
+        const uploaded = await uploadDocument(slotValue.file, UPLOAD_FOLDERS.KYC_DOCUMENTS)
+        const remoteUrl = assetUrlFromUpload(uploaded)
+        if (!remoteUrl) throw new Error(`Failed to upload ${label}`)
+        return { label, url: remoteUrl, type: slotId }
+      }
+      const rawDataUrl = typeof slotValue === 'object' ? (slotValue.dataUrl || slotValue.previewUrl) : slotValue
+      if (typeof rawDataUrl === 'string' && rawDataUrl.startsWith('data:')) {
+        const file = dataUrlToFile(rawDataUrl, `${slotId}.jpg`, 'image/jpeg')
+        if (file) {
+          const uploaded = await uploadDocument(file, UPLOAD_FOLDERS.KYC_DOCUMENTS)
+          const remoteUrl = assetUrlFromUpload(uploaded)
+          if (!remoteUrl) throw new Error(`Failed to upload ${label}`)
+          return { label, url: remoteUrl, type: slotId }
+        }
+      }
+      if (typeof slotValue === 'object' && slotValue.previewUrl && !slotValue.previewUrl.startsWith('blob:') && !slotValue.previewUrl.startsWith('data:')) {
+        return { label, url: slotValue.previewUrl, type: slotId }
+      }
+      return null
+    }
+
+    const [frontDoc, backDoc, panDoc, selfieDoc] = await Promise.all([
+      uploadSlot('aadhaar_front', 'Aadhaar Card (Front)', currentPhotos.aadhaar_front),
+      uploadSlot('aadhaar_back', 'Aadhaar Card (Back)', currentPhotos.aadhaar_back),
+      uploadSlot('pan', 'Business PAN Card', currentPhotos.pan),
+      uploadSlot('selfie', 'Proprietor Selfie', currentPhotos.selfie),
+    ])
+
+    const photoList = [frontDoc, backDoc, panDoc, selfieDoc].filter(Boolean)
+    return {
+      kycFrontImageUrl: frontDoc?.url || '',
+      kycBackImageUrl: backDoc?.url || '',
+      kycPanImageUrl: panDoc?.url || '',
+      kycSelfieUrl: selfieDoc?.url || '',
+      kycPhotos: photoList,
+    }
+  }
+
+  const patchBody = (uploadedPhotoMeta = null) => ({
     ...form,
     panNumber: normalizePan(form.panNumber),
     gstNumber: normalizeGst(form.gstNumber),
     pincode: String(form.pincode || '').replace(/\D/g, '').slice(0, 6),
     contactPhone: String(form.contactPhone || '').replace(/\D/g, '').slice(-10),
+    ...(uploadedPhotoMeta ? uploadedPhotoMeta : {}),
   })
 
   const saveDetails = async () => {
@@ -224,9 +364,10 @@ export function VendorProfilePage() {
     setBanner(null)
     setBusy(true)
     try {
-      const res = await patchVendorMe(patchBody()).unwrap()
+      const uploadedPhotos = await uploadAllPhotos(photos)
+      const res = await patchVendorMe(patchBody(uploadedPhotos)).unwrap()
       refreshUser(res)
-      setBanner({ variant: 'success', message: 'Business details saved' })
+      setBanner({ variant: 'success', message: 'Business details & KYC photos saved' })
     } catch (err) {
       setBanner({ variant: 'error', message: err?.data?.message || err?.message || 'Could not save details' })
     } finally {
@@ -235,7 +376,8 @@ export function VendorProfilePage() {
   }
 
   const saveDetailsQuiet = async () => {
-    const res = await patchVendorMe(patchBody()).unwrap()
+    const uploadedPhotos = await uploadAllPhotos(photos)
+    const res = await patchVendorMe(patchBody(uploadedPhotos)).unwrap()
     refreshUser(res)
   }
 
@@ -245,7 +387,11 @@ export function VendorProfilePage() {
     setBanner(null)
     setUploading(true)
     try {
-      await saveDetailsQuiet()
+      try {
+        await saveDetailsQuiet()
+      } catch (_quietErr) {
+        // Silent background save shouldn't block document upload
+      }
       const uploaded = await uploadDocument(file, UPLOAD_FOLDERS.KYC_DOCUMENTS)
       const url = assetUrlFromUpload(uploaded)
       const option = VENDOR_DOCUMENT_OPTIONS.find((o) => o.value === docType)
@@ -288,7 +434,8 @@ export function VendorProfilePage() {
     }
     setBusy(true)
     try {
-      await patchVendorMe(patchBody()).unwrap()
+      const uploadedPhotos = await uploadAllPhotos(photos)
+      await patchVendorMe(patchBody(uploadedPhotos)).unwrap()
       const res = await submitVerification().unwrap()
       refreshUser(res)
       setBanner({
@@ -611,9 +758,74 @@ export function VendorProfilePage() {
         ) : null}
       </GlassPanel>
 
-      <GlassPanel className="border-slate-200/90 p-4 sm:p-5">
+      {/* Workforce Trades & Capabilities Card */}
+      <GlassPanel className="border-amber-200/40 bg-linear-to-br from-amber-50/60 to-white p-4 sm:p-5">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FFC107] text-slate-950 shadow-xs">
+              <Hammer className="h-4.5 w-4.5" />
+            </span>
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-900 leading-tight">Workforce Trades & Capabilities</h3>
+              <p className="text-xs text-slate-500">Skills selected for corporate jobs & crew allocations</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsSkillsModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+          >
+            <Pencil className="h-3 w-3 text-amber-400" />
+            <span>Update Trades</span>
+          </button>
+        </div>
+
+        <div className="mt-4">
+          {vendorSkills.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-4 text-center">
+              <p className="text-xs font-semibold text-slate-500">No workforce trades selected yet</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Add trades so clients and corporate projects can match with your agency.
+              </p>
+              <button
+                type="button"
+                onClick={() => setIsSkillsModalOpen(true)}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-[#FFC107] hover:bg-[#e0a800] text-slate-950 px-4 py-2 text-xs font-black transition shadow-xs cursor-pointer"
+              >
+                <Plus className="h-3.5 w-3.5 stroke-[2.5]" /> Select Workforce Trades
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {vendorSkills.map((skill, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-amber-50 border border-amber-200/80 px-3 py-1.5 text-xs font-bold text-slate-800 shadow-2xs"
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#FFC107] shrink-0" />
+                    {skill}
+                  </span>
+                ))}
+              </div>
+              <div className="pt-1 flex items-center justify-between text-xs text-slate-500">
+                <span className="font-bold text-slate-700">{vendorSkills.length} {vendorSkills.length === 1 ? 'Trade' : 'Trades'} Registered</span>
+                <button
+                  type="button"
+                  onClick={() => setIsSkillsModalOpen(true)}
+                  className="font-extrabold text-amber-700 hover:text-amber-800 underline flex items-center gap-1 cursor-pointer"
+                >
+                  <Pencil className="h-3 w-3" /> Edit Trade Skills
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </GlassPanel>
+
+      <GlassPanel className="border-slate-200/90 p-4 sm:p-5 space-y-6">
         <div className="flex items-center justify-between mb-1">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Verification documents</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">KYC Photos & Verification Documents</p>
           {!canEdit && (
             <button
               type="button"
@@ -624,53 +836,71 @@ export function VendorProfilePage() {
             </button>
           )}
         </div>
-        <p className="text-xs leading-relaxed text-slate-600">
-          Select document type, then upload PDF or image. Only <strong>one document is required</strong> for verification.
-        </p>
-        {suggestedLabels.length > 0 && form.vendorType ? (
-          <p className="mt-2 rounded-xl border border-amber-200/60 bg-amber-50/60 px-3 py-2 text-[11px] text-amber-950">
-            <span className="font-bold">Suggested for {VENDOR_TYPE_LABELS[form.vendorType]}:</span>{' '}
-            {suggestedLabels.join(' · ')}
-          </p>
-        ) : null}
 
-        {canEdit ? (
-          <div className="mt-4 space-y-3">
-            <div>
-              <label className={labelClass} htmlFor="docType">
-                Document type
-              </label>
-              <select
-                id="docType"
-                className={inputClass}
-                value={docType}
-                onChange={(e) => setDocType(e.target.value)}
-              >
-                {VENDOR_DOCUMENT_OPTIONS.map((opt) => (
-                  <option
-                    key={opt.value}
-                    value={opt.value}
-                    disabled={uploadedTypes.has(opt.value) && opt.value !== VENDOR_DOCUMENT_TYPES.OTHER}
-                  >
-                    {opt.label}
-                    {uploadedTypes.has(opt.value) && opt.value !== VENDOR_DOCUMENT_TYPES.OTHER ? ' ✓' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm font-bold text-slate-700 transition hover:border-brand/40 hover:bg-brand/5">
-              <Upload className="h-5 w-5 text-brand" aria-hidden />
-              {uploading ? 'Uploading…' : 'Choose file to upload'}
-              <input
-                type="file"
-                className="sr-only"
-                accept=".pdf,image/*"
-                onChange={handleUpload}
-                disabled={uploading || busy}
-              />
-            </label>
+        {/* 1. Mandatory & Primary Photo Upload Grid (Aadhaar Front/Back, PAN, Selfie) */}
+        <div>
+          <BusinessKycPhotoUploadGrid
+            variant="vendor"
+            photos={photos}
+            onChange={setPhotos}
+            disabled={!canEdit || busy || uploading}
+          />
+        </div>
+
+        {/* 2. Additional Business Certificates (GST, Trade License, MSME, etc.) */}
+        <div className="pt-4 border-t border-slate-100 space-y-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Additional Business Certificates (Optional)</p>
+            <p className="text-xs text-slate-600">
+              Upload PDF or images of Shop Act, GST certificate, labour licence, or partnership deed.
+            </p>
           </div>
-        ) : null}
+
+          {suggestedLabels.length > 0 && form.vendorType ? (
+            <p className="rounded-xl border border-amber-200/60 bg-amber-50/60 px-3 py-2 text-[11px] text-amber-950">
+              <span className="font-bold">Suggested for {VENDOR_TYPE_LABELS[form.vendorType]}:</span>{' '}
+              {suggestedLabels.join(' · ')}
+            </p>
+          ) : null}
+
+          {canEdit ? (
+            <div className="space-y-3">
+              <div>
+                <label className={labelClass} htmlFor="docType">
+                  Certificate / Document type
+                </label>
+                <select
+                  id="docType"
+                  className={inputClass}
+                  value={docType}
+                  onChange={(e) => setDocType(e.target.value)}
+                >
+                  {VENDOR_DOCUMENT_OPTIONS.map((opt) => (
+                    <option
+                      key={opt.value}
+                      value={opt.value}
+                      disabled={uploadedTypes.has(opt.value) && opt.value !== VENDOR_DOCUMENT_TYPES.OTHER}
+                    >
+                      {opt.label}
+                      {uploadedTypes.has(opt.value) && opt.value !== VENDOR_DOCUMENT_TYPES.OTHER ? ' ✓' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm font-bold text-slate-700 transition hover:border-brand/40 hover:bg-brand/5">
+                <Upload className="h-5 w-5 text-brand" aria-hidden />
+                {uploading ? 'Uploading…' : 'Attach additional document (PDF / Image)'}
+                <input
+                  type="file"
+                  className="sr-only"
+                  accept=".pdf,image/*"
+                  onChange={handleUpload}
+                  disabled={uploading || busy}
+                />
+              </label>
+            </div>
+          ) : null}
+        </div>
 
         {documents.length > 0 ? (
           <ul className="mt-4 space-y-2">
@@ -763,6 +993,12 @@ export function VendorProfilePage() {
           })}
         </ul>
       </GlassPanel>
+
+      <VendorSkillsModal
+        isOpen={isSkillsModalOpen}
+        onClose={() => setIsSkillsModalOpen(false)}
+        user={user}
+      />
     </motion.div>
   )
 }

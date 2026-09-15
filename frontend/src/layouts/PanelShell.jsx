@@ -1,8 +1,8 @@
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { LogOut, Menu, Sparkles, X, MapPin, ChevronDown, Bell, ShoppingCart, MoreVertical, Check } from 'lucide-react'
+import { LogOut, Menu, Sparkles, X, MapPin, ChevronDown, Bell, ShoppingCart, MoreVertical, Check, BellRing } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth.js'
 import { useDispatch } from 'react-redux'
 import { workforceApi } from '../store/api/workforceApi.js'
@@ -21,6 +21,7 @@ import { useVendorNotificationCount } from '../hooks/useVendorNotificationCount.
 import { connectSocket } from '../services/socket.js'
 import { fetchMe } from '../api/authApi.js'
 import { setUser } from '../store/slices/authSlice.js'
+import { IncomingVendorRequestPopup } from '../components/vendor/IncomingVendorRequestPopup.jsx'
 
 export function PanelShell({
   panelId,
@@ -89,14 +90,37 @@ export function PanelShell({
       }
     });
 
+    // Play notification sound chime
+    try {
+      if (typeof window !== 'undefined') {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+          osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
+          gain.gain.setValueAtTime(0.25, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.45);
+        }
+      }
+    } catch (soundErr) {
+      // Autoplay or audio context error safely caught
+    }
+
     try {
       if (typeof window !== 'undefined' && 'Notification' in window) {
         if (Notification.permission === 'granted') {
-          new Notification(title || 'Staffivaa Update', { body: body || '', icon: '/vite.svg', badge: '/vite.svg', vibrate: [200, 100, 200], tag: toastId, requireInteraction: true });
+          new Notification(title || 'Staffivaa Update', { body: body || '', icon: '/favicon.svg', badge: '/favicon.svg', vibrate: [200, 100, 200], tag: toastId, requireInteraction: true });
         } else if (Notification.permission !== 'denied') {
           Notification.requestPermission().then((perm) => {
             if (perm === 'granted') {
-              new Notification(title || 'Staffivaa Update', { body: body || '', icon: '/vite.svg', badge: '/vite.svg', vibrate: [200, 100, 200], tag: toastId, requireInteraction: true });
+              new Notification(title || 'Staffivaa Update', { body: body || '', icon: '/favicon.svg', badge: '/favicon.svg', vibrate: [200, 100, 200], tag: toastId, requireInteraction: true });
             }
           });
         }
@@ -147,6 +171,23 @@ export function PanelShell({
 
     const handleNotification = (notification) => {
       injectNotificationIntoFeed(notification);
+      if (panelId === 'vendor' && (notification.type === 'NEW_ORDER' || notification.type === 'new_order') && notification.relatedId) {
+        const reqId = String(notification.relatedId);
+        if (!dismissedRequestsRef.current.has(reqId)) {
+          setIncomingVendorRequest((prev) => {
+            if (prev && String(prev._id || prev.requestId) === reqId) return prev;
+            return {
+              _id: reqId,
+              requestId: reqId,
+              reference: notification.title?.includes('CR-') ? notification.title : '',
+              clientName: 'Corporate Client',
+              locationText: notification.body || '',
+              lines: [{ categoryName: 'Workforce Needed', quantity: 1 }],
+              timeoutSeconds: 60,
+            };
+          });
+        }
+      }
       dispatchAlert(notification?.title || 'New Notification Received', notification?.body || notification?.message || 'You have a new alert', false);
       refreshUser();
       invalidateCache();
@@ -176,7 +217,50 @@ export function PanelShell({
       invalidateCache();
     };
 
-    socket.on('corporate_request_created', invalidateCache);
+    const handleCorporateRequestCreated = (data) => {
+      invalidateCache();
+      if (panelId === 'vendor') {
+        const rawReq = data?.request;
+        const reqId = String(rawReq?._id || data?.requestId || '');
+        if (reqId && !dismissedRequestsRef.current.has(reqId)) {
+          setIncomingVendorRequest({
+            ...rawReq,
+            _id: reqId,
+            requestId: reqId,
+            reference: rawReq?.reference || data?.reference,
+            companyName: rawReq?.clientId?.corporateProfile?.companyName || rawReq?.clientId?.fullName || rawReq?.companyName || data?.clientName || 'Corporate Client',
+            projectName: rawReq?.projectId?.name || rawReq?.projectName,
+            siteName: rawReq?.siteId?.name || rawReq?.siteName,
+            lines: rawReq?.lines || [],
+            locationText: rawReq?.locationText || data?.locationText,
+            locationLat: rawReq?.locationLat,
+            locationLng: rawReq?.locationLng,
+            startDate: rawReq?.startDate,
+            endDate: rawReq?.endDate,
+            shiftStart: rawReq?.shiftStart,
+            shiftEnd: rawReq?.shiftEnd,
+            notes: rawReq?.notes,
+            timeoutSeconds: 60,
+          });
+        }
+
+        const alertTitle = data?.title || 'New Corporate Request 🏗️';
+        const alertBody = data?.body || 'A new corporate workforce request matching your skills and area is available!';
+        dispatchAlert(alertTitle, alertBody, false);
+      }
+    };
+
+    const handleVendorAllocatedJob = (data) => {
+      invalidateCache();
+      if (panelId === 'vendor') {
+        const alertTitle = data?.title || 'New Workforce Allocation 🏗️';
+        const alertBody = data?.body || 'You have been allocated to a new corporate project.';
+        dispatchAlert(alertTitle, alertBody, false);
+      }
+    };
+
+    socket.on('corporate_request_created', handleCorporateRequestCreated);
+    socket.on('vendor_allocated_job', handleVendorAllocatedJob);
     socket.on('vendor_accepted_request', invalidateCache);
     socket.on('vendor_declined_request', invalidateCache);
     socket.on('vendor_accepted_request_global', invalidateCache);
@@ -192,7 +276,8 @@ export function PanelShell({
     socket.on('dashboard:updated', invalidateCache);
 
     return () => {
-      socket.off('corporate_request_created', invalidateCache);
+      socket.off('corporate_request_created', handleCorporateRequestCreated);
+      socket.off('vendor_allocated_job', handleVendorAllocatedJob);
       socket.off('vendor_accepted_request', invalidateCache);
       socket.off('vendor_declined_request', invalidateCache);
       socket.off('vendor_accepted_request_global', invalidateCache);
@@ -207,7 +292,7 @@ export function PanelShell({
       socket.off('account:status_updated', handleKycUpdate);
       socket.off('dashboard:updated', invalidateCache);
     };
-  }, [user, token, dispatch]);
+  }, [user, token, dispatch, panelId, dispatchAlert]);
 
   // Fetch fresh user profile on initial mount
   useEffect(() => {
@@ -307,6 +392,141 @@ export function PanelShell({
   const realNotifs = realNotifsData?.notifications || realNotifsData?.data?.notifications || []
   const unreadRealCount = realNotifsData?.unreadCount ?? realNotifsData?.data?.unreadCount ?? realNotifs.filter(n => !n.isRead && !n.read).length
   const displayCount = (panelId === 'vendor' ? notifCounts.total : 0) + unreadRealCount
+
+  const [showPushBanner, setShowPushBanner] = useState(false)
+  const [pushEnabling, setPushEnabling] = useState(false)
+
+  // Vendor incoming job request popup state
+  const [incomingVendorRequest, setIncomingVendorRequest] = useState(null)
+  const dismissedRequestsRef = useRef(new Set())
+  const [acceptMarketplaceRequest, { isLoading: isAcceptingMarketplaceRequest }] = workforceApi.useAcceptMarketplaceRequestMutation()
+  const [declineMarketplaceRequest] = workforceApi.useDeclineMarketplaceRequestMutation()
+
+  const { data: marketplaceData } = workforceApi.useGetVendorMarketplaceRequestsQuery(undefined, {
+    skip: panelId !== 'vendor' || !user,
+  })
+
+  // Auto-present newest open corporate request if created within the last 10 minutes
+  useEffect(() => {
+    if (panelId !== 'vendor' || !marketplaceData?.requests?.length) return
+    if (incomingVendorRequest) return
+
+    const openReqs = marketplaceData.requests
+    const now = Date.now()
+    const recentCandidate = openReqs.find((r) => {
+      const idStr = String(r._id)
+      if (dismissedRequestsRef.current.has(idStr)) return false
+      const createdTime = new Date(r.createdAt || 0).getTime()
+      return (now - createdTime) < 10 * 60 * 1000
+    })
+
+    if (recentCandidate) {
+      const idStr = String(recentCandidate._id)
+      if (!dismissedRequestsRef.current.has(idStr)) {
+        setIncomingVendorRequest({
+          ...recentCandidate,
+          _id: recentCandidate._id,
+          requestId: recentCandidate._id,
+          companyName: recentCandidate.clientId?.corporateProfile?.companyName || recentCandidate.clientId?.fullName,
+          siteName: recentCandidate.siteId?.name,
+          projectName: recentCandidate.projectId?.name,
+          timeoutSeconds: 60,
+        })
+      }
+    }
+  }, [marketplaceData, panelId, incomingVendorRequest])
+
+  const handleAcceptIncomingVendorRequest = useCallback(async () => {
+    if (!incomingVendorRequest) return
+    const reqId = String(incomingVendorRequest._id || incomingVendorRequest.requestId)
+    dismissedRequestsRef.current.add(reqId)
+    try {
+      await acceptMarketplaceRequest(reqId).unwrap()
+      import('react-hot-toast').then(({ default: toast }) => {
+        toast.success('Corporate request accepted! Added to your jobs.', { duration: 5000 })
+      })
+      setIncomingVendorRequest(null)
+      navigate('/vendor/jobs')
+    } catch (err) {
+      import('react-hot-toast').then(({ default: toast }) => {
+        toast.error(err?.data?.message || err?.message || 'Failed to accept request', { duration: 5000 })
+      })
+      setIncomingVendorRequest(null)
+    }
+  }, [incomingVendorRequest, acceptMarketplaceRequest, navigate])
+
+  const handleDeclineIncomingVendorRequest = useCallback(async () => {
+    if (!incomingVendorRequest) return
+    const reqId = String(incomingVendorRequest._id || incomingVendorRequest.requestId)
+    dismissedRequestsRef.current.add(reqId)
+    try {
+      await declineMarketplaceRequest(reqId).unwrap()
+      import('react-hot-toast').then(({ default: toast }) => {
+        toast.success('Request declined.')
+      })
+    } catch (err) {
+      console.error('Failed to decline request:', err)
+    }
+    setIncomingVendorRequest(null)
+  }, [incomingVendorRequest, declineMarketplaceRequest])
+
+  const handleTimeoutIncomingVendorRequest = useCallback(() => {
+    if (incomingVendorRequest) {
+      const reqId = String(incomingVendorRequest._id || incomingVendorRequest.requestId)
+      dismissedRequestsRef.current.add(reqId)
+    }
+    setIncomingVendorRequest(null)
+  }, [incomingVendorRequest])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return
+    if (panelId !== 'vendor') return
+    const dismissed = sessionStorage.getItem('vendor_push_banner_dismissed')
+    if (!dismissed && Notification.permission === 'default') {
+      setShowPushBanner(true)
+    }
+  }, [panelId])
+
+  const handleEnablePush = async () => {
+    setPushEnabling(true)
+    try {
+      if (!('Notification' in window)) return
+      const perm = await Notification.requestPermission()
+      if (perm === 'granted') {
+        setShowPushBanner(false)
+        await syncPushToken({
+          accessToken: token,
+          role: user?.role,
+          userId: user?._id,
+          force: true,
+        })
+        import('react-hot-toast').then(({ default: toast }) => {
+          toast.success('Push notifications enabled! You will now receive instant alerts for new requests.', { duration: 5000 })
+        })
+        try {
+          new Notification('Push Notifications Enabled 🎉', {
+            body: 'You will now receive instant push alerts for new corporate requests!',
+            icon: '/favicon.svg',
+            badge: '/favicon.svg',
+          })
+        } catch (e) {}
+      } else if (perm === 'denied') {
+        setShowPushBanner(false)
+        import('react-hot-toast').then(({ default: toast }) => {
+          toast.error('Notifications blocked. You can enable them anytime from the browser address bar icon.', { duration: 6000 })
+        })
+      }
+    } catch (err) {
+      console.error('Failed to enable push notifications:', err)
+    } finally {
+      setPushEnabling(false)
+    }
+  }
+
+  const handleDismissPushBanner = () => {
+    setShowPushBanner(false)
+    sessionStorage.setItem('vendor_push_banner_dismissed', '1')
+  }
 
   const hideShellHeader =
     pathname.includes('/notifications') ||
@@ -646,6 +866,42 @@ export function PanelShell({
             hideShellHeader ? 'pt-[max(0.5rem,env(safe-area-inset-top,0px))]' : 'pt-4'
           }`}
         >
+          {showPushBanner && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-linear-to-r from-amber-50 to-orange-50 p-3.5 shadow-sm"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-xs">
+                  <BellRing className="h-5 w-5 animate-pulse" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-900">Enable Push Notifications</p>
+                  <p className="text-[11px] text-slate-600 line-clamp-1">Get instant alerts when new workforce requests arrive in your area.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleEnablePush}
+                  disabled={pushEnabling}
+                  className="rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-slate-800 active:scale-95 disabled:opacity-50 cursor-pointer"
+                >
+                  {pushEnabling ? 'Enabling...' : 'Enable'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDismissPushBanner}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-amber-100 hover:text-slate-600 transition cursor-pointer"
+                  title="Dismiss"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </motion.div>
+          )}
           <AppPageTransition />
         </main>
       </div>
@@ -657,6 +913,16 @@ export function PanelShell({
         onClose={() => setLocationModalOpen(false)}
         onSaved={() => setAppLocation(readAppUserLocation())}
       />
+
+      {incomingVendorRequest && panelId === 'vendor' && (
+        <IncomingVendorRequestPopup
+          request={incomingVendorRequest}
+          onAccept={handleAcceptIncomingVendorRequest}
+          onDecline={handleDeclineIncomingVendorRequest}
+          onTimeout={handleTimeoutIncomingVendorRequest}
+          isAccepting={isAcceptingMarketplaceRequest}
+        />
+      )}
     </div>
   )
 }

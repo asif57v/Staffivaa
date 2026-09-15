@@ -56,7 +56,16 @@ export async function updateUserWalletAdmin(userId, action, amount, reason) {
   return json.data?.user ?? null
 }
 
+export async function updateUserSkillsAdmin(userId, { categoryIds, skills, reason }) {
+  const json = await apiRequest(`/users/${userId}/skills`, {
+    method: 'PATCH',
+    body: { categoryIds, skills, reason }
+  })
+  return json.data?.user ?? null
+}
+
 export async function getUserTimelineAdmin(userId) {
   const json = await apiRequest(`/users/${userId}/timeline`)
   return json.data?.logs ?? []
 }
+

@@ -11,6 +11,7 @@ import { EnterpriseWallet } from '../models/EnterpriseWallet.js'
 import { EnterpriseWalletTransaction } from '../models/EnterpriseWalletTransaction.js'
 import { SystemSettings } from '../models/SystemSettings.js'
 import { AttendanceRecord } from '../models/AttendanceRecord.js'
+import { EnterprisePayroll } from '../models/EnterprisePayroll.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { USER_ROLES } from '../constants/roles.js'
@@ -1713,19 +1714,235 @@ export const getLabourCurrentEmployment = asyncHandler(async (req, res) => {
   // Find latest joined employment application
   const activeApp = await EnterpriseApplication.findOne({
     workerId: req.user._id,
-    status: { $in: ['joining_activated', 'joined', 'waiting_for_joining_payment', 'joining_pending', 'offer_accepted'] },
+    status: { $in: ['joining_activated', 'joined', 'waiting_for_joining_payment', 'joining_pending', 'offer_accepted', 'completed', 'ended'] },
   })
     .populate({
       path: 'jobId',
-      select: 'jobTitle salary salaryType locationText shift workingHours department timeline contractDuration',
+      select: 'jobTitle salary salaryType locationText shift workingHours department timeline contractDuration status isLive locationPoint',
     })
     .populate({
       path: 'enterpriseId',
       select: 'fullName profileImageUrl enterpriseProfile phone email',
     })
     .sort({ updatedAt: -1 })
+    .lean()
 
-  return sendSuccess(res, { data: activeApp })
+  if (!activeApp) {
+    return sendSuccess(res, { data: null })
+  }
+
+  const endRaw = activeApp.joiningDetails?.endDate || activeApp.offerDetails?.endDate || activeApp.jobId?.timeline?.projectEndDate
+  let isJobEnded = activeApp.jobId?.status === 'closed' || activeApp.status === 'completed' || activeApp.status === 'ended'
+  if (!isJobEnded && endRaw) {
+    const endDate = new Date(endRaw)
+    if (!isNaN(endDate.getTime())) {
+      const isMidnight = endDate.getUTCHours() === 0 && endDate.getUTCMinutes() === 0 && endDate.getUTCSeconds() === 0
+      const cutoff = isMidnight ? new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999).getTime() : endDate.getTime()
+      if (Date.now() > cutoff) {
+        isJobEnded = true
+      }
+    }
+  }
+
+  return sendSuccess(res, {
+    data: {
+      ...activeApp,
+      isJobEnded,
+      endDate: endRaw || null,
+    }
+  })
+})
+
+/** GET /api/enterprise/my-employment/history - All completed & past jobs with project attendance & salary slips */
+export const getLabourEmploymentHistory = asyncHandler(async (req, res) => {
+  if (req.user.role !== USER_ROLES.LABOUR) {
+    return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  const applications = await EnterpriseApplication.find({
+    workerId: req.user._id,
+    status: { $in: ['joining_activated', 'joined', 'completed', 'ended', 'offer_accepted'] },
+  })
+    .populate({
+      path: 'jobId',
+      select: 'jobTitle salary salaryType locationText shift workingHours department timeline contractDuration status locationPoint',
+    })
+    .populate({
+      path: 'enterpriseId',
+      select: 'fullName profileImageUrl enterpriseProfile phone email',
+    })
+    .sort({ updatedAt: -1 })
+    .lean()
+
+  const history = []
+
+  for (const app of applications) {
+    if (!app.jobId) continue
+
+    const endRaw = app.joiningDetails?.endDate || app.offerDetails?.endDate || app.jobId?.timeline?.projectEndDate
+    let isJobEnded = app.jobId?.status === 'closed' || app.status === 'completed' || app.status === 'ended'
+    if (!isJobEnded && endRaw) {
+      const endDate = new Date(endRaw)
+      if (!isNaN(endDate.getTime())) {
+        const isMidnight = endDate.getUTCHours() === 0 && endDate.getUTCMinutes() === 0 && endDate.getUTCSeconds() === 0
+        const cutoff = isMidnight ? new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999).getTime() : endDate.getTime()
+        if (Date.now() > cutoff) {
+          isJobEnded = true
+        }
+      }
+    }
+
+    // Attendance stats for this specific project/job
+    const records = await AttendanceRecord.find({
+      workerId: req.user._id,
+      $or: [
+        { enterpriseApplicationId: app._id },
+        { enterpriseJobId: app.jobId._id },
+      ],
+    }).sort({ shiftDate: -1, checkInAt: -1 }).lean()
+
+    const standardHours = app.jobId.workingHours || 8
+    let totalPresent = 0
+    let totalAbsent = 0
+    let totalHalfDays = 0
+    let totalHoursSum = 0
+    let totalOvertimeSum = 0
+
+    records.forEach((r) => {
+      const st = (r.attendanceStatus || '').toLowerCase()
+      if (st === 'present' || r.checkInAt) {
+        totalPresent++
+      } else if (st === 'absent') {
+        totalAbsent++
+      } else if (st === 'half day' || st === 'half_day') {
+        totalHalfDays++
+      }
+
+      const h = r.totalHours != null && r.totalHours > 0
+        ? r.totalHours
+        : (r.checkInAt && r.checkOutAt ? parseFloat(((new Date(r.checkOutAt) - new Date(r.checkInAt)) / 3600000).toFixed(2)) : 0)
+
+      totalHoursSum += h
+      const ot = r.overtimeHours != null && r.overtimeHours > 0 ? r.overtimeHours : Math.max(0, h - standardHours)
+      totalOvertimeSum += ot
+    })
+
+    // Associated EnterprisePayroll
+    const payroll = await EnterprisePayroll.findOne({
+      workerId: req.user._id,
+      $or: [
+        { jobId: app.jobId._id },
+        { enterpriseId: app.enterpriseId?._id },
+      ],
+    })
+      .populate('enterpriseId', 'fullName enterpriseProfile profileImageUrl phone email')
+      .populate('jobId', 'jobTitle workLocation shift salary salaryType workingHours')
+      .populate('workerId', 'fullName phone labourProfile')
+      .sort({ year: -1, month: -1, createdAt: -1 })
+      .lean()
+
+    let calculatedSalary = payroll ? payroll.netSalary : 0
+    if (!payroll && app.jobId.salary) {
+      if (app.jobId.salaryType === 'hourly') {
+        calculatedSalary = Math.round(totalHoursSum * app.jobId.salary)
+      } else if (app.jobId.salaryType === 'daily') {
+        calculatedSalary = Math.round(totalPresent * app.jobId.salary)
+      } else {
+        calculatedSalary = Math.round((totalPresent / 26) * app.jobId.salary)
+      }
+    }
+
+    history.push({
+      applicationId: app._id,
+      application: app,
+      job: app.jobId,
+      enterprise: app.enterpriseId,
+      isJobEnded,
+      status: isJobEnded ? 'completed' : app.status,
+      startDate: app.joiningDetails?.joiningDate || app.offerDetails?.joiningDate || app.jobId?.timeline?.projectStartDate || app.createdAt,
+      endDate: endRaw || null,
+      attendanceStats: {
+        totalRecords: records.length,
+        totalPresent,
+        totalAbsent,
+        totalHalfDays,
+        totalHours: parseFloat(totalHoursSum.toFixed(1)),
+        totalOvertime: parseFloat(totalOvertimeSum.toFixed(1)),
+      },
+      salaryDetails: {
+        rate: app.jobId.salary,
+        rateType: app.jobId.salaryType,
+        grossSalary: payroll ? payroll.grossSalary : calculatedSalary,
+        attendanceDeduction: payroll ? payroll.attendanceDeduction : 0,
+        overtimeBonus: payroll ? payroll.overtimeBonus : 0,
+        otherDeductions: payroll ? ((payroll.pfDeduction || 0) + (payroll.esicDeduction || 0) + (payroll.ptDeduction || 0) + (payroll.tdsDeduction || 0) + (payroll.otherDeductions || 0)) : 0,
+        netSalary: payroll ? payroll.netSalary : calculatedSalary,
+        status: payroll ? payroll.status : (isJobEnded ? 'released' : 'in_progress'),
+        paidAt: payroll?.paidAt || (payroll?.status === 'paid' ? payroll.updatedAt : null),
+      },
+      payroll: payroll || (isJobEnded && totalPresent > 0 ? {
+        _id: `est_${app._id}`,
+        enterpriseId: app.enterpriseId,
+        jobId: app.jobId,
+        workerId: {
+          _id: req.user._id,
+          fullName: req.user.fullName,
+          phone: req.user.phone,
+          labourProfile: req.user.labourProfile,
+        },
+        month: new Date().getMonth() + 1,
+        year: new Date().getFullYear(),
+        grossSalary: calculatedSalary,
+        netSalary: calculatedSalary,
+        totalWorkingDays: totalPresent || 1,
+        presentDays: totalPresent,
+        totalWorkingHours: totalHoursSum,
+        overtimeHours: totalOvertimeSum,
+        status: 'released',
+        paidAt: new Date(),
+      } : null),
+      hasSalarySlip: Boolean(payroll || (isJobEnded && totalPresent > 0)),
+    })
+  }
+
+  return sendSuccess(res, { data: history })
+})
+
+/** PATCH /api/enterprise/jobs/:id/conclude - Conclude an Enterprise Job and set end date */
+export const concludeEnterpriseJob = asyncHandler(async (req, res) => {
+  if (req.user.role !== USER_ROLES.ENTERPRISE && req.user.role !== USER_ROLES.ADMIN) {
+    return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  const { id } = req.params
+  const { endDate } = req.body
+
+  const job = await EnterpriseJob.findOne({
+    _id: id,
+    ...(req.user.role === USER_ROLES.ENTERPRISE ? { enterpriseId: req.user._id } : {}),
+  })
+
+  if (!job) {
+    return sendError(res, { message: 'Enterprise Job not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  const finalEndDate = endDate ? new Date(endDate) : new Date()
+
+  job.timeline = job.timeline || {}
+  job.timeline.projectEndDate = finalEndDate
+  job.status = 'closed'
+  job.isLive = false
+  await job.save()
+
+  // Mark active applications as completed
+  await EnterpriseApplication.updateMany(
+    { jobId: job._id, status: { $in: ['joined', 'joining_activated'] } },
+    { $set: { status: 'completed', 'joiningDetails.endDate': finalEndDate } }
+  )
+
+  emitToRole('labour', 'enterprise_jobs_updated', { type: 'enterprise_job_concluded', jobId: job._id })
+
+  return sendSuccess(res, { message: 'Job contract concluded successfully', data: job })
 })
 
 /** GET /api/enterprise/applications/:id/attendance - Get worker attendance history for Enterprise */

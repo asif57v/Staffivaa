@@ -80,7 +80,7 @@ export const registerRequestOtp = asyncHandler(async (req, res) => {
 
 /** POST /auth/register/verify */
 export const registerVerify = asyncHandler(async (req, res) => {
-  const { phone, code, role, fullName, companyName, businessName, businessCategory, gstNumber, challengeId } = req.body
+  const { phone, code, role, fullName, companyName, businessName, businessCategory, gstNumber, challengeId, categoryIds, skills } = req.body
 
   const existing = await User.findOne({ phone })
   if (existing) {
@@ -138,7 +138,14 @@ export const registerVerify = asyncHandler(async (req, res) => {
     }
   }
   if (role === USER_ROLES.CONTRACTOR) {
-    doc.contractorProfile = { businessName, verificationStatus: 'pending' }
+    const rawCategoryIds = Array.isArray(categoryIds) ? categoryIds : (categoryIds ? [categoryIds] : [])
+    const rawSkills = Array.isArray(skills) ? skills : (skills ? [skills] : [])
+    doc.contractorProfile = {
+      businessName,
+      verificationStatus: 'pending',
+      categoryIds: rawCategoryIds,
+      skills: rawSkills,
+    }
   }
   if (role === USER_ROLES.LABOUR) {
     const rawAadhaar = (req.body.aadhaar || req.body.aadhaarNumber || '').toString().replace(/\D/g, '').slice(0, 12)
@@ -173,6 +180,7 @@ export const registerVerify = asyncHandler(async (req, res) => {
     })
   }
   await deleteOtpChallengeDoc(otp.doc)
+  await populateLabourCategories(user)
   const token = signAccessToken(user, sessionId)
 
   if (role === USER_ROLES.LABOUR) {
@@ -303,6 +311,7 @@ export const loginVerify = asyncHandler(async (req, res) => {
     }).catch((err) => console.error('[Notification Error]:', err.message))
   }
 
+  await populateLabourCategories(user)
   const token = signAccessToken(user, sessionId)
   const payload = buildAuthPayload(user, token)
 

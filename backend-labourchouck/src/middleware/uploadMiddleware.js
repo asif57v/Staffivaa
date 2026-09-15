@@ -4,9 +4,13 @@ const storage = multer.memoryStorage()
 
 const MEDIA_MIMES = new Set([
   'image/jpeg',
+  'image/jpg',
+  'image/pjpeg',
   'image/png',
   'image/webp',
   'image/gif',
+  'image/heic',
+  'image/heif',
   'video/mp4',
   'video/webm',
   'video/quicktime',
@@ -14,18 +18,48 @@ const MEDIA_MIMES = new Set([
 
 const DOCUMENT_MIMES = new Set([
   'image/jpeg',
+  'image/jpg',
+  'image/pjpeg',
   'image/png',
   'image/webp',
+  'image/gif',
+  'image/heic',
+  'image/heif',
   'application/pdf',
+  'application/x-pdf',
+  'application/acrobat',
+  'applications/vnd.pdf',
+  'text/pdf',
 ])
 
+const ALLOWED_DOC_EXT = /\.(jpe?g|png|webp|gif|heic|heif|bmp|pdf)$/i
+const ALLOWED_MEDIA_EXT = /\.(jpe?g|png|webp|gif|heic|heif|mp4|webm|mov|quicktime)$/i
+
 function mediaFilter(_req, file, cb) {
-  if (MEDIA_MIMES.has(file.mimetype)) return cb(null, true)
+  const mime = String(file.mimetype || '').toLowerCase()
+  const name = String(file.originalname || '').toLowerCase()
+  if (
+    MEDIA_MIMES.has(mime) ||
+    mime.startsWith('image/') ||
+    mime.startsWith('video/') ||
+    ALLOWED_MEDIA_EXT.test(name)
+  ) {
+    return cb(null, true)
+  }
   cb(new Error('Unsupported media type. Use JPEG, PNG, WebP, GIF, or MP4/WebM video.'))
 }
 
 function documentFilter(_req, file, cb) {
-  if (DOCUMENT_MIMES.has(file.mimetype)) return cb(null, true)
+  const mime = String(file.mimetype || '').toLowerCase()
+  const name = String(file.originalname || '').toLowerCase()
+  if (
+    DOCUMENT_MIMES.has(mime) ||
+    mime.startsWith('image/') ||
+    mime.includes('pdf') ||
+    ALLOWED_DOC_EXT.test(name)
+  ) {
+    return cb(null, true)
+  }
   cb(new Error('Unsupported document type. Use JPEG, PNG, WebP, or PDF.'))
 }
 

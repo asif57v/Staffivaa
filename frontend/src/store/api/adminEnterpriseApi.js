@@ -79,6 +79,8 @@ export const adminEnterpriseApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['AdminJoiningPayments', 'EnterpriseInvoices'],
     }),
+
+    // ── Admin Enterprise Payrolls ────────────────────────────────────────────
     getAdminEnterprisePayrolls: builder.query({
       query: (params) => ({ url: '/admin/enterprise/payrolls', params }),
       providesTags: ['AdminEnterprisePayrolls'],
@@ -110,6 +112,26 @@ export const adminEnterpriseApi = baseApi.injectEndpoints({
       },
       invalidatesTags: ['AdminEnterprisePayrolls', 'AdminJoiningPayments'],
     }),
+
+    // ── Admin: Send Payment Request to Enterprise ────────────────────────────
+    sendPayrollPaymentRequest: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/admin/enterprise/payrolls/${id}/send-payment-request`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['AdminEnterprisePayrolls'],
+    }),
+
+    // ── Admin: Live Enterprise Attendance Monitoring ─────────────────────────
+    getAdminEnterpriseAttendance: builder.query({
+      query: (params) => ({ url: '/admin/enterprise/attendance', params }),
+      providesTags: ['AdminEnterpriseAttendance'],
+    }),
+    getAdminWorkerAttendanceDetail: builder.query({
+      query: ({ workerId, ...params }) => ({ url: `/admin/enterprise/attendance/${workerId}`, params }),
+      providesTags: ['AdminEnterpriseAttendance'],
+    }),
   }),
   overrideExisting: false,
 })
@@ -129,4 +151,8 @@ export const {
   useGetAdminEnterprisePayrollsQuery,
   useReviewEnterprisePayrollMutation,
   useReleaseEnterpriseSalaryMutation,
+  useSendPayrollPaymentRequestMutation,
+  useGetAdminEnterpriseAttendanceQuery,
+  useGetAdminWorkerAttendanceDetailQuery,
 } = adminEnterpriseApi
+

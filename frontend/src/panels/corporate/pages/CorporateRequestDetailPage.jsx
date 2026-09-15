@@ -872,7 +872,9 @@ export function CorporateRequestDetailPage() {
       <div className="mt-4 p-4 pb-24 max-w-md mx-auto flex flex-col gap-3">
         {request.status === 'corporate_platform_fee_pending' ? (
           <Link to={`/corporate/requests/${id}/payment`} className="w-full flex items-center justify-center text-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
-            Pay Platform Fee to Unlock Quotation Phase
+            {Number(request.corporatePlatformFeeAmount ?? 0) <= 0
+              ? 'Claim Free Platform Fee to Unlock Quotation Phase'
+              : 'Pay Platform Fee to Unlock Quotation Phase'}
           </Link>
         ) : request.status === 'vendor_platform_fee_pending' ? (
           <button disabled className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-emerald-50 border border-emerald-200 py-3.5 text-[15px] font-bold text-emerald-600 cursor-not-allowed shadow-sm">

@@ -95,6 +95,57 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
       if (request.vendorPlatformFeeStatus === 'paid') return sendError(res, { message: 'Already paid vendor fee', statusCode: HTTP_STATUS.BAD_REQUEST });
       totalAmount = request.vendorPlatformFeeAmount ?? 0;
       isVendorFee = true;
+
+      // Bypass Razorpay if vendor platform fee is ₹0 (Free)
+      if (totalAmount <= 0) {
+        request.vendorPlatformFeeStatus = 'paid';
+        request.vendorPlatformFeePaidAt = new Date();
+        const reqRef = request.reference || request._id.toString().slice(-6);
+
+        const isCorpSettled =
+          request.corporatePlatformFeeStatus === 'paid' ||
+          (request.corporatePlatformFeeAmount !== undefined && request.corporatePlatformFeeAmount === 0);
+
+        if (isCorpSettled) {
+          request.corporatePlatformFeeStatus = 'paid';
+          if (!request.corporatePlatformFeePaidAt) request.corporatePlatformFeePaidAt = new Date();
+          request.quotationUnlocked = true;
+          request.status = 'quotation_unlocked';
+
+          if (request.clientId) {
+            triggerNotification({
+              userId: request.clientId,
+              title: 'Quotation Unlocked! 🎉',
+              body: `Vendor platform fee waived (Free) for Request #${reqRef}. Quotation is now unlocked!`,
+              type: 'BOOKING_UPDATED',
+              relatedId: request._id,
+              relatedModel: 'WorkforceRequest',
+            }).catch(err => console.error('[Notification Error]:', err.message));
+          }
+        } else {
+          request.status = 'corporate_platform_fee_pending';
+          emitToCorporate(request.clientId?.toString(), 'corporate_fee_pending', { requestId: request._id.toString() });
+
+          if (request.clientId) {
+            triggerNotification({
+              userId: request.clientId,
+              title: 'Vendor Fee Waived! 💳',
+              body: `Vendor platform fee is Free for Request #${reqRef}. Please confirm your platform fee to unlock quotation & worker allocation.`,
+              type: 'PAYMENT_RECEIVED',
+              relatedId: request._id,
+              relatedModel: 'WorkforceRequest',
+            }).catch(err => console.error('[Notification Error]:', err.message));
+          }
+        }
+
+        await request.save();
+        emitRequestStatusUpdate(request._id.toString(), {
+          requestId: request._id.toString(),
+          requestStatus: request.status,
+          vendorPlatformFeeStatus: request.vendorPlatformFeeStatus,
+        });
+        return sendSuccess(res, { data: { bypassPayment: true, message: 'Vendor platform fee waived (Free)' } });
+      }
     } else {
       if (request.labourPaymentStatus === 'paid') return sendError(res, { message: 'Already paid by labour', statusCode: HTTP_STATUS.BAD_REQUEST });
       totalAmount = request.labourPlatformFee !== undefined ? request.labourPlatformFee : 0;
@@ -119,6 +170,60 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
         if (request.corporatePlatformFeeStatus === 'paid') return sendError(res, { message: 'Already paid corporate fee', statusCode: HTTP_STATUS.BAD_REQUEST });
         totalAmount = request.corporatePlatformFeeAmount ?? 0;
         isCorporateFee = true;
+
+        // Bypass Razorpay if corporate platform fee is ₹0 (Free)
+        if (totalAmount <= 0) {
+          request.corporatePlatformFeeStatus = 'paid';
+          request.corporatePlatformFeePaidAt = new Date();
+          const reqRef = request.reference || request._id.toString().slice(-6);
+
+          const { Allocation } = await import('../models/Allocation.js');
+          const allocation = await Allocation.findOne({ requestId: request._id });
+
+          const isVendorSettled =
+            request.vendorPlatformFeeStatus === 'paid' ||
+            (request.vendorPlatformFeeAmount !== undefined && request.vendorPlatformFeeAmount === 0);
+
+          if (isVendorSettled) {
+            request.vendorPlatformFeeStatus = 'paid';
+            if (!request.vendorPlatformFeePaidAt) request.vendorPlatformFeePaidAt = new Date();
+            request.quotationUnlocked = true;
+            request.status = 'quotation_unlocked';
+
+            if (allocation && allocation.vendorId) {
+              emitToVendor(allocation.vendorId.toString(), 'quotation_unlocked', { requestId: request._id.toString() });
+              triggerNotification({
+                userId: allocation.vendorId,
+                title: 'Quotation Unlocked! 🎉',
+                body: `Corporate platform fee waived (Free) for Request #${reqRef}. Quotation is unlocked for worker assignment!`,
+                type: 'BOOKING_UPDATED',
+                relatedId: request._id,
+                relatedModel: 'WorkforceRequest',
+              }).catch(err => console.error('[Notification Error]:', err.message));
+            }
+          } else {
+            request.status = 'vendor_platform_fee_pending';
+            if (allocation && allocation.vendorId) {
+              emitToVendor(allocation.vendorId.toString(), 'vendor_fee_pending', { requestId: request._id.toString() });
+              triggerNotification({
+                userId: allocation.vendorId,
+                title: 'Corporate Fee Waived! 💳',
+                body: `Corporate client platform fee is Free for Request #${reqRef}. Please confirm your vendor fee to proceed.`,
+                type: 'PAYMENT_RECEIVED',
+                relatedId: request._id,
+                relatedModel: 'WorkforceRequest',
+              }).catch(err => console.error('[Notification Error]:', err.message));
+            }
+          }
+
+          await request.save();
+          emitRequestStatusUpdate(request._id.toString(), {
+            requestId: request._id.toString(),
+            requestStatus: request.status,
+            corporatePlatformFeeStatus: request.corporatePlatformFeeStatus,
+          });
+          return sendSuccess(res, { data: { bypassPayment: true, message: 'Corporate platform fee waived (Free)' } });
+        }
       } else {
         const userPlatformFee = request.userPlatformFee !== undefined ? request.userPlatformFee : 0
         const convenienceFee = request.convenienceFee !== undefined ? request.convenienceFee : 0
@@ -130,6 +235,19 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
             return sendError(res, { message: 'Platform fee already completed', statusCode: HTTP_STATUS.BAD_REQUEST })
           }
           totalAmount = userPlatformFee + gstAmount + convenienceFee
+
+          if (totalAmount <= 0) {
+            request.userPaymentStatus = 'paid';
+            request.status = 'project_active';
+            request.platformFeePaymentLifecycle = 'completed';
+            await request.save();
+            emitRequestStatusUpdate(request._id.toString(), {
+              requestId: request._id.toString(),
+              requestStatus: request.status,
+              userPaymentStatus: request.userPaymentStatus,
+            });
+            return sendSuccess(res, { data: { bypassPayment: true, message: 'Platform fee waived (Free)' } });
+          }
         } else {
           return sendError(res, { message: `Payment is not due or requested yet. Current status: ${request.status}`, statusCode: HTTP_STATUS.BAD_REQUEST })
         }
@@ -163,6 +281,23 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
         return sendSuccess(res, { data: { bypassPayment: true } })
       }
     }
+  }
+
+  // Final safety guard: never call Razorpay with <= 0 amount
+  if (totalAmount <= 0) {
+    if (isCorporateFee) {
+      request.corporatePlatformFeeStatus = 'paid';
+      request.corporatePlatformFeePaidAt = new Date();
+    } else if (isVendorFee) {
+      request.vendorPlatformFeeStatus = 'paid';
+      request.vendorPlatformFeePaidAt = new Date();
+    } else if (isLabour) {
+      request.labourPaymentStatus = 'paid';
+    } else {
+      request.userPaymentStatus = 'paid';
+    }
+    await request.save();
+    return sendSuccess(res, { data: { bypassPayment: true, message: 'Platform fee waived (Free)' } });
   }
 
   const razorpay = getRazorpayInstance()

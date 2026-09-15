@@ -292,7 +292,7 @@ export function VendorJobDetailPage() {
             )}
           </div>
         ) : (
-          !pending && !quotation && (['quotation_unlocked', 'accepted', 'project_active', 'allocated', 'assigned'].includes(req?.status)) && totalAssigned >= totalRequired && (
+          !pending && !quotation && (['quotation_unlocked', 'accepted', 'project_active', 'allocated', 'assigned'].includes(req?.status)) && (
             <div className="rounded-xl sm:rounded-[20px] bg-slate-900 p-2.5 sm:p-5 text-white border border-slate-900 space-y-3">
               <div className="flex justify-between items-start">
                 <div>
@@ -419,15 +419,25 @@ export function VendorJobDetailPage() {
         )}
 
         {/* Assigned Roster */}
-        {(!pending || assignments.length > 0) && (
+        {(assignments.length > 0 || ['project_active', 'in_progress', 'attendance_tracking'].includes(req?.status)) && (
           <div className="rounded-xl sm:rounded-[20px] bg-white p-2.5 sm:p-5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.08)] border border-slate-100">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-amber-500" />
                 <h3 className="text-[15px] font-extrabold text-slate-900">Assigned Roster</h3>
               </div>
-              <div className="text-[13px] font-extrabold text-slate-500">
-                {totalAssigned} / {totalRequired}
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] font-extrabold text-slate-500">
+                  {totalAssigned} / {totalRequired}
+                </span>
+                {['project_active', 'in_progress', 'attendance_tracking'].includes(req?.status) && (
+                  <Link
+                    to={`/vendor/jobs/${id}/assign`}
+                    className="text-xs font-bold text-amber-600 hover:text-amber-700 underline ml-2"
+                  >
+                    Manage Crew
+                  </Link>
+                )}
               </div>
             </div>
             
@@ -437,6 +447,14 @@ export function VendorJobDetailPage() {
                   <Users className="h-5 w-5 text-slate-300" />
                 </div>
                 <p className="text-[14px] font-bold text-slate-500">No workers assigned yet.</p>
+                {['project_active', 'in_progress', 'attendance_tracking'].includes(req?.status) && (
+                  <Link
+                    to={`/vendor/jobs/${id}/assign`}
+                    className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition"
+                  >
+                    <Users className="h-3.5 w-3.5" /> Assign Crew Members
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
@@ -471,24 +489,26 @@ export function VendorJobDetailPage() {
             <CheckCircle2 className="h-4 w-4" /> Accept Job
           </button>
         ) : req?.status === 'vendor_platform_fee_pending' ? (
-          <button onClick={() => navigate(`/vendor/jobs/${id}/payment`)} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
-            Pay Platform Fee to Unlock Next Step
+          <button onClick={() => navigate(`/vendor/jobs/${id}/payment`)} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm cursor-pointer">
+            {Number(req?.vendorPlatformFeeAmount ?? 0) <= 0
+              ? 'Claim Free Platform Fee to Unlock Next Step'
+              : 'Pay Platform Fee to Unlock Next Step'}
           </button>
         ) : req?.status === 'corporate_platform_fee_pending' ? (
           <button disabled className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-slate-100 border border-slate-200 py-3.5 text-[15px] font-black text-slate-400 transition shadow-sm opacity-80">
             Waiting for Corporate to Pay Platform Fee...
           </button>
-        ) : (['accepted', 'allocated', 'assigned', 'quotation_unlocked', 'project_active'].includes(req?.status)) && totalAssigned < totalRequired ? (
-          <button onClick={() => navigate(`/vendor/jobs/${id}/assign`)} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
-            <Users className="h-4 w-4" /> Assign Workers
-          </button>
-        ) : !quotation && (['quotation_unlocked', 'accepted', 'project_active', 'allocated', 'assigned'].includes(req?.status)) && totalAssigned >= totalRequired ? (
+        ) : !quotation && (['quotation_unlocked', 'accepted', 'project_active', 'allocated', 'assigned'].includes(req?.status)) ? (
           <button onClick={() => setShowEditor(true)} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
             <FileText className="h-4 w-4" /> Create & Submit Quotation
           </button>
         ) : quotation && ['draft', 'submitted', 'under_review', 'revision_requested', 'revised'].includes(quotation.status) ? (
           <button onClick={() => setShowEditor(true)} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
             <FileText className="h-4 w-4" /> {quotation.status === 'revision_requested' ? 'Edit & Resubmit Quotation' : 'Edit Quotation'}
+          </button>
+        ) : req?.status === 'project_active' && totalAssigned < totalRequired ? (
+          <button onClick={() => navigate(`/vendor/jobs/${id}/assign`)} className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
+            <Users className="h-4 w-4" /> Assign Crew ({totalAssigned}/{totalRequired})
           </button>
         ) : null}
         

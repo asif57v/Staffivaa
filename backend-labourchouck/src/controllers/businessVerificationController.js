@@ -33,8 +33,15 @@ function pendingStatusClause(role, statusKey) {
   }
 }
 
-function hasDocumentsClause(documentsKey) {
-  return { [`${documentsKey}.0`]: { $exists: true } }
+function hasDocumentsClause(profileKey) {
+  return {
+    $or: [
+      { [`${profileKey}.documents.0`]: { $exists: true } },
+      { [`${profileKey}.kycPhotos.0`]: { $exists: true } },
+      { [`${profileKey}.kycFrontImageUrl`]: { $exists: true, $ne: '' } },
+      { [`${profileKey}.kycPanImageUrl`]: { $exists: true, $ne: '' } },
+    ],
+  }
 }
 
 function verificationFilterQuery(role, filter) {
@@ -42,7 +49,6 @@ function verificationFilterQuery(role, filter) {
   const profileKey = role === USER_ROLES.CORPORATE ? 'corporateProfile' : 'contractorProfile'
   const statusKey = role === USER_ROLES.CORPORATE ? 'corporateProfile.status' : 'contractorProfile.verificationStatus'
   const submittedKey = `${profileKey}.documentsSubmittedAt`
-  const documentsKey = `${profileKey}.documents`
 
   if (filter === 'not_submitted') {
     return {
@@ -60,7 +66,7 @@ function verificationFilterQuery(role, filter) {
         {
           $or: [
             { [submittedKey]: { $exists: true, $ne: null } },
-            hasDocumentsClause(documentsKey),
+            hasDocumentsClause(profileKey),
           ],
         },
       ],
@@ -72,7 +78,7 @@ function verificationFilterQuery(role, filter) {
       ...base,
       $and: [
         notSubmittedClause(submittedKey),
-        hasDocumentsClause(documentsKey),
+        hasDocumentsClause(profileKey),
         pendingStatusClause(role, statusKey),
       ],
     }
@@ -107,7 +113,7 @@ async function listByRole(req, res, role) {
           'corporateProfile.status': CORPORATE_STATUS.PENDING,
           $or: [
             { 'corporateProfile.documentsSubmittedAt': { $exists: true, $ne: null } },
-            { 'corporateProfile.documents.0': { $exists: true } },
+            ...hasDocumentsClause('corporateProfile').$or,
           ],
         }
       : {
@@ -115,7 +121,7 @@ async function listByRole(req, res, role) {
           'contractorProfile.verificationStatus': 'pending',
           $or: [
             { 'contractorProfile.documentsSubmittedAt': { $exists: true, $ne: null } },
-            { 'contractorProfile.documents.0': { $exists: true } },
+            ...hasDocumentsClause('contractorProfile').$or,
           ],
         }
 

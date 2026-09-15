@@ -1,5 +1,5 @@
 import mongoose from 'mongoose'
-import { USER_ROLES } from '../constants/roles.js'
+import { USER_ROLES, KYC_STATUS } from '../constants/roles.js'
 import {
   VENDOR_DOCUMENT_TYPE_LIST,
   VENDOR_DOCUMENT_TYPES,
@@ -24,6 +24,7 @@ import {
 import { emitToCorporate, emitToRole } from '../utils/socket.js'
 import { sendNotificationToUser } from '../services/notificationService.js'
 import { payrollService } from '../services/payroll.service.js'
+import LocationMatchingService from '../services/LocationMatchingService.js'
 
 function requireApprovedVendor(user) {
   if (user.role !== USER_ROLES.CONTRACTOR) return 'Vendor account required'
@@ -34,6 +35,9 @@ function requireApprovedVendor(user) {
 }
 
 export const getVendorMe = asyncHandler(async (req, res) => {
+  if (req.user.contractorProfile?.categoryIds?.length) {
+    await req.user.populate('contractorProfile.categoryIds', 'name slug')
+  }
   const progress = getVendorVerificationProgress(req.user.contractorProfile || {})
   sendSuccess(res, {
     data: {
@@ -56,7 +60,11 @@ export const patchVendorMe = asyncHandler(async (req, res) => {
   const patch = normalizeVendorProfilePatch(req.body)
   if (!req.user.contractorProfile) req.user.contractorProfile = {}
   Object.assign(req.user.contractorProfile, patch)
+  req.user.markModified('contractorProfile')
   await req.user.save()
+  if (req.user.contractorProfile?.categoryIds?.length) {
+    await req.user.populate('contractorProfile.categoryIds', 'name slug')
+  }
   const progress = getVendorVerificationProgress(req.user.contractorProfile)
   sendSuccess(res, {
     data: {
@@ -202,6 +210,75 @@ export const linkVendorCrew = asyncHandler(async (req, res) => {
   sendSuccess(res, { data: { worker: worker.toSafeObject() } })
 })
 
+export const addVendorWorker = asyncHandler(async (req, res) => {
+  const err = requireApprovedVendor(req.user)
+  if (err) return sendError(res, { message: err, statusCode: HTTP_STATUS.FORBIDDEN })
+
+  const { fullName, phone, categoryId, skills } = req.body
+  const digits = String(phone ?? '').replace(/\D/g, '').slice(-10)
+  if (digits.length !== 10) {
+    return sendError(res, { message: 'Valid 10-digit mobile number is required', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+  if (!fullName || !fullName.trim()) {
+    return sendError(res, { message: 'Worker name is required', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  let worker = await User.findOne({ phone: digits })
+
+  if (worker) {
+    if (worker.role !== USER_ROLES.LABOUR) {
+      return sendError(res, {
+        message: `A user with this phone number is already registered as ${worker.role}.`,
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+      })
+    }
+    // Link worker to this vendor
+    worker.vendorId = req.user._id
+    if (fullName && fullName.trim()) {
+      worker.fullName = fullName.trim()
+    }
+    if (!worker.labourProfile) worker.labourProfile = {}
+
+    // Add categoryId if provided and not already present
+    if (categoryId) {
+      if (!worker.labourProfile.categoryIds) worker.labourProfile.categoryIds = []
+      const exists = worker.labourProfile.categoryIds.some((id) => String(id) === String(categoryId))
+      if (!exists) {
+        worker.labourProfile.categoryIds.push(categoryId)
+      }
+    }
+    if (skills && Array.isArray(skills)) {
+      worker.labourProfile.skills = Array.from(new Set([...(worker.labourProfile.skills || []), ...skills]))
+    }
+    worker.labourProfile.isExternal = true
+    await worker.save()
+  } else {
+    // Create new external worker user
+    worker = await User.create({
+      phone: digits,
+      fullName: fullName.trim(),
+      role: USER_ROLES.LABOUR,
+      vendorId: req.user._id,
+      isPhoneVerified: true,
+      accountStatus: 'active',
+      labourProfile: {
+        categoryIds: categoryId ? [categoryId] : [],
+        skills: Array.isArray(skills) ? skills : [],
+        availabilityStatus: 'available',
+        kycStatus: KYC_STATUS.VERIFIED,
+        isExternal: true,
+      },
+    })
+  }
+
+  await worker.populate('labourProfile.categoryIds', 'name')
+
+  sendSuccess(res, {
+    message: 'Worker added to crew successfully',
+    data: { worker: worker.toSafeObject() },
+  })
+})
+
 export const getVendorDashboard = asyncHandler(async (req, res) => {
   const err = requireApprovedVendor(req.user)
   if (err) return sendError(res, { message: err, statusCode: HTTP_STATUS.FORBIDDEN })
@@ -300,7 +377,7 @@ export const listVendorMarketplaceRequests = asyncHandler(async (req, res) => {
   const err = requireApprovedVendor(req.user)
   if (err) return sendError(res, { message: err, statusCode: HTTP_STATUS.FORBIDDEN })
 
-  const requests = await WorkforceRequest.find({
+  const rawRequests = await WorkforceRequest.find({
     sourceType: REQUEST_SOURCE.CORPORATE,
     status: {
       $in: [REQUEST_STATUS.PENDING_REVIEW, REQUEST_STATUS.ALLOCATING, REQUEST_STATUS.SEARCHING, REQUEST_STATUS.APPROVED],
@@ -314,7 +391,14 @@ export const listVendorMarketplaceRequests = asyncHandler(async (req, res) => {
     .populate('lines.categoryId', 'name group')
     .lean()
 
-  sendSuccess(res, { data: { requests } })
+  const { SystemSettings } = await import('../models/SystemSettings.js')
+  const settings = await SystemSettings.findOne().lean()
+
+  const matchingRequests = rawRequests.filter((request) => {
+    return LocationMatchingService.isRequestMatchingVendor(request, req.user, settings?.radiusConfig)
+  })
+
+  sendSuccess(res, { data: { requests: matchingRequests } })
 })
 
 export const acceptVendorMarketplaceRequest = asyncHandler(async (req, res) => {
@@ -344,13 +428,13 @@ export const acceptVendorMarketplaceRequest = asyncHandler(async (req, res) => {
   // Calculate platform fees from SystemPricing
   const { SystemPricing } = await import('../models/SystemPricing.js')
   const pricing = await SystemPricing.findOne().lean()
-  
+
   const vendorFee = pricing?.vendor?.platformCommission?.value ?? 0
   const corporateFee = pricing?.corporate?.platformFee?.value ?? 0
 
   request.vendorPlatformFeeAmount = vendorFee
   request.corporatePlatformFeeAmount = corporateFee
-  
+
   // Update request status to vendor_platform_fee_pending
   request.status = REQUEST_STATUS.VENDOR_PLATFORM_FEE_PENDING
   await request.save()
@@ -363,9 +447,9 @@ export const acceptVendorMarketplaceRequest = asyncHandler(async (req, res) => {
   const vendorName = req.user.contractorProfile?.businessName || req.user.fullName || 'A vendor'
   const clientRole = request.sourceType === 'individual' ? 'individual' : 'corporate'
   sendNotificationToUser(
-    request.clientId.toString(), 
-    'Request Accepted', 
-    `${vendorName} has accepted your request.`, 
+    request.clientId.toString(),
+    'Request Accepted',
+    `${vendorName} has accepted your request.`,
     { url: clientRole === 'corporate' ? `/corporate/requests/${request._id}` : `/app/bookings/${request._id}`, recipientRole: clientRole }
   )
 

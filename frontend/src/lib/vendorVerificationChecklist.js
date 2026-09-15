@@ -24,7 +24,10 @@ function isPanFieldComplete(pan) {
 export function getVendorVerificationChecklist(profile = {}) {
   const gst = normalizeGst(profile.gstNumber)
   const hasGst = gst.length > 0
-  const docCount = Array.isArray(profile.documents) ? profile.documents.length : 0
+  const docCount =
+    (Array.isArray(profile.documents) ? profile.documents.length : 0) +
+    (Array.isArray(profile.kycPhotos) ? profile.kycPhotos.length : 0) +
+    (profile.kycFrontImageUrl || profile.kycBackImageUrl || profile.kycPanImageUrl || profile.kycSelfieUrl ? 1 : 0)
   const vendorType = String(profile.vendorType || '').trim()
 
   return [
@@ -80,11 +83,11 @@ export function getVendorVerificationChecklist(profile = {}) {
     },
     {
       id: 'doc_any',
-      label: 'At least one verification document',
+      label: 'Additional business certificates / documents (Optional)',
       done: docCount > 0,
-      required: true,
-      section: 'documents',
-      hint: 'Upload any one type — only one document is mandatory',
+      required: false,
+      section: 'optional',
+      hint: 'Shop Act, GST certificate, labour licence, partnership deed, etc.',
     },
     {
       id: 'gst_number',
@@ -122,7 +125,7 @@ export function getVendorVerificationProgress(profile = {}) {
   }
 }
 
-export function buildVendorProfileFromForm(form) {
+export function buildVendorProfileFromForm(form = {}) {
   return {
     businessName: form.businessName,
     vendorType: form.vendorType,
@@ -136,5 +139,10 @@ export function buildVendorProfileFromForm(form) {
     contactEmail: form.contactEmail,
     contactPhone: form.contactPhone,
     documents: form.documents,
+    kycPhotos: form.kycPhotos,
+    kycFrontImageUrl: form.kycFrontImageUrl,
+    kycBackImageUrl: form.kycBackImageUrl,
+    kycPanImageUrl: form.kycPanImageUrl,
+    kycSelfieUrl: form.kycSelfieUrl,
   }
 }

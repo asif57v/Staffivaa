@@ -437,19 +437,60 @@ export const createRequest = asyncHandler(async (req, res) => {
 
   emitToUser('individual', user._id.toString(), 'request_created', { requestId: request._id.toString() })
   if (sourceType === REQUEST_SOURCE.CORPORATE) {
-    if (settings?.radiusConfig?.enableRadiusMatching) {
-      console.log(`[LocationMatching] Finding eligible vendors for request ${request._id}`)
-      const eligibleVendorIds = await LocationMatchingService.findEligibleVendors(request, settings.radiusConfig)
-      
-      console.log(`[LocationMatching] Found ${eligibleVendorIds.length} eligible vendors. Dispatching sockets...`)
-      for (const vId of eligibleVendorIds) {
-        emitToVendor(vId, 'corporate_request_created', { requestId: request._id.toString() })
-      }
+    console.log(`[LocationMatching] Finding eligible vendors (location + skills) for request ${request._id}`)
+    const eligibleVendorIds = await LocationMatchingService.findEligibleVendors(request, settings?.radiusConfig)
+
+    console.log(`[LocationMatching] Found ${eligibleVendorIds.length} eligible vendors. Dispatching notifications...`)
+
+    let populatedRequest = null
+    try {
+      populatedRequest = await WorkforceRequest.findById(request._id)
+        .populate('clientId', 'fullName corporateProfile.companyName')
+        .populate('projectId', 'name')
+        .populate('siteId', 'name')
+        .populate('lines.categoryId', 'name group')
+        .lean()
+    } catch (e) {
+      console.warn('[Populate Request Error]:', e.message)
     }
-    // Always emit globally so that the Vendor Marketplace (which lists all requests) can refresh in real-time
-    console.log(`[Socket] Emitting corporate_request_created to contractor and vendor roles globally`)
-    emitToRole('contractor', 'corporate_request_created', { requestId: request._id.toString() })
-    emitToRole('vendor', 'corporate_request_created', { requestId: request._id.toString() })
+
+    const firstLineCategory = populatedRequest?.lines?.[0]?.categoryId?.name || 'Worker'
+    const clientCompany = populatedRequest?.clientId?.corporateProfile?.companyName || populatedRequest?.clientId?.fullName || user.fullName || 'Corporate Client'
+
+    for (const vId of eligibleVendorIds) {
+      const notifTitle = 'New Matching Corporate Request 🏗️'
+      const notifBody = `New request matching your workforce skills and area (${request.locationText || 'nearby site'}).`
+
+      emitToVendor(vId, 'corporate_request_created', {
+        requestId: request._id.toString(),
+        title: notifTitle,
+        body: notifBody,
+        reference: request.reference,
+        request: populatedRequest || request,
+      })
+
+      triggerNotification({
+        userId: vId,
+        title: notifTitle,
+        body: notifBody,
+        type: 'NEW_ORDER',
+        relatedId: request._id,
+        relatedModel: 'WorkforceRequest',
+        url: '/vendor/requests',
+        recipientRole: 'contractor',
+        fcmExtra: {
+          requestId: request._id.toString(),
+          locationText: request.locationText || '',
+          locationLat: request.locationLat != null ? String(request.locationLat) : '',
+          locationLng: request.locationLng != null ? String(request.locationLng) : '',
+          categoryName: firstLineCategory,
+          clientName: clientCompany,
+          url: '/vendor/requests',
+          bookingType: 'corporate',
+          timeoutSeconds: '60',
+        },
+      }).catch((err) => console.error('[Vendor Notification Error]:', vId, err.message))
+    }
   }
 
   sendSuccess(res, { data: { request } }, HTTP_STATUS.CREATED)
@@ -1169,12 +1210,14 @@ export const payPlatformFee = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Forbidden', statusCode: HTTP_STATUS.FORBIDDEN })
   }
 
-  if (user.walletBalance < feeAmount) {
+  if (feeAmount > 0 && user.walletBalance < feeAmount) {
     return sendError(res, { message: 'Insufficient wallet balance to pay platform fee', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
 
-  user.walletBalance -= feeAmount
-  await user.save()
+  if (feeAmount > 0) {
+    user.walletBalance -= feeAmount
+    await user.save()
+  }
 
   await WalletTransaction.create({
     transactionId: `FEE-${isCorporate ? 'CORP' : 'VEND'}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,

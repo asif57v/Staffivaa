@@ -11,6 +11,7 @@ import {
   useGetEnterpriseCompanyApplicationsQuery,
   useUpdateApplicationStatusMutation,
   useGetJobWorkersAttendanceQuery,
+  useConcludeEnterpriseJobMutation,
 } from '../../../store/api/enterpriseApi.js'
 import {
   useCreateRechargeOrderMutation,
@@ -93,6 +94,21 @@ export function EnterpriseJobDetailPage() {
   const [createRechargeOrder] = useCreateRechargeOrderMutation()
   const [verifyRechargePayment] = useVerifyRechargePaymentMutation()
   const [isProcessingPay, setIsProcessingPay] = useState(false)
+
+  // 🏁 Conclude Project state
+  const [showConcludeModal, setShowConcludeModal] = useState(false)
+  const [concludeDate, setConcludeDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [concludeJob, { isLoading: isConcluding }] = useConcludeEnterpriseJobMutation()
+
+  const handleConcludeJob = async () => {
+    try {
+      await concludeJob({ id: jobId, endDate: concludeDate }).unwrap()
+      toast.success('Project contract concluded successfully! Daily check-in is now closed.')
+      setShowConcludeModal(false)
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to conclude project')
+    }
+  }
 
   const handlePayAndSettle = async (amount, workerName, workerId, applicationId) => {
     if (!amount || amount <= 0) {
@@ -219,32 +235,53 @@ export function EnterpriseJobDetailPage() {
 
   return (
     <div className="px-3.5 py-4 sm:p-6 pb-28 space-y-5 max-w-7xl mx-auto min-h-screen bg-slate-50/50">
-      {/* Back button + Title */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => navigate('/enterprise/jobs')}
-          className="flex h-9 w-9 items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors shrink-0"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-[20px] sm:text-[22px] font-extrabold text-slate-900 leading-tight">{job.jobTitle}</h1>
-            <span
-              className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                job.status === 'approved'
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : job.status === 'rejected'
-                  ? 'bg-rose-100 text-rose-800'
-                  : 'bg-amber-100 text-amber-800'
-              }`}
-            >
-              {job.status.toUpperCase()}
-            </span>
+      {/* Back button + Title + Conclude Action */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/enterprise/jobs')}
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors shrink-0"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-[20px] sm:text-[22px] font-extrabold text-slate-900 leading-tight">{job.jobTitle}</h1>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                  job.status === 'closed'
+                    ? 'bg-slate-200 text-slate-700'
+                    : job.status === 'approved'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : job.status === 'rejected'
+                    ? 'bg-rose-100 text-rose-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}
+              >
+                {job.status === 'closed' ? 'CONTRACT CONCLUDED' : job.status.toUpperCase()}
+              </span>
+            </div>
+            <p className="text-[12.5px] font-medium text-slate-500 mt-0.5">
+              Category: <span className="font-bold text-slate-700">{job.categoryId?.name || job.department || 'General'}</span>
+            </p>
           </div>
-          <p className="text-[12.5px] font-medium text-slate-500 mt-0.5">
-            Category: <span className="font-bold text-slate-700">{job.categoryId?.name || job.department || 'General'}</span>
-          </p>
+        </div>
+
+        {/* Conclude Project Action Button */}
+        <div>
+          {job.status === 'closed' ? (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-[12px] font-bold">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              Contract Concluded {job.timeline?.projectEndDate ? `(${new Date(job.timeline.projectEndDate).toLocaleDateString('en-IN')})` : ''}
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowConcludeModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[12px] font-extrabold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+            >
+              🏁 Conclude Project / End Contract
+            </button>
+          )}
         </div>
       </div>
 
@@ -753,6 +790,65 @@ export function EnterpriseJobDetailPage() {
             application={offerModalApp}
             onClose={() => setOfferModalApp(null)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Conclude Project Modal */}
+      <AnimatePresence>
+        {showConcludeModal && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs p-4 flex items-center justify-center">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-100 p-6 space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2 text-rose-600">
+                  <Clock className="h-5 w-5" />
+                  <h3 className="text-[16px] font-extrabold text-slate-900">Conclude Project Contract</h3>
+                </div>
+                <button
+                  onClick={() => setShowConcludeModal(false)}
+                  className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-[13px] text-slate-600 leading-relaxed">
+                Ending this project contract will <strong className="text-slate-900">close and lock worker check-in</strong>. The project attendance history and salary calculation will be archived for records and salary slip generation.
+              </p>
+
+              <div className="space-y-1.5">
+                <label className="text-[11.5px] font-extrabold text-slate-600 uppercase tracking-wide">Contract End Date</label>
+                <input
+                  type="date"
+                  value={concludeDate}
+                  onChange={(e) => setConcludeDate(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-[13px] font-bold text-slate-900 focus:outline-hidden focus:border-rose-500"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowConcludeModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-[12.5px] font-bold hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConcludeJob}
+                  disabled={isConcluding}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[12.5px] font-extrabold shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isConcluding ? 'Concluding...' : 'Confirm & End Contract'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
@@ -15,12 +15,15 @@ import {
   ChevronDown,
   ChevronRight,
   Check,
+  Search,
+  X,
 } from 'lucide-react'
 import { MobileShell } from '../../layouts/MobileShell.jsx'
 import { AppAmbientBackground } from '../../components/app/AppAmbientBackground.jsx'
 import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import { LabourCategorySetup } from '../../components/auth/LabourCategorySetup.jsx'
+import { fetchLabourCategoriesGrouped } from '../../api/labourCategoriesApi.js'
 import { ROLE_LABELS, USER_ROLES } from '../../constants/userRoles.js'
 import { getRoleHomePath } from '../../lib/roleHomePath.js'
 import { requestLoginOtp, requestRegisterOtp, verifyLogin, verifyRegister } from '../../api/authApi.js'
@@ -138,6 +141,81 @@ export function AuthEntryPage() {
   const [busy, setBusy] = useState(false)
   const [banner, setBanner] = useState(null)
 
+  // Vendor skills state
+  const dropdownRef = useRef(null)
+  const [categories, setCategories] = useState([])
+  const [loadingCategories, setLoadingCategories] = useState(false)
+  const [vendorSkills, setVendorSkills] = useState([])
+  const [skillSearch, setSkillSearch] = useState('')
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoadingCategories(true)
+      try {
+        const json = await fetchLabourCategoriesGrouped()
+        if (cancelled) return
+        const payload = json?.data ?? json
+        const flat = []
+        for (const group of payload?.groups ?? []) {
+          for (const c of group.categories ?? []) {
+            flat.push({
+              id: String(c._id || c.id),
+              name: c.name,
+              subtitle: c.subtitle,
+              group: group.name,
+              kind: group.kind,
+            })
+          }
+        }
+        setCategories(flat)
+      } catch (err) {
+        console.error('Failed to load categories:', err)
+      } finally {
+        if (!cancelled) setLoadingCategories(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
+  const filteredSkills = useMemo(() => {
+    if (!skillSearch.trim()) return categories
+    const q = skillSearch.toLowerCase().trim()
+    return categories.filter(
+      (c) => c.name.toLowerCase().includes(q) || (c.group && c.group.toLowerCase().includes(q))
+    )
+  }, [categories, skillSearch])
+
+  const selectedCategoryObjects = useMemo(() => {
+    return categories.filter((c) => vendorSkills.includes(c.id))
+  }, [categories, vendorSkills])
+
+  const toggleVendorSkill = (catId) => {
+    setVendorSkills((prev) => {
+      if (prev.includes(catId)) {
+        return prev.filter((id) => id !== catId)
+      } else {
+        return [...prev, catId]
+      }
+    })
+    if (banner?.variant === 'error') setBanner(null)
+  }
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const reason = sessionStorage.getItem('staffivaa_logout_reason')
@@ -226,10 +304,17 @@ export function AuthEntryPage() {
           setBusy(false)
           return
         }
-        if (role === USER_ROLES.CONTRACTOR && !businessName.trim()) {
-          setBanner({ variant: 'error', message: 'Business name is required.' })
-          setBusy(false)
-          return
+        if (role === USER_ROLES.CONTRACTOR) {
+          if (!businessName.trim()) {
+            setBanner({ variant: 'error', message: 'Business name is required.' })
+            setBusy(false)
+            return
+          }
+          if (vendorSkills.length === 0) {
+            setBanner({ variant: 'error', message: 'Please select at least one workforce skill / trade.' })
+            setBusy(false)
+            return
+          }
         }
         if ((role === USER_ROLES.CORPORATE || role === USER_ROLES.ENTERPRISE) && gstNumber.trim() && !GST_RE.test(gstNumber.trim())) {
           setBanner({ variant: 'error', message: 'GSTIN must be exactly 15 characters (or leave blank).' })
@@ -307,6 +392,10 @@ export function AuthEntryPage() {
         }
         if (role === USER_ROLES.CONTRACTOR) {
           body.businessName = businessName.trim()
+          body.categoryIds = vendorSkills
+          body.skills = categories
+            .filter((c) => vendorSkills.includes(c.id))
+            .map((c) => c.name)
         }
         const res = await verifyRegister(body)
         const { token, user } = res.data
@@ -805,10 +894,295 @@ export function AuthEntryPage() {
                         </>
                       ) : null}
                       {role === USER_ROLES.CONTRACTOR ? (
-                        <div id="field-business">
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Business Name</label>
-                          <input type="text" onFocus={handleInputFocus} style={{ width: '100%', borderRadius: 14, border: '2px solid #e2e8f0', padding: '14px 16px', fontSize: 15, fontWeight: 500, color: '#0f172a', outline: 'none', boxSizing: 'border-box', background: '#fff' }} value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
-                        </div>
+                        <>
+                          <div id="field-business">
+                            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Business Name</label>
+                            <input type="text" onFocus={handleInputFocus} style={{ width: '100%', borderRadius: 14, border: '2px solid #e2e8f0', padding: '14px 16px', fontSize: 15, fontWeight: 500, color: '#0f172a', outline: 'none', boxSizing: 'border-box', background: '#fff' }} value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
+                          </div>
+
+                          <div id="field-vendor-skills" ref={dropdownRef} style={{ marginTop: 14, position: 'relative' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                                Workforce Skills / Trades <span style={{ color: '#ef4444' }}>*</span>
+                              </label>
+                              {vendorSkills.length > 0 && (
+                                <span style={{ fontSize: 11, fontWeight: 800, color: '#92400e', background: '#fef3c7', padding: '2px 8px', borderRadius: 8, border: '1px solid #fde68a' }}>
+                                  {vendorSkills.length} selected
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Dropdown Trigger Button */}
+                            <div
+                              onClick={() => setIsDropdownOpen((prev) => !prev)}
+                              style={{
+                                width: '100%',
+                                minHeight: 52,
+                                borderRadius: 14,
+                                border: isDropdownOpen
+                                  ? '2px solid #FFD100'
+                                  : vendorSkills.length === 0 && banner?.variant === 'error'
+                                  ? '2px solid #fbbf24'
+                                  : '2px solid #e2e8f0',
+                                padding: '8px 14px',
+                                background: '#fff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 8,
+                                cursor: 'pointer',
+                                boxSizing: 'border-box',
+                                boxShadow: isDropdownOpen ? '0 0 0 3px rgba(255, 209, 0, 0.2)' : 'none',
+                                transition: 'all 0.15s ease',
+                              }}
+                            >
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, flex: 1, minWidth: 0, alignItems: 'center' }}>
+                                {vendorSkills.length === 0 ? (
+                                  <span style={{ color: '#94a3b8', fontSize: 14, fontWeight: 500 }}>
+                                    Select workforce skills from dropdown…
+                                  </span>
+                                ) : (
+                                  selectedCategoryObjects.slice(0, 3).map((cat) => (
+                                    <span
+                                      key={cat.id}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        background: '#FFD100',
+                                        color: '#1a0800',
+                                        fontWeight: 700,
+                                        fontSize: 11.5,
+                                        padding: '3px 8px',
+                                        borderRadius: 8,
+                                      }}
+                                    >
+                                      {cat.name}
+                                      <span
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          toggleVendorSkill(cat.id)
+                                        }}
+                                        style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+                                      >
+                                        <X style={{ width: 12, height: 12 }} />
+                                      </span>
+                                    </span>
+                                  ))
+                                )}
+                                {vendorSkills.length > 3 && (
+                                  <span style={{ fontSize: 11.5, fontWeight: 700, color: '#475569', background: '#f1f5f9', padding: '3px 8px', borderRadius: 8 }}>
+                                    +{vendorSkills.length - 3} more
+                                  </span>
+                                )}
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                {vendorSkills.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setVendorSkills([])
+                                    }}
+                                    title="Clear all"
+                                    style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#94a3b8', padding: 2 }}
+                                  >
+                                    <X style={{ width: 15, height: 15 }} />
+                                  </button>
+                                )}
+                                <motion.div
+                                  animate={{ rotate: isDropdownOpen ? 180 : 0 }}
+                                  transition={{ duration: 0.2 }}
+                                  style={{ display: 'flex', alignItems: 'center', color: '#64748b' }}
+                                >
+                                  <ChevronDown style={{ width: 18, height: 18 }} />
+                                </motion.div>
+                              </div>
+                            </div>
+
+                            {/* Dropdown Menu Popup */}
+                            <AnimatePresence>
+                              {isDropdownOpen && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                                  transition={{ duration: 0.18 }}
+                                  style={{
+                                    position: 'absolute',
+                                    top: 'calc(100% + 6px)',
+                                    left: 0,
+                                    right: 0,
+                                    zIndex: 60,
+                                    background: '#ffffff',
+                                    borderRadius: 16,
+                                    border: '1px solid #e2e8f0',
+                                    boxShadow: '0 12px 32px rgba(15, 23, 42, 0.15)',
+                                    overflow: 'hidden',
+                                  }}
+                                >
+                                  {/* Search inside Dropdown */}
+                                  <div style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+                                    <div style={{ position: 'relative' }}>
+                                      <input
+                                        type="text"
+                                        autoFocus
+                                        value={skillSearch}
+                                        onChange={(e) => setSkillSearch(e.target.value)}
+                                        placeholder="Filter skills (e.g. Mason, Electrician)..."
+                                        style={{
+                                          width: '100%',
+                                          borderRadius: 10,
+                                          border: '1px solid #cbd5e1',
+                                          padding: '8px 10px 8px 30px',
+                                          fontSize: 12.5,
+                                          color: '#0f172a',
+                                          outline: 'none',
+                                          boxSizing: 'border-box',
+                                          background: '#fff',
+                                        }}
+                                      />
+                                      <Search style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, color: '#94a3b8', pointerEvents: 'none' }} />
+                                      {skillSearch && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setSkillSearch('')}
+                                          style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#94a3b8', padding: 2 }}
+                                        >
+                                          <X style={{ width: 13, height: 13 }} />
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, fontSize: 11, fontWeight: 700 }}>
+                                      <span style={{ color: '#64748b' }}>
+                                        {filteredSkills.length} skills available
+                                      </span>
+                                      <div style={{ display: 'flex', gap: 10 }}>
+                                        {vendorSkills.length < filteredSkills.length && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const allFilteredIds = filteredSkills.map((c) => c.id)
+                                              setVendorSkills((prev) => Array.from(new Set([...prev, ...allFilteredIds])))
+                                            }}
+                                            style={{ border: 'none', background: 'transparent', color: '#d97706', cursor: 'pointer', fontWeight: 700, padding: 0 }}
+                                          >
+                                            Select All
+                                          </button>
+                                        )}
+                                        {vendorSkills.length > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setVendorSkills([])}
+                                            style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', fontWeight: 700, padding: 0 }}
+                                          >
+                                            Clear All
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Scrollable list of skills */}
+                                  <div style={{ maxHeight: 220, overflowY: 'auto', padding: '4px 0' }}>
+                                    {loadingCategories ? (
+                                      <p style={{ fontSize: 12, color: '#94a3b8', padding: '16px', textAlign: 'center', margin: 0 }}>
+                                        Loading skills catalogue…
+                                      </p>
+                                    ) : filteredSkills.length === 0 ? (
+                                      <p style={{ fontSize: 12, color: '#94a3b8', padding: '16px', textAlign: 'center', margin: 0 }}>
+                                        No matching skills found.
+                                      </p>
+                                    ) : (
+                                      filteredSkills.map((cat) => {
+                                        const isSelected = vendorSkills.includes(cat.id)
+                                        return (
+                                          <div
+                                            key={cat.id}
+                                            onClick={() => toggleVendorSkill(cat.id)}
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'space-between',
+                                              padding: '9px 14px',
+                                              cursor: 'pointer',
+                                              background: isSelected ? 'rgba(255, 209, 0, 0.12)' : 'transparent',
+                                              borderBottom: '1px solid #f8fafc',
+                                              transition: 'background 0.1s',
+                                            }}
+                                            onMouseEnter={(e) => {
+                                              if (!isSelected) e.currentTarget.style.background = '#f8fafc'
+                                            }}
+                                            onMouseLeave={(e) => {
+                                              if (!isSelected) e.currentTarget.style.background = 'transparent'
+                                            }}
+                                          >
+                                            <div style={{ minWidth: 0, flex: 1, paddingRight: 8 }}>
+                                              <span style={{ fontSize: 13, fontWeight: isSelected ? 800 : 500, color: isSelected ? '#1a0800' : '#1e293b' }}>
+                                                {cat.name}
+                                              </span>
+                                              {cat.group && (
+                                                <span style={{ display: 'block', fontSize: 10, color: '#94a3b8', marginTop: 1 }}>
+                                                  {cat.group}
+                                                </span>
+                                              )}
+                                            </div>
+
+                                            <span
+                                              style={{
+                                                width: 20,
+                                                height: 20,
+                                                borderRadius: 6,
+                                                background: isSelected ? '#FFD100' : '#fff',
+                                                border: isSelected ? '1px solid #eab308' : '2px solid #cbd5e1',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                flexShrink: 0,
+                                              }}
+                                            >
+                                              {isSelected && (
+                                                <Check style={{ width: 13, height: 13, strokeWidth: 3, color: '#1a0800' }} />
+                                              )}
+                                            </span>
+                                          </div>
+                                        )
+                                      })
+                                    )}
+                                  </div>
+
+                                  {/* Dropdown Footer Done button */}
+                                  <div style={{ padding: '8px 12px', borderTop: '1px solid #f1f5f9', background: '#fafafa', display: 'flex', justifyContent: 'flex-end' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsDropdownOpen(false)}
+                                      style={{
+                                        padding: '6px 14px',
+                                        borderRadius: 10,
+                                        border: 'none',
+                                        background: '#0f172a',
+                                        color: '#fff',
+                                        fontSize: 12,
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      Done
+                                    </button>
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+
+                            {vendorSkills.length === 0 && (
+                              <p style={{ marginTop: 5, fontSize: 11, color: '#94a3b8' }}>
+                                * Select at least 1 trade from the dropdown
+                              </p>
+                            )}
+                          </div>
+                        </>
                       ) : null}
                     </>
                   ) : null}

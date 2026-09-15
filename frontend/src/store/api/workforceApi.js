@@ -130,6 +130,11 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       invalidatesTags: ['Crew', 'VendorDashboard'],
     }),
+    addVendorWorker: build.mutation({
+      query: (body) => ({ url: '/vendor/crew/add', method: 'POST', body }),
+      transformResponse: unwrap,
+      invalidatesTags: ['Crew', 'VendorDashboard'],
+    }),
     getVendorJobs: build.query({
       query: () => '/vendor/jobs',
       transformResponse: unwrap,
@@ -603,6 +608,7 @@ export const {
   useGetVendorDashboardQuery,
   useGetVendorCrewQuery,
   useLinkVendorCrewMutation,
+  useAddVendorWorkerMutation,
   useGetVendorJobsQuery,
   useAcceptVendorJobMutation,
   useGetVendorSettlementsQuery,

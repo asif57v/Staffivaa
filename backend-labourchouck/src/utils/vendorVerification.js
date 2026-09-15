@@ -46,7 +46,10 @@ export function isPanFieldComplete(pan) {
 export function getVendorVerificationChecklist(profile = {}) {
   const gst = String(profile.gstNumber || '').trim().toUpperCase()
   const hasGst = gst.length > 0
-  const docCount = Array.isArray(profile.documents) ? profile.documents.length : 0
+  const docCount =
+    (Array.isArray(profile.documents) ? profile.documents.length : 0) +
+    (Array.isArray(profile.kycPhotos) ? profile.kycPhotos.length : 0) +
+    (profile.kycFrontImageUrl || profile.kycBackImageUrl || profile.kycPanImageUrl || profile.kycSelfieUrl ? 1 : 0)
   const vendorType = String(profile.vendorType || '').trim()
 
   return [
@@ -102,11 +105,11 @@ export function getVendorVerificationChecklist(profile = {}) {
     },
     {
       id: 'doc_any',
-      label: 'At least one verification document',
+      label: 'Additional business certificates / documents (Optional)',
       done: docCount > 0,
-      required: true,
-      section: 'documents',
-      hint: 'Any type — licence, GST, PAN, shop act, etc.',
+      required: false,
+      section: 'optional',
+      hint: 'Shop Act, GST certificate, labour licence, partnership deed, etc.',
     },
     {
       id: 'gst_number',
@@ -132,7 +135,10 @@ export function getVendorVerificationProgress(profile = {}) {
   const requiredDone = required.filter((i) => i.done).length
   const formItems = required.filter((i) => i.section === 'form')
   const formDone = formItems.filter((i) => i.done).length
-  const docCount = Array.isArray(profile.documents) ? profile.documents.length : 0
+  const docCount =
+    (Array.isArray(profile.documents) ? profile.documents.length : 0) +
+    (Array.isArray(profile.kycPhotos) ? profile.kycPhotos.length : 0) +
+    (profile.kycFrontImageUrl || profile.kycBackImageUrl || profile.kycPanImageUrl || profile.kycSelfieUrl ? 1 : 0)
 
   return {
     checklist,
@@ -178,6 +184,13 @@ export function normalizeVendorProfilePatch(body = {}) {
   }
   if (body.gstNumber != null) out.gstNumber = String(body.gstNumber).trim().toUpperCase()
   if (body.panNumber != null) out.panNumber = normalizePanValue(body.panNumber)
+  if (body.aadhaarNumber != null || body.aadhaar != null) {
+    const raw = String(body.aadhaarNumber || body.aadhaar || '').replace(/\D/g, '').slice(0, 12)
+    if (raw) {
+      out.aadhaarNumber = raw
+      out.aadhaarMasked = `XXXX-XXXX-${raw.slice(-4)}`
+    }
+  }
   if (body.businessAddress != null) out.businessAddress = String(body.businessAddress).trim()
   if (body.city != null) out.city = String(body.city).trim()
   if (body.state != null) out.state = String(body.state).trim()
@@ -185,5 +198,28 @@ export function normalizeVendorProfilePatch(body = {}) {
   if (body.contactPersonName != null) out.contactPersonName = String(body.contactPersonName).trim()
   if (body.contactEmail != null) out.contactEmail = String(body.contactEmail).trim().toLowerCase()
   if (body.contactPhone != null) out.contactPhone = String(body.contactPhone).replace(/\D/g, '').slice(-10)
+
+  // Photos
+  if (body.kycFrontImageUrl != null) out.kycFrontImageUrl = String(body.kycFrontImageUrl).trim()
+  if (body.kycBackImageUrl != null) out.kycBackImageUrl = String(body.kycBackImageUrl).trim()
+  if (body.kycPanImageUrl != null) out.kycPanImageUrl = String(body.kycPanImageUrl).trim()
+  if (body.kycSelfieUrl != null) out.kycSelfieUrl = String(body.kycSelfieUrl).trim()
+  if (Array.isArray(body.kycPhotos || body.photos)) {
+    out.kycPhotos = (body.kycPhotos || body.photos)
+      .map((p) => ({
+        label: String(p.label || '').trim(),
+        url: String(p.url || '').trim(),
+        type: String(p.type || '').trim(),
+        uploadedAt: p.uploadedAt ? new Date(p.uploadedAt) : new Date(),
+      }))
+      .filter((p) => Boolean(p.url))
+  }
+  if (Array.isArray(body.categoryIds)) {
+    out.categoryIds = body.categoryIds.filter(Boolean)
+  }
+  if (Array.isArray(body.skills)) {
+    out.skills = body.skills.map((s) => String(s).trim()).filter(Boolean)
+  }
+
   return out
 }

@@ -117,8 +117,40 @@ export const checkIn = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Assignment not found', statusCode: HTTP_STATUS.NOT_FOUND })
   }
 
+  if (assignment && assignment.requestId?.endDate) {
+    const endDate = new Date(assignment.requestId.endDate)
+    if (!isNaN(endDate.getTime())) {
+      const isMidnight = endDate.getUTCHours() === 0 && endDate.getUTCMinutes() === 0 && endDate.getUTCSeconds() === 0
+      const cutoff = isMidnight ? new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999).getTime() : endDate.getTime()
+      if (Date.now() > cutoff) {
+        return sendError(res, { message: 'This assignment contract has ended. Check-in is closed.', statusCode: HTTP_STATUS.BAD_REQUEST })
+      }
+    }
+  }
+
   if (enterpriseApp) {
     const jobDoc = await EnterpriseJob.findById(enterpriseApp.jobId).lean()
+
+    // ── Contract Expiration & Job End Verification ──
+    const endRaw = enterpriseApp.joiningDetails?.endDate || enterpriseApp.offerDetails?.endDate || jobDoc?.timeline?.projectEndDate
+    let isJobEnded = jobDoc?.status === 'closed' || enterpriseApp.status === 'completed' || enterpriseApp.status === 'ended'
+    if (!isJobEnded && endRaw) {
+      const endDate = new Date(endRaw)
+      if (!isNaN(endDate.getTime())) {
+        const isMidnight = endDate.getUTCHours() === 0 && endDate.getUTCMinutes() === 0 && endDate.getUTCSeconds() === 0
+        const cutoff = isMidnight ? new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999).getTime() : endDate.getTime()
+        if (Date.now() > cutoff) {
+          isJobEnded = true
+        }
+      }
+    }
+    if (isJobEnded) {
+      return sendError(res, { 
+        message: 'This enterprise project contract has ended. Daily check-in is closed.', 
+        statusCode: HTTP_STATUS.BAD_REQUEST 
+      })
+    }
+
     if (jobDoc && jobDoc.locationPoint && Array.isArray(jobDoc.locationPoint.coordinates) && jobDoc.locationPoint.coordinates.length === 2) {
       const [siteLng, siteLat] = jobDoc.locationPoint.coordinates
       if (siteLat != null && siteLng != null) {

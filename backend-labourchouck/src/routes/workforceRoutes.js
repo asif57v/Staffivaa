@@ -32,6 +32,10 @@ import {
   updateExtraWorkStatus,
 } from '../controllers/extraWorkController.js'
 import { getSystemPricing } from '../controllers/systemPricingController.js'
+import {
+  reviewCorporateAdmin,
+  reviewContractorAdmin,
+} from '../controllers/corporateController.js'
 import { bookingLimiter, paymentLimiter } from '../middleware/rateLimiters.js'
 
 const router = Router()
@@ -69,5 +73,9 @@ router.post('/attendance/check-out', restrictTo(USER_ROLES.LABOUR), checkOut)
 router.get('/attendance', restrictTo(...APP_ROLES, USER_ROLES.ADMIN), listAttendance)
 router.get('/attendance/monitor', restrictTo(USER_ROLES.CONTRACTOR, USER_ROLES.CORPORATE, USER_ROLES.ADMIN), monitorAttendance)
 router.post('/attendance/vendor-mark', restrictTo(USER_ROLES.CONTRACTOR), markAttendanceVendor)
+
+// Admin review endpoints (route aliases for /admin/workforce/...)
+router.patch('/corporates/:id/review', restrictTo(USER_ROLES.ADMIN), reviewCorporateAdmin)
+router.patch('/vendors/:id/review', restrictTo(USER_ROLES.ADMIN), reviewContractorAdmin)
 
 export default router

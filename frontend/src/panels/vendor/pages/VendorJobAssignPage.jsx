@@ -1,9 +1,14 @@
 import { useState, useMemo } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, Circle, Users } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Circle, Users, Plus, UserPlus, X, Check, Phone } from 'lucide-react'
 import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
 import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
-import { useGetVendorJobsQuery, useGetVendorCrewQuery, useAssignWorkforceMutation } from '../../../store/api/workforceApi.js'
+import { 
+  useGetVendorJobsQuery, 
+  useGetVendorCrewQuery, 
+  useAssignWorkforceMutation,
+  useAddVendorWorkerMutation
+} from '../../../store/api/workforceApi.js'
 
 export function VendorJobAssignPage() {
   const { id } = useParams()
@@ -12,13 +17,25 @@ export function VendorJobAssignPage() {
   const { data: jobsData, isLoading: loadingJobs } = useGetVendorJobsQuery()
   const { data: crewData, isLoading: loadingCrew } = useGetVendorCrewQuery()
   const [assignWorkforce, { isLoading: submitting }] = useAssignWorkforceMutation()
+  const [addVendorWorker, { isLoading: addingWorker }] = useAddVendorWorkerMutation()
 
   const [selectedWorkers, setSelectedWorkers] = useState({}) // { [labourId]: categoryId }
   const [workerRates, setWorkerRates] = useState({}) // { [labourId]: number }
+  const [localAddedWorkers, setLocalAddedWorkers] = useState([])
+
+  // Add Worker Modal State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [newWorkerForm, setNewWorkerForm] = useState({
+    fullName: '',
+    phone: '',
+    categoryId: '',
+    perDayRate: ''
+  })
+  const [addWorkerError, setAddWorkerError] = useState('')
+  const [toastMessage, setToastMessage] = useState('')
 
   const allocation = (jobsData?.allocations ?? []).find((a) => String(a._id) === String(id))
   const req = allocation?.requestId
-  const crew = crewData?.crew ?? []
 
   const requestedSkills = useMemo(() => {
     if (!req?.lines) return []
@@ -28,6 +45,20 @@ export function VendorJobAssignPage() {
       quantity: line.quantity
     }))
   }, [req])
+
+  // Combine fetched crew with newly created local crew
+  const crew = useMemo(() => {
+    const combined = [...(crewData?.crew ?? [])]
+    for (const nw of localAddedWorkers) {
+      const idx = combined.findIndex(w => String(w._id) === String(nw._id))
+      if (idx >= 0) {
+        combined[idx] = { ...combined[idx], ...nw }
+      } else {
+        combined.unshift(nw)
+      }
+    }
+    return combined
+  }, [crewData, localAddedWorkers])
 
   const handleToggleWorker = (labourId, categoryId) => {
     setSelectedWorkers(prev => {
@@ -48,6 +79,91 @@ export function VendorJobAssignPage() {
 
   const handleRateChange = (labourId, value) => {
     setWorkerRates(prev => ({ ...prev, [labourId]: value }))
+  }
+
+  const handleOpenAddModal = (defaultCategoryId = '') => {
+    setNewWorkerForm({
+      fullName: '',
+      phone: '',
+      categoryId: defaultCategoryId || requestedSkills[0]?.categoryId || '',
+      perDayRate: ''
+    })
+    setAddWorkerError('')
+    setIsAddModalOpen(true)
+  }
+
+  const handleCreateWorker = async (e) => {
+    e.preventDefault()
+    setAddWorkerError('')
+
+    const fullName = newWorkerForm.fullName.trim()
+    const phone = newWorkerForm.phone.trim()
+    const categoryId = newWorkerForm.categoryId
+    const perDayRate = newWorkerForm.perDayRate.trim()
+
+    if (!fullName) {
+      setAddWorkerError('Worker name is required')
+      return
+    }
+    if (phone.length !== 10) {
+      setAddWorkerError('Enter a valid 10-digit mobile number')
+      return
+    }
+    if (!categoryId) {
+      setAddWorkerError('Please select a skill category')
+      return
+    }
+
+    try {
+      const res = await addVendorWorker({
+        fullName,
+        phone,
+        categoryId
+      }).unwrap()
+
+      const createdWorker = res?.worker || res?.data?.worker
+
+      if (createdWorker?._id) {
+        const categoryObj = requestedSkills.find(s => String(s.categoryId) === String(categoryId))
+        const categoryName = categoryObj?.categoryName || 'Skill'
+
+        const normalizedWorker = {
+          ...createdWorker,
+          labourProfile: {
+            ...createdWorker.labourProfile,
+            categoryIds: [
+              ...(createdWorker.labourProfile?.categoryIds || []),
+              { _id: categoryId, name: categoryName }
+            ]
+          }
+        }
+
+        setLocalAddedWorkers(prev => [
+          normalizedWorker,
+          ...prev.filter(w => String(w._id) !== String(createdWorker._id))
+        ])
+
+        // Auto-select for this job
+        setSelectedWorkers(prev => ({
+          ...prev,
+          [createdWorker._id]: categoryId
+        }))
+
+        // Prefill daily rate if provided
+        if (perDayRate && Number(perDayRate) > 0) {
+          setWorkerRates(prev => ({
+            ...prev,
+            [createdWorker._id]: perDayRate
+          }))
+        }
+
+        setIsAddModalOpen(false)
+        setToastMessage(`${fullName} added and assigned to ${categoryName}!`)
+        setTimeout(() => setToastMessage(''), 3500)
+      }
+    } catch (err) {
+      setAddWorkerError(err?.data?.message || err?.message || 'Failed to add worker')
+    }
   }
 
   const handleAssign = async () => {
@@ -102,7 +218,15 @@ export function VendorJobAssignPage() {
   const isReadyToSubmit = isQuotaMet && allRatesValid
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-6 pb-24 relative">
+      {/* Success Toast */}
+      {toastMessage && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 rounded-2xl px-5 py-3 text-slate-900 bg-amber-400 font-bold text-sm shadow-xl transition-all duration-300 border border-amber-500/30">
+          <Check className="h-4 w-4 shrink-0 text-slate-950 stroke-[3]" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       <div className="flex items-center gap-3">
         <Link to={`/vendor/jobs/${id}`} className="inline-flex items-center gap-2 text-sm font-bold text-brand">
           <ArrowLeft className="h-4 w-4" aria-hidden />
@@ -119,7 +243,7 @@ export function VendorJobAssignPage() {
         
         // Filter crew that have this skill in their labourProfile
         const eligibleCrew = crew.filter(w => {
-          if (!skill.categoryId) return false;
+          if (!skill.categoryId) return false
           return w.labourProfile?.categoryIds?.some(cat => 
             String(cat?._id || cat) === String(skill.categoryId)
           )
@@ -134,14 +258,36 @@ export function VendorJobAssignPage() {
                   Select {skill.quantity} worker{skill.quantity > 1 ? 's' : ''}
                 </p>
               </div>
-              <div className={`px-3 py-1 rounded-full text-xs font-bold ${isComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
-                {assignedCount} / {skill.quantity} Assigned
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddModal(skill.categoryId)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-900 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 rounded-xl transition-all border border-amber-300 shadow-sm"
+                >
+                  <Plus className="h-3.5 w-3.5 text-slate-900" />
+                  <span>Add Worker</span>
+                </button>
+                <div className={`px-3 py-1.5 rounded-full text-xs font-bold ${isComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                  {assignedCount} / {skill.quantity} Assigned
+                </div>
               </div>
             </div>
 
             {eligibleCrew.length === 0 ? (
-              <AppSurface className="bg-slate-50 border-dashed border-slate-200">
-                <p className="text-xs text-slate-500 text-center py-4">No matching workers in your crew.</p>
+              <AppSurface className="bg-slate-50 border-dashed border-slate-200 p-6 text-center">
+                <Users className="h-9 w-9 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm font-bold text-slate-700">No {skill.categoryName} in your registered crew</p>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                  Add an external worker by Name & Mobile Number — they don&apos;t need to be registered on the app beforehand.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddModal(skill.categoryId)}
+                  className="mt-3.5 inline-flex items-center gap-2 px-4 py-2.5 text-xs font-extrabold text-slate-900 bg-[#FFC107] hover:bg-amber-400 active:bg-amber-500 rounded-xl shadow-sm transition-all"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  <span>+ Add {skill.categoryName} Directly</span>
+                </button>
               </AppSurface>
             ) : (
               <ul className="space-y-2">
@@ -165,7 +311,14 @@ export function VendorJobAssignPage() {
                               <Circle className="h-5 w-5 text-slate-300 flex-shrink-0" />
                             )}
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-bold text-slate-900 truncate">{worker.fullName || 'Worker'}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-bold text-slate-900 truncate">{worker.fullName || 'Worker'}</p>
+                                {worker.labourProfile?.isExternal && (
+                                  <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-800 border border-amber-200">
+                                    Direct Added
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-xs text-slate-500 truncate">{worker.phone}</p>
                             </div>
                             <div className="flex-shrink-0">
@@ -220,6 +373,142 @@ export function VendorJobAssignPage() {
           Assign Selected Workers
         </AppPrimaryButton>
       </div>
+
+      {/* Add Worker Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden transform transition-all">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
+                  <UserPlus className="h-5 w-5 text-slate-900" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">Add Worker to Crew</h3>
+                  <p className="text-[11px] font-semibold text-slate-500">Add external worker & auto-assign</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateWorker} className="p-6 space-y-4">
+              {addWorkerError && (
+                <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
+                  {addWorkerError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                  Worker Full Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Ramesh Kumar"
+                  value={newWorkerForm.fullName}
+                  onChange={(e) => setNewWorkerForm(f => ({ ...f, fullName: e.target.value }))}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-brand/40 focus:border-brand transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                  Mobile Number <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-xs font-bold text-slate-400">
+                    +91
+                  </div>
+                  <input
+                    type="tel"
+                    required
+                    maxLength={10}
+                    placeholder="9876543210"
+                    value={newWorkerForm.phone}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                      setNewWorkerForm(f => ({ ...f, phone: digits }))
+                    }}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 pl-14 pr-4 py-3 text-sm text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-brand/40 focus:border-brand transition font-mono tracking-wide"
+                  />
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    <span className={`text-[11px] font-bold ${newWorkerForm.phone.length === 10 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                      {newWorkerForm.phone.length}/10
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Worker does not need to be registered on the app beforehand
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                  Skill / Category <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={newWorkerForm.categoryId}
+                  onChange={(e) => setNewWorkerForm(f => ({ ...f, categoryId: e.target.value }))}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-brand/40 focus:border-brand transition"
+                >
+                  {requestedSkills.map(sk => (
+                    <option key={sk.categoryId} value={sk.categoryId}>
+                      {sk.categoryName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                  Daily Wage Rate (₹/day)
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 font-bold text-slate-400">
+                    ₹
+                  </div>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="e.g. 500"
+                    value={newWorkerForm.perDayRate}
+                    onChange={(e) => setNewWorkerForm(f => ({ ...f, perDayRate: e.target.value }))}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 pl-9 pr-4 py-3 text-sm text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-brand/40 focus:border-brand transition"
+                  />
+                </div>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Will be automatically prefilled for this assignment
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="flex-1 py-3 px-4 rounded-2xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <AppPrimaryButton
+                  type="submit"
+                  loading={addingWorker}
+                  disabled={addingWorker || !newWorkerForm.fullName.trim() || newWorkerForm.phone.length !== 10}
+                  className="flex-1 bg-slate-900 text-white hover:bg-slate-800"
+                >
+                  Add & Assign
+                </AppPrimaryButton>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

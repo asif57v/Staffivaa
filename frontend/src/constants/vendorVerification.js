@@ -24,6 +24,10 @@ export const VENDOR_TYPE_LIST = VENDOR_TYPE_OPTIONS.map((o) => o.value)
 export const VENDOR_TYPE_LABELS = Object.fromEntries(VENDOR_TYPE_OPTIONS.map((o) => [o.value, o.label]))
 
 export const VENDOR_DOCUMENT_TYPES = {
+  AADHAAR_FRONT: 'aadhaar_front',
+  AADHAAR_BACK: 'aadhaar_back',
+  PAN: 'pan',
+  SELFIE: 'selfie',
   SHOP_ESTABLISHMENT: 'shop_establishment',
   GST_CERTIFICATE: 'gst_certificate',
   PAN_CARD: 'pan_card',
@@ -37,6 +41,10 @@ export const VENDOR_DOCUMENT_TYPES = {
 }
 
 export const VENDOR_DOCUMENT_OPTIONS = [
+  { value: VENDOR_DOCUMENT_TYPES.AADHAAR_FRONT, label: 'Proprietor / Partner Aadhaar (Front)' },
+  { value: VENDOR_DOCUMENT_TYPES.AADHAAR_BACK, label: 'Proprietor / Partner Aadhaar (Back)' },
+  { value: VENDOR_DOCUMENT_TYPES.PAN, label: 'Business / Proprietor PAN Card' },
+  { value: VENDOR_DOCUMENT_TYPES.SELFIE, label: 'Authorized Person / Vendor Selfie / Live Photo' },
   { value: VENDOR_DOCUMENT_TYPES.SHOP_ESTABLISHMENT, label: 'Shop & establishment / business registration' },
   { value: VENDOR_DOCUMENT_TYPES.GST_CERTIFICATE, label: 'GST registration certificate' },
   { value: VENDOR_DOCUMENT_TYPES.PAN_CARD, label: 'Business PAN card' },
@@ -52,6 +60,7 @@ export const VENDOR_DOCUMENT_OPTIONS = [
 export const VENDOR_DOCUMENT_LABELS = Object.fromEntries(
   VENDOR_DOCUMENT_OPTIONS.map((o) => [o.value, o.label]),
 )
+
 
 /** Suggested document types per vendor category */
 export const VENDOR_TYPE_DOCUMENT_HINTS = {

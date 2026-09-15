@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { ClipboardList, IndianRupee, Users, ChevronRight, FileText, CheckCircle, Menu, MapPin, ChevronDown, Bell, Calendar, Hammer } from 'lucide-react'
+import { ClipboardList, IndianRupee, Users, ChevronRight, FileText, CheckCircle, Menu, MapPin, ChevronDown, Bell, Calendar, Hammer, Pencil, Plus } from 'lucide-react'
+import { VendorSkillsModal } from '../../../components/vendor/VendorSkillsModal.jsx'
 import { readAppUserLocation } from '../../../lib/appUserLocationStorage.js'
 import { ApprovalGate } from '../../../components/shared/ApprovalGate.jsx'
 import { OpsStatCard } from '../../../components/shared/OpsStatCard.jsx'
 import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
 import { AppSurface } from '../../../components/app-ui/cards/AppSurface.jsx'
 import { useAuth } from '../../../hooks/useAuth.js'
+import { fetchLabourCategoriesGrouped } from '../../../api/labourCategoriesApi.js'
 import { 
   useGetVendorDashboardQuery,
   useGetVendorCrewQuery,
@@ -22,9 +24,99 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+function VendorSkillsCard({ skills = [], className = '', onEditTrades }) {
+  return (
+    <div className={`rounded-[22px] bg-white p-5 shadow-[0_2px_14px_rgb(0,0,0,0.04)] border border-slate-100 ${className}`}>
+      <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-700 border border-amber-200/60 shadow-xs">
+            <Hammer className="h-4 w-4" />
+          </span>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 leading-tight">Registered Workforce Trades</h3>
+            <p className="text-[11px] font-medium text-slate-400">Skills selected for jobs & crew allocations</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#FFC107]" />
+            {skills.length} {skills.length === 1 ? 'Trade' : 'Trades'}
+          </span>
+          {onEditTrades && (
+            <button
+              type="button"
+              onClick={onEditTrades}
+              className="inline-flex items-center gap-1 rounded-full bg-amber-100 hover:bg-[#FFC107] active:scale-95 text-slate-900 px-2.5 py-1 text-[11px] font-black transition-all cursor-pointer shadow-2xs border border-amber-200"
+              title="Update Trades"
+            >
+              <Pencil className="h-3 w-3" />
+              <span>Edit</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4">
+        {skills.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-4 text-center">
+            <p className="text-xs font-semibold text-slate-500">No workforce trades selected yet</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Trades chosen during registration will show here.
+            </p>
+            {onEditTrades && (
+              <button
+                type="button"
+                onClick={onEditTrades}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-[#FFC107] hover:bg-[#e0a800] text-slate-950 px-4 py-2 text-xs font-black transition shadow-xs cursor-pointer"
+              >
+                <Plus className="h-3.5 w-3.5 stroke-[2.5]" /> Select Workforce Trades
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {skills.map((skill, idx) => (
+                <span
+                  key={idx}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-amber-50/80 border border-amber-200/80 px-3 py-1.5 text-xs font-bold text-slate-800 shadow-2xs hover:bg-amber-100/70 transition-colors"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#FFC107] shrink-0" />
+                  {skill}
+                </span>
+              ))}
+            </div>
+            {onEditTrades && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={onEditTrades}
+                  className="w-full py-2 px-3 rounded-xl border border-dashed border-amber-300 hover:border-amber-400 bg-amber-50/40 hover:bg-amber-50/80 text-amber-900 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Pencil className="h-3 w-3 text-amber-600" />
+                  <span>Update Skills & Capabilities</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 rounded-xl bg-slate-50/80 p-3 border border-slate-100 flex items-start gap-2.5">
+        <span className="text-sm shrink-0 mt-0.5">ℹ️</span>
+        <p className="text-[11px] font-medium text-slate-500 leading-relaxed">
+          Matching labour requests from corporate and client projects will be dispatched based on these registered trade capabilities once your verification is approved.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function VendorDashboardPage() {
   const { user } = useAuth()
   const [appLocation, setAppLocation] = useState(() => readAppUserLocation())
+  const [categoriesCatalogue, setCategoriesCatalogue] = useState([])
+  const [isSkillsModalOpen, setIsSkillsModalOpen] = useState(false)
   const approved = user?.contractorProfile?.verificationStatus === 'approved'
   const { data: dashboardData, isLoading, refetch: refetchDashboard } = useGetVendorDashboardQuery(undefined, { skip: !approved })
 
@@ -40,6 +132,43 @@ export function VendorDashboardPage() {
   })
   const requests = requestsData?.requests ?? []
   const [acceptRequest, { isLoading: isAcceptingRequest }] = useAcceptMarketplaceRequestMutation()
+
+  useEffect(() => {
+    fetchLabourCategoriesGrouped()
+      .then((res) => {
+        const groups = res?.data?.groups || []
+        const flat = []
+        for (const g of groups) {
+          for (const c of g.categories || []) {
+            flat.push(c)
+          }
+        }
+        setCategoriesCatalogue(flat)
+      })
+      .catch(() => {})
+  }, [])
+
+  const vendorSkills = useMemo(() => {
+    const directSkills = Array.isArray(user?.contractorProfile?.skills)
+      ? user.contractorProfile.skills.map((s) => String(s).trim()).filter(Boolean)
+      : []
+
+    const idMap = new Map()
+    for (const c of categoriesCatalogue) {
+      if (c._id) idMap.set(String(c._id), c.name)
+    }
+
+    const fromCatIds = Array.isArray(user?.contractorProfile?.categoryIds)
+      ? user.contractorProfile.categoryIds.map((c) => {
+          if (!c) return null
+          if (typeof c === 'object' && c.name) return c.name
+          const id = typeof c === 'object' ? String(c._id) : String(c)
+          return idMap.get(id) || null
+        }).filter(Boolean)
+      : []
+
+    return Array.from(new Set([...directSkills, ...fromCatIds]))
+  }, [user?.contractorProfile?.skills, user?.contractorProfile?.categoryIds, categoriesCatalogue])
 
   const handleAcceptJob = async (e, id) => {
     e.preventDefault()
@@ -89,12 +218,14 @@ export function VendorDashboardPage() {
 
   if (!approved) {
     return (
-      <div className="-mx-4 -mt-4">
+      <div className="-mx-4 -mt-4 px-4 pt-4 pb-8 space-y-4 bg-[#F8F9FA] min-h-screen">
         <ApprovalGate
           title="Vendor verification required"
           message="Upload business documents on your profile. Operations will verify your account before jobs and crew linking unlock."
           profileTo="/vendor/profile"
         />
+
+        <VendorSkillsCard skills={vendorSkills} />
       </div>
     )
   }
@@ -159,6 +290,14 @@ export function VendorDashboardPage() {
       </div>
 
       <div className="px-4 space-y-6">
+        {/* Registered Workforce Trades */}
+        <section>
+          <VendorSkillsCard
+            skills={vendorSkills}
+            onEditTrades={() => setIsSkillsModalOpen(true)}
+          />
+        </section>
+
         {/* Current Requests */}
         <section>
           <div className="flex items-center justify-between mb-4 px-1">
@@ -319,6 +458,12 @@ export function VendorDashboardPage() {
           )}
         </section>
       </div>
+
+      <VendorSkillsModal
+        isOpen={isSkillsModalOpen}
+        onClose={() => setIsSkillsModalOpen(false)}
+        user={user}
+      />
     </div>
   )
 }

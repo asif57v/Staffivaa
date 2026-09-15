@@ -303,9 +303,15 @@ export const reviewCorporateAdmin = asyncHandler(async (req, res) => {
   if (!user.corporateProfile) user.corporateProfile = {}
 
   if (resolved === CORPORATE_STATUS.APPROVED) {
-    if (!(user.corporateProfile.documents?.length > 0)) {
+    const hasCorpDocs =
+      (user.corporateProfile.documents?.length > 0) ||
+      (user.corporateProfile.kycPhotos?.length > 0) ||
+      Boolean(user.corporateProfile.kycFrontImageUrl) ||
+      Boolean(user.corporateProfile.kycPanImageUrl)
+
+    if (!hasCorpDocs) {
       return sendError(res, {
-        message: 'Corporate has not uploaded verification documents yet',
+        message: 'Corporate has not uploaded verification documents or KYC photos yet',
         statusCode: HTTP_STATUS.BAD_REQUEST,
         code: 'NO_SUBMISSION',
       })
@@ -376,9 +382,15 @@ export const reviewContractorAdmin = asyncHandler(async (req, res) => {
   if (!user.contractorProfile) user.contractorProfile = {}
 
   if (resolved === 'approved') {
-    if (!(user.contractorProfile.documents?.length > 0)) {
+    const hasContractorDocs =
+      (user.contractorProfile.documents?.length > 0) ||
+      (user.contractorProfile.kycPhotos?.length > 0) ||
+      Boolean(user.contractorProfile.kycFrontImageUrl) ||
+      Boolean(user.contractorProfile.kycPanImageUrl)
+
+    if (!hasContractorDocs) {
       return sendError(res, {
-        message: 'Vendor has not uploaded verification documents yet',
+        message: 'Vendor has not uploaded verification documents or KYC photos yet',
         statusCode: HTTP_STATUS.BAD_REQUEST,
         code: 'NO_SUBMISSION',
       })

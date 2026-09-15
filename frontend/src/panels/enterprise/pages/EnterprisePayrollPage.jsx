@@ -1,15 +1,19 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { loadRazorpayScript } from '../../../lib/razorpay.js'
 import {
   FileText, Plus, Search, Filter, CheckCircle2, Clock, AlertTriangle,
   Users, DollarSign, ArrowRight, ShieldCheck, Download, Calendar, Loader2,
-  RefreshCw, ChevronRight, UserCheck, X
+  RefreshCw, ChevronRight, UserCheck, X, CreditCard, Wallet, Send, AlertCircle
 } from 'lucide-react'
 import {
   useGetEnterprisePayrollsQuery,
   useCalculateEnterprisePayrollMutation,
   useSubmitPayrollForReviewMutation,
   useGetActiveWorkforceQuery,
+  useGetEnterprisePayrollInvoicesQuery,
+  usePayPayrollInvoiceMutation,
+  useVerifyPayrollInvoicePaymentMutation,
 } from '../../../store/api/enterpriseApi.js'
 import { ProfessionalSalarySlipModal } from '../../../components/labour/salary/ProfessionalSalarySlipModal.jsx'
 import toast from 'react-hot-toast'
@@ -20,6 +24,11 @@ export function EnterprisePayrollPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [showComputeModal, setShowComputeModal] = useState(false)
   const [selectedPayrollForSlip, setSelectedPayrollForSlip] = useState(null)
+  const [activeTab, setActiveTab] = useState('payrolls') // 'payrolls' | 'invoices'
+
+  useEffect(() => {
+    loadRazorpayScript()
+  }, [])
 
   const { data: payrollsData, isLoading, refetch } = useGetEnterprisePayrollsQuery({
     month: selectedMonth,
@@ -27,6 +36,9 @@ export function EnterprisePayrollPage() {
     status: statusFilter !== 'all' ? statusFilter : undefined,
   })
   const [submitForReview, { isLoading: isSubmitting }] = useSubmitPayrollForReviewMutation()
+  const { data: invoicesData, isLoading: isInvoicesLoading, refetch: refetchInvoices } = useGetEnterprisePayrollInvoicesQuery()
+  const [payInvoice, { isLoading: isPaying }] = usePayPayrollInvoiceMutation()
+  const [verifyPayment] = useVerifyPayrollInvoicePaymentMutation()
 
   const payrolls = payrollsData?.data || []
 
@@ -44,6 +56,60 @@ export function EnterprisePayrollPage() {
       refetch()
     } catch (err) {
       toast.error(err?.data?.message || 'Failed to submit payroll for review')
+    }
+  }
+
+  const invoices = invoicesData?.data || []
+  const invoiceMetrics = invoicesData?.metrics || {}
+
+  const handlePayInvoice = async (invoice) => {
+    try {
+      const res = await payInvoice(invoice._id).unwrap()
+      if (res.data?.paymentStatus === 'paid') {
+        toast.success(res.message || 'Paid from wallet!')
+        refetchInvoices()
+        return
+      }
+      // Open Razorpay checkout
+      const { razorpayOrder } = res.data || {}
+      if (!razorpayOrder) {
+        toast.error('Failed to create Razorpay order')
+        return
+      }
+
+      const isLoaded = await loadRazorpayScript()
+      if (!isLoaded || !window.Razorpay) {
+        toast.error('Could not load Razorpay payment gateway. Please check your network connection.')
+        return
+      }
+
+      const options = {
+        key: razorpayOrder.key,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
+        name: 'Staffivaa',
+        description: `Salary Payment - Invoice #${invoice.invoiceNumber}`,
+        order_id: razorpayOrder.id,
+        handler: async (response) => {
+          try {
+            await verifyPayment({
+              id: invoice._id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            }).unwrap()
+            toast.success('Payment verified! Admin will release salaries soon.')
+            refetchInvoices()
+          } catch (err) {
+            toast.error(err?.data?.message || 'Payment verification failed')
+          }
+        },
+        theme: { color: '#4F46E5' },
+      }
+      const rzp = new window.Razorpay(options)
+      rzp.open()
+    } catch (err) {
+      toast.error(err?.data?.message || err?.message || 'Payment initiation failed')
     }
   }
 
@@ -117,6 +183,183 @@ export function EnterprisePayrollPage() {
         </div>
       </div>
 
+      {/* Tab Switcher */}
+      <div className="flex items-center gap-1 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs">
+        {[
+          { id: 'payrolls', label: 'Payroll Records', icon: FileText },
+          { id: 'invoices', label: `Salary Payment Requests${invoiceMetrics.pendingCount ? ` (${invoiceMetrics.pendingCount})` : ''}`, icon: CreditCard },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-extrabold transition-all ${
+              activeTab === tab.id
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <tab.icon className="h-4 w-4" /> {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* TAB: Salary Payment Invoices */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'invoices' && (
+        <div className="space-y-4">
+          {/* Invoice Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-5 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-lg">
+              <p className="text-[11px] font-bold text-orange-100 uppercase tracking-wider">Pending Payments</p>
+              <p className="text-[28px] font-black mt-1">₹{(invoiceMetrics.pendingAmount || 0).toLocaleString('en-IN')}</p>
+              <p className="text-[11px] text-orange-200 mt-1">{invoiceMetrics.pendingCount || 0} invoices awaiting payment</p>
+            </div>
+            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs">
+              <p className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Total Paid
+              </p>
+              <p className="text-[26px] font-black text-slate-900 mt-1">₹{(invoiceMetrics.paidAmount || 0).toLocaleString('en-IN')}</p>
+            </div>
+            <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs">
+              <p className="text-[11px] font-bold text-indigo-600 uppercase tracking-wider flex items-center gap-1">
+                <FileText className="h-3.5 w-3.5" /> Total Invoices
+              </p>
+              <p className="text-[26px] font-black text-slate-900 mt-1">{invoiceMetrics.totalInvoices || 0}</p>
+            </div>
+          </div>
+
+          {isInvoicesLoading ? (
+            <div className="p-16 flex flex-col items-center justify-center gap-3 bg-white rounded-3xl border border-slate-200">
+              <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
+              <p className="text-[14px] font-extrabold text-slate-600">Loading salary invoices...</p>
+            </div>
+          ) : invoices.length === 0 ? (
+            <div className="p-16 flex flex-col items-center justify-center gap-3 bg-white rounded-3xl border border-slate-200">
+              <CreditCard className="h-12 w-12 text-slate-300" />
+              <p className="text-[16px] font-black text-slate-600">No salary payment requests yet</p>
+              <p className="text-[13px] text-slate-400">Admin will send payment requests when payroll is approved</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {invoices.map((inv) => {
+                const isPending = inv.status === 'payment_pending'
+                const isPaid = ['paid', 'verified', 'salary_released'].includes(inv.status)
+                const isOverdue = isPending && inv.dueDate && new Date(inv.dueDate) < new Date()
+
+                return (
+                  <motion.div
+                    key={inv._id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`bg-white rounded-2xl border shadow-xs p-5 space-y-4 ${
+                      isOverdue ? 'border-rose-200 bg-rose-50/30' :
+                      isPending ? 'border-orange-200' :
+                      'border-slate-200'
+                    }`}
+                  >
+                    {/* Invoice Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-indigo-600" />
+                          <span className="text-[15px] font-black text-slate-900">Invoice #{inv.invoiceNumber}</span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                            isPaid ? 'bg-emerald-100 text-emerald-800' :
+                            isOverdue ? 'bg-rose-100 text-rose-800 animate-pulse' :
+                            'bg-orange-100 text-orange-800'
+                          }`}>
+                            {isOverdue ? 'OVERDUE' : inv.status.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                        <p className="text-[12px] text-slate-500 mt-1">
+                          Period: Month {inv.month}/{inv.year} • Workers: {inv.workerCount || inv.workerSummary?.length || 0}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[22px] font-black text-slate-900">₹{(inv.grandTotal || 0).toLocaleString('en-IN')}</p>
+                        {inv.dueDate && (
+                          <p className={`text-[11px] font-bold ${isOverdue ? 'text-rose-600' : 'text-slate-400'}`}>
+                            Due: {new Date(inv.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Financial Breakdown */}
+                    <div className="grid grid-cols-3 gap-3 bg-slate-50 rounded-xl p-3">
+                      <div>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">Worker Salary</p>
+                        <p className="text-[14px] font-black text-slate-800">₹{(inv.totalWorkerSalary || 0).toLocaleString('en-IN')}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">Platform Fee</p>
+                        <p className="text-[14px] font-black text-slate-800">₹{(inv.platformCommission || 0).toLocaleString('en-IN')}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">GST</p>
+                        <p className="text-[14px] font-black text-slate-800">₹{(inv.gstAmount || 0).toLocaleString('en-IN')}</p>
+                      </div>
+                    </div>
+
+                    {/* Worker Summary */}
+                    {inv.workerSummary?.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Workers Covered</p>
+                        {inv.workerSummary.map((w, i) => (
+                          <div key={i} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <UserCheck className="h-3.5 w-3.5 text-indigo-500" />
+                              <span className="text-[12px] font-bold text-slate-700">{w.workerName || 'Worker'}</span>
+                            </div>
+                            <span className="text-[12px] font-black text-slate-900">₹{(w.netSalary || 0).toLocaleString('en-IN')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+                      {inv.paidAt && (
+                        <span className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Paid on {new Date(inv.paidAt).toLocaleDateString('en-IN')}
+                          {inv.paymentMethod && ` via ${inv.paymentMethod.replace('_', ' ')}`}
+                        </span>
+                      )}
+                      {isPending && (
+                        <button
+                          onClick={() => handlePayInvoice(inv)}
+                          disabled={isPaying}
+                          className="ml-auto px-6 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-[13px] shadow-md shadow-orange-500/20 flex items-center gap-2 cursor-pointer active:scale-[0.98] transition-all"
+                        >
+                          {isPaying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                          {isPaying ? 'Processing...' : 'Pay Now'}
+                        </button>
+                      )}
+                      {isPaid && inv.status === 'paid' && (
+                        <span className="ml-auto text-[11px] text-amber-600 font-bold flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5" /> Admin is processing salary release...
+                        </span>
+                      )}
+                      {inv.status === 'salary_released' && (
+                        <span className="ml-auto text-[11px] text-emerald-600 font-bold flex items-center gap-1">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Salaries released to worker wallets ✅
+                        </span>
+                      )}
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* TAB: Payroll Records */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'payrolls' && (
+      <>
       {/* Filter Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3 flex-wrap">
@@ -303,6 +546,9 @@ export function EnterprisePayrollPage() {
             </table>
           </div>
         </div>
+      )}
+
+      </>
       )}
 
       {/* Compute Monthly Payroll Modal */}

@@ -14,7 +14,7 @@ import {
 } from '../services/walletDeductionService.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
-import { emitRequestStatusUpdate, getIO, emitToUser } from '../utils/socket.js'
+import { emitRequestStatusUpdate, getIO, emitToUser, emitToVendor } from '../utils/socket.js'
 import { logAudit } from '../utils/auditLogger.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
 import { triggerBookingNotif } from '../utils/triggerBookingNotif.js'
@@ -50,6 +50,25 @@ export const createAllocationAdmin = asyncHandler(async (req, res) => {
     if (notes != null) allocation.notes = notes
     allocation.adminId = req.user._id
     await allocation.save()
+  }
+
+  if (allocation.vendorId) {
+    const vIdStr = allocation.vendorId.toString()
+    emitToVendor(vIdStr, 'vendor_allocated_job', { requestId: request._id.toString() })
+    triggerNotification({
+      userId: vIdStr,
+      title: 'New Workforce Allocation 🏗️',
+      body: `You have been allocated to request ${request.reference || request._id.toString().slice(-6)}.`,
+      type: 'NEW_ORDER',
+      relatedId: request._id,
+      relatedModel: 'WorkforceRequest',
+      url: '/vendor/jobs',
+      recipientRole: 'contractor',
+      fcmExtra: {
+        requestId: request._id.toString(),
+        url: '/vendor/jobs',
+      },
+    }).catch((err) => console.error('[Allocation Vendor Notif Error]:', err.message))
   }
 
   const ids = Array.isArray(labourIds) ? labourIds.filter((id) => mongoose.Types.ObjectId.isValid(id)) : []

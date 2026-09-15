@@ -53,32 +53,47 @@ export function uploadBufferToCloudinary({
   const cloudinary = getCloudinary()
   const { folderPath, publicId } = buildUploadPaths({ folder, userId, originalName })
 
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: folderPath,
-        public_id: publicId,
-        resource_type: resourceType,
-        overwrite: false,
-        unique_filename: false,
-        use_filename: false,
-      },
-      (err, result) => {
-        if (err) {
-          const e = new Error(err.message || 'Cloudinary upload failed')
-          e.statusCode = 502
-          e.code = 'CLOUDINARY_UPLOAD_FAILED'
-          e.cause = err
-          return reject(e)
-        }
-        resolve(
-          formatUploadResult(result, {
-            folder,
-            originalName: originalName || 'file',
-          }),
-        )
-      },
-    )
-    Readable.from(buffer).pipe(stream)
+  const attempt = (targetResourceType) =>
+    new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: folderPath,
+          public_id: publicId,
+          resource_type: targetResourceType,
+          overwrite: false,
+          unique_filename: false,
+          use_filename: false,
+        },
+        (err, result) => {
+          if (err) return reject(err)
+          resolve(
+            formatUploadResult(result, {
+              folder,
+              originalName: originalName || 'file',
+            }),
+          )
+        },
+      )
+      Readable.from(buffer).pipe(stream)
+    })
+
+  return attempt(resourceType).catch(async (firstErr) => {
+    // If upload failed and wasn't already raw, fallback to 'raw' to accept any document / image
+    if (targetResTypeIsNotRaw(resourceType)) {
+      try {
+        return await attempt('raw')
+      } catch (_rawErr) {
+        // Fall back to original error
+      }
+    }
+    const e = new Error(firstErr.message || 'Cloudinary upload failed')
+    e.statusCode = 502
+    e.code = 'CLOUDINARY_UPLOAD_FAILED'
+    e.cause = firstErr
+    throw e
   })
+}
+
+function targetResTypeIsNotRaw(type) {
+  return type !== 'raw'
 }

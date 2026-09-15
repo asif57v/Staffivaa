@@ -30,6 +30,104 @@ function RolePill({ role }) {
   )
 }
 
+function VerificationPill({ user }) {
+  if (!user) return <span className="text-slate-400">—</span>
+
+  if (user.role === 'labour') {
+    const kyc = user.labourProfile?.kycStatus
+    if (kyc === 'verified') {
+      return (
+        <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 ring-1 ring-emerald-200">
+          Verified
+        </span>
+      )
+    }
+    if (kyc === 'failed') {
+      return (
+        <span className="inline-flex rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-bold text-rose-800 ring-1 ring-rose-200">
+          Failed
+        </span>
+      )
+    }
+    return (
+      <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 ring-1 ring-amber-200">
+        Not Verified
+      </span>
+    )
+  }
+
+  if (user.role === 'contractor') {
+    const st = user.contractorProfile?.verificationStatus
+    if (st === 'approved') {
+      return (
+        <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 ring-1 ring-emerald-200">
+          Verified
+        </span>
+      )
+    }
+    if (st === 'rejected') {
+      return (
+        <span className="inline-flex rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-bold text-rose-800 ring-1 ring-rose-200">
+          Failed
+        </span>
+      )
+    }
+    return (
+      <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 ring-1 ring-amber-200">
+        Not Verified
+      </span>
+    )
+  }
+
+  if (user.role === 'corporate') {
+    const st = user.corporateProfile?.status
+    if (st === 'approved') {
+      return (
+        <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 ring-1 ring-emerald-200">
+          Verified
+        </span>
+      )
+    }
+    if (st === 'rejected') {
+      return (
+        <span className="inline-flex rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-bold text-rose-800 ring-1 ring-rose-200">
+          Failed
+        </span>
+      )
+    }
+    return (
+      <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 ring-1 ring-amber-200">
+        Not Verified
+      </span>
+    )
+  }
+
+  if (user.role === 'enterprise') {
+    const st = user.enterpriseProfile?.status
+    if (st === 'approved') {
+      return (
+        <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 ring-1 ring-emerald-200">
+          Verified
+        </span>
+      )
+    }
+    if (st === 'rejected') {
+      return (
+        <span className="inline-flex rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-bold text-rose-800 ring-1 ring-rose-200">
+          Failed
+        </span>
+      )
+    }
+    return (
+      <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 ring-1 ring-amber-200">
+        Not Verified
+      </span>
+    )
+  }
+
+  return <span className="text-xs text-slate-400 font-medium">—</span>
+}
+
 export function AdminUsersPage({ fixedRole, customTitle }) {
   const reduce = useReducedMotion()
   const [searchParams] = useSearchParams()
@@ -180,7 +278,8 @@ export function AdminUsersPage({ fixedRole, customTitle }) {
                 <th className="px-4 py-3">Phone</th>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Role</th>
-                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Verification</th>
+                <th className="px-4 py-3">Account</th>
                 <th className="px-4 py-3">Last login</th>
                 <th className="px-4 py-3">Joined</th>
                 <th className="px-4 py-3 text-right">Actions</th>
@@ -190,7 +289,7 @@ export function AdminUsersPage({ fixedRole, customTitle }) {
               {loading
                 ? Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i} className="border-b border-slate-100">
-                      {Array.from({ length: 7 }).map((__, j) => (
+                      {Array.from({ length: 8 }).map((__, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 animate-pulse rounded bg-slate-200/80" />
                         </td>
@@ -208,6 +307,9 @@ export function AdminUsersPage({ fixedRole, customTitle }) {
                       </td>
                       <td className="px-4 py-3">
                         <RolePill role={u.role} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <VerificationPill user={u} />
                       </td>
                       <td className="px-4 py-3">
                         <StatusPill status={u.accountStatus} active={u.isActive !== false} />
@@ -257,7 +359,10 @@ export function AdminUsersPage({ fixedRole, customTitle }) {
                       {u.email ? u.email : <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400/80">MAIL NOT PROVIDED</span>}
                     </p>
                   </div>
-                  <StatusPill status={u.accountStatus} active={u.isActive !== false} />
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <StatusPill status={u.accountStatus} active={u.isActive !== false} />
+                    <VerificationPill user={u} />
+                  </div>
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
                   <div className="flex items-center gap-2">

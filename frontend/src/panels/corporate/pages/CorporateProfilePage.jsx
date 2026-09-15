@@ -42,8 +42,10 @@ import {
 import { CorporateVerificationChecklist } from '../../../components/corporate/CorporateVerificationChecklist.jsx'
 import { CorporateVerificationHero } from '../../../components/corporate/CorporateVerificationHero.jsx'
 import { LabourKycWorkflowTimeline } from '../../../components/labour/kyc/LabourKycWorkflowTimeline.jsx'
+import { BusinessKycPhotoUploadGrid } from '../../../components/business/BusinessKycPhotoUploadGrid.jsx'
 import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
 import { GlassPanel } from '../../../components/ui/GlassPanel.jsx'
+import { dataUrlToFile } from '../../../lib/kycDraftStorage.js'
 import {
   useAddCorporateDocumentMutation,
   usePatchCorporateMeMutation,
@@ -58,6 +60,43 @@ const labelClass = 'mb-1.5 block text-[11px] font-bold uppercase tracking-wide t
 const BENEFIT_ICONS = [Briefcase, HardHat, IndianRupee]
 
 const GMAPS_LIBRARIES = ['places']
+
+function profileToPhotos(p) {
+  if (!p) return {}
+  const res = {}
+  if (p.kycFrontImageUrl) res.aadhaar_front = p.kycFrontImageUrl
+  if (p.kycBackImageUrl) res.aadhaar_back = p.kycBackImageUrl
+  if (p.kycPanImageUrl) res.pan = p.kycPanImageUrl
+  if (p.kycSelfieUrl) res.selfie = p.kycSelfieUrl
+  if (Array.isArray(p.kycPhotos)) {
+    for (const ph of p.kycPhotos) {
+      if (ph?.url) {
+        if (ph.type === 'aadhaar_front' && !res.aadhaar_front) res.aadhaar_front = ph.url
+        if (ph.type === 'aadhaar_back' && !res.aadhaar_back) res.aadhaar_back = ph.url
+        if (ph.type === 'pan' && !res.pan) res.pan = ph.url
+        if (ph.type === 'selfie' && !res.selfie) res.selfie = ph.url
+      }
+    }
+  }
+  if (Array.isArray(p.documents)) {
+    for (const d of p.documents) {
+      if (d?.url) {
+        const type = (d.documentType || '').toLowerCase()
+        const label = (d.label || '').toLowerCase()
+        if ((type === 'aadhaar_front' || type === 'authorized_signatory_id' || label.includes('aadhaar front') || label.includes('aadhar front') || label.includes('signatory id')) && !res.aadhaar_front) {
+          res.aadhaar_front = d.url
+        } else if ((type === 'aadhaar_back' || label.includes('aadhaar back') || label.includes('aadhar back')) && !res.aadhaar_back) {
+          res.aadhaar_back = d.url
+        } else if ((type === 'pan' || type === 'pan_card' || label.includes('pan')) && !res.pan) {
+          res.pan = d.url
+        } else if ((type === 'selfie' || label.includes('selfie') || label.includes('representative photo')) && !res.selfie) {
+          res.selfie = d.url
+        }
+      }
+    }
+  }
+  return res
+}
 
 function profileToForm(profile, user) {
   return {
@@ -92,6 +131,7 @@ export function CorporateProfilePage() {
   const canEdit = (!isApproved && !inReview) || isEditing
 
   const [form, setForm] = useState(() => profileToForm(profile, user))
+  const [photos, setPhotos] = useState(() => profileToPhotos(profile))
   const [docType, setDocType] = useState(CORPORATE_DOCUMENT_TYPES.COMPANY_REGISTRATION)
   const [uploading, setUploading] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -211,11 +251,21 @@ export function CorporateProfilePage() {
 
   useEffect(() => {
     setForm(profileToForm(profile, user))
-  }, [user?._id, profile?.companyName])
+    setPhotos(profileToPhotos(profile))
+  }, [user?._id, profile?.companyName, profile?.kycFrontImageUrl, profile?.kycPanImageUrl])
 
   const draftProfile = useMemo(
-    () => buildProfileFromForm({ ...form, documents }),
-    [form, documents],
+    () =>
+      buildProfileFromForm({
+        ...form,
+        documents,
+        kycPhotos: Object.values(photos).filter(Boolean),
+        kycFrontImageUrl: photos.aadhaar_front,
+        kycBackImageUrl: photos.aadhaar_back,
+        kycPanImageUrl: photos.pan,
+        kycSelfieUrl: photos.selfie,
+      }),
+    [form, documents, photos],
   )
   const progress = useMemo(() => getCorporateVerificationProgress(draftProfile), [draftProfile])
   const ui = getBusinessVerificationUiState({
@@ -229,7 +279,7 @@ export function CorporateProfilePage() {
     status,
     submittedAt,
     hasDetails: progress.formComplete,
-    docCount: documents.length,
+    docCount: documents.length + Object.keys(photos).length,
     isApproved,
   })
 
@@ -244,6 +294,51 @@ export function CorporateProfilePage() {
 
   const refreshUser = (res) => {
     if (res?.user) dispatch(setUser(res.user))
+  }
+
+  const uploadAllPhotos = async (currentPhotos) => {
+    const uploadSlot = async (slotId, label, slotValue) => {
+      if (!slotValue) return null
+      if (typeof slotValue === 'string' && slotValue.trim() && !slotValue.startsWith('data:') && !slotValue.startsWith('blob:')) {
+        return { label, url: slotValue, type: slotId }
+      }
+      if (typeof slotValue === 'object' && slotValue.file) {
+        const uploaded = await uploadDocument(slotValue.file, UPLOAD_FOLDERS.KYC_DOCUMENTS)
+        const remoteUrl = assetUrlFromUpload(uploaded)
+        if (!remoteUrl) throw new Error(`Failed to upload ${label}`)
+        return { label, url: remoteUrl, type: slotId }
+      }
+      const rawDataUrl = typeof slotValue === 'object' ? (slotValue.dataUrl || slotValue.previewUrl) : slotValue
+      if (typeof rawDataUrl === 'string' && rawDataUrl.startsWith('data:')) {
+        const file = dataUrlToFile(rawDataUrl, `${slotId}.jpg`, 'image/jpeg')
+        if (file) {
+          const uploaded = await uploadDocument(file, UPLOAD_FOLDERS.KYC_DOCUMENTS)
+          const remoteUrl = assetUrlFromUpload(uploaded)
+          if (!remoteUrl) throw new Error(`Failed to upload ${label}`)
+          return { label, url: remoteUrl, type: slotId }
+        }
+      }
+      if (typeof slotValue === 'object' && slotValue.previewUrl && !slotValue.previewUrl.startsWith('blob:') && !slotValue.previewUrl.startsWith('data:')) {
+        return { label, url: slotValue.previewUrl, type: slotId }
+      }
+      return null
+    }
+
+    const [frontDoc, backDoc, panDoc, selfieDoc] = await Promise.all([
+      uploadSlot('aadhaar_front', 'Authorized Signatory Aadhaar (Front)', currentPhotos.aadhaar_front),
+      uploadSlot('aadhaar_back', 'Authorized Signatory Aadhaar (Back)', currentPhotos.aadhaar_back),
+      uploadSlot('pan', 'Company PAN Card', currentPhotos.pan),
+      uploadSlot('selfie', 'Authorized Representative Live Photo', currentPhotos.selfie),
+    ])
+
+    const photoList = [frontDoc, backDoc, panDoc, selfieDoc].filter(Boolean)
+    return {
+      kycFrontImageUrl: frontDoc?.url || '',
+      kycBackImageUrl: backDoc?.url || '',
+      kycPanImageUrl: panDoc?.url || '',
+      kycSelfieUrl: selfieDoc?.url || '',
+      kycPhotos: photoList,
+    }
   }
 
   const saveDetails = async () => {
@@ -269,15 +364,17 @@ export function CorporateProfilePage() {
     setBanner(null)
     setBusy(true)
     try {
+      const uploadedPhotos = await uploadAllPhotos(photos)
       const res = await patchCorporateMe({
         ...form,
         panNumber: normalizePan(form.panNumber),
         gstNumber: normalizeGst(form.gstNumber),
         cinNumber: String(form.cinNumber || '').trim().toUpperCase(),
         pincode: String(form.pincode || '').replace(/\D/g, '').slice(0, 6),
+        ...uploadedPhotos,
       }).unwrap()
       refreshUser(res)
-      setBanner({ variant: 'success', message: 'Company details saved' })
+      setBanner({ variant: 'success', message: 'Company details & KYC photos saved' })
       setIsEditing(false)
     } catch (err) {
       setBanner({ variant: 'error', message: err?.data?.message || err?.message || 'Could not save details' })
@@ -292,7 +389,11 @@ export function CorporateProfilePage() {
     setBanner(null)
     setUploading(true)
     try {
-      await saveDetailsQuiet()
+      try {
+        await saveDetailsQuiet()
+      } catch (_quietErr) {
+        // Silent background save shouldn't block document upload
+      }
       const uploaded = await uploadDocument(file, UPLOAD_FOLDERS.KYC_DOCUMENTS)
       const url = assetUrlFromUpload(uploaded)
       const option = CORPORATE_DOCUMENT_OPTIONS.find((o) => o.value === docType)
@@ -315,11 +416,13 @@ export function CorporateProfilePage() {
   }
 
   const saveDetailsQuiet = async () => {
+    const uploadedPhotos = await uploadAllPhotos(photos)
     const res = await patchCorporateMe({
       ...form,
       panNumber: normalizePan(form.panNumber),
       gstNumber: normalizeGst(form.gstNumber),
       pincode: String(form.pincode || '').replace(/\D/g, '').slice(0, 6),
+      ...uploadedPhotos,
     }).unwrap()
     refreshUser(res)
   }
@@ -345,11 +448,13 @@ export function CorporateProfilePage() {
     }
     setBusy(true)
     try {
+      const uploadedPhotos = await uploadAllPhotos(photos)
       await patchCorporateMe({
         ...form,
         panNumber: normalizePan(form.panNumber),
         gstNumber: normalizeGst(form.gstNumber),
         pincode: String(form.pincode || '').replace(/\D/g, '').slice(0, 6),
+        ...uploadedPhotos,
       }).unwrap()
       const res = await submitVerification().unwrap()
       refreshUser(res)
@@ -659,9 +764,9 @@ export function CorporateProfilePage() {
         ) : null}
       </GlassPanel>
 
-      <GlassPanel className="border-slate-200/90 p-4 sm:p-5">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Verification documents</p>
+      <GlassPanel className="border-slate-200/90 p-4 sm:p-5 space-y-6">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">KYC Photos & Verification Documents</p>
           {!canEdit && (
             <button
               onClick={() => setIsEditing(true)}
@@ -671,44 +776,60 @@ export function CorporateProfilePage() {
             </button>
           )}
         </div>
-        <p className="mt-1 text-xs leading-relaxed text-slate-600">
-          Select document type, then upload PDF or image. Only <strong>one document is required</strong> for
-          verification; you may add more if you like.
-        </p>
 
-        {canEdit ? (
-          <div className="mt-4 space-y-3">
-            <div>
-              <label className={labelClass} htmlFor="docType">
-                Document type
-              </label>
-              <select
-                id="docType"
-                className={inputClass}
-                value={docType}
-                onChange={(e) => setDocType(e.target.value)}
-              >
-                {CORPORATE_DOCUMENT_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value} disabled={uploadedTypes.has(opt.value) && opt.value !== CORPORATE_DOCUMENT_TYPES.OTHER}>
-                    {opt.label}
-                    {uploadedTypes.has(opt.value) && opt.value !== CORPORATE_DOCUMENT_TYPES.OTHER ? ' ✓' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm font-bold text-slate-700 transition hover:border-brand/40 hover:bg-brand/5">
-              <Upload className="h-5 w-5 text-brand" aria-hidden />
-              {uploading ? 'Uploading…' : 'Choose file to upload'}
-              <input
-                type="file"
-                className="sr-only"
-                accept=".pdf,image/*"
-                onChange={handleUpload}
-                disabled={uploading || busy}
-              />
-            </label>
+        {/* 1. Mandatory & Primary Photo Upload Grid (Signatory Aadhaar Front/Back, PAN, Selfie) */}
+        <div>
+          <BusinessKycPhotoUploadGrid
+            variant="corporate"
+            photos={photos}
+            onChange={setPhotos}
+            disabled={!canEdit || busy || uploading}
+          />
+        </div>
+
+        {/* 2. Additional Corporate Documents (COI, GST Certificate, CIN, etc.) */}
+        <div className="pt-4 border-t border-slate-100 space-y-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Additional Corporate Documents (Optional)</p>
+            <p className="text-xs text-slate-600">
+              Attach Certificate of Incorporation, GST Certificate, or MOA/AOA files.
+            </p>
           </div>
-        ) : null}
+
+          {canEdit ? (
+            <div className="space-y-3">
+              <div>
+                <label className={labelClass} htmlFor="docType">
+                  Document type
+                </label>
+                <select
+                  id="docType"
+                  className={inputClass}
+                  value={docType}
+                  onChange={(e) => setDocType(e.target.value)}
+                >
+                  {CORPORATE_DOCUMENT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value} disabled={uploadedTypes.has(opt.value) && opt.value !== CORPORATE_DOCUMENT_TYPES.OTHER}>
+                      {opt.label}
+                      {uploadedTypes.has(opt.value) && opt.value !== CORPORATE_DOCUMENT_TYPES.OTHER ? ' ✓' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm font-bold text-slate-700 transition hover:border-brand/40 hover:bg-brand/5">
+                <Upload className="h-5 w-5 text-brand" aria-hidden />
+                {uploading ? 'Uploading…' : 'Attach additional document (PDF / Image)'}
+                <input
+                  type="file"
+                  className="sr-only"
+                  accept=".pdf,image/*"
+                  onChange={handleUpload}
+                  disabled={uploading || busy}
+                />
+              </label>
+            </div>
+          ) : null}
+        </div>
 
         {documents.length > 0 ? (
           <ul className="mt-4 space-y-2">

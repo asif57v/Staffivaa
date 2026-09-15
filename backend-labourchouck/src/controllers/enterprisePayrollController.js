@@ -1,10 +1,16 @@
 import mongoose from 'mongoose'
+import { razorpay } from '../config/razorpay.js'
+import crypto from 'crypto'
 import { EnterprisePayroll } from '../models/EnterprisePayroll.js'
+import { EnterprisePayrollInvoice } from '../models/EnterprisePayrollInvoice.js'
 import { EnterpriseAttendance } from '../models/EnterpriseAttendance.js'
 import { EnterpriseJob } from '../models/EnterpriseJob.js'
 import { EnterpriseApplication } from '../models/EnterpriseApplication.js'
 import { EnterpriseEscrowTransaction } from '../models/EnterpriseEscrowTransaction.js'
 import { EnterpriseFinancialAuditLog } from '../models/EnterpriseFinancialAuditLog.js'
+import { EnterpriseWallet } from '../models/EnterpriseWallet.js'
+import { EnterpriseWalletTransaction } from '../models/EnterpriseWalletTransaction.js'
+import { SystemSettings } from '../models/SystemSettings.js'
 import { User } from '../models/User.js'
 import { WalletTransaction } from '../models/WalletTransaction.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
@@ -74,11 +80,19 @@ export const calculateEnterpriseMonthlyPayroll = asyncHandler(async (req, res) =
   const endDate = new Date(year, month, 0, 23, 59, 59)
 
   // Fetch actual attendance logs for this worker under this enterprise for the month
-  const attendanceLogs = await EnterpriseAttendance.find({
-    enterpriseId: req.user._id,
+  let attendanceLogs = await AttendanceRecord.find({
     workerId,
-    date: { $gte: startDate, $lte: endDate },
-  })
+    enterpriseId: req.user._id,
+    shiftDate: { $gte: startDate, $lte: endDate },
+  }).lean()
+
+  if (!attendanceLogs || attendanceLogs.length === 0) {
+    attendanceLogs = await EnterpriseAttendance.find({
+      enterpriseId: req.user._id,
+      workerId,
+      date: { $gte: startDate, $lte: endDate },
+    }).lean()
+  }
 
   let presentDays = 0
   let absentDays = 0
@@ -89,22 +103,41 @@ export const calculateEnterpriseMonthlyPayroll = asyncHandler(async (req, res) =
   let totalWorkingHours = 0
 
   attendanceLogs.forEach((log) => {
-    if (log.status === 'present') presentDays++
-    if (log.status === 'absent') absentDays++
-    if (log.status === 'half-day') halfDays++
-    if (log.status === 'late') {
+    const st = log.attendanceStatus || log.status
+    if (st === 'present' || log.checkInAt) presentDays++
+    if (st === 'absent') absentDays++
+    if (st === 'half-day') halfDays++
+    if (st === 'late') {
       presentDays++
       lateEntries++
     }
-    if (log.status === 'leave') leaveDays++
+    if (st === 'leave') leaveDays++
     if (log.overtimeHours) overtimeHours += Number(log.overtimeHours)
     if (log.totalHours) totalWorkingHours += Number(log.totalHours)
   })
 
-  // If no attendance logs exist yet, assume standard present month for calculation simulation or let user customize
-  const totalWorkingDays = 26
-  if (attendanceLogs.length === 0 && !req.body.strictAttendance) {
+  // Look up job details for accurate salaryType & working hours
+  const jobDoc = (jobId || application?.jobId) ? await EnterpriseJob.findById(jobId || application?.jobId).lean() : null
+  const isHourly = jobDoc?.salaryType === 'hourly'
+  const isDaily = jobDoc?.salaryType === 'daily'
+
+  // Total working days
+  let totalWorkingDays = 26
+  if (isHourly || isDaily) {
+    totalWorkingDays = Math.max(1, presentDays + absentDays + halfDays)
+  } else if (attendanceLogs.length > 0) {
+    totalWorkingDays = Math.max(1, presentDays + absentDays + halfDays + leaveDays)
+  } else if (attendanceLogs.length === 0 && !req.body.strictAttendance) {
     presentDays = 26
+  }
+
+  // For hourly job, compute gross salary based on actual hours or shift duration
+  if (isHourly && jobDoc?.salary) {
+    const hourlyRate = Number(jobDoc.salary)
+    const billableHours = totalWorkingHours > 0 ? totalWorkingHours : Math.max(1, presentDays * (jobDoc.workingHours || 1))
+    grossSalary = Math.round(billableHours * hourlyRate)
+  } else if (isDaily && jobDoc?.salary) {
+    grossSalary = Math.round(presentDays * Number(jobDoc.salary))
   }
 
   // Compute attendance deduction (Daily Rate = Gross / 26)
@@ -379,8 +412,14 @@ export const getAdminEnterprisePayrolls = asyncHandler(async (req, res) => {
       const realTotalHours = enrichedRecords.reduce((sum, r) => sum + (r.totalHours || 0), 0)
       const realOvertimeHours = enrichedRecords.reduce((sum, r) => sum + (r.overtimeHours || 0), 0)
 
+      const isHourlyOrDaily = p.jobId?.salaryType === 'hourly' || p.jobId?.salaryType === 'daily'
+      const realTotalWorkingDays = isHourlyOrDaily
+        ? Math.max(1, realPresentDays)
+        : (p.absentDays === 0 && realPresentDays > 0 && realPresentDays < (p.totalWorkingDays || 26) ? realPresentDays : p.totalWorkingDays || 26)
+
       return {
         ...p,
+        totalWorkingDays: realTotalWorkingDays,
         presentDays: realPresentDays || p.presentDays,
         totalWorkingHours: parseFloat(realTotalHours.toFixed(2)) || p.totalWorkingHours,
         overtimeHours: parseFloat(realOvertimeHours.toFixed(2)) || p.overtimeHours,
@@ -459,6 +498,29 @@ export const releaseEnterpriseSalary = asyncHandler(async (req, res) => {
 
   if (['released', 'paid'].includes(payroll.status)) {
     return sendError(res, { message: 'Salary has already been released and credited to worker wallet.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  // 🔒 PAYMENT GATE: Block salary release unless Enterprise has paid the payroll invoice
+  if (payroll.payrollInvoiceId) {
+    const payrollInvoice = await EnterprisePayrollInvoice.findById(payroll.payrollInvoiceId)
+    if (!payrollInvoice || payrollInvoice.status === 'payment_pending') {
+      return sendError(res, {
+        message: 'Cannot release salary — Enterprise has not yet paid the payroll invoice. Please wait for Enterprise payment before releasing.',
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+      })
+    }
+  } else if (!['payment_received', 'approved'].includes(payroll.status)) {
+    // If no invoice linked and not in approved/payment_received state, check for any pending invoice
+    const pendingInvoice = await EnterprisePayrollInvoice.findOne({
+      payrollIds: payroll._id,
+      status: 'payment_pending',
+    })
+    if (pendingInvoice) {
+      return sendError(res, {
+        message: 'Cannot release salary — Enterprise has a pending payroll invoice. Please wait for Enterprise payment.',
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+      })
+    }
   }
 
   // Parse optional admin deductions from request body
@@ -628,4 +690,532 @@ export const getMyEnterprisePayrolls = asyncHandler(async (req, res) => {
     .sort({ year: -1, month: -1, createdAt: -1 })
 
   return sendSuccess(res, { data: payrolls })
+})
+
+// ─── Admin: Live Enterprise Attendance Monitoring ─────────────────────────────
+
+/** GET /api/admin/enterprise/attendance - Live attendance across all enterprises */
+export const getAdminEnterpriseAttendance = asyncHandler(async (req, res) => {
+  if (req.user.role !== USER_ROLES.ADMIN) {
+    return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  const { enterpriseId, workerId, date, startDate, endDate, status, page = 1, limit = 50 } = req.query
+  const filter = {}
+
+  if (enterpriseId) filter.enterpriseId = enterpriseId
+  if (workerId) filter.workerId = workerId
+  if (status) filter.attendanceStatus = status
+
+  // Date filtering with timezone tolerance
+  if (date) {
+    const d = new Date(date)
+    const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
+    const endOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
+    // 14 hours buffer on each side to absorb UTC vs local IST offset
+    const startBuffer = new Date(startOfDay.getTime() - 14 * 60 * 60 * 1000)
+    const endBuffer = new Date(endOfDay.getTime() + 14 * 60 * 60 * 1000)
+    filter.shiftDate = { $gte: startBuffer, $lte: endBuffer }
+  } else if (startDate && endDate) {
+    filter.shiftDate = { $gte: new Date(startDate), $lte: new Date(endDate) }
+  }
+
+  // Only enterprise-linked attendance
+  filter.enterpriseId = filter.enterpriseId || { $exists: true, $ne: null }
+
+  const skip = (Number(page) - 1) * Number(limit)
+  const totalCount = await AttendanceRecord.countDocuments(filter)
+
+  const records = await AttendanceRecord.find(filter)
+    .populate('workerId', 'fullName profileImageUrl phone email labourProfile')
+    .populate('enterpriseId', 'fullName profileImageUrl enterpriseProfile phone email')
+    .populate('enterpriseJobId', 'jobTitle workLocation salary salaryType workingHours')
+    .sort({ shiftDate: -1, checkInAt: -1, createdAt: -1 })
+    .skip(skip)
+    .limit(Number(limit))
+    .lean()
+
+  // Compute summary stats across all enterprise records
+  const allEnterpriseRecords = await AttendanceRecord.find({ enterpriseId: { $exists: true, $ne: null } }).lean()
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000)
+
+  const todayRecords = allEnterpriseRecords.filter(r => 
+    (r.shiftDate && new Date(r.shiftDate) >= todayStart) || 
+    (r.checkInAt && new Date(r.checkInAt) >= last24h)
+  )
+  const activeRecords = records.length > 0 ? records : allEnterpriseRecords
+
+  const summary = {
+    totalRecords: allEnterpriseRecords.length,
+    todayTotal: todayRecords.length,
+    todayPresent: activeRecords.filter(r => r.attendanceStatus === 'present' || r.checkInAt).length,
+    todayAbsent: activeRecords.filter(r => r.attendanceStatus === 'absent').length,
+    todayLate: activeRecords.filter(r => r.attendanceStatus === 'late').length,
+    todayCheckedIn: activeRecords.filter(r => r.checkInAt && !r.checkOutAt).length, // Currently working
+    todayCompleted: activeRecords.filter(r => r.checkInAt && r.checkOutAt).length,
+    avgHoursToday: activeRecords.length > 0
+      ? parseFloat((activeRecords.reduce((s, r) => s + (r.totalHours || 0), 0) / Math.max(1, activeRecords.filter(r => r.totalHours > 0).length)).toFixed(1))
+      : 0,
+  }
+
+  return sendSuccess(res, {
+    data: {
+      records,
+      summary,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        totalCount,
+        totalPages: Math.ceil(totalCount / Number(limit)),
+      },
+    },
+  })
+})
+
+/** GET /api/admin/enterprise/attendance/:workerId - Detailed attendance for a specific worker */
+export const getAdminWorkerAttendanceDetail = asyncHandler(async (req, res) => {
+  if (req.user.role !== USER_ROLES.ADMIN) {
+    return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  const { month, year, enterpriseId } = req.query
+  const filter = { workerId: req.params.workerId, enterpriseId: { $exists: true, $ne: null } }
+  if (enterpriseId) filter.enterpriseId = enterpriseId
+
+  if (month && year) {
+    const startDate = new Date(Number(year), Number(month) - 1, 1)
+    const endDate = new Date(Number(year), Number(month), 0, 23, 59, 59)
+    filter.shiftDate = { $gte: startDate, $lte: endDate }
+  }
+
+  const records = await AttendanceRecord.find(filter)
+    .populate('enterpriseId', 'fullName enterpriseProfile')
+    .populate('enterpriseJobId', 'jobTitle workLocation salary')
+    .sort({ shiftDate: -1 })
+    .limit(62) // 2 months max
+    .lean()
+
+  const worker = await User.findById(req.params.workerId).select('fullName profileImageUrl phone email labourProfile').lean()
+
+  // Calculate summary
+  const presentDays = records.filter(r => r.attendanceStatus === 'present' || (r.checkInAt && r.attendanceStatus !== 'absent')).length
+  const absentDays = records.filter(r => r.attendanceStatus === 'absent').length
+  const totalHours = records.reduce((s, r) => s + (r.totalHours || 0), 0)
+  const totalOT = records.reduce((s, r) => s + (r.overtimeHours || 0), 0)
+
+  return sendSuccess(res, {
+    data: {
+      records,
+      worker,
+      summary: {
+        totalRecords: records.length,
+        presentDays,
+        absentDays,
+        totalHours: parseFloat(totalHours.toFixed(1)),
+        totalOvertimeHours: parseFloat(totalOT.toFixed(1)),
+        avgHoursPerDay: presentDays > 0 ? parseFloat((totalHours / presentDays).toFixed(1)) : 0,
+      },
+    },
+  })
+})
+
+// ─── Admin: Payroll Payment Request Flow ──────────────────────────────────────
+
+/** POST /api/admin/enterprise/payrolls/:id/send-payment-request - Send payment request to Enterprise for approved payroll */
+export const sendPayrollPaymentRequest = asyncHandler(async (req, res) => {
+  if (req.user.role !== USER_ROLES.ADMIN) {
+    return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  const { adminNotes, dueDays = 7, includePlatformFee = true } = req.body
+
+  const payroll = await EnterprisePayroll.findById(req.params.id)
+    .populate('workerId', 'fullName')
+    .populate('enterpriseId', 'fullName enterpriseProfile')
+
+  if (!payroll) {
+    return sendError(res, { message: 'Payroll record not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  if (!['approved', 'under_review'].includes(payroll.status)) {
+    return sendError(res, { message: `Cannot send payment request for payroll with status: ${payroll.status}`, statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  // Check if payment request already exists for this payroll
+  const existingInvoice = await EnterprisePayrollInvoice.findOne({
+    payrollIds: payroll._id,
+    status: { $in: ['payment_pending', 'paid'] },
+  })
+  if (existingInvoice) {
+    return sendError(res, { message: `Payment request already sent (Invoice #${existingInvoice.invoiceNumber}). Status: ${existingInvoice.status}`, statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  // Calculate amounts
+  const settings = await SystemSettings.findOne({ singletonId: 'SYSTEM_SETTINGS' })
+  const platformFeeType = settings?.platformFeeType || 'percentage'
+  const platformFeeValue = settings?.platformFeeValue ?? 10
+  const isGstEnabled = settings?.isGstEnabled ?? true
+  const gstRate = settings?.gstPercentage ?? 18
+
+  const totalWorkerSalary = payroll.netSalary
+  let platformCommission = 0
+  if (includePlatformFee) {
+    if (platformFeeType === 'fixed') {
+      platformCommission = Number(platformFeeValue)
+    } else {
+      platformCommission = Math.round(totalWorkerSalary * (platformFeeValue / 100))
+    }
+  }
+
+  const subtotal = totalWorkerSalary + platformCommission
+  const gstAmount = isGstEnabled ? Math.round(subtotal * (gstRate / 100)) : 0
+  const grandTotal = subtotal + gstAmount
+
+  const invoiceDate = new Date()
+  const dueDate = new Date(invoiceDate.getTime() + Number(dueDays) * 24 * 60 * 60 * 1000)
+  const gracePeriodEndDate = new Date(dueDate.getTime() + 3 * 24 * 60 * 60 * 1000)
+  const invNumber = `SAL-INV-${payroll.year}${String(payroll.month).padStart(2, '0')}-${Date.now().toString().slice(-4)}-${Math.floor(100 + Math.random() * 900)}`
+
+  const workerName = payroll.workerId?.fullName || 'Worker'
+
+  const invoice = await EnterprisePayrollInvoice.create({
+    invoiceNumber: invNumber,
+    enterpriseId: payroll.enterpriseId._id || payroll.enterpriseId,
+    payrollIds: [payroll._id],
+    month: payroll.month,
+    year: payroll.year,
+    totalWorkerSalary,
+    platformCommission,
+    gstAmount,
+    grandTotal,
+    workerCount: 1,
+    workerSummary: [{
+      workerId: payroll.workerId._id || payroll.workerId,
+      workerName,
+      netSalary: totalWorkerSalary,
+      payrollId: payroll._id,
+    }],
+    status: 'payment_pending',
+    dueDate,
+    gracePeriodEndDate,
+    createdBy: req.user._id,
+    adminNotes: adminNotes || '',
+  })
+
+  // Update payroll status
+  payroll.status = 'payment_requested'
+  payroll.payrollInvoiceId = invoice._id
+  await payroll.save()
+
+  // Audit log
+  await EnterpriseFinancialAuditLog.create({
+    enterpriseId: payroll.enterpriseId._id || payroll.enterpriseId,
+    action: 'payroll_payment_requested',
+    amount: grandTotal,
+    performedBy: req.user._id,
+    details: {
+      invoiceNumber: invNumber,
+      payrollId: payroll._id,
+      month: payroll.month,
+      year: payroll.year,
+      workerName,
+      dueDate,
+    },
+  })
+
+  // Notify Enterprise HR
+  const companyName = payroll.enterpriseId?.enterpriseProfile?.companyName || payroll.enterpriseId?.fullName || 'Enterprise'
+  triggerNotification({
+    userId: payroll.enterpriseId._id || payroll.enterpriseId,
+    title: '💰 Salary Payment Request from Staffivaa',
+    body: `Payment of ₹${grandTotal.toLocaleString('en-IN')} is requested for ${workerName}'s salary (Month ${payroll.month}/${payroll.year}). Invoice #${invNumber}. Due by ${dueDate.toLocaleDateString('en-IN')}.`,
+    type: 'PAYROLL_PAYMENT_REQUEST',
+    relatedId: invoice._id,
+    relatedModel: 'EnterprisePayrollInvoice',
+  }).catch((err) => console.error('[Notification Error]:', err.message))
+
+  emitToRole('enterprise', 'enterprise_payroll_invoice', {
+    type: 'payment_request',
+    invoiceId: invoice._id,
+    enterpriseId: payroll.enterpriseId._id || payroll.enterpriseId,
+  })
+
+  return sendSuccess(res, {
+    message: `Payment request sent to ${companyName}! Invoice #${invNumber} (₹${grandTotal.toLocaleString('en-IN')}) generated.`,
+    data: { invoice, payroll },
+  })
+})
+
+// ─── Enterprise: Payroll Invoice & Payment ────────────────────────────────────
+
+/** GET /api/enterprise/payroll-invoices - Enterprise views their salary payment invoices */
+export const getEnterprisePayrollInvoices = asyncHandler(async (req, res) => {
+  if (req.user.role !== USER_ROLES.ENTERPRISE) {
+    return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  const { status } = req.query
+  const filter = { enterpriseId: req.user._id }
+  if (status && status !== 'all') filter.status = status
+
+  const invoices = await EnterprisePayrollInvoice.find(filter)
+    .populate('payrollIds')
+    .populate('createdBy', 'fullName')
+    .populate('workerSummary.workerId', 'fullName profileImageUrl phone')
+    .sort({ createdAt: -1 })
+
+  // Summary metrics
+  const allInvoices = await EnterprisePayrollInvoice.find({ enterpriseId: req.user._id })
+  const pendingAmount = allInvoices.filter(i => i.status === 'payment_pending').reduce((s, i) => s + (i.grandTotal || 0), 0)
+  const paidAmount = allInvoices.filter(i => ['paid', 'verified', 'salary_released'].includes(i.status)).reduce((s, i) => s + (i.grandTotal || 0), 0)
+
+  return sendSuccess(res, {
+    data: invoices,
+    metrics: {
+      totalInvoices: allInvoices.length,
+      pendingCount: allInvoices.filter(i => i.status === 'payment_pending').length,
+      pendingAmount,
+      paidAmount,
+    },
+  })
+})
+
+/** POST /api/enterprise/payroll-invoices/:id/pay - Enterprise pays payroll invoice via Razorpay or Wallet */
+export const payPayrollInvoice = asyncHandler(async (req, res) => {
+  if (req.user.role !== USER_ROLES.ENTERPRISE) {
+    return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  const invoice = await EnterprisePayrollInvoice.findOne({
+    _id: req.params.id,
+    enterpriseId: req.user._id,
+  })
+
+  if (!invoice) {
+    return sendError(res, { message: 'Invoice not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  if (invoice.status !== 'payment_pending') {
+    return sendError(res, { message: `Invoice is already ${invoice.status}`, statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  // Check Enterprise Wallet balance
+  let wallet = await EnterpriseWallet.findOne({ enterpriseId: req.user._id })
+  if (!wallet) {
+    wallet = await EnterpriseWallet.create({ enterpriseId: req.user._id, balance: 0 })
+  }
+
+  const availableBalance = wallet.balance || 0
+  const walletAmountUsed = Math.min(availableBalance, invoice.grandTotal)
+  const remainingAmount = invoice.grandTotal - walletAmountUsed
+
+  // CASE 1: Full wallet payment
+  if (remainingAmount === 0) {
+    const session = await mongoose.startSession()
+    session.startTransaction()
+    try {
+      const lockedWallet = await EnterpriseWallet.findOne({ enterpriseId: req.user._id }).session(session)
+      if (lockedWallet.balance < invoice.grandTotal) {
+        await session.abortTransaction()
+        return sendError(res, { message: 'Insufficient wallet balance', statusCode: HTTP_STATUS.BAD_REQUEST })
+      }
+
+      lockedWallet.balance -= invoice.grandTotal
+      await lockedWallet.save({ session })
+
+      await EnterpriseWalletTransaction.create([{
+        transactionId: `TXN_SAL_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,
+        enterpriseId: req.user._id,
+        type: 'payroll_payment',
+        amount: invoice.grandTotal,
+        balanceAfter: lockedWallet.balance,
+        description: `Salary Payment for Invoice #${invoice.invoiceNumber} (Month ${invoice.month}/${invoice.year})`,
+        status: 'success',
+      }], { session })
+
+      invoice.status = 'paid'
+      invoice.paidAt = new Date()
+      invoice.paymentMethod = 'enterprise_wallet'
+      invoice.walletAmountUsed = invoice.grandTotal
+      invoice.onlineAmountUsed = 0
+      await invoice.save({ session })
+
+      // Update all linked payrolls
+      await EnterprisePayroll.updateMany(
+        { _id: { $in: invoice.payrollIds } },
+        { $set: { status: 'payment_received' } },
+        { session }
+      )
+
+      await session.commitTransaction()
+    } catch (err) {
+      await session.abortTransaction()
+      throw err
+    } finally {
+      session.endSession()
+    }
+
+    // Notify Admin
+    const adminUsers = await User.find({ role: USER_ROLES.ADMIN }).select('_id')
+    for (const admin of adminUsers) {
+      triggerNotification({
+        userId: admin._id,
+        title: 'Enterprise Salary Payment Received 💳',
+        body: `Payment of ₹${invoice.grandTotal.toLocaleString('en-IN')} received for Invoice #${invoice.invoiceNumber} via Enterprise Wallet.`,
+        type: 'PAYROLL_PAYMENT_RECEIVED',
+        relatedId: invoice._id,
+        relatedModel: 'EnterprisePayrollInvoice',
+      }).catch((err) => console.error('[Notification Error]:', err.message))
+    }
+
+    emitToRole('admin', 'admin_notification', {
+      type: 'PAYROLL_PAYMENT_RECEIVED',
+      message: `Enterprise paid ₹${invoice.grandTotal.toLocaleString('en-IN')} for salary Invoice #${invoice.invoiceNumber}`,
+    })
+
+    return sendSuccess(res, {
+      message: 'Salary invoice paid fully from Enterprise Wallet!',
+      data: { invoice, paymentStatus: 'paid', walletBalance: wallet.balance - invoice.grandTotal },
+    })
+  }
+
+  // CASE 2: Razorpay order (partial or full online payment)
+  const receiptId = `RCPT_SAL_${invoice.invoiceNumber}_${Date.now().toString().slice(-4)}`
+  const order = await razorpay.orders.create({
+    amount: Math.round(remainingAmount * 100), // paise
+    currency: 'INR',
+    receipt: receiptId,
+    notes: {
+      invoiceId: String(invoice._id),
+      enterpriseId: String(req.user._id),
+      walletAmountUsed: String(walletAmountUsed),
+      remainingAmount: String(remainingAmount),
+      purpose: 'Enterprise Monthly Salary Payment',
+    },
+  })
+
+  invoice.walletAmountUsed = walletAmountUsed
+  invoice.onlineAmountUsed = remainingAmount
+  invoice.razorpayOrderId = order.id
+  await invoice.save()
+
+  return sendSuccess(res, {
+    message: walletAmountUsed > 0
+      ? `Applying ₹${walletAmountUsed.toLocaleString('en-IN')} from Wallet. Pay remaining ₹${remainingAmount.toLocaleString('en-IN')} via Gateway.`
+      : `Please pay ₹${remainingAmount.toLocaleString('en-IN')} via Payment Gateway.`,
+    data: {
+      paymentStatus: 'requires_online_payment',
+      invoice,
+      walletAmountUsed,
+      remainingAmount,
+      razorpayOrder: {
+        id: order.id,
+        amount: order.amount,
+        currency: order.currency,
+        key: process.env.RAZORPAY_KEY_ID || '',
+      },
+    },
+  })
+})
+
+/** POST /api/enterprise/payroll-invoices/:id/verify - Verify Razorpay payment for salary invoice */
+export const verifyPayrollInvoicePayment = asyncHandler(async (req, res) => {
+  if (req.user.role !== USER_ROLES.ENTERPRISE) {
+    return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body
+  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    return sendError(res, { message: 'Missing Razorpay payment details', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const invoice = await EnterprisePayrollInvoice.findOne({
+    _id: req.params.id,
+    enterpriseId: req.user._id,
+    razorpayOrderId: razorpay_order_id,
+  })
+
+  if (!invoice) {
+    return sendError(res, { message: 'Invoice not found or order mismatch', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  // Verify Razorpay Signature
+  const generatedSignature = crypto
+    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+    .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+    .digest('hex')
+
+  if (generatedSignature !== razorpay_signature) {
+    return sendError(res, { message: 'Invalid payment signature. Verification failed.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  // Atomic wallet debit + invoice update
+  const session = await mongoose.startSession()
+  session.startTransaction()
+  try {
+    // Debit wallet portion if applicable
+    if (invoice.walletAmountUsed > 0) {
+      const lockedWallet = await EnterpriseWallet.findOne({ enterpriseId: req.user._id }).session(session)
+      if (lockedWallet && lockedWallet.balance >= invoice.walletAmountUsed) {
+        lockedWallet.balance -= invoice.walletAmountUsed
+        await lockedWallet.save({ session })
+
+        await EnterpriseWalletTransaction.create([{
+          transactionId: `TXN_SAL_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,
+          enterpriseId: req.user._id,
+          type: 'payroll_payment',
+          amount: invoice.walletAmountUsed,
+          balanceAfter: lockedWallet.balance,
+          description: `Wallet portion for Salary Invoice #${invoice.invoiceNumber}`,
+          status: 'success',
+        }], { session })
+      }
+    }
+
+    invoice.status = 'paid'
+    invoice.paidAt = new Date()
+    invoice.paymentMethod = invoice.walletAmountUsed > 0 ? 'hybrid' : 'razorpay'
+    invoice.razorpayPaymentId = razorpay_payment_id
+    invoice.razorpaySignature = razorpay_signature
+    await invoice.save({ session })
+
+    // Update all linked payrolls
+    await EnterprisePayroll.updateMany(
+      { _id: { $in: invoice.payrollIds } },
+      { $set: { status: 'payment_received' } },
+      { session }
+    )
+
+    await session.commitTransaction()
+  } catch (err) {
+    await session.abortTransaction()
+    throw err
+  } finally {
+    session.endSession()
+  }
+
+  // Notify Admin
+  const adminUsers = await User.find({ role: USER_ROLES.ADMIN }).select('_id')
+  for (const admin of adminUsers) {
+    triggerNotification({
+      userId: admin._id,
+      title: 'Enterprise Salary Payment Verified ✅',
+      body: `₹${invoice.grandTotal.toLocaleString('en-IN')} verified for Invoice #${invoice.invoiceNumber}. You can now release worker salaries.`,
+      type: 'PAYROLL_PAYMENT_VERIFIED',
+      relatedId: invoice._id,
+      relatedModel: 'EnterprisePayrollInvoice',
+    }).catch((err) => console.error('[Notification Error]:', err.message))
+  }
+
+  emitToRole('admin', 'admin_notification', {
+    type: 'PAYROLL_PAYMENT_VERIFIED',
+    message: `Salary payment of ₹${invoice.grandTotal.toLocaleString('en-IN')} verified for Invoice #${invoice.invoiceNumber}`,
+  })
+
+  return sendSuccess(res, {
+    message: 'Payment verified successfully! Staffivaa Admin will now release worker salaries.',
+    data: { invoice },
+  })
 })

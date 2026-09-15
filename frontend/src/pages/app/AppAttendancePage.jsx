@@ -9,7 +9,11 @@ import {
   useGetAttendanceQuery,
   useVerifyCheckInOtpMutation,
 } from '../../store/api/workforceApi.js'
-import { useGetLabourCurrentEmploymentQuery } from '../../store/api/enterpriseApi.js'
+import {
+  useGetLabourCurrentEmploymentQuery,
+  useGetLabourEmploymentHistoryQuery,
+} from '../../store/api/enterpriseApi.js'
+import { ProfessionalSalarySlipModal } from '../../components/labour/salary/ProfessionalSalarySlipModal.jsx'
 import { useAuth } from '../../hooks/useAuth.js'
 import { getSocket } from '../../services/socket.js'
 import {
@@ -19,7 +23,11 @@ import {
   nowIso,
 } from '../../lib/labourJobDemoStorage.js'
 import { AppPrimaryButton } from '../../components/app/AppPrimaryButton.jsx'
-import { LogIn, LogOut, MapPin, Clock, Building2, Briefcase, UserCircle, CalendarDays, History, Navigation, AlertTriangle, KeyRound, CheckCircle } from 'lucide-react'
+import {
+  LogIn, LogOut, MapPin, Clock, Building2, Briefcase, UserCircle,
+  CalendarDays, History, Navigation, AlertTriangle, KeyRound, CheckCircle,
+  FileText, Download, CheckCircle2, ChevronRight, Award, ShieldCheck
+} from 'lucide-react'
 
 function isApiAssignment(job) {
   return Boolean(job?.requestId) && /^[a-f0-9]{24}$/i.test(String(job.id))
@@ -123,6 +131,10 @@ export function AppAttendancePage() {
   const { data: assignmentsData, isLoading: loadingAssignments, refetch } = useGetLabourAssignmentsQuery()
   const { data: currentEmpData, isLoading: loadingEmp } = useGetLabourCurrentEmploymentQuery()
   const currentEmp = currentEmpData?.data
+
+  const { data: historyData, isLoading: loadingHistory } = useGetLabourEmploymentHistoryQuery()
+  const pastJobsHistory = historyData?.data || []
+  const [selectedSalarySlip, setSelectedSalarySlip] = useState(null)
   
   // Fetch ALL historical attendance records for this worker, without date filtering
   const { data: attendanceData, isLoading: loadingAttendance } = useGetAttendanceQuery()
@@ -417,6 +429,30 @@ export function AppAttendancePage() {
   const displayAssignment = primaryAssignment || latestCompleted
   const isDemo = displayAssignment?.isDemo
   const req = displayAssignment?.requestId || {}
+
+  const isJobContractEnded = (jobOrApp) => {
+    if (!jobOrApp) return false
+    if (jobOrApp.isJobEnded) return true
+    if (jobOrApp.status === 'completed' || jobOrApp.status === 'ended' || jobOrApp.status === 'closed') return true
+    if (jobOrApp.jobId?.status === 'closed') return true
+
+    const endRaw =
+      jobOrApp.joiningDetails?.endDate ||
+      jobOrApp.offerDetails?.endDate ||
+      jobOrApp.jobId?.timeline?.projectEndDate ||
+      jobOrApp.timeline?.projectEndDate ||
+      jobOrApp.requestId?.endDate ||
+      jobOrApp.endDate
+    if (!endRaw) return false
+    const endDate = new Date(endRaw)
+    if (isNaN(endDate.getTime())) return false
+
+    const isMidnight = endDate.getUTCHours() === 0 && endDate.getUTCMinutes() === 0 && endDate.getUTCSeconds() === 0
+    const cutoff = isMidnight ? new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999).getTime() : endDate.getTime()
+    return Date.now() > cutoff
+  }
+
+  const isCurrentJobEnded = isJobContractEnded(displayAssignment) || isJobContractEnded(currentEmp)
 
   let projectName, corporateName, vendorName, roleName, locationStr, shiftStr
   if (displayAssignment) {
@@ -723,10 +759,16 @@ export function AppAttendancePage() {
                 <p style={{ fontSize: 13, fontWeight: 800, color: '#0F172A', margin: 0, leading: '1.4' }}>{locationStr}</p>
               </div>
             </div>
-            <div style={{ padding: '12px 16px', background: '#F8FAFC', borderTop: '1px solid #F1F5F9' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 800, color: '#10B981', background: '#ECFDF5', padding: '4px 10px', borderRadius: 12, border: '1px solid #A7F3D0' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }} /> Active Assignment
-              </span>
+            <div style={{ padding: '12px 16px', background: isCurrentJobEnded ? '#FFF1F2' : '#F8FAFC', borderTop: '1px solid #F1F5F9' }}>
+              {isCurrentJobEnded ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 800, color: '#BE123C', background: '#FFE4E6', padding: '4px 10px', borderRadius: 12, border: '1px solid #FECDD3' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#E11D48' }} /> Contract Concluded ({endDateFormatted})
+                </span>
+              ) : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 800, color: '#10B981', background: '#ECFDF5', padding: '4px 10px', borderRadius: 12, border: '1px solid #A7F3D0' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }} /> Active Assignment
+                </span>
+              )}
             </div>
           </div>
 
@@ -834,6 +876,28 @@ export function AppAttendancePage() {
                 <KeyRound style={{ width: 18, height: 18 }} />
                 Enter OTP to Check In
               </button>
+            ) : isCurrentJobEnded && !isCheckedIn ? (
+              <div style={{
+                padding: '16px', borderRadius: 16,
+                background: '#FFF1F2', border: '1.5px solid #FECDD3',
+                textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 6,
+                boxShadow: '0 2px 6px rgba(225,29,72,0.06)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, color: '#BE123C', fontWeight: 800, fontSize: 13.5 }}>
+                  <AlertTriangle style={{ width: 16, height: 16 }} />
+                  <span>Project Contract Concluded</span>
+                </div>
+                <p style={{ margin: 0, fontSize: 12.5, color: '#9F1239', fontWeight: 600, lineHeight: 1.5 }}>
+                  Enterprise timeline ke mutabiq yeh job {endDateFormatted} ko end ho chuki hai. Is project ke liye daily attendance aur check-in band kar diya gaya hai.
+                </p>
+                <div style={{
+                  marginTop: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  padding: '6px 12px', background: '#FFE4E6', borderRadius: 10,
+                  fontSize: 11.5, fontWeight: 700, color: '#BE123C'
+                }}>
+                  🔒 Check-in Closed | Pura attendance aur salary hisab niche dekhein
+                </div>
+              </div>
             ) : canCheckInToday && !isCheckedIn && !isCompleted ? (
               <>
                 {/* Live distance indicator */}
@@ -1221,6 +1285,239 @@ export function AppAttendancePage() {
             </div>
           )}
         </>
+      )}
+
+      {/* 4️⃣ Past / Completed Enterprise Projects & Earnings History */}
+      <div style={{
+        background: '#FFFFFF', borderRadius: 20, padding: '20px',
+        border: '1px solid #F1F5F9', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+        marginTop: '16px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 12,
+              background: 'linear-gradient(135deg, #4F46E5 0%, #3730A3 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 10px rgba(79,70,229,0.25)', flexShrink: 0
+            }}>
+              <Briefcase style={{ width: 20, height: 20, color: '#FFFFFF' }} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                Enterprise Work & Salary History
+              </h3>
+              <p style={{ fontSize: 11.5, color: '#64748B', margin: '2px 0 0', fontWeight: 600 }}>
+                Completed projects, verified attendance & salary slip downloads
+              </p>
+            </div>
+          </div>
+          {pastJobsHistory.length > 0 && (
+            <span style={{
+              fontSize: 11, fontWeight: 800, background: '#EEF2FF', color: '#4338CA',
+              padding: '4px 10px', borderRadius: 10, border: '1px solid #C7D2FE'
+            }}>
+              {pastJobsHistory.length} Project{pastJobsHistory.length > 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+
+        {loadingHistory ? (
+          <div style={{ padding: '32px', textAlign: 'center', color: '#94A3B8', fontSize: 13, fontWeight: 600 }}>
+            <Clock className="animate-spin inline-block mr-2" style={{ width: 16, height: 16 }} />
+            Loading project history & salary records...
+          </div>
+        ) : pastJobsHistory.length === 0 ? (
+          <div style={{
+            padding: '28px 20px', textAlign: 'center', background: '#F8FAFC', borderRadius: 16,
+            border: '1.5px dashed #E2E8F0', color: '#64748B'
+          }}>
+            <Building2 style={{ width: 36, height: 36, color: '#94A3B8', margin: '0 auto 10px' }} />
+            <h4 style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 800, color: '#1E293B' }}>
+              No Completed Projects Yet
+            </h4>
+            <p style={{ margin: 0, fontSize: 12, color: '#64748B', lineHeight: 1.5 }}>
+              Jab enterprise dwara di gayi timeline ke mutabiq aapka project complete ya end hoga, uska pura attendance hisab aur download salary slip yahan show hoga.
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {pastJobsHistory.map((item, idx) => {
+              const compName = item.enterprise?.enterpriseProfile?.companyName || item.enterprise?.fullName || 'Enterprise Client'
+              const jTitle = item.job?.jobTitle || 'Enterprise Worker'
+              const jLocation = item.job?.locationText || 'Work Site'
+              const isEnded = item.isJobEnded
+              const stats = item.attendanceStats || {}
+              const salary = item.salaryDetails || {}
+              const payrollObj = item.payroll
+
+              const sFormatted = item.startDate ? formatDate(item.startDate) : '—'
+              const eFormatted = item.endDate ? formatDate(item.endDate) : (isEnded ? 'Concluded' : 'Ongoing')
+
+              return (
+                <div
+                  key={item.applicationId || idx}
+                  style={{
+                    borderRadius: 18, border: '1.5px solid #E2E8F0', overflow: 'hidden',
+                    background: '#FFFFFF', boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {/* Card Header */}
+                  <div style={{
+                    padding: '14px 16px',
+                    background: isEnded ? 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)' : 'linear-gradient(135deg, #1E3A8A 0%, #1E293B 100%)',
+                    color: '#FFFFFF'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <h4 style={{ fontSize: 15, fontWeight: 800, margin: 0, color: '#FFFFFF' }}>{compName}</h4>
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 3,
+                            fontSize: 10, fontWeight: 800, color: '#34D399', background: 'rgba(16,185,129,0.15)',
+                            padding: '2px 7px', borderRadius: 8, border: '1px solid rgba(16,185,129,0.3)'
+                          }}>
+                            <ShieldCheck style={{ width: 11, height: 11 }} /> Verified
+                          </span>
+                        </div>
+                        <p style={{ fontSize: 12.5, color: '#94A3B8', margin: '3px 0 0', fontWeight: 600 }}>
+                          Role: <strong style={{ color: '#E2E8F0' }}>{jTitle}</strong> • {jLocation}
+                        </p>
+                      </div>
+
+                      <span style={{
+                        padding: '4px 10px', borderRadius: 10, fontSize: 10.5, fontWeight: 800, flexShrink: 0,
+                        background: isEnded ? '#334155' : '#059669',
+                        color: isEnded ? '#E2E8F0' : '#FFFFFF',
+                        border: isEnded ? '1px solid #475569' : 'none'
+                      }}>
+                        {isEnded ? '🏁 Completed' : '🟢 Current Active'}
+                      </span>
+                    </div>
+
+                    {/* Timeline Pill */}
+                    <div style={{
+                      marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6,
+                      fontSize: 11, fontWeight: 700, color: '#CBD5E1',
+                      background: 'rgba(255,255,255,0.08)', padding: '4px 10px', borderRadius: 8
+                    }}>
+                      <CalendarDays style={{ width: 12, height: 12, color: '#38BDF8' }} />
+                      <span>{sFormatted} ➔ {eFormatted}</span>
+                    </div>
+                  </div>
+
+                  {/* Body Content */}
+                  <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {/* Project Attendance Summary */}
+                    <div>
+                      <p style={{
+                        fontSize: 10, fontWeight: 800, color: '#64748B', textTransform: 'uppercase',
+                        letterSpacing: '0.6px', margin: '0 0 8px'
+                      }}>
+                        Project Attendance Summary
+                      </p>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                        <div style={{ background: '#ECFDF5', padding: '10px 8px', borderRadius: 12, textAlign: 'center', border: '1px solid #A7F3D0' }}>
+                          <span style={{ fontSize: 9.5, fontWeight: 800, color: '#047857', display: 'block', textTransform: 'uppercase' }}>Present</span>
+                          <span style={{ fontSize: 15, fontWeight: 900, color: '#065F46' }}>{stats.totalPresent || 0}d</span>
+                        </div>
+                        <div style={{ background: '#F0F9FF', padding: '10px 8px', borderRadius: 12, textAlign: 'center', border: '1px solid #BAE6FD' }}>
+                          <span style={{ fontSize: 9.5, fontWeight: 800, color: '#0369A1', display: 'block', textTransform: 'uppercase' }}>Hours</span>
+                          <span style={{ fontSize: 15, fontWeight: 900, color: '#0C4A6E' }}>{stats.totalHours || 0}h</span>
+                        </div>
+                        <div style={{ background: '#FFFBEB', padding: '10px 8px', borderRadius: 12, textAlign: 'center', border: '1px solid #FDE68A' }}>
+                          <span style={{ fontSize: 9.5, fontWeight: 800, color: '#B45309', display: 'block', textTransform: 'uppercase' }}>Overtime</span>
+                          <span style={{ fontSize: 15, fontWeight: 900, color: '#78350F' }}>+{stats.totalOvertime || 0}h</span>
+                        </div>
+                        <div style={{ background: '#F8FAFC', padding: '10px 8px', borderRadius: 12, textAlign: 'center', border: '1px solid #E2E8F0' }}>
+                          <span style={{ fontSize: 9.5, fontWeight: 800, color: '#475569', display: 'block', textTransform: 'uppercase' }}>Rate</span>
+                          <span style={{ fontSize: 13, fontWeight: 900, color: '#0F172A' }}>₹{salary.rate || 0}/{salary.rateType?.slice(0, 2) || 'hr'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Salary & Earnings Received Breakdown */}
+                    <div style={{
+                      background: '#F8FAFC', borderRadius: 14, padding: '14px',
+                      border: '1px solid #E2E8F0'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                          Salary Calculation
+                        </span>
+                        <span style={{
+                          padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 800,
+                          background: (salary.status === 'paid' || salary.status === 'released') ? '#ECFDF5' : '#FFFBEB',
+                          color: (salary.status === 'paid' || salary.status === 'released') ? '#047857' : '#B45309',
+                          border: `1px solid ${(salary.status === 'paid' || salary.status === 'released') ? '#A7F3D0' : '#FDE68A'}`
+                        }}>
+                          {(salary.status === 'paid' || salary.status === 'released') ? '✅ Disbursed / Paid' : '🟡 Processing'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 10, alignItems: 'center' }}>
+                        <div>
+                          <span style={{ fontSize: 9.5, fontWeight: 700, color: '#94A3B8', display: 'block', textTransform: 'uppercase' }}>Gross Earned</span>
+                          <span style={{ fontSize: 13.5, fontWeight: 800, color: '#334155' }}>₹{(salary.grossSalary || 0).toLocaleString('en-IN')}</span>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 9.5, fontWeight: 700, color: '#94A3B8', display: 'block', textTransform: 'uppercase' }}>Deductions</span>
+                          <span style={{ fontSize: 13.5, fontWeight: 800, color: '#EF4444' }}>
+                            {salary.otherDeductions > 0 ? `-₹${salary.otherDeductions.toLocaleString('en-IN')}` : '₹0'}
+                          </span>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: 9.5, fontWeight: 800, color: '#059669', display: 'block', textTransform: 'uppercase' }}>Net Salary</span>
+                          <span style={{ fontSize: 18, fontWeight: 900, color: '#047857' }}>₹{(salary.netSalary || 0).toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+
+                      {salary.paidAt && (
+                        <p style={{ margin: '8px 0 0', fontSize: 11, color: '#64748B', fontWeight: 600 }}>
+                          Paid on: {formatDate(salary.paidAt)}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Action: Download / View Salary Slip */}
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (payrollObj) {
+                            setSelectedSalarySlip(payrollObj)
+                          } else {
+                            showToast('No payslip generated for this project yet.')
+                          }
+                        }}
+                        style={{
+                          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                          padding: '12px 0', borderRadius: 12, border: 'none', cursor: 'pointer',
+                          background: 'linear-gradient(135deg, #4F46E5 0%, #4338CA 100%)',
+                          color: '#FFFFFF', fontSize: 13, fontWeight: 800,
+                          boxShadow: '0 3px 10px rgba(79,70,229,0.25)',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <FileText style={{ width: 16, height: 16 }} />
+                        <span>View / Download Salary Slip (PDF)</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 5️⃣ Professional Salary Slip Modal */}
+      {selectedSalarySlip && (
+        <ProfessionalSalarySlipModal
+          payroll={selectedSalarySlip}
+          onClose={() => setSelectedSalarySlip(null)}
+        />
       )}
 
       {createPortal(

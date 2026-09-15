@@ -22,6 +22,10 @@ export const VENDOR_TYPE_LABELS = {
 }
 
 export const VENDOR_DOCUMENT_TYPES = {
+  AADHAAR_FRONT: 'aadhaar_front',
+  AADHAAR_BACK: 'aadhaar_back',
+  PAN: 'pan',
+  SELFIE: 'selfie',
   SHOP_ESTABLISHMENT: 'shop_establishment',
   GST_CERTIFICATE: 'gst_certificate',
   PAN_CARD: 'pan_card',
@@ -37,6 +41,10 @@ export const VENDOR_DOCUMENT_TYPES = {
 export const VENDOR_DOCUMENT_TYPE_LIST = Object.values(VENDOR_DOCUMENT_TYPES)
 
 export const VENDOR_DOCUMENT_LABELS = {
+  [VENDOR_DOCUMENT_TYPES.AADHAAR_FRONT]: 'Proprietor / Partner Aadhaar (Front)',
+  [VENDOR_DOCUMENT_TYPES.AADHAAR_BACK]: 'Proprietor / Partner Aadhaar (Back)',
+  [VENDOR_DOCUMENT_TYPES.PAN]: 'Business / Proprietor PAN Card',
+  [VENDOR_DOCUMENT_TYPES.SELFIE]: 'Authorized Person / Vendor Selfie / Live Photo',
   [VENDOR_DOCUMENT_TYPES.SHOP_ESTABLISHMENT]: 'Shop & establishment / business registration',
   [VENDOR_DOCUMENT_TYPES.GST_CERTIFICATE]: 'GST registration certificate',
   [VENDOR_DOCUMENT_TYPES.PAN_CARD]: 'Business PAN card',
@@ -48,3 +56,4 @@ export const VENDOR_DOCUMENT_LABELS = {
   [VENDOR_DOCUMENT_TYPES.CANCELLED_CHEQUE]: 'Cancelled cheque / bank proof',
   [VENDOR_DOCUMENT_TYPES.OTHER]: 'Other supporting document',
 }
+

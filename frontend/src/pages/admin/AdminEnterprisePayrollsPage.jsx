@@ -9,6 +9,7 @@ import {
   useGetAdminEnterprisePayrollsQuery,
   useReviewEnterprisePayrollMutation,
   useReleaseEnterpriseSalaryMutation,
+  useSendPayrollPaymentRequestMutation,
 } from '../../store/api/adminEnterpriseApi.js'
 import { ProfessionalSalarySlipModal } from '../../components/labour/salary/ProfessionalSalarySlipModal.jsx'
 import toast from 'react-hot-toast'
@@ -25,6 +26,7 @@ export function AdminEnterprisePayrollsPage() {
   })
   const [reviewPayroll, { isLoading: isReviewing }] = useReviewEnterprisePayrollMutation()
   const [releaseSalary, { isLoading: isReleasing }] = useReleaseEnterpriseSalaryMutation()
+  const [sendPaymentRequest, { isLoading: isSendingRequest }] = useSendPayrollPaymentRequestMutation()
 
   const payrolls = payrollsData?.data || []
   const filteredPayrolls = payrolls.filter((p) => {
@@ -117,6 +119,17 @@ export function AdminEnterprisePayrollsPage() {
       refetch()
     } catch (err) {
       toast.error(err?.data?.message || 'Approval failed')
+    }
+  }
+
+  const handleSendPaymentRequest = async (row) => {
+    if (!window.confirm(`Send payment request of ₹${(row.netSalary || 0).toLocaleString('en-IN')} to Enterprise for ${row.workerId?.fullName || 'Worker'}?`)) return
+    try {
+      const res = await sendPaymentRequest({ id: row._id }).unwrap()
+      toast.success(res.message || 'Payment request sent to Enterprise!')
+      refetch()
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to send payment request')
     }
   }
 
@@ -220,6 +233,8 @@ export function AdminEnterprisePayrollsPage() {
             const isReleased = ['released', 'paid'].includes(row.status)
             const isApproved = row.status === 'approved'
             const isReview = row.status === 'under_review'
+            const isPaymentRequested = row.status === 'payment_requested'
+            const isPaymentReceived = row.status === 'payment_received'
 
             const workerIdTag = `WRK-${(worker._id || '').slice(-6).toUpperCase()}`
             const hasAadhaar = Boolean(worker.labourProfile?.aadhaarMasked || worker.labourProfile?.kycStatus === 'approved')
@@ -377,14 +392,18 @@ export function AdminEnterprisePayrollsPage() {
                   <div className="flex items-center gap-2">
                     <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-black uppercase ${
                       isReleased ? 'bg-emerald-100 text-emerald-900' :
+                      isPaymentReceived ? 'bg-cyan-100 text-cyan-900' :
+                      isPaymentRequested ? 'bg-orange-100 text-orange-900 animate-pulse' :
                       isApproved ? 'bg-purple-100 text-purple-900' :
                       isReview ? 'bg-amber-100 text-amber-900 animate-pulse' :
                       'bg-slate-100 text-slate-800'
                     }`}>
                       {isReleased ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> :
+                       isPaymentReceived ? <DollarSign className="h-3.5 w-3.5 text-cyan-600" /> :
+                       isPaymentRequested ? <Clock className="h-3.5 w-3.5 text-orange-600" /> :
                        isApproved ? <ShieldCheck className="h-3.5 w-3.5 text-purple-600" /> :
                        <Clock className="h-3.5 w-3.5 text-amber-600" />}
-                      Status: {row.status.replace('_', ' ')}
+                      Status: {row.status.replace(/_/g, ' ')}
                     </span>
                     {row.paymentReference && (
                       <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
@@ -418,7 +437,23 @@ export function AdminEnterprisePayrollsPage() {
                       </button>
                     )}
 
-                    {(isReview || isApproved) && (
+                    {isApproved && (
+                      <button
+                        onClick={() => handleSendPaymentRequest(row)}
+                        disabled={isSendingRequest}
+                        className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-[12px] shadow-md shadow-orange-500/20 flex items-center gap-1.5 cursor-pointer active:scale-[0.98]"
+                      >
+                        <Send className="h-3.5 w-3.5" /> {isSendingRequest ? 'Sending...' : 'Send Payment Request'}
+                      </button>
+                    )}
+
+                    {isPaymentRequested && (
+                      <span className="px-4 py-2 rounded-xl bg-orange-50 border border-orange-200 text-orange-700 font-black text-[12px] flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5" /> Waiting for Enterprise Payment...
+                      </span>
+                    )}
+
+                    {(isPaymentReceived) && (
                       <button
                         onClick={() => openCreditModal(row)}
                         disabled={isReleasing}
@@ -730,7 +765,18 @@ export function AdminEnterprisePayrollsPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                 <p className="text-[10px] text-slate-400 font-bold uppercase">Working Days</p>
-                <p className="text-base font-black text-slate-900">{selectedAttendance.totalWorkingDays || 26} Days</p>
+                <p className="text-base font-black text-slate-900 flex items-center">
+                  {selectedAttendance.totalWorkingDays && selectedAttendance.totalWorkingDays <= (selectedAttendance.presentDays || 1)
+                    ? `${selectedAttendance.totalWorkingDays} Day${selectedAttendance.totalWorkingDays > 1 ? 's' : ''}`
+                    : (selectedAttendance.absentDays === 0 && selectedAttendance.presentDays > 0
+                        ? `${selectedAttendance.presentDays} Day${selectedAttendance.presentDays > 1 ? 's' : ''}`
+                        : `${selectedAttendance.totalWorkingDays || 26} Days`)}
+                  {selectedAttendance.jobId?.salaryType === 'hourly' && (
+                    <span className="text-xs text-indigo-600 font-bold ml-1.5">
+                      ({selectedAttendance.totalWorkingHours || selectedAttendance.attendanceLogs?.[0]?.totalHours || 0}h)
+                    </span>
+                  )}
+                </p>
               </div>
               <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100">
                 <p className="text-[10px] text-emerald-600 font-bold uppercase">Present Days</p>

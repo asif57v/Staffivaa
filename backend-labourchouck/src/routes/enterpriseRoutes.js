@@ -23,6 +23,8 @@ import {
   markWorkerJoined,
   getActiveWorkforce,
   getLabourCurrentEmployment,
+  getLabourEmploymentHistory,
+  concludeEnterpriseJob,
   getEnterpriseWorkerAttendance,
   getJobWorkersAttendance,
 } from '../controllers/enterpriseController.js'
@@ -31,6 +33,9 @@ import {
   getEnterprisePayrolls,
   submitPayrollForReview,
   getMyEnterprisePayrolls,
+  getEnterprisePayrollInvoices,
+  payPayrollInvoice,
+  verifyPayrollInvoicePayment,
 } from '../controllers/enterprisePayrollController.js'
 
 const router = express.Router()
@@ -45,6 +50,7 @@ router.get('/my-applications', protect, getMyApplications)
 router.get('/applications/:id/interview', protect, getInterviewDetails)
 router.post('/applications/:id/respond-offer', protect, respondToOffer)
 router.get('/my-employment', protect, getLabourCurrentEmployment)
+router.get('/my-employment/history', protect, getLabourEmploymentHistory)
 router.get('/my-payrolls', protect, getMyEnterprisePayrolls)
 
 // ── Enterprise HR Panel ──────────────────────────────────────────────────────
@@ -52,6 +58,7 @@ router.get('/dashboard-overview', protect, getEnterpriseDashboardOverview)
 router.get('/security-settings', protect, getEnterpriseSecuritySettings)
 router.get('/jobs', protect, getEnterpriseJobs)
 router.post('/jobs', protect, createEnterpriseJob)
+router.patch('/jobs/:id/conclude', protect, concludeEnterpriseJob)
 
 router.get('/company-applications', protect, getEnterpriseCompanyApplications)
 router.patch('/applications/:id/status', protect, updateApplicationStatus)
@@ -75,5 +82,10 @@ router.get('/active-workforce', protect, getActiveWorkforce)
 router.post('/payroll/calculate', protect, calculateEnterpriseMonthlyPayroll)
 router.get('/payroll', protect, getEnterprisePayrolls)
 router.post('/payroll/:id/submit', protect, submitPayrollForReview)
+
+// ── Enterprise Salary Payment Invoices ───────────────────────────────────────
+router.get('/payroll-invoices', protect, getEnterprisePayrollInvoices)
+router.post('/payroll-invoices/:id/pay', protect, payPayrollInvoice)
+router.post('/payroll-invoices/:id/verify', protect, verifyPayrollInvoicePayment)
 
 export default router

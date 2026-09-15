@@ -75,6 +75,20 @@ export const enterpriseApi = baseApi.injectEndpoints({
       providesTags: ['LabourEmployment'],
     }),
 
+    getLabourEmploymentHistory: builder.query({
+      query: () => '/enterprise/my-employment/history',
+      providesTags: ['LabourEmployment', 'EnterprisePayrolls'],
+    }),
+
+    concludeEnterpriseJob: builder.mutation({
+      query: ({ id, endDate }) => ({
+        url: `/enterprise/jobs/${id}/conclude`,
+        method: 'PATCH',
+        body: { endDate },
+      }),
+      invalidatesTags: ['EnterpriseJobs', 'EnterpriseApplications', 'EnterpriseWorkforce', 'LabourEmployment'],
+    }),
+
     // ── Enterprise HR Hiring & Applications ──────────────────────────────────
     getEnterpriseCompanyApplications: builder.query({
       query: (params) => ({ url: '/enterprise/company-applications', params }),
@@ -227,6 +241,27 @@ export const enterpriseApi = baseApi.injectEndpoints({
       query: (jobId) => `/enterprise/jobs/${jobId}/workers-attendance`,
       providesTags: ['EnterpriseWorkforce'],
     }),
+
+    // ── Enterprise Salary Payment Invoices ───────────────────────────────────
+    getEnterprisePayrollInvoices: builder.query({
+      query: (params) => ({ url: '/enterprise/payroll-invoices', params }),
+      providesTags: ['EnterprisePayrollInvoices'],
+    }),
+    payPayrollInvoice: builder.mutation({
+      query: (invoiceId) => ({
+        url: `/enterprise/payroll-invoices/${invoiceId}/pay`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['EnterprisePayrollInvoices', 'EnterprisePayrolls', 'EnterpriseWallet'],
+    }),
+    verifyPayrollInvoicePayment: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/enterprise/payroll-invoices/${id}/verify`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['EnterprisePayrollInvoices', 'EnterprisePayrolls', 'EnterpriseWallet'],
+    }),
   }),
 })
 
@@ -239,6 +274,8 @@ export const {
   useGetMyEnterpriseApplicationsQuery,
   useRespondToOfferMutation,
   useGetLabourCurrentEmploymentQuery,
+  useGetLabourEmploymentHistoryQuery,
+  useConcludeEnterpriseJobMutation,
   useGetEnterpriseCompanyApplicationsQuery,
   useUpdateApplicationStatusMutation,
   useScheduleInterviewMutation,
@@ -259,4 +296,8 @@ export const {
   useGetEnterpriseWorkerAttendanceQuery,
   useGetEnterpriseDashboardOverviewQuery,
   useGetJobWorkersAttendanceQuery,
+  useGetEnterprisePayrollInvoicesQuery,
+  usePayPayrollInvoiceMutation,
+  useVerifyPayrollInvoicePaymentMutation,
 } = enterpriseApi
+

@@ -61,10 +61,13 @@ const enterprisePayrollSchema = new mongoose.Schema(
     // Lifecycle Governance Status
     status: {
       type: String,
-      enum: ['draft', 'under_review', 'approved', 'on_hold', 'rejected', 'released', 'paid', 'failed'],
+      enum: ['draft', 'under_review', 'approved', 'on_hold', 'rejected', 'payment_requested', 'payment_received', 'released', 'paid', 'failed'],
       default: 'draft',
       index: true,
     },
+    
+    // Link to Payroll Payment Invoice (sent by Admin to Enterprise)
+    payrollInvoiceId: { type: mongoose.Schema.Types.ObjectId, ref: 'EnterprisePayrollInvoice' },
     
     // Admin Review & Release Audit Trail
     reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

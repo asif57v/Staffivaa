@@ -90,6 +90,21 @@ router.get('/:id', restrictTo(USER_ROLES.ADMIN), validateUserIdParam, validateRe
 router.patch('/:id/status', restrictTo(USER_ROLES.ADMIN), validateUserIdParam, validateRequest, user.patchUserStatusAdmin)
 router.post('/:id/notes', restrictTo(USER_ROLES.ADMIN), validateUserIdParam, validateRequest, user.addAdminNote)
 router.patch('/:id/wallet', restrictTo(USER_ROLES.ADMIN), validateUserIdParam, validateRequest, user.updateUserWalletAdmin)
+router.patch(
+  '/:id/skills',
+  restrictTo(USER_ROLES.ADMIN),
+  validateUserIdParam,
+  [
+    body('categoryIds').optional().isArray(),
+    body('categoryIds.*').optional().isMongoId(),
+    body('skills').optional().isArray(),
+    body('skills.*').optional().trim().isLength({ min: 1, max: 64 }),
+    body('reason').optional().trim().isLength({ max: 500 }),
+  ],
+  validateRequest,
+  user.updateUserSkillsAdmin,
+)
 router.get('/:id/timeline', restrictTo(USER_ROLES.ADMIN), validateUserIdParam, validateRequest, user.getUserTimelineAdmin)
 
 export default router
+

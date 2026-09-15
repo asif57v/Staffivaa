@@ -100,19 +100,19 @@ export function PopularServicesSection({ onBook }) {
             className="group relative flex w-[165px] min-w-[165px] shrink-0 cursor-pointer flex-col overflow-hidden rounded-2xl bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] ring-1 ring-slate-100 transition-all hover:shadow-[0_8px_16px_rgba(0,0,0,0.08)] active:scale-[0.97]"
             onClick={() => onBook?.(service)}
           >
-            {/* Image Container with full image contain */}
-            <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-50 flex items-center justify-center p-2">
+            {/* Image Container with full edge-to-edge card cover */}
+            <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
               <img
                 src={service.image}
                 alt={service.title}
-                className="max-h-full max-w-full w-auto h-auto object-contain transition-transform duration-500 group-hover:scale-105"
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                 loading="lazy"
                 onError={(e) => {
                   e.currentTarget.src = '/service_ac.png'
                 }}
               />
               {service.discount && (
-                <div className="absolute left-2 top-2 rounded-md bg-[#059669] px-1.5 py-0.5 text-[9px] font-bold text-white shadow-xs">
+                <div className="absolute left-0 top-0 rounded-br-lg bg-[#059669] px-2 py-1 text-[10px] font-bold text-white shadow-sm">
                   {service.discount}
                 </div>
               )}
