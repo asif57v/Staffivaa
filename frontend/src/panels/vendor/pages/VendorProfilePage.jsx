@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
@@ -52,7 +52,7 @@ import { LabourKycWorkflowTimeline } from '../../../components/labour/kyc/Labour
 import { BusinessKycPhotoUploadGrid } from '../../../components/business/BusinessKycPhotoUploadGrid.jsx'
 import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
 import { GlassPanel } from '../../../components/ui/GlassPanel.jsx'
-import { dataUrlToFile } from '../../../lib/kycDraftStorage.js'
+import { dataUrlToFile, saveKycDraft, loadKycDraft, clearKycDraft } from '../../../lib/kycDraftStorage.js'
 import {
   useAddVendorDocumentMutation,
   usePatchVendorMeMutation,
@@ -176,6 +176,97 @@ export function VendorProfilePage() {
 
   const [form, setForm] = useState(() => profileToForm(profile, user))
   const [photos, setPhotos] = useState(() => profileToPhotos(profile))
+  const [draftLoaded, setDraftLoaded] = useState(false)
+  const latestStateRef = useRef({ form, photos, userId: user?._id })
+  const isLoadedRef = useRef(false)
+
+  useEffect(() => {
+    latestStateRef.current = { form, photos, userId: user?._id }
+  }, [form, photos, user?._id])
+
+  // Load persistent draft on mount / user change
+  useEffect(() => {
+    let cancelled = false
+    async function initDraft() {
+      if (isApproved) {
+        setDraftLoaded(true)
+        isLoadedRef.current = true
+        return
+      }
+      try {
+        const draft = await loadKycDraft(user?._id, 'vendor')
+        if (!cancelled && draft) {
+          const remotePhotos = profileToPhotos(profile)
+          const mergedPhotos = {
+            ...remotePhotos,
+            ...(draft.photos || {}),
+          }
+          if (Object.keys(mergedPhotos).length > 0) {
+            setPhotos(mergedPhotos)
+          }
+          if (draft.form && typeof draft.form === 'object') {
+            setForm((prev) => ({
+              ...prev,
+              ...draft.form,
+            }))
+          }
+        }
+      } catch (err) {
+        console.warn('[VendorProfilePage] Failed to restore draft:', err)
+      } finally {
+        if (!cancelled) {
+          setDraftLoaded(true)
+          isLoadedRef.current = true
+        }
+      }
+    }
+    initDraft()
+    return () => {
+      cancelled = true
+    }
+  }, [user?._id, isApproved])
+
+  // Auto-save draft when form or photos change
+  useEffect(() => {
+    if (!draftLoaded || !isLoadedRef.current || isApproved) return
+    const timer = setTimeout(() => {
+      saveKycDraft({
+        form,
+        photos,
+        userId: user?._id,
+        role: 'vendor',
+      })
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [form, photos, draftLoaded, user?._id, isApproved])
+
+  // Guaranteed immediate save on exit (when vendor taps back / navigates away / closes app)
+  useEffect(() => {
+    const handleSaveOnExit = () => {
+      if (!isLoadedRef.current || isApproved) return
+      const current = latestStateRef.current
+      if (current && ((current.photos && Object.keys(current.photos).length > 0) || current.form)) {
+        saveKycDraft({
+          ...current,
+          role: 'vendor',
+        })
+      }
+    }
+
+    window.addEventListener('pagehide', handleSaveOnExit)
+    window.addEventListener('beforeunload', handleSaveOnExit)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') handleSaveOnExit()
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      handleSaveOnExit()
+      window.removeEventListener('pagehide', handleSaveOnExit)
+      window.removeEventListener('beforeunload', handleSaveOnExit)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [isApproved])
   const [docType, setDocType] = useState(VENDOR_DOCUMENT_TYPES.SHOP_ESTABLISHMENT)
   const [uploading, setUploading] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -239,8 +330,16 @@ export function VendorProfilePage() {
   const [submitVerification] = useSubmitVendorVerificationMutation()
 
   useEffect(() => {
-    setForm(profileToForm(profile, user))
-    setPhotos(profileToPhotos(profile))
+    const remoteForm = profileToForm(profile, user)
+    const remotePhotos = profileToPhotos(profile)
+    setForm((prev) => ({
+      ...remoteForm,
+      ...(prev || {}),
+    }))
+    setPhotos((prev) => ({
+      ...remotePhotos,
+      ...(prev || {}),
+    }))
   }, [user?._id, profile?.businessName, profile?.kycFrontImageUrl, profile?.kycPanImageUrl])
 
   useEffect(() => {
@@ -438,6 +537,7 @@ export function VendorProfilePage() {
       await patchVendorMe(patchBody(uploadedPhotos)).unwrap()
       const res = await submitVerification().unwrap()
       refreshUser(res)
+      await clearKycDraft(user?._id, 'vendor')
       setBanner({
         variant: 'success',
         message: res?.message || 'Submitted for admin review',

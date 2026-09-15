@@ -59,14 +59,48 @@ export function dataUrlToFile(dataUrl, filename = 'document.jpg', mimeType = 'im
   }
 }
 
+function getDraftKeys(userKey, role = 'labour') {
+  if (role === 'vendor') {
+    return {
+      textUser: `lc_vendor_kyc_text_${userKey}`,
+      textDraft: 'lc_vendor_kyc_text_draft',
+      photosUser: `lc_vendor_kyc_photos_${userKey}`,
+      photosDraft: 'lc_vendor_kyc_photos_draft',
+      idbKeys: [`kyc_draft_vendor_${userKey}`, 'kyc_draft_vendor_current_user', 'kyc_draft_vendor_universal'],
+    }
+  }
+  if (role === 'corporate') {
+    return {
+      textUser: `lc_corporate_kyc_text_${userKey}`,
+      textDraft: 'lc_corporate_kyc_text_draft',
+      photosUser: `lc_corporate_kyc_photos_${userKey}`,
+      photosDraft: 'lc_corporate_kyc_photos_draft',
+      idbKeys: [`kyc_draft_corporate_${userKey}`, 'kyc_draft_corporate_current_user', 'kyc_draft_corporate_universal'],
+    }
+  }
+  // default: labour
+  return {
+    textUser: `lc_labour_kyc_text_${userKey}`,
+    textDraft: 'lc_labour_kyc_text_draft',
+    photosUser: `lc_labour_kyc_photos_${userKey}`,
+    photosDraft: 'lc_labour_kyc_photos_draft',
+    idbKeys: [`kyc_draft_${userKey}`, 'kyc_draft_current_user', 'kyc_draft_universal'],
+  }
+}
+
 /**
- * Persist KYC form draft (Aadhaar, PAN, and local photo files/blobs)
+ * Persist KYC form draft (Aadhaar, PAN, form fields, and local photo files/blobs)
  */
-export async function saveKycDraft({ aadhaar, pan, photos, userId }) {
+export async function saveKycDraft({ aadhaar, pan, photos, form, userId, role = 'labour' }) {
   const userKey = userId || 'current_user'
+  const keys = getDraftKeys(userKey, role)
 
   const hasPhotos = photos && Object.keys(photos).length > 0
-  const hasText = Boolean((aadhaar && aadhaar.trim()) || (pan && pan.trim()))
+  const hasText = Boolean(
+    (aadhaar && aadhaar.trim()) ||
+    (pan && pan.trim()) ||
+    (form && Object.keys(form).some((k) => Boolean(form[k])))
+  )
   if (!hasPhotos && !hasText) {
     return
   }
@@ -75,15 +109,17 @@ export async function saveKycDraft({ aadhaar, pan, photos, userId }) {
   const textPayload = {
     aadhaar: aadhaar || '',
     pan: pan || '',
+    form: form || null,
     userId: userKey,
     hasPhotos,
     savedAt: Date.now(),
   }
 
   try {
-    localStorage.setItem('lc_labour_kyc_text_draft', JSON.stringify(textPayload))
-    localStorage.setItem(`lc_labour_kyc_text_${userKey}`, JSON.stringify(textPayload))
-    sessionStorage.setItem('lc_labour_kyc_text_draft', JSON.stringify(textPayload))
+    const serialized = JSON.stringify(textPayload)
+    localStorage.setItem(keys.textDraft, serialized)
+    localStorage.setItem(keys.textUser, serialized)
+    sessionStorage.setItem(keys.textDraft, serialized)
   } catch (e) {}
 
   // 2. Prepare serializable photos with guaranteed Data URLs
@@ -96,7 +132,7 @@ export async function saveKycDraft({ aadhaar, pan, photos, userId }) {
       } else if (slotVal && typeof slotVal === 'object') {
         const fileName = slotVal.file?.name || `${slotId}.jpg`
         const fileType = slotVal.file?.type || 'image/jpeg'
-        
+
         let dataUrl = slotVal.dataUrl || (slotVal.previewUrl?.startsWith('data:') ? slotVal.previewUrl : null)
         if (!dataUrl && slotVal.file) {
           dataUrl = await fileToDataUrl(slotVal.file)
@@ -119,13 +155,13 @@ export async function saveKycDraft({ aadhaar, pan, photos, userId }) {
     }
   }
 
-  // 3. Save photos to localStorage & sessionStorage for 100% instant recovery
+  // 3. Save photos to localStorage & sessionStorage for instant recovery
   if (Object.keys(serializablePhotos).length > 0) {
     try {
       const photosPayload = JSON.stringify(serializablePhotos)
-      localStorage.setItem('lc_labour_kyc_photos_draft', photosPayload)
-      localStorage.setItem(`lc_labour_kyc_photos_${userKey}`, photosPayload)
-      sessionStorage.setItem('lc_labour_kyc_photos_draft', photosPayload)
+      localStorage.setItem(keys.photosDraft, photosPayload)
+      localStorage.setItem(keys.photosUser, photosPayload)
+      sessionStorage.setItem(keys.photosDraft, photosPayload)
     } catch (storageErr) {
       console.warn('[kycDraftStorage] localStorage full for photos, falling back to IDB', storageErr)
     }
@@ -140,15 +176,16 @@ export async function saveKycDraft({ aadhaar, pan, photos, userId }) {
       userId: userKey,
       aadhaar: aadhaar || '',
       pan: pan || '',
+      form: form || null,
       photos: serializablePhotos,
       updatedAt: Date.now(),
     }
 
     const tx = db.transaction(STORE_NAME, 'readwrite')
     const store = tx.objectStore(STORE_NAME)
-    store.put(draftData, 'kyc_draft_' + userKey)
-    store.put(draftData, 'kyc_draft_current_user')
-    store.put(draftData, 'kyc_draft_universal')
+    for (const k of keys.idbKeys) {
+      store.put(draftData, k)
+    }
   } catch (err) {
     console.warn('[kycDraftStorage] Error saving draft to IDB:', err)
   }
@@ -157,8 +194,9 @@ export async function saveKycDraft({ aadhaar, pan, photos, userId }) {
 /**
  * Load persisted KYC form draft
  */
-export async function loadKycDraft(userId) {
+export async function loadKycDraft(userId, role = 'labour') {
   const userKey = userId || 'current_user'
+  const keys = getDraftKeys(userKey, role)
 
   // Helper to parse stored serializable photos back into { file, previewUrl, dataUrl }
   const parsePhotos = (rawPhotos) => {
@@ -196,15 +234,15 @@ export async function loadKycDraft(userId) {
 
   try {
     const rawText =
-      localStorage.getItem(`lc_labour_kyc_text_${userKey}`) ||
-      localStorage.getItem('lc_labour_kyc_text_draft') ||
-      sessionStorage.getItem('lc_labour_kyc_text_draft')
+      localStorage.getItem(keys.textUser) ||
+      localStorage.getItem(keys.textDraft) ||
+      sessionStorage.getItem(keys.textDraft)
     if (rawText) textDraft = JSON.parse(rawText)
 
     const rawPhotos =
-      localStorage.getItem(`lc_labour_kyc_photos_${userKey}`) ||
-      localStorage.getItem('lc_labour_kyc_photos_draft') ||
-      sessionStorage.getItem('lc_labour_kyc_photos_draft')
+      localStorage.getItem(keys.photosUser) ||
+      localStorage.getItem(keys.photosDraft) ||
+      sessionStorage.getItem(keys.photosDraft)
     if (rawPhotos) photosDraft = parsePhotos(JSON.parse(rawPhotos))
   } catch (e) {}
 
@@ -214,6 +252,7 @@ export async function loadKycDraft(userId) {
     return {
       aadhaar: textDraft?.aadhaar || '',
       pan: textDraft?.pan || '',
+      form: textDraft?.form || null,
       photos: photosDraft || {},
       updatedAt: textDraft?.savedAt || Date.now(),
     }
@@ -223,10 +262,9 @@ export async function loadKycDraft(userId) {
     const tx = db.transaction(STORE_NAME, 'readonly')
     const store = tx.objectStore(STORE_NAME)
 
-    const keysToTry = ['kyc_draft_' + userKey, 'kyc_draft_current_user', 'kyc_draft_universal']
     let data = null
 
-    for (const k of keysToTry) {
+    for (const k of keys.idbKeys) {
       const res = await new Promise((resolve) => {
         try {
           const req = store.get(k)
@@ -236,7 +274,7 @@ export async function loadKycDraft(userId) {
           resolve(null)
         }
       })
-      if (res && (res.aadhaar || res.pan || (res.photos && Object.keys(res.photos).length > 0))) {
+      if (res && (res.aadhaar || res.pan || res.form || (res.photos && Object.keys(res.photos).length > 0))) {
         data = res
         break
       }
@@ -246,6 +284,7 @@ export async function loadKycDraft(userId) {
       return {
         aadhaar: textDraft?.aadhaar || '',
         pan: textDraft?.pan || '',
+        form: textDraft?.form || null,
         photos: photosDraft || {},
         updatedAt: textDraft?.savedAt || Date.now(),
       }
@@ -260,6 +299,7 @@ export async function loadKycDraft(userId) {
     return {
       aadhaar: data.aadhaar || textDraft?.aadhaar || '',
       pan: data.pan || textDraft?.pan || '',
+      form: data.form || textDraft?.form || null,
       photos: mergedPhotos,
       updatedAt: data.updatedAt,
     }
@@ -268,6 +308,7 @@ export async function loadKycDraft(userId) {
     return {
       aadhaar: textDraft?.aadhaar || '',
       pan: textDraft?.pan || '',
+      form: textDraft?.form || null,
       photos: photosDraft || {},
       updatedAt: textDraft?.savedAt || Date.now(),
     }
@@ -277,15 +318,16 @@ export async function loadKycDraft(userId) {
 /**
  * Clear draft after successful submission
  */
-export async function clearKycDraft(userId) {
+export async function clearKycDraft(userId, role = 'labour') {
   const userKey = userId || 'current_user'
+  const keys = getDraftKeys(userKey, role)
   try {
-    localStorage.removeItem('lc_labour_kyc_text_draft')
-    localStorage.removeItem(`lc_labour_kyc_text_${userKey}`)
-    localStorage.removeItem('lc_labour_kyc_photos_draft')
-    localStorage.removeItem(`lc_labour_kyc_photos_${userKey}`)
-    sessionStorage.removeItem('lc_labour_kyc_text_draft')
-    sessionStorage.removeItem('lc_labour_kyc_photos_draft')
+    localStorage.removeItem(keys.textDraft)
+    localStorage.removeItem(keys.textUser)
+    localStorage.removeItem(keys.photosDraft)
+    localStorage.removeItem(keys.photosUser)
+    sessionStorage.removeItem(keys.textDraft)
+    sessionStorage.removeItem(keys.photosDraft)
   } catch (e) {}
 
   const db = await openDb()
@@ -294,8 +336,9 @@ export async function clearKycDraft(userId) {
   try {
     const tx = db.transaction(STORE_NAME, 'readwrite')
     const store = tx.objectStore(STORE_NAME)
-    store.delete('kyc_draft_' + userKey)
-    store.delete('kyc_draft_current_user')
-    store.delete('kyc_draft_universal')
+    for (const k of keys.idbKeys) {
+      store.delete(k)
+    }
   } catch (e) {}
 }
+
