@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -94,6 +95,16 @@ export function VendorSkillsModal({
       setCustomSkills(Array.from(new Set(remainingCustom)))
     }
   }, [isOpen, user, categoryNameToId])
+
+  // Lock body scroll when modal is open to avoid background page shifting on mobile
+  useEffect(() => {
+    if (!isOpen) return
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = originalOverflow
+    }
+  }, [isOpen])
 
   // Fetch all active categories from server
   useEffect(() => {
@@ -221,18 +232,39 @@ export function VendorSkillsModal({
 
   if (!isOpen) return null
 
-  return (
+  return createPortal(
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
+      <div
+        className="fixed inset-0 z-[99999] flex flex-col justify-end sm:justify-center items-center bg-slate-950/75 backdrop-blur-sm sm:p-4 overflow-hidden"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 99999,
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget && !saving) {
+            onClose()
+          }
+        }}
+      >
         <motion.div
-          initial={{ opacity: 0, scale: 0.96, y: 16 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.96, y: 16 }}
-          transition={{ duration: 0.22 }}
-          className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden"
+          initial={{ opacity: 0, y: 32, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 32, scale: 0.98 }}
+          transition={{ duration: 0.22, ease: 'easeOut' }}
+          className="relative w-full max-w-2xl bg-white rounded-t-[28px] sm:rounded-3xl shadow-2xl border border-slate-100 flex flex-col h-[90dvh] max-h-[90dvh] sm:h-auto sm:max-h-[88dvh] overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
         >
+          {/* Mobile Bottom Sheet Pull Bar */}
+          <div className="pt-2.5 pb-1 sm:hidden flex justify-center shrink-0">
+            <span className="w-10 h-1 rounded-full bg-slate-300" />
+          </div>
+
           {/* Header */}
-          <div className="px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-amber-50/50 via-white to-amber-50/20 flex items-start justify-between gap-3">
+          <div className="shrink-0 px-4 sm:px-5 py-3 sm:py-4 border-b border-slate-100 bg-gradient-to-r from-amber-50/60 via-white to-amber-50/20 flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#FFC107] text-slate-950 shadow-sm shrink-0">
                 <Hammer className="h-5 w-5" />
@@ -257,7 +289,7 @@ export function VendorSkillsModal({
           </div>
 
           {/* Search & Selected Count Bar */}
-          <div className="p-4 bg-slate-50/80 border-b border-slate-100 space-y-3">
+          <div className="shrink-0 p-3 sm:p-4 bg-slate-50/90 border-b border-slate-100 space-y-2.5 sm:space-y-3">
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -304,14 +336,14 @@ export function VendorSkillsModal({
 
           {/* Error Banner */}
           {error && (
-            <div className="mx-4 mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+            <div className="shrink-0 mx-4 mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
               <span className="text-sm">⚠️</span>
               <span>{error}</span>
             </div>
           )}
 
           {/* Main Body - Categories Catalogue */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4 sm:space-y-5">
             {loadingCategories ? (
               <div className="py-12 flex flex-col items-center justify-center text-slate-400 space-y-2">
                 <Loader2 className="h-7 w-7 animate-spin text-[#FFC107]" />
@@ -427,13 +459,13 @@ export function VendorSkillsModal({
             </div>
           </div>
 
-          {/* Footer Actions */}
-          <div className="px-5 py-4 bg-white border-t border-slate-100 flex items-center justify-between gap-3">
+          {/* Footer Actions - Pinned at Bottom with Safe Area */}
+          <div className="shrink-0 px-4 sm:px-5 py-3 sm:py-4 bg-white border-t border-slate-100 flex items-center justify-between gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.05)] pb-[max(1rem,env(safe-area-inset-bottom,1rem))]">
             <button
               type="button"
               onClick={onClose}
               disabled={saving}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+              className="px-4 py-2.5 sm:py-3 rounded-xl border border-slate-200 text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-50 active:scale-95 transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -442,7 +474,7 @@ export function VendorSkillsModal({
               type="button"
               onClick={handleSave}
               disabled={saving || totalSelectedCount === 0}
-              className="flex-1 sm:flex-initial px-6 py-2.5 rounded-xl bg-[#FFC107] hover:bg-[#e0a800] active:scale-95 disabled:opacity-50 text-slate-950 text-xs font-black shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="flex-1 sm:flex-initial px-6 py-2.5 sm:py-3 rounded-xl bg-[#FFC107] hover:bg-[#e0a800] active:scale-95 disabled:opacity-50 text-slate-950 text-xs sm:text-sm font-black shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               {saving ? (
                 <>
@@ -459,6 +491,7 @@ export function VendorSkillsModal({
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   )
 }

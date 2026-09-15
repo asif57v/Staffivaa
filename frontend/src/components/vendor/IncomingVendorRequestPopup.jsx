@@ -98,7 +98,7 @@ export function IncomingVendorRequestPopup({
         )
         if (d != null) setDistanceMeters(d)
       },
-      () => {},
+      () => { },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
     )
 
@@ -129,7 +129,7 @@ export function IncomingVendorRequestPopup({
           osc.stop(ctx.currentTime + 0.5)
         }
       }
-    } catch {}
+    } catch { }
   }, [])
 
   useEffect(() => {
@@ -249,11 +249,11 @@ export function IncomingVendorRequestPopup({
       >
         {/* Main Floating Card */}
         <div className="rounded-3xl bg-white overflow-hidden shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] border border-slate-100">
-          
+
           {/* Header with Circular Timer */}
           <div className="relative bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-5 pt-5 pb-4">
             <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500" />
-            
+
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-2 flex-wrap">
