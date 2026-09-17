@@ -492,7 +492,7 @@ class PaymentService {
             labourPaymentStatus: request.labourPaymentStatus,
           })
 
-          // Admin Ledger update
+          // Admin Ledger update & WalletTransaction creation
           try {
             await Wallet.findOneAndUpdate(
               { singletonId: 'ADMIN_WALLET' },
@@ -506,6 +506,35 @@ class PaymentService {
               },
               { upsert: true, new: true },
             )
+
+            const queryKey = gatewayOrderId ? { razorpayOrderId: gatewayOrderId } : { bookingId: request._id, payerId: userId }
+            const existingLedgerTxn = await WalletTransaction.findOne(queryKey)
+            if (!existingLedgerTxn) {
+              let payerType = 'user'
+              if (isLabourOrder) payerType = 'labour'
+              else if (request.sourceType === 'corporate') payerType = 'corporate'
+
+              const userDoc = await User.findById(userId).select('fullName companyName phone role').lean()
+
+              await WalletTransaction.create({
+                transactionId: gatewayOrderId || `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+                bookingId: request._id,
+                clientId: request.clientId,
+                labourId: request.labourId,
+                payerId: userId,
+                payerName: userDoc?.companyName || userDoc?.fullName || userDoc?.phone || 'Customer',
+                payerType,
+                platform_fee: true,
+                type: 'Credit',
+                source: `${payerType.charAt(0).toUpperCase() + payerType.slice(1)} Platform Fee`,
+                amount: Number(amount),
+                status: 'Completed',
+                paymentMethod: payment.paymentMethod || 'razorpay',
+                razorpayOrderId: gatewayOrderId,
+                razorpayPaymentId: gatewayPaymentId,
+                createdAt: payment.paidAt || new Date(),
+              })
+            }
           } catch (adminWalErr) {
             console.error('[PaymentService] Admin wallet ledger update error:', adminWalErr.message)
           }
