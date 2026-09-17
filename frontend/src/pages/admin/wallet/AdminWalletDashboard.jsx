@@ -5,7 +5,8 @@ import {
   Wallet, IndianRupee, ArrowDownRight, ArrowUpRight, 
   Building2, ArrowRightLeft, Clock, FileText, Download, 
   Users, Briefcase, Truck, Building, TrendingUp, Search, 
-  RefreshCw, SlidersHorizontal, Copy, Check, AlertCircle
+  RefreshCw, SlidersHorizontal, Copy, Check, AlertCircle,
+  Calendar, X
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -68,6 +69,8 @@ export function AdminWalletDashboard() {
   const [search, setSearch] = useState('')
   const [type, setType] = useState('')
   const [status, setStatus] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   // Withdrawal management states
   const [selectedWithdrawal, setSelectedWithdrawal] = useState(null)
@@ -81,6 +84,8 @@ export function AdminWalletDashboard() {
     setSearch('')
     setType('')
     setStatus('')
+    setDateFrom('')
+    setDateTo('')
   }, [activeTab])
   
   const { data: summaryData, isLoading: loadingSummary, refetch: refetchSummary } = useGetWalletSummaryQuery()
@@ -99,7 +104,9 @@ export function AdminWalletDashboard() {
     search, 
     payerType: activeTab === 'platform' ? '' : activeTab, 
     status, 
-    type 
+    type,
+    dateFrom,
+    dateTo
   })
 
   // Filter pending withdrawals for active vendor/labor tab
@@ -626,6 +633,50 @@ export function AdminWalletDashboard() {
                   onChange={(e) => setSearch(e.target.value)}
                   className="rounded-xl border border-slate-200 pl-9 pr-3.5 py-1.5 text-xs font-semibold outline-none focus:ring-1 focus:ring-yellow-400 focus:border-yellow-400 w-44 sm:w-56"
                 />
+              </div>
+
+              {/* Date Range Filter */}
+              <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200/80">
+                <div className="relative flex items-center">
+                  <Calendar className="absolute left-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => {
+                      setDateFrom(e.target.value)
+                      setPage(1)
+                    }}
+                    className="rounded-lg border-0 bg-white pl-8 pr-2 py-1 text-xs font-semibold text-slate-700 outline-none shadow-xs focus:ring-1 focus:ring-yellow-400"
+                    title="From Date"
+                  />
+                </div>
+                <span className="text-[10px] font-bold uppercase text-slate-400 px-0.5">to</span>
+                <div className="relative flex items-center">
+                  <Calendar className="absolute left-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => {
+                      setDateTo(e.target.value)
+                      setPage(1)
+                    }}
+                    className="rounded-lg border-0 bg-white pl-8 pr-2 py-1 text-xs font-semibold text-slate-700 outline-none shadow-xs focus:ring-1 focus:ring-yellow-400"
+                    title="To Date"
+                  />
+                </div>
+                {(dateFrom || dateTo) && (
+                  <button
+                    onClick={() => {
+                      setDateFrom('')
+                      setDateTo('')
+                      setPage(1)
+                    }}
+                    title="Clear Date Filter"
+                    className="p-1 rounded-md text-rose-500 hover:text-rose-600 hover:bg-rose-50 transition active:scale-95"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
 
               {/* Sliders filter indicators */}
