@@ -14,163 +14,189 @@ import { logAudit } from '../utils/auditLogger.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
 
 export async function syncAllPaymentsToLedger() {
+  // 1. Sync from Payment collection (status: SUCCESS)
   try {
-    // 1. Sync from Payment collection (status: SUCCESS)
-    const successPayments = await Payment.find({ status: 'SUCCESS' }).lean()
+    const successPayments = await Payment.find({ status: { $in: ['SUCCESS', 'success', 'paid'] } }).lean()
     for (const p of successPayments) {
-      if (!p.gatewayOrderId && !p.orderId) continue
-      const queryKey = p.gatewayOrderId ? { razorpayOrderId: p.gatewayOrderId } : { transactionId: p.orderId }
-      const existing = await WalletTransaction.findOne(queryKey)
-      if (!existing) {
-        let payerType = 'user'
-        if (p.purpose === 'ENTERPRISE_WALLET_RECHARGE') payerType = 'corporate'
-        else if (p.purpose === 'COMMISSION') payerType = 'vendor'
-        else if (p.metadata?.isLabour) payerType = 'labour'
+      try {
+        if (!p.gatewayOrderId && !p.orderId) continue
+        const queryKey = p.gatewayOrderId ? { razorpayOrderId: p.gatewayOrderId } : { transactionId: p.orderId }
+        const existing = await WalletTransaction.findOne(queryKey)
+        if (!existing) {
+          let payerType = 'user'
+          if (p.purpose === 'ENTERPRISE_WALLET_RECHARGE') payerType = 'corporate'
+          else if (p.purpose === 'COMMISSION') payerType = 'vendor'
+          else if (p.metadata?.isLabour) payerType = 'labour'
 
-        const userDoc = p.userId ? await User.findById(p.userId).select('fullName companyName phone role').lean() : null
-        if (userDoc?.role === 'labour') payerType = 'labour'
-        else if (userDoc?.role === 'contractor' || userDoc?.role === 'vendor') payerType = 'vendor'
-        else if (userDoc?.role === 'corporate' || userDoc?.role === 'enterprise') payerType = 'corporate'
+          let userDoc = null
+          if (p.userId) {
+            try {
+              userDoc = await User.findById(p.userId).select('fullName companyName phone role').lean()
+            } catch (e) {}
+          }
+          if (userDoc?.role === 'labour') payerType = 'labour'
+          else if (userDoc?.role === 'contractor' || userDoc?.role === 'vendor') payerType = 'vendor'
+          else if (userDoc?.role === 'corporate' || userDoc?.role === 'enterprise') payerType = 'corporate'
 
-        let source = 'Razorpay Payment'
-        if (p.purpose === 'WALLET_TOPUP') source = 'Razorpay Add Money'
-        else if (p.purpose === 'WORKFORCE_REQUEST_PLATFORM_FEE') source = `${payerType.charAt(0).toUpperCase() + payerType.slice(1)} Platform Fee`
-        else if (p.purpose === 'ENTERPRISE_WALLET_RECHARGE') source = 'Enterprise Wallet Recharge'
-        else if (p.purpose === 'COMMISSION') source = 'Vendor Commission'
+          let source = 'Razorpay Payment'
+          if (p.purpose === 'WALLET_TOPUP') source = 'Razorpay Add Money'
+          else if (p.purpose === 'WORKFORCE_REQUEST_PLATFORM_FEE') source = `${payerType.charAt(0).toUpperCase() + payerType.slice(1)} Platform Fee`
+          else if (p.purpose === 'ENTERPRISE_WALLET_RECHARGE') source = 'Enterprise Wallet Recharge'
+          else if (p.purpose === 'COMMISSION') source = 'Vendor Commission'
 
-        await WalletTransaction.create({
-          transactionId: p.orderId || `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
-          bookingId: p.metadata?.requestId || null,
-          payerId: p.userId,
-          payerName: userDoc?.companyName || userDoc?.fullName || userDoc?.phone || 'Customer',
-          payerType,
-          platform_fee: p.purpose !== 'WALLET_TOPUP' && p.purpose !== 'ENTERPRISE_WALLET_RECHARGE',
-          type: 'Credit',
-          source,
-          amount: p.amount,
-          status: 'Completed',
-          paymentMethod: p.paymentMethod || 'razorpay',
-          razorpayOrderId: p.gatewayOrderId || p.orderId,
-          razorpayPaymentId: p.gatewayPaymentId || p.paymentId,
-          createdAt: p.paidAt || p.createdAt || new Date(),
-        })
+          await WalletTransaction.create({
+            transactionId: p.orderId || `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+            bookingId: p.metadata?.requestId || null,
+            payerId: p.userId || null,
+            payerName: userDoc?.companyName || userDoc?.fullName || userDoc?.phone || 'Customer',
+            payerType,
+            platform_fee: p.purpose !== 'WALLET_TOPUP' && p.purpose !== 'ENTERPRISE_WALLET_RECHARGE',
+            type: 'Credit',
+            source,
+            amount: Number(p.amount || 0),
+            status: 'Completed',
+            paymentMethod: p.paymentMethod || 'razorpay',
+            razorpayOrderId: p.gatewayOrderId || p.orderId,
+            razorpayPaymentId: p.gatewayPaymentId || p.paymentId,
+            createdAt: p.paidAt || p.createdAt || new Date(),
+          })
+        }
+      } catch (itemErr) {
+        console.error('[SyncLedger Payment Item Error]:', itemErr.message)
       }
     }
+  } catch (err) {
+    console.error('[SyncLedger Payments Error]:', err.message)
+  }
 
-    // 2. Sync from WorkforceRequest collection
+  // 2. Sync from WorkforceRequest collection
+  try {
     const paidRequests = await WorkforceRequest.find({
       $or: [
         { userPaymentStatus: 'paid' },
         { labourPaymentStatus: 'paid' },
         { vendorPlatformFeeStatus: 'paid' },
         { corporatePlatformFeeStatus: 'paid' },
+        { paymentStatus: 'paid' },
       ],
     }).populate('clientId labourId').lean()
 
     for (const reqDoc of paidRequests) {
-      if (reqDoc.userPaymentStatus === 'paid' && reqDoc.userPlatformFee > 0) {
-        const orderId = reqDoc.userRazorpayOrderId
-        const existing = await WalletTransaction.findOne({
-          bookingId: reqDoc._id,
-          payerType: reqDoc.sourceType === 'corporate' ? 'corporate' : 'user',
-        })
-        if (!existing) {
-          const payer = reqDoc.clientId
-          const payerType = reqDoc.sourceType === 'corporate' ? 'corporate' : 'user'
-          await WalletTransaction.create({
-            transactionId: orderId || `TXN-USER-${reqDoc._id.toString().slice(-6)}-${Date.now()}`,
+      try {
+        if (reqDoc.userPaymentStatus === 'paid' || reqDoc.paymentStatus === 'paid') {
+          const orderId = reqDoc.userRazorpayOrderId
+          const existing = await WalletTransaction.findOne({
             bookingId: reqDoc._id,
-            clientId: reqDoc.clientId?._id || reqDoc.clientId,
-            payerId: reqDoc.clientId?._id || reqDoc.clientId,
-            payerName: payer?.companyName || payer?.fullName || payer?.phone || 'Client',
-            payerType,
-            platform_fee: true,
-            type: 'Credit',
-            source: `${payerType.charAt(0).toUpperCase() + payerType.slice(1)} Platform Fee`,
-            amount: reqDoc.userPlatformFee,
-            status: 'Completed',
-            paymentMethod: 'razorpay',
-            razorpayOrderId: orderId || null,
-            razorpayPaymentId: reqDoc.razorpayPaymentId || null,
-            createdAt: reqDoc.platformFeePendingAt || reqDoc.updatedAt || reqDoc.createdAt,
+            payerType: reqDoc.sourceType === 'corporate' ? 'corporate' : 'user',
           })
+          if (!existing) {
+            const payer = reqDoc.clientId
+            const payerType = reqDoc.sourceType === 'corporate' ? 'corporate' : 'user'
+            await WalletTransaction.create({
+              transactionId: orderId || `TXN-USER-${reqDoc._id.toString().slice(-6)}-${Date.now()}`,
+              bookingId: reqDoc._id,
+              clientId: reqDoc.clientId?._id || reqDoc.clientId,
+              payerId: reqDoc.clientId?._id || reqDoc.clientId,
+              payerName: payer?.companyName || payer?.fullName || payer?.phone || 'Client',
+              payerType,
+              platform_fee: true,
+              type: 'Credit',
+              source: `${payerType.charAt(0).toUpperCase() + payerType.slice(1)} Platform Fee`,
+              amount: Number(reqDoc.userPlatformFee || reqDoc.totalAmount || 0),
+              status: 'Completed',
+              paymentMethod: 'razorpay',
+              razorpayOrderId: orderId || null,
+              razorpayPaymentId: reqDoc.razorpayPaymentId || null,
+              createdAt: reqDoc.platformFeePendingAt || reqDoc.updatedAt || reqDoc.createdAt,
+            })
+          }
         }
-      }
 
-      if (reqDoc.labourPaymentStatus === 'paid' && reqDoc.labourPlatformFee > 0) {
-        const orderId = reqDoc.labourRazorpayOrderId
-        const existing = await WalletTransaction.findOne({
-          bookingId: reqDoc._id,
-          payerType: 'labour',
-        })
-        if (!existing) {
-          const payer = reqDoc.labourId
-          await WalletTransaction.create({
-            transactionId: orderId || `TXN-LABOUR-${reqDoc._id.toString().slice(-6)}-${Date.now()}`,
+        if (reqDoc.labourPaymentStatus === 'paid') {
+          const orderId = reqDoc.labourRazorpayOrderId
+          const existing = await WalletTransaction.findOne({
             bookingId: reqDoc._id,
-            labourId: reqDoc.labourId?._id || reqDoc.labourId,
-            payerId: reqDoc.labourId?._id || reqDoc.labourId,
-            payerName: payer?.fullName || payer?.phone || 'Worker',
             payerType: 'labour',
-            platform_fee: true,
-            type: 'Credit',
-            source: 'Labour Platform Fee',
-            amount: reqDoc.labourPlatformFee,
-            status: 'Completed',
-            paymentMethod: 'razorpay',
-            razorpayOrderId: orderId || null,
-            razorpayPaymentId: reqDoc.razorpayPaymentId || null,
-            createdAt: reqDoc.updatedAt || reqDoc.createdAt,
           })
+          if (!existing) {
+            const payer = reqDoc.labourId
+            await WalletTransaction.create({
+              transactionId: orderId || `TXN-LABOUR-${reqDoc._id.toString().slice(-6)}-${Date.now()}`,
+              bookingId: reqDoc._id,
+              labourId: reqDoc.labourId?._id || reqDoc.labourId,
+              payerId: reqDoc.labourId?._id || reqDoc.labourId,
+              payerName: payer?.fullName || payer?.phone || 'Worker',
+              payerType: 'labour',
+              platform_fee: true,
+              type: 'Credit',
+              source: 'Labour Platform Fee',
+              amount: Number(reqDoc.labourPlatformFee || 0),
+              status: 'Completed',
+              paymentMethod: 'razorpay',
+              razorpayOrderId: orderId || null,
+              razorpayPaymentId: reqDoc.razorpayPaymentId || null,
+              createdAt: reqDoc.updatedAt || reqDoc.createdAt,
+            })
+          }
         }
-      }
 
-      if (reqDoc.vendorPlatformFeeStatus === 'paid' && (reqDoc.vendorPlatformFeeAmount || 0) > 0) {
-        const existing = await WalletTransaction.findOne({
-          bookingId: reqDoc._id,
-          payerType: 'vendor',
-        })
-        if (!existing) {
-          await WalletTransaction.create({
-            transactionId: `TXN-VENDOR-${reqDoc._id.toString().slice(-6)}-${Date.now()}`,
+        if (reqDoc.vendorPlatformFeeStatus === 'paid') {
+          const existing = await WalletTransaction.findOne({
             bookingId: reqDoc._id,
             payerType: 'vendor',
-            platform_fee: true,
-            type: 'Credit',
-            source: 'Vendor Platform Fee',
-            amount: reqDoc.vendorPlatformFeeAmount,
-            status: 'Completed',
-            paymentMethod: 'razorpay',
-            createdAt: reqDoc.vendorPlatformFeePaidAt || reqDoc.updatedAt || reqDoc.createdAt,
           })
+          if (!existing) {
+            await WalletTransaction.create({
+              transactionId: `TXN-VENDOR-${reqDoc._id.toString().slice(-6)}-${Date.now()}`,
+              bookingId: reqDoc._id,
+              payerType: 'vendor',
+              platform_fee: true,
+              type: 'Credit',
+              source: 'Vendor Platform Fee',
+              amount: Number(reqDoc.vendorPlatformFeeAmount || 0),
+              status: 'Completed',
+              paymentMethod: 'razorpay',
+              createdAt: reqDoc.vendorPlatformFeePaidAt || reqDoc.updatedAt || reqDoc.createdAt,
+            })
+          }
         }
-      }
-    }
-
-    // 3. Sync from EnterpriseJoiningInvoice
-    const paidInvoices = await EnterpriseJoiningInvoice.find({ status: 'paid' }).populate('enterpriseId').lean()
-    for (const inv of paidInvoices) {
-      const existing = await WalletTransaction.findOne({ transactionId: inv.invoiceNumber })
-      if (!existing) {
-        const ent = inv.enterpriseId
-        await WalletTransaction.create({
-          transactionId: inv.invoiceNumber || `INV-${Date.now()}`,
-          payerId: ent?._id || inv.enterpriseId,
-          payerName: ent?.companyName || ent?.fullName || 'Enterprise Client',
-          payerType: 'corporate',
-          platform_fee: true,
-          type: 'Credit',
-          source: 'Enterprise Registration / Joining Fee',
-          amount: inv.totalAmount || inv.amount,
-          status: 'Completed',
-          paymentMethod: inv.paymentMethod || 'razorpay',
-          razorpayPaymentId: inv.razorpayPaymentId || null,
-          createdAt: inv.paidAt || inv.updatedAt || inv.createdAt,
-        })
+      } catch (reqErr) {
+        console.error('[SyncLedger Request Item Error]:', reqErr.message)
       }
     }
   } catch (err) {
-    console.error('[SyncLedger Error]:', err.message)
+    console.error('[SyncLedger WorkforceRequests Error]:', err.message)
+  }
+
+  // 3. Sync from EnterpriseJoiningInvoice
+  try {
+    const paidInvoices = await EnterpriseJoiningInvoice.find({ status: { $in: ['paid', 'SUCCESS', 'success'] } }).populate('enterpriseId').lean()
+    for (const inv of paidInvoices) {
+      try {
+        const existing = await WalletTransaction.findOne({ transactionId: inv.invoiceNumber })
+        if (!existing) {
+          const ent = inv.enterpriseId
+          await WalletTransaction.create({
+            transactionId: inv.invoiceNumber || `INV-${Date.now()}`,
+            payerId: ent?._id || inv.enterpriseId,
+            payerName: ent?.companyName || ent?.fullName || 'Enterprise Client',
+            payerType: 'corporate',
+            platform_fee: true,
+            type: 'Credit',
+            source: 'Enterprise Registration / Joining Fee',
+            amount: Number(inv.totalAmount || inv.amount || 0),
+            status: 'Completed',
+            paymentMethod: inv.paymentMethod || 'razorpay',
+            razorpayPaymentId: inv.razorpayPaymentId || null,
+            createdAt: inv.paidAt || inv.updatedAt || inv.createdAt,
+          })
+        }
+      } catch (invErr) {
+        console.error('[SyncLedger Invoice Item Error]:', invErr.message)
+      }
+    }
+  } catch (err) {
+    console.error('[SyncLedger Invoices Error]:', err.message)
   }
 }
 
