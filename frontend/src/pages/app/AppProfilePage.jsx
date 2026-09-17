@@ -44,6 +44,7 @@ import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import { patchCurrentUser } from '../../api/userProfileApi.js'
 import { ApiError } from '../../api/http.js'
 import { setUser } from '../../store/slices/authSlice.js'
+import { LanguageSwitcher } from '../../components/common/LanguageSwitcher.jsx'
 
 function openAppDrawer() {
   window.dispatchEvent(new Event('lc-open-app-drawer'))
@@ -638,7 +639,7 @@ export function AppProfilePage() {
             </div>
           </div>
         </GlassPanel>
-      ) : null}
+      <LanguageSwitcher className="mt-4" />
 
       <section>
         <AppSectionHeader title="Shortcuts" className="mb-3 px-0.5" />

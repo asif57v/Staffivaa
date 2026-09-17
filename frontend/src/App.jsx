@@ -2,6 +2,7 @@ import React, { useEffect, Suspense, lazy } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import toast, { Toaster } from 'react-hot-toast'
 import { AuthProvider } from './context/AuthProvider.jsx'
+import { LanguageProvider } from './context/LanguageContext.jsx'
 import { GlobalScrollManager } from './components/navigation/GlobalScrollManager.jsx'
 import { SmoothScrollProvider } from './components/navigation/SmoothScrollProvider.jsx'
 import { ProtectedRoute } from './components/auth/ProtectedRoute.jsx'
@@ -84,127 +85,129 @@ function App() {
           }
         }}
       />
-      <AuthProvider>
-        <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-50"><div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-500"></div></div>}>
-          <Routes>
-            {/* Public Landing Page at root */}
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/home" element={<Navigate to="/" replace />} />
+      <LanguageProvider>
+        <AuthProvider>
+          <Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-50"><div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-500"></div></div>}>
+            <Routes>
+              {/* Public Landing Page at root */}
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/home" element={<Navigate to="/" replace />} />
 
-            {/* Public auth pages — redirects away if already logged in */}
-            <Route
-              path="/auth"
-              element={
-                <GuestRoute>
-                  <AuthEntryPage />
-                </GuestRoute>
-              }
-            />
+              {/* Public auth pages — redirects away if already logged in */}
+              <Route
+                path="/auth"
+                element={
+                  <GuestRoute>
+                    <AuthEntryPage />
+                  </GuestRoute>
+                }
+              />
 
-            <Route
-              path="/app"
-              element={
-                <ProtectedRoute roles={APP_B2C_ROLES}>
-                  <AppShell />
-                </ProtectedRoute>
-              }
-            >
-              {appShellChildRoutes}
-            </Route>
-            <Route
-              path="/app/work-categories"
-              element={
-                <ProtectedRoute roles={[USER_ROLES.LABOUR]}>
-                  <LabourCategoriesPage />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/app"
+                element={
+                  <ProtectedRoute roles={APP_B2C_ROLES}>
+                    <AppShell />
+                  </ProtectedRoute>
+                }
+              >
+                {appShellChildRoutes}
+              </Route>
+              <Route
+                path="/app/work-categories"
+                element={
+                  <ProtectedRoute roles={[USER_ROLES.LABOUR]}>
+                    <LabourCategoriesPage />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/corporate"
-              element={
-                <ProtectedRoute roles={CORPORATE_ROLES}>
-                  <CorporateShell />
-                </ProtectedRoute>
-              }
-            >
-              {corporateChildRoutes}
-            </Route>
+              <Route
+                path="/corporate"
+                element={
+                  <ProtectedRoute roles={CORPORATE_ROLES}>
+                    <CorporateShell />
+                  </ProtectedRoute>
+                }
+              >
+                {corporateChildRoutes}
+              </Route>
 
-            <Route
-              path="/vendor"
-              element={
-                <ProtectedRoute roles={VENDOR_ROLES}>
-                  <VendorShell />
-                </ProtectedRoute>
-              }
-            >
-              {vendorChildRoutes}
-            </Route>
+              <Route
+                path="/vendor"
+                element={
+                  <ProtectedRoute roles={VENDOR_ROLES}>
+                    <VendorShell />
+                  </ProtectedRoute>
+                }
+              >
+                {vendorChildRoutes}
+              </Route>
 
-            <Route
-              path="/enterprise"
-              element={
-                <ProtectedRoute roles={ENTERPRISE_ROLES}>
-                  <EnterpriseShell />
-                </ProtectedRoute>
-              }
-            >
-              {enterpriseChildRoutes}
-            </Route>
+              <Route
+                path="/enterprise"
+                element={
+                  <ProtectedRoute roles={ENTERPRISE_ROLES}>
+                    <EnterpriseShell />
+                  </ProtectedRoute>
+                }
+              >
+                {enterpriseChildRoutes}
+              </Route>
 
-            <Route path="/admin/login" element={<AdminLoginPage />} />
+              <Route path="/admin/login" element={<AdminLoginPage />} />
 
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute roles={[USER_ROLES.ADMIN]}>
-                  <AdminLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<AdminDashboardPage />} />
-              <Route path="categories" element={<AdminLabourCategoriesPage />} />
-              <Route path="users" element={<AdminUsersPage />} />
-              <Route path="individuals" element={<AdminUsersPage fixedRole="individual" customTitle="Individual Users" />} />
-              <Route path="enterprises" element={<AdminUsersPage fixedRole="enterprise" customTitle="Enterprise Clients" />} />
-              <Route path="corporates" element={<AdminUsersPage fixedRole="corporate" customTitle="Corporate Clients" />} />
-              <Route path="contractors" element={<AdminUsersPage fixedRole="contractor" customTitle="Contractors & Vendors" />} />
-              <Route path="user/:id" element={<AdminUserDetailsPage />} />
-              <Route path="labour" element={<AdminLabourPage />} />
-              <Route path="business-verification" element={<AdminBusinessVerificationPage />} />
-              <Route path="enterprise-verification" element={<AdminEnterpriseVerificationPage />} />
-              <Route path="enterprise-jobs" element={<AdminEnterpriseJobsPage />} />
-              <Route path="enterprise-wallets" element={<AdminEnterpriseWalletsPage />} />
-              <Route path="enterprise-payments" element={<AdminJoiningPaymentsPage />} />
-              <Route path="enterprise-payrolls" element={<AdminEnterprisePayrollsPage />} />
-              <Route path="enterprise-attendance" element={<AdminEnterpriseAttendancePage />} />
-              <Route path="enterprise-withdrawals" element={<AdminWithdrawalRequestsPage />} />
-              <Route path="buildmart" element={<AdminBuildMartLeadsPage />} />
-              <Route path="bookings" element={<AdminBookingsPage />} />
-              <Route path="allocations" element={<AdminAllocationsPage />} />
-              <Route path="attendance" element={<AdminAttendancePage />} />
-              <Route path="payments/:id" element={<AdminPaymentDetailPage />} />
-              <Route path="pricing" element={<AdminPricingPage />} />
-              <Route path="wallet" element={<AdminWalletDashboard />} />
-              <Route path="refunds" element={<AdminRefundsPage />} />
-              <Route path="commission" element={<AdminCommissionPage />} />
-              <Route path="reports" element={<AdminReportsPage />} />
-              <Route path="settings" element={<AdminSettingsPage />} />
-              <Route path="marketing/popular-services" element={<AdminPopularServicesPage />} />
-              <Route path="marketing/promotions" element={<AdminPromotionsOffersPage />} />
-              <Route path="marketing/ads" element={<AdminSponsoredAdsPage />} />
-              <Route path="marketing/banners" element={<AdminBannerManagementPage />} />
-              <Route path="marketing/analytics" element={<AdminCampaignAnalyticsPage />} />
-              <Route path="legal-content" element={<AdminLegalContentPage />} />
-            </Route>
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute roles={[USER_ROLES.ADMIN]}>
+                    <AdminLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<AdminDashboardPage />} />
+                <Route path="categories" element={<AdminLabourCategoriesPage />} />
+                <Route path="users" element={<AdminUsersPage />} />
+                <Route path="individuals" element={<AdminUsersPage fixedRole="individual" customTitle="Individual Users" />} />
+                <Route path="enterprises" element={<AdminUsersPage fixedRole="enterprise" customTitle="Enterprise Clients" />} />
+                <Route path="corporates" element={<AdminUsersPage fixedRole="corporate" customTitle="Corporate Clients" />} />
+                <Route path="contractors" element={<AdminUsersPage fixedRole="contractor" customTitle="Contractors & Vendors" />} />
+                <Route path="user/:id" element={<AdminUserDetailsPage />} />
+                <Route path="labour" element={<AdminLabourPage />} />
+                <Route path="business-verification" element={<AdminBusinessVerificationPage />} />
+                <Route path="enterprise-verification" element={<AdminEnterpriseVerificationPage />} />
+                <Route path="enterprise-jobs" element={<AdminEnterpriseJobsPage />} />
+                <Route path="enterprise-wallets" element={<AdminEnterpriseWalletsPage />} />
+                <Route path="enterprise-payments" element={<AdminJoiningPaymentsPage />} />
+                <Route path="enterprise-payrolls" element={<AdminEnterprisePayrollsPage />} />
+                <Route path="enterprise-attendance" element={<AdminEnterpriseAttendancePage />} />
+                <Route path="enterprise-withdrawals" element={<AdminWithdrawalRequestsPage />} />
+                <Route path="buildmart" element={<AdminBuildMartLeadsPage />} />
+                <Route path="bookings" element={<AdminBookingsPage />} />
+                <Route path="allocations" element={<AdminAllocationsPage />} />
+                <Route path="attendance" element={<AdminAttendancePage />} />
+                <Route path="payments/:id" element={<AdminPaymentDetailPage />} />
+                <Route path="pricing" element={<AdminPricingPage />} />
+                <Route path="wallet" element={<AdminWalletDashboard />} />
+                <Route path="refunds" element={<AdminRefundsPage />} />
+                <Route path="commission" element={<AdminCommissionPage />} />
+                <Route path="reports" element={<AdminReportsPage />} />
+                <Route path="settings" element={<AdminSettingsPage />} />
+                <Route path="marketing/popular-services" element={<AdminPopularServicesPage />} />
+                <Route path="marketing/promotions" element={<AdminPromotionsOffersPage />} />
+                <Route path="marketing/ads" element={<AdminSponsoredAdsPage />} />
+                <Route path="marketing/banners" element={<AdminBannerManagementPage />} />
+                <Route path="marketing/analytics" element={<AdminCampaignAnalyticsPage />} />
+                <Route path="legal-content" element={<AdminLegalContentPage />} />
+              </Route>
 
-            <Route path="/legal/:slug" element={<PublicLegalPage />} />
+              <Route path="/legal/:slug" element={<PublicLegalPage />} />
 
-            <Route path="*" element={<Navigate to="/auth" replace />} />
-          </Routes>
-        </Suspense>
-      </AuthProvider>
+              <Route path="*" element={<Navigate to="/auth" replace />} />
+            </Routes>
+          </Suspense>
+        </AuthProvider>
+      </LanguageProvider>
       </SmoothScrollProvider>
     </BrowserRouter>
   )

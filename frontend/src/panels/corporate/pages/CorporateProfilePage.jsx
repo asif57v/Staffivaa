@@ -24,6 +24,7 @@ import {
   CORPORATE_DOCUMENT_TYPES,
   INDIAN_STATES,
 } from '../../../constants/corporateVerification.js'
+import { LanguageSwitcher } from '../../../components/common/LanguageSwitcher.jsx'
 import { CORPORATE_STATUS } from '../../../constants/userRoles.js'
 import { useAuth } from '../../../hooks/useAuth.js'
 import { setUser } from '../../../store/slices/authSlice.js'
@@ -1028,6 +1029,8 @@ export function CorporateProfilePage() {
           })}
         </ul>
       </GlassPanel>
+
+      <LanguageSwitcher className="mt-4" />
     </div>
   )
 }

@@ -20,6 +20,7 @@ import {
   Pencil,
   Plus,
 } from 'lucide-react'
+import { LanguageSwitcher } from '../../../components/common/LanguageSwitcher.jsx'
 import { VendorSkillsModal } from '../../../components/vendor/VendorSkillsModal.jsx'
 import { fetchLabourCategoriesGrouped } from '../../../api/labourCategoriesApi.js'
 import { assetUrlFromUpload, uploadDocument } from '../../../api/uploadApi.js'
@@ -1093,6 +1094,8 @@ export function VendorProfilePage() {
           })}
         </ul>
       </GlassPanel>
+
+      <LanguageSwitcher className="mt-4" />
 
       <VendorSkillsModal
         isOpen={isSkillsModalOpen}
