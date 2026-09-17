@@ -1,5 +1,21 @@
 import { useState } from 'react'
-import { ClipboardList, CheckCircle2, Clock, UserCheck, Search, ShieldAlert, AlertCircle, XCircle } from 'lucide-react'
+import {
+  ClipboardList,
+  CheckCircle2,
+  Clock,
+  UserCheck,
+  Search,
+  XCircle,
+  MapPin,
+  Navigation,
+  IndianRupee,
+  Calendar,
+  Layers,
+  Phone,
+  User,
+  Building2,
+  CreditCard
+} from 'lucide-react'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import { useGetAdminRequestsQuery } from '../../store/api/workforceApi.js'
 
@@ -21,13 +37,32 @@ export function AdminAllocationsPage() {
   )
   const requests = data?.requests ?? []
 
+  const renderPaymentStatusBadge = (status) => {
+    const isPaid = status === 'paid'
+    const isFailed = status === 'failed'
+    return (
+      <span
+        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+          isPaid
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            : isFailed
+            ? 'bg-rose-50 text-rose-700 border-rose-200'
+            : 'bg-amber-50 text-amber-700 border-amber-200'
+        }`}
+      >
+        <span className={`w-1.5 h-1.5 rounded-full ${isPaid ? 'bg-emerald-500' : isFailed ? 'bg-rose-500' : 'bg-amber-500'}`} />
+        {isPaid ? 'Paid' : isFailed ? 'Failed' : 'Pending'}
+      </span>
+    )
+  }
+
   return (
     <div className="w-full space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900">Booking Status & Allocations</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Read-only monitoring of live customer bookings, auto-allocations, and worker statuses.
+            Read-only monitoring of live customer bookings, distance (KM), fee payment breakdown, and site locations.
           </p>
         </div>
         <button
@@ -92,48 +127,130 @@ export function AdminAllocationsPage() {
               icon: Clock,
             }
             const StatusIcon = badge.icon
+            const isCorporate = r.sourceType === 'corporate'
 
             return (
-              <GlassPanel key={r._id} className="p-5 space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-base font-black text-slate-900">{r.reference || r._id}</span>
+              <GlassPanel key={r._id} className="p-5 space-y-4 border border-slate-200/80 shadow-xs">
+                {/* Header Row */}
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-base font-black text-slate-900 tracking-tight">{r.reference || r._id}</span>
+                      
                       <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${badge.bg}`}>
                         <StatusIcon className="h-3 w-3" />
                         {badge.label}
                       </span>
+
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${
+                        isCorporate ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-sky-50 text-sky-700 border-sky-200'
+                      }`}>
+                        {isCorporate ? <Building2 className="h-3 w-3" /> : <User className="h-3 w-3" />}
+                        {isCorporate ? 'Corporate' : 'Individual'}
+                      </span>
                     </div>
-                    <p className="mt-1 text-xs font-medium text-slate-500">
-                      Client: <strong className="text-slate-700">{r.clientId?.fullName || r.clientId?.corporateProfile?.companyName || 'N/A'}</strong> ({r.clientId?.phone || 'No phone'})
+
+                    <p className="text-xs font-medium text-slate-500 flex items-center gap-2 flex-wrap">
+                      <span>Client: <strong className="text-slate-800">{r.clientId?.fullName || r.clientId?.corporateProfile?.companyName || 'N/A'}</strong></span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1"><Phone className="h-3 w-3 text-slate-400" />{r.clientId?.phone || 'No phone'}</span>
                     </p>
                   </div>
-                  <div className="text-right">
-                    <span className="text-xs font-bold text-slate-500">Location</span>
-                    <p className="text-xs font-semibold text-slate-800 max-w-xs truncate">
+
+                  {/* Distance KM Pill */}
+                  <div className="flex items-center gap-2">
+                    <div className="inline-flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1 rounded-xl text-xs font-extrabold shadow-sm">
+                      <Navigation className="h-3.5 w-3.5 text-amber-400" />
+                      <span>{r.distanceKm != null ? `${Number(r.distanceKm).toFixed(1)} KM` : 'Distance N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Full Location Address (Untruncated) */}
+                <div className="flex items-start gap-2 bg-slate-50 border border-slate-200/60 p-3 rounded-xl">
+                  <MapPin className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                      Full Site Location Address
+                    </span>
+                    <p className="text-xs font-semibold text-slate-800 leading-relaxed whitespace-normal break-words">
                       {r.locationText || 'Location not specified'}
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3 text-xs">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Assigned Worker</span>
-                    <p className="mt-0.5 font-bold text-slate-800">
-                      {r.labourName ? `${r.labourName} (${r.labourPhone || 'No Phone'})` : 'No worker assigned yet'}
+                {/* Requested Categories (if any) */}
+                {r.lines && r.lines.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                      <Layers className="h-3 w-3 text-slate-500" /> Requested Workers:
+                    </span>
+                    {r.lines.map((line, idx) => (
+                      <span key={idx} className="bg-slate-100 text-slate-800 px-2.5 py-0.5 rounded-lg text-xs font-bold border border-slate-200">
+                        {line.categoryId?.name || 'Worker'} × {line.quantity}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Main Details Grid: Worker, Schedule, Payment & Fee Breakdown */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* Column 1: Assigned Worker */}
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 space-y-1 text-xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Assigned Worker</span>
+                    <p className="font-bold text-slate-800">
+                      {r.labourName ? `${r.labourName}` : 'No worker assigned yet'}
+                    </p>
+                    {r.labourPhone && (
+                      <p className="text-slate-500 font-medium flex items-center gap-1">
+                        <Phone className="h-3 w-3 text-slate-400" /> {r.labourPhone}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Column 2: Date & Shift */}
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 space-y-1 text-xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Date & Shift</span>
+                    <p className="font-semibold text-slate-800 flex items-center gap-1">
+                      <Calendar className="h-3.5 w-3.5 text-slate-500" />
+                      {r.startDate ? new Date(r.startDate).toLocaleDateString() : 'N/A'}
+                    </p>
+                    <p className="text-slate-500 font-medium">
+                      Shift: <strong className="text-slate-700">{r.shiftStart || 'Full Day'}</strong>
                     </p>
                   </div>
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Date & Shift</span>
-                    <p className="mt-0.5 font-semibold text-slate-800">
-                      {r.startDate ? new Date(r.startDate).toLocaleDateString() : 'N/A'} · {r.shiftStart || 'Full Day'}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Payment Status</span>
-                    <p className="mt-0.5 font-semibold text-slate-800">
-                      User: <span className="capitalize">{r.userPaymentStatus || r.paymentStatus || 'pending'}</span> · Labour Fee: <span className="capitalize">{r.labourPaymentStatus || 'pending'}</span>
-                    </p>
+
+                  {/* Column 3: Platform Fee & Payment Breakdown */}
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 space-y-2 text-xs">
+                    <div className="flex items-center justify-between border-b border-indigo-100/80 pb-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-900 flex items-center gap-1">
+                        <IndianRupee className="h-3 w-3 text-indigo-600" /> Fee & Payment Details
+                      </span>
+                      {r.razorpayPaymentId && (
+                        <span className="text-[9px] font-mono text-indigo-700 bg-white px-1.5 py-0.5 rounded border border-indigo-200">
+                          {r.razorpayPaymentId}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-600 text-[11px]">User Fee (₹{r.userPlatformFee ?? 49}):</span>
+                        {renderPaymentStatusBadge(r.userPaymentStatus || r.paymentStatus)}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-600 text-[11px]">Labour Fee (₹{r.labourPlatformFee ?? r.vendorPlatformFeeAmount ?? 49}):</span>
+                        {renderPaymentStatusBadge(r.labourPaymentStatus || r.vendorPlatformFeeStatus)}
+                      </div>
+
+                      {r.labourCharge != null && (
+                        <div className="flex items-center justify-between pt-1 border-t border-indigo-100">
+                          <span className="text-slate-700 font-bold text-[11px]">Labour Charge:</span>
+                          <span className="font-extrabold text-emerald-700">₹{r.labourCharge}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </GlassPanel>

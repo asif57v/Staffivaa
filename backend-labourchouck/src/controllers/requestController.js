@@ -802,9 +802,10 @@ export const listAdminRequests = asyncHandler(async (req, res) => {
   if (req.query.status) filter.status = req.query.status
   if (req.query.sourceType) filter.sourceType = req.query.sourceType
   const requests = await WorkforceRequest.find(filter)
-    .sort({ createdAt: 1 })
+    .sort({ createdAt: -1 })
     .limit(200)
     .populate('clientId', 'fullName phone role corporateProfile companyName')
+    .populate('lines.categoryId', 'name group')
     .lean()
   sendSuccess(res, { data: { requests } })
 })
