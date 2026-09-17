@@ -352,7 +352,6 @@ export const getTransactions = asyncHandler(async (req, res) => {
     .populate('clientId', 'fullName email phone companyName')
     .populate('payerId', 'fullName email phone enterpriseProfile companyName')
     .populate('labourId', 'fullName email phone')
-    .populate('userId', 'fullName email phone enterpriseProfile companyName')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit))
