@@ -87,6 +87,23 @@ export function GlobalScrollManager() {
   useEffect(() => {
     const key = location.key || location.pathname
 
+    // Always unfreeze any leftover modal/drawer body scroll-locks on navigation
+    const body = document.body
+    const html = document.documentElement
+    if (body.style.position === 'fixed') {
+      body.style.position = ''
+      body.style.top = ''
+      body.style.left = ''
+      body.style.right = ''
+      body.style.width = ''
+    }
+    body.style.overflow = ''
+    html.style.overflow = ''
+    body.classList.remove('lenis-stopped')
+    html.classList.remove('lenis-stopped')
+    const lenisInstance = getLenisInstance()
+    lenisInstance?.start?.()
+
     if (navigationType === 'POP') {
       // POP Navigation (Back / Forward Button) -> Restore exact previous position!
       const saved = scrollPositions.get(key)
