@@ -639,6 +639,8 @@ export function AppProfilePage() {
             </div>
           </div>
         </GlassPanel>
+      ) : null}
+
       <LanguageSwitcher className="mt-4" />
 
       <section>
