@@ -23,6 +23,9 @@ export async function syncAllPaymentsToLedger(force = false) {
   lastLedgerSyncTimestamp = now
 
   try {
+    // Purge zero-amount records from ledger
+    await WalletTransaction.deleteMany({ amount: { $lte: 0 } })
+
     const existingTxns = await WalletTransaction.find({}, 'razorpayOrderId transactionId bookingId payerType').lean()
     const existingOrderIds = new Set(existingTxns.map((t) => t.razorpayOrderId).filter(Boolean))
     const existingTxIds = new Set(existingTxns.map((t) => t.transactionId).filter(Boolean))
@@ -32,7 +35,7 @@ export async function syncAllPaymentsToLedger(force = false) {
 
     // 1. Sync from Payment collection (status: SUCCESS)
     try {
-      const successPayments = await Payment.find({ status: { $in: ['SUCCESS', 'success', 'paid'] } }).lean()
+      const successPayments = await Payment.find({ status: { $in: ['SUCCESS', 'success', 'paid'] }, amount: { $gt: 0 } }).lean()
       for (const p of successPayments) {
         try {
           if (!p.gatewayOrderId && !p.orderId) continue
@@ -109,7 +112,8 @@ export async function syncAllPaymentsToLedger(force = false) {
         try {
           const reqIdStr = reqDoc._id.toString()
 
-          if (reqDoc.userPaymentStatus === 'paid' || reqDoc.paymentStatus === 'paid') {
+          const userFee = Number(reqDoc.userPlatformFee || 0)
+          if ((reqDoc.userPaymentStatus === 'paid' || reqDoc.paymentStatus === 'paid') && userFee > 0) {
             const payerType = reqDoc.sourceType === 'corporate' ? 'corporate' : 'user'
             const key = `${reqIdStr}_${payerType}`
             if (!existingBookingPayerKeys.has(key)) {
@@ -125,7 +129,7 @@ export async function syncAllPaymentsToLedger(force = false) {
                 platform_fee: true,
                 type: 'Credit',
                 source: `${payerType.charAt(0).toUpperCase() + payerType.slice(1)} Platform Fee`,
-                amount: Number(reqDoc.userPlatformFee || reqDoc.totalAmount || 0),
+                amount: userFee,
                 status: 'Completed',
                 paymentMethod: 'razorpay',
                 razorpayOrderId: orderId || null,
@@ -136,7 +140,8 @@ export async function syncAllPaymentsToLedger(force = false) {
             }
           }
 
-          if (reqDoc.labourPaymentStatus === 'paid') {
+          const labourFee = Number(reqDoc.labourPlatformFee || 0)
+          if (reqDoc.labourPaymentStatus === 'paid' && labourFee > 0) {
             const key = `${reqIdStr}_labour`
             if (!existingBookingPayerKeys.has(key)) {
               const orderId = reqDoc.labourRazorpayOrderId
@@ -151,7 +156,7 @@ export async function syncAllPaymentsToLedger(force = false) {
                 platform_fee: true,
                 type: 'Credit',
                 source: 'Labour Platform Fee',
-                amount: Number(reqDoc.labourPlatformFee || 0),
+                amount: labourFee,
                 status: 'Completed',
                 paymentMethod: 'razorpay',
                 razorpayOrderId: orderId || null,
@@ -162,7 +167,8 @@ export async function syncAllPaymentsToLedger(force = false) {
             }
           }
 
-          if (reqDoc.vendorPlatformFeeStatus === 'paid') {
+          const vendorFee = Number(reqDoc.vendorPlatformFeeAmount || 0)
+          if (reqDoc.vendorPlatformFeeStatus === 'paid' && vendorFee > 0) {
             const key = `${reqIdStr}_vendor`
             if (!existingBookingPayerKeys.has(key)) {
               await WalletTransaction.create({
@@ -172,7 +178,7 @@ export async function syncAllPaymentsToLedger(force = false) {
                 platform_fee: true,
                 type: 'Credit',
                 source: 'Vendor Platform Fee',
-                amount: Number(reqDoc.vendorPlatformFeeAmount || 0),
+                amount: vendorFee,
                 status: 'Completed',
                 paymentMethod: 'razorpay',
                 createdAt: reqDoc.vendorPlatformFeePaidAt || reqDoc.updatedAt || reqDoc.createdAt,
