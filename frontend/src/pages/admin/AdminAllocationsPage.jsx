@@ -37,6 +37,20 @@ export function AdminAllocationsPage() {
   )
   const requests = data?.requests ?? []
 
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return 'N/A'
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return 'N/A'
+    return d.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    })
+  }
+
   const renderPaymentStatusBadge = (status) => {
     const isPaid = status === 'paid'
     const isFailed = status === 'failed'
@@ -62,7 +76,7 @@ export function AdminAllocationsPage() {
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900">Booking Status & Allocations</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Read-only monitoring of live customer bookings, distance (KM), fee payment breakdown, and site locations.
+            Read-only monitoring of live customer bookings, distance (KM), exact timestamps, fee payment breakdown, and site locations.
           </p>
         </div>
         <button
@@ -148,6 +162,12 @@ export function AdminAllocationsPage() {
                         {isCorporate ? <Building2 className="h-3 w-3" /> : <User className="h-3 w-3" />}
                         {isCorporate ? 'Corporate' : 'Individual'}
                       </span>
+
+                      {/* Created Date & Time Badge */}
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                        <Clock className="h-3 w-3 text-slate-500" />
+                        {formatDateTime(r.createdAt)}
+                      </span>
                     </div>
 
                     <p className="text-xs font-medium text-slate-500 flex items-center gap-2 flex-wrap">
@@ -196,7 +216,7 @@ export function AdminAllocationsPage() {
                 {/* Main Details Grid: Worker, Schedule, Payment & Fee Breakdown */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {/* Column 1: Assigned Worker */}
-                  <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 space-y-1 text-xs">
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 space-y-1.5 text-xs">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Assigned Worker</span>
                     <p className="font-bold text-slate-800">
                       {r.labourName ? `${r.labourName}` : 'No worker assigned yet'}
@@ -206,17 +226,26 @@ export function AdminAllocationsPage() {
                         <Phone className="h-3 w-3 text-slate-400" /> {r.labourPhone}
                       </p>
                     )}
+                    {r.acceptedAt && (
+                      <p className="text-[10.5px] text-emerald-700 font-medium flex items-center gap-1 pt-1 border-t border-slate-200/60">
+                        <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Accepted: {formatDateTime(r.acceptedAt)}
+                      </p>
+                    )}
                   </div>
 
-                  {/* Column 2: Date & Shift */}
-                  <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 space-y-1 text-xs">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Date & Shift</span>
+                  {/* Column 2: Date & Shift Time */}
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 space-y-1.5 text-xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Date & Shift Time</span>
                     <p className="font-semibold text-slate-800 flex items-center gap-1">
                       <Calendar className="h-3.5 w-3.5 text-slate-500" />
                       {r.startDate ? new Date(r.startDate).toLocaleDateString() : 'N/A'}
                     </p>
-                    <p className="text-slate-500 font-medium">
-                      Shift: <strong className="text-slate-700">{r.shiftStart || 'Full Day'}</strong>
+                    <p className="text-slate-600 font-medium flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5 text-amber-500" />
+                      Shift: <strong className="text-slate-800">{r.shiftStart || 'Full Day'}</strong>
+                    </p>
+                    <p className="text-[10.5px] text-slate-500 font-medium pt-1 border-t border-slate-200/60">
+                      Booked On: <strong className="text-slate-700">{formatDateTime(r.createdAt)}</strong>
                     </p>
                   </div>
 
