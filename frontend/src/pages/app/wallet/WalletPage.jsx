@@ -121,6 +121,7 @@ export function WalletPage() {
         image: '/favicon.svg',
         order_id: orderId,
         handler: async function (response) {
+          console.log('✅ [Razorpay Checkout] Payment response received (QR/UPI/Card):', response)
           try {
             setIsPaymentProcessing(true)
             await verifyPayment({
@@ -159,9 +160,20 @@ export function WalletPage() {
         },
       }
 
+      console.log('📱 [Razorpay Checkout] Opening checkout modal. Order:', orderId, 'Amount: ₹' + amount)
+
       const rzp1 = new window.Razorpay(options)
+
+      // Listen for payment submission (captures method such as UPI / QR scan)
+      rzp1.on('payment.submit', function (data) {
+        console.log('📱 [Razorpay Checkout] Payment submitted by user:', {
+          method: data?.method,
+          data,
+        })
+      })
+
       rzp1.on('payment.failed', function (response) {
-        console.error('Payment Failed:', response.error)
+        console.error('❌ [Razorpay Checkout] Payment Failed:', response.error)
         clearPendingPayment()
         toast.error(response?.error?.description || 'Payment failed. Please try again.')
         setIsPaymentProcessing(false)

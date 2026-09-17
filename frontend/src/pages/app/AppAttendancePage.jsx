@@ -1568,6 +1568,8 @@ export function AppAttendancePage() {
                       <div style={{ position: 'relative', width: '100%' }}>
                         <input
                           type="text"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
                           maxLength={6}
                           pattern="\d*"
                           placeholder="Enter 6-digit OTP"

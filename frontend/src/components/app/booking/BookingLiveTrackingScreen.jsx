@@ -151,6 +151,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
         description: 'Booking Payment',
         order_id: activeOrderId,
         handler: async function (response) {
+          console.log('✅ [Razorpay Checkout - Booking] Payment response received (QR/UPI/Card):', response)
           try {
             await verifyPayment({
               id: requestId,
@@ -172,6 +173,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
         },
         modal: {
           ondismiss: function () {
+            console.log('ℹ️ [Razorpay Checkout - Booking] Modal dismissed by user')
             checkStatus(activeOrderId)
           },
         },
@@ -180,9 +182,20 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
         },
       }
 
+      console.log('📱 [Razorpay Checkout - Booking] Opening checkout modal. Order:', activeOrderId)
+
       const rzp1 = new window.Razorpay(options)
+
+      // Listen for payment submission (captures method such as UPI / QR scan)
+      rzp1.on('payment.submit', function (data) {
+        console.log('📱 [Razorpay Checkout - Booking] Payment submitted by user:', {
+          method: data?.method,
+          data,
+        })
+      })
+
       rzp1.on('payment.failed', function (response) {
-        console.error(response.error)
+        console.error('❌ [Razorpay Checkout - Booking] Payment Failed:', response.error)
         clearPendingPayment()
       })
       rzp1.open()

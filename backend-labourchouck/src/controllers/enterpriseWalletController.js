@@ -10,6 +10,7 @@ import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { USER_ROLES } from '../constants/roles.js'
 import { logAudit } from '../utils/auditLogger.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
+import { logRazorpayVerifyAttempt } from '../utils/paymentLogger.js'
 
 /** GET /api/enterprise/wallet/summary - Get wallet summary & balance */
 export const getEnterpriseWalletSummary = asyncHandler(async (req, res) => {
@@ -145,6 +146,14 @@ export const verifyRechargePayment = asyncHandler(async (req, res) => {
   if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
     return sendError(res, { message: 'Incomplete payment parameters', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
+
+  logRazorpayVerifyAttempt({
+    endpoint: '/enterprise/wallet/razorpay/verify',
+    orderId: razorpay_order_id,
+    paymentId: razorpay_payment_id,
+    userId: req.user?._id,
+    purpose: 'ENTERPRISE_WALLET_RECHARGE',
+  })
 
   const isSignatureValid = paymentService.verifyPaymentSignature({
     gatewayOrderId: razorpay_order_id,

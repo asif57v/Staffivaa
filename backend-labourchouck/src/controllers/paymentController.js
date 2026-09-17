@@ -22,6 +22,7 @@ import {
   labourProceedToSiteNotif,
 } from '../utils/bookingNotificationCopy.js'
 import { paymentService } from '../services/paymentService.js'
+import { logRazorpayVerifyAttempt } from '../utils/paymentLogger.js'
 
 // Cache the instance
 let razorpayInstance = null
@@ -347,6 +348,15 @@ export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
 
   const isLabourOrder = request.labourRazorpayOrderId === razorpay_order_id;
   const isUserOrder = request.userRazorpayOrderId === razorpay_order_id;
+
+  logRazorpayVerifyAttempt({
+    endpoint: `/workforce/requests/${id}/payment/verify`,
+    orderId: razorpay_order_id,
+    paymentId: razorpay_payment_id,
+    amount: isLabourOrder ? request.labourPlatformFee : request.userPlatformFee,
+    userId: req.user?._id,
+    purpose: 'WORKFORCE_REQUEST_PLATFORM_FEE',
+  })
 
   let isAuthentic = false;
   try {

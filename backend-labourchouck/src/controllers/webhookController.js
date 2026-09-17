@@ -3,6 +3,7 @@ import { paymentService } from '../services/paymentService.js'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { emitRequestStatusUpdate } from '../utils/socket.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
+import { logRazorpayWebhookEvent } from '../utils/paymentLogger.js'
 import {
   paymentSuccessUserNotif,
   paymentSuccessLabourNotif,
@@ -49,7 +50,14 @@ export const razorpayWebhook = async (req, res) => {
   const paymentPayload = req.body?.payload?.payment?.entity
   const orderId = paymentPayload?.order_id || req.body?.payload?.order?.entity?.id
 
-  console.log(`[Webhook] Received Razorpay event: ${event} for order: ${orderId}`)
+  logRazorpayWebhookEvent({
+    event,
+    orderId,
+    paymentId: paymentPayload?.id,
+    amount: paymentPayload?.amount,
+    method: paymentPayload?.method,
+    vpa: paymentPayload?.vpa,
+  })
 
   if (event === 'payment.captured' || event === 'order.paid') {
     if (orderId && paymentPayload) {

@@ -96,14 +96,58 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
   }, [job.requestId, job.id]);
 
   const handleOtpChange = (index, value) => {
-    if (!/^[0-9]?$/.test(value)) return;
+    let digits = String(value || '').replace(/\D/g, '')
+    if (!digits) {
+      const newOtp = [...otpValue]
+      newOtp[index] = ''
+      setOtpValue(newOtp)
+      setOtpError(false)
+      return
+    }
+    if (digits.length > 6 && otpValue[index] && digits.startsWith(otpValue[index])) {
+      digits = digits.slice(otpValue[index].length)
+    }
+    if (digits.length > 1) {
+      if (digits.length === 2 && otpValue[index]) {
+        const prev = otpValue[index]
+        const single = digits.startsWith(prev) ? digits.slice(prev.length) : digits.slice(-1)
+        const newOtp = [...otpValue]
+        newOtp[index] = single
+        setOtpValue(newOtp)
+        setOtpError(false)
+        if (index < 5) document.getElementById(`otp-input-${job.id}-${index + 1}`)?.focus()
+        return
+      }
+      const parts = digits.slice(0, 6).split('')
+      const newOtp = Array(6).fill('')
+      for (let k = 0; k < parts.length; k++) newOtp[k] = parts[k]
+      setOtpValue(newOtp)
+      setOtpError(false)
+      const nextIdx = Math.min(parts.length, 5)
+      document.getElementById(`otp-input-${job.id}-${nextIdx}`)?.focus()
+      return
+    }
     const newOtp = [...otpValue]
-    newOtp[index] = value
+    newOtp[index] = digits
     setOtpValue(newOtp)
     setOtpError(false)
-    if (value && index < 5) {
+    if (index < 5) {
       document.getElementById(`otp-input-${job.id}-${index + 1}`)?.focus()
     }
+  }
+
+  const handleOtpPaste = (e) => {
+    e.preventDefault()
+    const text = e.clipboardData?.getData('text/plain') || ''
+    const digits = text.replace(/\D/g, '').slice(0, 6)
+    if (!digits) return
+    const parts = digits.split('')
+    const newOtp = Array(6).fill('')
+    for (let k = 0; k < parts.length; k++) newOtp[k] = parts[k]
+    setOtpValue(newOtp)
+    setOtpError(false)
+    const nextIdx = Math.min(parts.length, 5)
+    document.getElementById(`otp-input-${job.id}-${nextIdx}`)?.focus()
   }
 
   const handleVerifyOtp = () => {
@@ -402,21 +446,39 @@ export function LabourJobActiveCard({ job, onMarkOnSite, onStartWork, onOpenDeta
                   </div>
                 ) : (
                   <>
-                    <div className="flex justify-between gap-1.5 my-4 px-1">
+                    <div className="flex justify-between gap-1.5 my-4 px-1" onPaste={handleOtpPaste}>
                       {otpValue.map((digit, i) => (
                         <input
                           key={i}
                           id={`otp-input-${job.id}-${i}`}
                           type="text"
                           inputMode="numeric"
-                          maxLength={1}
+                          autoComplete="one-time-code"
+                          pattern="\d*"
+                          maxLength={6}
                           value={digit}
+                          onPaste={handleOtpPaste}
                           onChange={(e) => handleOtpChange(i, e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               handleVerifyOtp()
-                            } else if (e.key === 'Backspace' && !digit && i > 0) {
+                            } else if (e.key === 'Backspace') {
+                              if (otpValue[i]) {
+                                const newOtp = [...otpValue]
+                                newOtp[i] = ''
+                                setOtpValue(newOtp)
+                                setOtpError(false)
+                              } else if (i > 0) {
+                                const newOtp = [...otpValue]
+                                newOtp[i - 1] = ''
+                                setOtpValue(newOtp)
+                                setOtpError(false)
+                                document.getElementById(`otp-input-${job.id}-${i - 1}`)?.focus()
+                              }
+                            } else if (e.key === 'ArrowLeft' && i > 0) {
                               document.getElementById(`otp-input-${job.id}-${i - 1}`)?.focus()
+                            } else if (e.key === 'ArrowRight' && i < 5) {
+                              document.getElementById(`otp-input-${job.id}-${i + 1}`)?.focus()
                             }
                           }}
                           className={`flex-1 min-w-0 h-11 text-center text-lg font-black rounded-xl border-2 outline-none transition-colors ${

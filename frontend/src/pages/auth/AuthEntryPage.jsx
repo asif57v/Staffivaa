@@ -126,6 +126,7 @@ export function AuthEntryPage() {
   const { applySession } = useAuth()
   const reduce = useReducedMotion()
   const otpInputRefs = useRef([])
+  const autoVerifyTimerRef = useRef(null)
 
   const [mode, setMode] = useState('login')
   const [step, setStep] = useState('form')
@@ -140,6 +141,7 @@ export function AuthEntryPage() {
   const [challengeId, setChallengeId] = useState(null)
   const [busy, setBusy] = useState(false)
   const [banner, setBanner] = useState(null)
+  const [resendCountdown, setResendCountdown] = useState(30)
 
   // Vendor skills state
   const dropdownRef = useRef(null)
@@ -252,15 +254,84 @@ export function AuthEntryPage() {
     return out
   }
 
+  function handleOtpChange(e, i) {
+    let digits = e.target.value.replace(/\D/g, '')
+
+    if (!digits) {
+      const next = [...otpCells]
+      next[i] = ''
+      setOtpCells(next)
+      clearOtpError()
+      return
+    }
+
+    // If cell already had a digit and autofill inserted full code (e.g. "8" + "123456" = "8123456")
+    if (digits.length > 6 && otpCells[i] && digits.startsWith(otpCells[i])) {
+      digits = digits.slice(otpCells[i].length)
+    }
+
+    // Multi-digit detection: Auto-fill from mobile keyboard or clipboard paste
+    if (digits.length > 1) {
+      // If user typed 1 digit into a cell that already had 1 digit (replacement typing)
+      if (digits.length === 2 && otpCells[i]) {
+        const prev = otpCells[i]
+        const single = digits.startsWith(prev) ? digits.slice(prev.length) : digits.slice(-1)
+        const next = [...otpCells]
+        next[i] = single
+        setOtpCells(next)
+        clearOtpError()
+        if (i < 5) otpInputRefs.current[i + 1]?.focus()
+        return
+      }
+
+      // Full 6-digit or multi-digit autofill
+      const fullCode = digits.slice(0, 6)
+      const cells = digitsToOtpCells(fullCode)
+      setOtpCells(cells)
+      clearOtpError()
+      const nextEmpty = cells.findIndex((c) => c === '')
+      const focusIdx = nextEmpty === -1 ? 5 : nextEmpty
+      queueMicrotask(() => {
+        otpInputRefs.current[focusIdx]?.focus()
+      })
+
+      if (fullCode.length === 6) {
+        if (autoVerifyTimerRef.current) clearTimeout(autoVerifyTimerRef.current)
+        autoVerifyTimerRef.current = setTimeout(() => {
+          void handleVerifyOtp(fullCode)
+        }, 350)
+      }
+      return
+    }
+
+    // Single digit typed manually
+    const next = [...otpCells]
+    next[i] = digits
+    setOtpCells(next)
+    clearOtpError()
+    if (i < 5) {
+      otpInputRefs.current[i + 1]?.focus()
+    }
+  }
+
   function handleOtpPaste(e) {
     e.preventDefault()
-    const cells = digitsToOtpCells(e.clipboardData.getData('text/plain'))
+    const text = e.clipboardData?.getData('text/plain') || ''
+    const digits = String(text).replace(/\D/g, '').slice(0, 6)
+    if (!digits) return
+    const cells = digitsToOtpCells(digits)
     setOtpCells(cells)
     clearOtpError()
     const nextEmpty = cells.findIndex((c) => c === '')
     queueMicrotask(() => {
       otpInputRefs.current[nextEmpty === -1 ? 5 : nextEmpty]?.focus()
     })
+    if (digits.length === 6) {
+      if (autoVerifyTimerRef.current) clearTimeout(autoVerifyTimerRef.current)
+      autoVerifyTimerRef.current = setTimeout(() => {
+        void handleVerifyOtp(digits)
+      }, 350)
+    }
   }
 
   useEffect(() => {
@@ -270,6 +341,73 @@ export function AuthEntryPage() {
     })
   }, [step])
 
+  // Native WebOTP API for Android Chrome one-tap auto-fill
+  useEffect(() => {
+    if (step !== 'otp') return
+    if (typeof window === 'undefined' || !('OTPCredential' in window)) return
+
+    const ac = new AbortController()
+    navigator.credentials
+      .get({
+        otp: { transport: ['sms'] },
+        signal: ac.signal,
+      })
+      .then((otp) => {
+        if (otp && otp.code) {
+          const digits = String(otp.code).replace(/\D/g, '').slice(0, 6)
+          if (digits) {
+            const cells = digitsToOtpCells(digits)
+            setOtpCells(cells)
+            clearOtpError()
+            queueMicrotask(() => {
+              otpInputRefs.current[5]?.focus()
+            })
+            if (digits.length === 6) {
+              if (autoVerifyTimerRef.current) clearTimeout(autoVerifyTimerRef.current)
+              autoVerifyTimerRef.current = setTimeout(() => {
+                void handleVerifyOtp(digits)
+              }, 350)
+            }
+          }
+        }
+      })
+      .catch(() => {
+        // Dismissed or aborted silently
+      })
+
+    return () => {
+      try {
+        ac.abort()
+      } catch (err) {}
+    }
+  }, [step])
+
+  // Countdown timer for Resend OTP
+  useEffect(() => {
+    if (step !== 'otp') {
+      setResendCountdown(30)
+      return
+    }
+    setResendCountdown(30)
+    const interval = setInterval(() => {
+      setResendCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [step])
+
+  // Cleanup auto-verify timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoVerifyTimerRef.current) clearTimeout(autoVerifyTimerRef.current)
+    }
+  }, [])
+
   function setPhoneDigits(value) {
     const digits = String(value).replace(/\D/g, '').slice(0, 10)
     setPhone(digits)
@@ -277,6 +415,7 @@ export function AuthEntryPage() {
   }
 
   function resetFlowToForm() {
+    if (autoVerifyTimerRef.current) clearTimeout(autoVerifyTimerRef.current)
     setStep('form')
     setChallengeId(null)
     setBanner(null)
@@ -355,9 +494,10 @@ export function AuthEntryPage() {
     }
   }
 
-  async function handleVerifyOtp() {
+  async function handleVerifyOtp(explicitCode) {
+    const activeCode = typeof explicitCode === 'string' ? explicitCode : code
     setBanner(null)
-    if (code.length !== 6) {
+    if (activeCode.length !== 6) {
       setBanner({ variant: 'error', message: 'Enter all 6 digits of the OTP.' })
       return
     }
@@ -373,7 +513,7 @@ export function AuthEntryPage() {
     try {
       let signedInUser
       if (mode === 'login') {
-        const res = await verifyLogin({ phone: p, code, challengeId })
+        const res = await verifyLogin({ phone: p, code: activeCode, challengeId })
         const { token, user } = res.data
         applySession(token, user)
         signedInUser = user
@@ -386,7 +526,7 @@ export function AuthEntryPage() {
         const body = {
           phone: p,
           role,
-          code,
+          code: activeCode,
           challengeId,
           fullName: fullName.trim(),
         }
@@ -1244,10 +1384,36 @@ export function AuthEntryPage() {
                 >
                   {/* OTP sent info */}
                   <div style={{ background: 'rgba(255,209,0,0.06)', borderRadius: 14, padding: '14px 16px', border: '1px solid rgba(255,209,0,0.2)' }}>
-                    <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
-                      6-digit code sent to{' '}
-                      <span style={{ fontWeight: 700, color: '#0f172a', fontFamily: 'monospace' }}>+91 {phone}</span>
-                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                      <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
+                        6-digit code sent to{' '}
+                        <span style={{ fontWeight: 700, color: '#0f172a', fontFamily: 'monospace' }}>+91 {phone}</span>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={resetFlowToForm}
+                        style={{ background: 'none', border: 'none', padding: 0, fontSize: 12, fontWeight: 700, color: '#b45309', cursor: 'pointer', textDecoration: 'underline' }}
+                      >
+                        Change
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(255,209,0,0.18)' }}>
+                      <span style={{ fontSize: 12, color: '#64748b' }}>Didn't receive code?</span>
+                      {resendCountdown > 0 ? (
+                        <span style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8' }}>
+                          Resend in {resendCountdown}s
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void handleSendOtp()}
+                          style={{ background: 'none', border: 'none', padding: 0, fontSize: 12, fontWeight: 800, color: '#0284c7', cursor: busy ? 'not-allowed' : 'pointer', textDecoration: 'underline' }}
+                        >
+                          Resend OTP
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* OTP boxes */}
@@ -1257,12 +1423,15 @@ export function AuthEntryPage() {
                       {otpCells.map((digit, i) => (
                         <input
                           key={i}
+                          id={`otp-input-${i}`}
+                          name={`otp-${i}`}
                           onFocus={handleInputFocus}
                           ref={(el) => { otpInputRefs.current[i] = el }}
                           type="text"
                           inputMode="numeric"
-                          autoComplete={i === 0 ? 'one-time-code' : 'off'}
-                          maxLength={1}
+                          autoComplete="one-time-code"
+                          pattern="\d*"
+                          maxLength={6}
                           aria-label={`OTP digit ${i + 1} of 6`}
                           style={{
                             flex: 1, minWidth: 0, borderRadius: 14,
@@ -1276,20 +1445,7 @@ export function AuthEntryPage() {
                           }}
                           value={digit}
                           onPaste={handleOtpPaste}
-                          onChange={(e) => {
-                            const d = e.target.value.replace(/\D/g, '').slice(-1)
-                            const next = [...otpCells]
-                            if (d) {
-                              next[i] = d
-                              setOtpCells(next)
-                              clearOtpError()
-                              if (i < 5) otpInputRefs.current[i + 1]?.focus()
-                            } else {
-                              next[i] = ''
-                              setOtpCells(next)
-                              clearOtpError()
-                            }
-                          }}
+                          onChange={(e) => handleOtpChange(e, i)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') { e.preventDefault(); if (!busy) void handleVerifyOtp(); return }
                             if (e.key === 'Backspace') {

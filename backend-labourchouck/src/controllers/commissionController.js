@@ -14,6 +14,7 @@ const razorpay = new Razorpay({
 })
 
 import { paymentService } from '../services/paymentService.js'
+import { logRazorpayVerifyAttempt } from '../utils/paymentLogger.js'
 
 // --- Vendor APIs ---
 
@@ -60,6 +61,15 @@ export const createRazorpayOrder = asyncHandler(async (req, res) => {
 
 export const verifyRazorpayPayment = asyncHandler(async (req, res) => {
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body
+
+  logRazorpayVerifyAttempt({
+    endpoint: `/vendor/commission/${req.params.id}/pay/verify`,
+    orderId: razorpay_order_id,
+    paymentId: razorpay_payment_id,
+    userId: req.user?._id,
+    purpose: 'COMMISSION',
+  })
+
   const commission = await Commission.findOne({ _id: req.params.id, vendorId: req.user._id })
   if (!commission) return sendError(res, { message: 'Commission not found', statusCode: HTTP_STATUS.NOT_FOUND })
 

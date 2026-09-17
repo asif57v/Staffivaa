@@ -12,6 +12,8 @@ import { EnterprisePayroll } from '../models/EnterprisePayroll.js'
 import { EnterpriseJob } from '../models/EnterpriseJob.js'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { Commission } from '../models/Commission.js'
+import { AuditLog } from '../models/AuditLog.js'
+import { logRazorpayPaymentSuccess, logRazorpayPaymentFailure } from '../utils/paymentLogger.js'
 import CommissionService from './CommissionService.js'
 import { emitToUser, emitToVendor, emitToCorporate, emitRequestStatusUpdate } from '../utils/socket.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
@@ -178,6 +180,24 @@ class PaymentService {
       return { success: false, error: 'Payment record not found' }
     }
 
+    // Fetch live gateway payment details if missing
+    let fetchedDetails = gatewayResponse
+    if (!fetchedDetails && gatewayPaymentId && process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+      try {
+        fetchedDetails = await razorpay.payments.fetch(gatewayPaymentId)
+      } catch (fetchErr) {
+        // Fallback gracefully if mock or offline
+      }
+    }
+
+    const resolvedMethod =
+      fetchedDetails?.method ||
+      (paymentMethod && paymentMethod !== 'razorpay' ? paymentMethod : payment.paymentMethod || 'razorpay')
+    const isUpiOrQr =
+      resolvedMethod === 'upi' ||
+      Boolean(fetchedDetails?.vpa) ||
+      (typeof resolvedMethod === 'string' && resolvedMethod.toLowerCase().includes('qr'))
+
     // Atomic state update: only match if status is NOT already 'SUCCESS'
     const updatedPayment = await Payment.findOneAndUpdate(
       {
@@ -189,13 +209,13 @@ class PaymentService {
           status: 'SUCCESS',
           gatewayPaymentId: gatewayPaymentId || payment.gatewayPaymentId,
           paymentId: gatewayPaymentId || payment.paymentId || payment.orderId,
-          paymentMethod: paymentMethod || payment.paymentMethod,
+          paymentMethod: isUpiOrQr ? 'upi' : (resolvedMethod || payment.paymentMethod),
           paidAt: new Date(),
           lastCheckedAt: new Date(),
           failureReason: null,
           webhookReceived: source === 'webhook' ? true : payment.webhookReceived,
           webhookStatus: source === 'webhook' ? 'SUCCESS' : payment.webhookStatus,
-          gatewayResponse: gatewayResponse || payment.gatewayResponse,
+          gatewayResponse: fetchedDetails || gatewayResponse || payment.gatewayResponse,
         },
       },
       { new: true },
@@ -204,6 +224,22 @@ class PaymentService {
     // If update returned null, it means another thread (webhook or frontend) already marked it SUCCESS!
     if (!updatedPayment) {
       const alreadySuccessDoc = await Payment.findById(payment._id)
+      logRazorpayPaymentSuccess({
+        orderId: gatewayOrderId,
+        paymentId: gatewayPaymentId || alreadySuccessDoc?.gatewayPaymentId,
+        amount: alreadySuccessDoc?.amount || payment.amount,
+        currency: alreadySuccessDoc?.currency || 'INR',
+        method: alreadySuccessDoc?.paymentMethod || resolvedMethod,
+        vpa: fetchedDetails?.vpa || alreadySuccessDoc?.gatewayResponse?.vpa,
+        contact: fetchedDetails?.contact || alreadySuccessDoc?.gatewayResponse?.contact,
+        email: fetchedDetails?.email || alreadySuccessDoc?.gatewayResponse?.email,
+        rrn: fetchedDetails?.acquirer_data?.rrn || alreadySuccessDoc?.gatewayResponse?.acquirer_data?.rrn,
+        purpose: alreadySuccessDoc?.purpose || payment.purpose,
+        userId: payment.userId,
+        source,
+        timestamp: alreadySuccessDoc?.paidAt || new Date(),
+        alreadyProcessed: true,
+      })
       return {
         success: true,
         alreadyProcessed: true,
@@ -211,6 +247,52 @@ class PaymentService {
         message: 'Payment was already processed and verified successfully.',
       }
     }
+
+    // Retrieve user details for formatted logging
+    let userDoc = null
+    try {
+      userDoc = await User.findById(updatedPayment.userId).select('fullName phone email role').lean()
+    } catch (uErr) {}
+
+    // 1. Output dedicated Razorpay & UPI QR payment log
+    logRazorpayPaymentSuccess({
+      orderId: gatewayOrderId,
+      paymentId: gatewayPaymentId,
+      amount: updatedPayment.amount,
+      currency: updatedPayment.currency,
+      method: resolvedMethod,
+      vpa: fetchedDetails?.vpa || null,
+      contact: fetchedDetails?.contact || userDoc?.phone || null,
+      email: fetchedDetails?.email || userDoc?.email || null,
+      rrn: fetchedDetails?.acquirer_data?.rrn || null,
+      purpose: updatedPayment.purpose,
+      userId: updatedPayment.userId,
+      userName: userDoc?.fullName || null,
+      userPhone: userDoc?.phone || null,
+      userRole: userDoc?.role || null,
+      source,
+      timestamp: updatedPayment.paidAt || new Date(),
+      alreadyProcessed: false,
+    })
+
+    // 2. Persist audit log entry for historical tracking
+    AuditLog.create({
+      action: 'PAYMENT_SUCCESS',
+      module: 'PAYMENT',
+      reason: `Razorpay payment ${isUpiOrQr ? 'via UPI QR / App' : `via ${resolvedMethod}`} of ₹${updatedPayment.amount} verified successfully`,
+      targetUser: updatedPayment.userId,
+      newValue: {
+        orderId: gatewayOrderId,
+        paymentId: gatewayPaymentId,
+        amount: updatedPayment.amount,
+        currency: updatedPayment.currency,
+        method: resolvedMethod,
+        isUpiOrQr,
+        vpa: fetchedDetails?.vpa || null,
+        purpose: updatedPayment.purpose,
+        source,
+      },
+    }).catch((err) => console.warn('[PaymentService] AuditLog recording error:', err.message))
 
     // Execute business fulfillment logic based on purpose
     await this.fulfillBusinessLogic(updatedPayment, source)
@@ -470,6 +552,17 @@ class PaymentService {
       },
       { new: true },
     )
+
+    logRazorpayPaymentFailure({
+      orderId: gatewayOrderId,
+      paymentId: payment?.gatewayPaymentId || null,
+      amount: payment?.amount || null,
+      currency: payment?.currency || 'INR',
+      reason: failureReason,
+      source: 'gateway_verification',
+      userId: payment?.userId || null,
+      timestamp: new Date(),
+    })
 
     return payment
   }

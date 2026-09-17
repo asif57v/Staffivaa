@@ -35,11 +35,17 @@ router.get(
       })
     }
 
-    // If still in CREATED or PENDING state, reconcile with Gateway
+    // If still in CREATED or PENDING state, reconcile with Gateway (throttled to at most once per 5 seconds)
     if (['CREATED', 'PENDING'].includes(payment.status) && payment.gatewayOrderId) {
-      const reconcileResult = await paymentService.reconcilePaymentWithGateway(payment.gatewayOrderId)
-      if (reconcileResult.success && reconcileResult.payment) {
-        payment = reconcileResult.payment
+      const lastCheckAgeMs = payment.lastCheckedAt
+        ? Date.now() - new Date(payment.lastCheckedAt).getTime()
+        : Infinity
+
+      if (lastCheckAgeMs > 5000) {
+        const reconcileResult = await paymentService.reconcilePaymentWithGateway(payment.gatewayOrderId)
+        if (reconcileResult.success && reconcileResult.payment) {
+          payment = reconcileResult.payment
+        }
       }
     }
 

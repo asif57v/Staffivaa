@@ -11,6 +11,7 @@ import { triggerNotification } from '../utils/notificationTrigger.js'
 import { emitToUser } from '../utils/socket.js'
 
 import { paymentService } from '../services/paymentService.js'
+import { logRazorpayVerifyAttempt } from '../utils/paymentLogger.js'
 
 export const createAddMoneyOrder = asyncHandler(async (req, res) => {
   const amount = Number(req.body.amount)
@@ -51,6 +52,15 @@ export const createAddMoneyOrder = asyncHandler(async (req, res) => {
 
 export const verifyAddMoneyPayment = asyncHandler(async (req, res) => {
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature, amount } = req.body
+
+  logRazorpayVerifyAttempt({
+    endpoint: '/wallet/razorpay/verify',
+    orderId: razorpay_order_id,
+    paymentId: razorpay_payment_id,
+    amount,
+    userId: req.user?._id,
+    purpose: 'WALLET_TOPUP',
+  })
 
   if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !amount) {
     return res.status(400).json({ status: 'fail', message: 'Missing payment verification data' })

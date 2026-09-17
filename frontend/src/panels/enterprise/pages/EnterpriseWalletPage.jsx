@@ -117,8 +117,19 @@ function AddMoneyModal({ summary, onClose }) {
         },
       }
 
+      console.log('📱 [Razorpay Checkout - Enterprise] Opening modal. Order:', orderData.orderId, 'Amount: ₹' + amount)
+
       const rzp = new window.Razorpay(options)
+
+      rzp.on('payment.submit', function (data) {
+        console.log('📱 [Razorpay Checkout - Enterprise] Payment submitted by user:', {
+          method: data?.method,
+          data,
+        })
+      })
+
       rzp.on('payment.failed', function (response) {
+        console.error('❌ [Razorpay Checkout - Enterprise] Payment failed:', response?.error)
         clearPendingPayment()
         toast.error(response?.error?.description || 'Payment failed')
       })
