@@ -144,9 +144,10 @@ export function AdminPaymentDetailPage() {
   const getStatusLabel = (status) => {
     switch (status) {
       case 'payment_pending':
-        return 'Awaiting Advance Payment'
+        return 'Platform Fee Pending'
+      case 'quotation_unlocked':
       case 'advance_paid':
-        return 'Advance Paid'
+        return 'Quotation Phase'
       case 'project_active':
         return 'Project Active'
       case 'settlement_pending':
@@ -154,7 +155,7 @@ export function AdminPaymentDetailPage() {
       case 'settlement_completed':
         return 'Settlement Completed'
       default:
-        return status ? status.replace('_', ' ').toUpperCase() : 'PENDING'
+        return status ? status.replace(/_/g, ' ').toUpperCase() : 'PENDING'
     }
   }
 
@@ -193,42 +194,25 @@ export function AdminPaymentDetailPage() {
       title: `Request created by ${request.clientId?.corporateProfile?.companyName || request.clientId?.fullName || 'Client'}`,
       time: `${formatDate(request.createdAt)}, ${formatTime(request.createdAt)}`,
       iconClass: 'bg-[#f5f3ff] text-[#6366f1] border-[#ddd6fe]',
-      Icon: FileText
+      Icon: FileText,
     })
   }
   if (request.reviewedAt) {
     activities.push({
       id: 'accept',
-      title: 'Vendor accepted the request',
+      title: request.isDirectAdminAccept ? 'Accepted directly by Admin (Direct Fulfillment)' : 'Vendor accepted the request',
       time: `${formatDate(request.reviewedAt)}, ${formatTime(request.reviewedAt)}`,
       iconClass: 'bg-[#ecfdf5] text-emerald-600 border-emerald-100',
-      Icon: CheckCircle2
+      Icon: CheckCircle2,
     })
   }
-  if (allocation?.createdAt) {
+  if (quotation) {
     activities.push({
-      id: 'assign',
-      title: 'Workers assigned by vendor',
-      time: `${formatDate(allocation.createdAt)}, ${formatTime(allocation.createdAt)}`,
-      iconClass: 'bg-[#eff6ff] text-blue-600 border-blue-100',
-      Icon: Users
-    })
-  }
-  if (request.advancePaymentStatus === 'paid') {
-    activities.push({
-      id: 'advance_paid_act',
-      title: 'Advance payment received successfully',
-      time: request.razorpayPaymentId ? `Transaction: ${request.razorpayPaymentId}` : 'Recorded Offline',
-      iconClass: 'bg-[#ecfdf5] text-emerald-600 border-emerald-100',
-      Icon: CheckCircle2
-    })
-  } else {
-    activities.push({
-      id: 'advance_pending_act',
-      title: 'Advance payment pending',
-      time: `Due: ${formatDate(dueDateObj)}`,
-      iconClass: 'bg-amber-50 text-amber-600 border-amber-200',
-      Icon: Clock
+      id: 'quote_act',
+      title: `Quotation ${quotation.status?.replace(/_/g, ' ')} (${formatMoney(quotation.grandTotal)})`,
+      time: `${formatDate(quotation.updatedAt || quotation.createdAt)}`,
+      iconClass: quotation.status === 'approved' ? 'bg-[#ecfdf5] text-emerald-600 border-emerald-100' : 'bg-[#eff6ff] text-blue-600 border-blue-100',
+      Icon: FileText,
     })
   }
 
@@ -349,7 +333,7 @@ export function AdminPaymentDetailPage() {
       </div>
 
       {/* Metric Cards Row */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-start gap-3">
           <div className="h-9 w-9 rounded-lg bg-indigo-50 flex items-center justify-center text-[#6366f1] shrink-0 border border-indigo-100">
@@ -357,29 +341,20 @@ export function AdminPaymentDetailPage() {
           </div>
           <div>
             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Project Value</p>
-            <p className="text-base font-black text-slate-900 mt-0.5">{formatMoney(grandTotal)}</p>
+            <p className="text-base font-black text-slate-900 mt-0.5">{formatMoney(grandTotal || quotation?.grandTotal)}</p>
           </div>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-start gap-3">
           <div className="h-9 w-9 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 border border-emerald-100">
-            <Percent className="h-5 w-5" />
+            <FileText className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Advance ({advancePercent}%)</p>
-            <p className="text-base font-black text-slate-900 mt-0.5">{formatMoney(advanceAmount)}</p>
-            <p className="text-[9px] font-bold text-rose-600 mt-0.5">Due: {formatDate(dueDateObj)}</p>
-          </div>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-start gap-3">
-          <div className="h-9 w-9 rounded-lg bg-sky-50 flex items-center justify-center text-sky-600 shrink-0 border border-sky-100">
-            <Banknote className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Remaining (70%)</p>
-            <p className="text-base font-black text-slate-900 mt-0.5">{formatMoney(remainingAmount)}</p>
-            <p className="text-[9px] font-bold text-slate-400 mt-0.5">After Advance</p>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Quote Status</p>
+            <p className="text-xs font-black text-emerald-700 mt-0.5 uppercase tracking-wide">
+              {quotation?.status ? quotation.status.replace(/_/g, ' ') : 'Pending'}
+            </p>
+            <p className="text-[9px] font-bold text-slate-500 mt-0.5">{quotation ? formatMoney(quotation.grandTotal) : 'Not Generated'}</p>
           </div>
         </div>
 
@@ -390,7 +365,7 @@ export function AdminPaymentDetailPage() {
           <div>
             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Corporate Fee</p>
             <p className="text-base font-black text-slate-900 mt-0.5">{formatMoney(corpFee)}</p>
-            <p className="text-[9px] font-bold text-slate-400 mt-0.5">Configured Fee</p>
+            <p className="text-[9px] font-bold text-slate-400 mt-0.5">Platform Booking</p>
           </div>
         </div>
 
@@ -401,7 +376,7 @@ export function AdminPaymentDetailPage() {
           <div>
             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Vendor Fee</p>
             <p className="text-base font-black text-slate-900 mt-0.5">{formatMoney(vendorPlatformFee)}</p>
-            <p className="text-[9px] font-bold text-slate-400 mt-0.5">Configured Fee</p>
+            <p className="text-[9px] font-bold text-slate-400 mt-0.5">{request.isDirectAdminAccept ? 'Direct Staffivaa' : 'Configured Fee'}</p>
           </div>
         </div>
 
@@ -410,147 +385,42 @@ export function AdminPaymentDetailPage() {
             <Sparkles className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">GST (18%)</p>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">GST ({gstRate}%)</p>
             <p className="text-base font-black text-slate-900 mt-0.5">{formatMoney(gstAmount)}</p>
-            <p className="text-[9px] font-bold text-slate-400 mt-0.5">On Fees</p>
+            <p className="text-[9px] font-bold text-slate-400 mt-0.5">On Platform Fee</p>
           </div>
         </div>
 
       </div>
 
-      {/* Three Center Detail Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        
-        {/* Advance Payment Details */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
-          <div className="space-y-4">
-            <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2.5">
-              <CreditCard className="h-4 w-4 text-indigo-500" /> Advance Payment Details
-            </h3>
-            
-            <div className="space-y-2.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-semibold">Advance Amount</span>
-                <span className="font-extrabold text-slate-900">{formatMoney(advanceAmount)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-semibold">Percentage</span>
-                <span className="font-bold text-slate-800">{advancePercent}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-semibold">Payment Due Date</span>
-                <span className="font-bold text-rose-600">{formatDate(dueDateObj)} (48h Before Start)</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-semibold">Status</span>
-                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
-                  request.advancePaymentStatus === 'paid' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
-                }`}>
-                  {request.advancePaymentStatus === 'paid' ? 'Paid' : 'Pending'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-semibold">Reminder</span>
-                <span className="font-bold text-slate-700">Not Sent Yet</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-semibold">Auto Reminder</span>
-                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Enabled</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 pt-4">
-            <button
-              onClick={triggerReminder}
-              disabled={sendingReminder || request.advancePaymentStatus === 'paid'}
-              className="flex items-center justify-center gap-1 bg-[#f5f3ff] hover:bg-[#ede9fe] text-[#6366f1] text-xs font-bold py-2.5 rounded-xl border border-[#ddd6fe] transition disabled:opacity-50"
-            >
-              <Send className="h-3.5 w-3.5" /> Send Reminder
-            </button>
-            <button
-              onClick={triggerOfflinePayment}
-              disabled={recordingPayment || request.advancePaymentStatus === 'paid'}
-              className="flex items-center justify-center gap-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white text-xs font-black py-2.5 rounded-xl transition disabled:opacity-50"
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" /> Record Payment
-            </button>
-          </div>
-        </div>
-
+      {/* Escrow Wallet Card */}
+      <div className="w-full">
         {/* Escrow Wallet (Admin) */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
           <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2.5">
             <Lock className="h-4 w-4 text-[#6366f1]" /> Escrow Wallet (Admin)
           </h3>
           
-          <div className="space-y-3.5 text-xs pt-1">
-            <div className="flex justify-between">
-              <span className="text-slate-400 font-semibold">Received Amount</span>
-              <span className="font-extrabold text-slate-900">{formatMoney(receivedAmount)}</span>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs pt-1">
+            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+              <span className="text-slate-400 font-semibold block">Received Amount</span>
+              <span className="font-extrabold text-slate-900 text-sm mt-1 block">{formatMoney(receivedAmount)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400 font-semibold">Held in Escrow</span>
-              <span className="font-extrabold text-slate-900">{formatMoney(escrowBalance)}</span>
+            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+              <span className="text-slate-400 font-semibold block">Held in Escrow</span>
+              <span className="font-extrabold text-slate-900 text-sm mt-1 block">{formatMoney(escrowBalance)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400 font-semibold">Released to Vendor</span>
-              <span className="font-extrabold text-slate-900">{formatMoney(releasedToVendor)}</span>
+            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+              <span className="text-slate-400 font-semibold block">Released to Vendor</span>
+              <span className="font-extrabold text-slate-900 text-sm mt-1 block">{formatMoney(releasedToVendor)}</span>
             </div>
+          </div>
 
-            <div className="bg-[#f5f3ff] rounded-xl p-3.5 flex justify-between items-center mt-6">
-              <span className="text-[#6366f1] font-bold">Available in Escrow</span>
-              <span className="text-[#6366f1] font-black text-sm">{formatMoney(escrowBalance)}</span>
-            </div>
+          <div className="bg-[#f5f3ff] rounded-xl p-3.5 flex justify-between items-center mt-3">
+            <span className="text-[#6366f1] font-bold">Available in Escrow</span>
+            <span className="text-[#6366f1] font-black text-base">{formatMoney(escrowBalance)}</span>
           </div>
         </div>
-
-        {/* Settlement Overview */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
-          <div className="space-y-4">
-            <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2.5">
-              <Banknote className="h-4 w-4 text-emerald-500" /> Settlement Overview
-            </h3>
-            
-            <div className="space-y-2.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-semibold">Remaining Amount</span>
-                <span className="font-extrabold text-slate-900">{formatMoney(remainingAmount)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-semibold">Expected Collection Date</span>
-                <span className="font-bold text-slate-800">{formatDate(request.endDate || request.startDate)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-semibold">Settlement Status</span>
-                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
-                  request.status === 'settlement_completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
-                }`}>
-                  {request.status === 'settlement_completed' ? 'Settled' : 'Pending'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-semibold">Settlement Type</span>
-                <span className="font-bold text-slate-800">After Project Completion</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-semibold">Release Condition</span>
-                <span className="font-bold text-slate-800">Corporate Approval + Attendance</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-4">
-            <button
-              onClick={triggerRelease}
-              disabled={releasingSettlement || (request.status !== 'completed' && request.status !== 'settlement_pending')}
-              className="w-full flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black py-2.5 rounded-xl transition disabled:opacity-40"
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" /> Release Final Payment
-            </button>
-          </div>
-        </div>
-
       </div>
 
       {/* Quotation & Complete Financial Breakdown */}
@@ -641,7 +511,7 @@ export function AdminPaymentDetailPage() {
 
       {/* Timeline Section */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-        <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Payment Timeline</h3>
+        <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Payment & Project Timeline</h3>
         <div className="flex flex-wrap md:flex-nowrap items-start justify-between gap-4 overflow-x-auto pt-2 pb-4">
           
           {/* Stage 1 */}
@@ -662,7 +532,7 @@ export function AdminPaymentDetailPage() {
           <div className="flex-1 min-w-[100px] flex flex-col items-center text-center space-y-2">
             <div className="h-7 w-7 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center justify-center font-bold text-xs">2</div>
             <div>
-              <p className="text-[10px] font-black text-slate-900">Vendor Accepted</p>
+              <p className="text-[10px] font-black text-slate-900">{request.isDirectAdminAccept ? 'Admin Accepted' : 'Request Accepted'}</p>
               <p className="text-[9px] text-slate-400 font-medium mt-0.5">{formatDate(request.reviewedAt || request.createdAt)}</p>
               <p className="text-[9px] text-slate-400 font-medium">{formatTime(request.reviewedAt || request.createdAt)}</p>
             </div>
@@ -674,13 +544,15 @@ export function AdminPaymentDetailPage() {
 
           {/* Stage 3 */}
           <div className="flex-1 min-w-[100px] flex flex-col items-center text-center space-y-2">
-            <div className="h-7 w-7 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center justify-center font-bold text-xs">3</div>
+            <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs ${
+              quotation ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-slate-50 text-slate-400 border border-slate-200'
+            }`}>3</div>
             <div>
-              <p className="text-[10px] font-black text-slate-900">Workers Assigned</p>
-              <p className="text-[9px] text-slate-400 font-medium mt-0.5">{formatDate(allocation?.createdAt || request.createdAt)}</p>
-              <p className="text-[9px] text-slate-400 font-medium">{formatTime(allocation?.createdAt || request.createdAt)}</p>
+              <p className="text-[10px] font-black text-slate-900">Quotation Submitted</p>
+              <p className="text-[9px] text-slate-400 font-medium mt-0.5">{quotation ? formatDate(quotation.createdAt) : 'Pending Quote'}</p>
+              {quotation && <p className="text-[9px] text-slate-400 font-medium">{formatMoney(quotation.grandTotal)}</p>}
             </div>
-            <div className="h-2.5 w-2.5 bg-emerald-500 rounded-full border-2 border-white mt-1 shadow-sm" />
+            {quotation && <div className="h-2.5 w-2.5 bg-emerald-500 rounded-full border-2 border-white mt-1 shadow-sm" />}
           </div>
 
           {/* Dash */}
@@ -689,16 +561,25 @@ export function AdminPaymentDetailPage() {
           {/* Stage 4 */}
           <div className="flex-1 min-w-[120px] flex flex-col items-center text-center space-y-2">
             <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs ${
-              request.advancePaymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-yellow-400 text-slate-950 font-black border border-yellow-500'
+              quotation?.status === 'approved' || ['project_active', 'completed', 'settlement_pending', 'settlement_completed'].includes(request.status)
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                : quotation?.status === 'revision_requested'
+                ? 'bg-amber-100 text-amber-900 font-black border border-amber-300'
+                : 'bg-yellow-400 text-slate-950 font-black border border-yellow-500'
             }`}>4</div>
             <div>
-              <p className="text-[10px] font-black text-slate-900">Awaiting Advance</p>
-              {request.advancePaymentStatus === 'paid' ? (
-                <p className="text-[9px] text-emerald-600 font-bold mt-1">Paid</p>
+              <p className="text-[10px] font-black text-slate-900">Quotation Review</p>
+              {quotation?.status === 'approved' || ['project_active', 'completed', 'settlement_pending', 'settlement_completed'].includes(request.status) ? (
+                <p className="text-[9px] text-emerald-600 font-bold mt-1">Approved by Client</p>
+              ) : quotation?.status === 'revision_requested' ? (
+                <>
+                  <p className="text-[9px] text-amber-700 font-bold mt-0.5">Revision Requested</p>
+                  <span className="inline-block text-[8px] bg-amber-50 text-amber-700 px-1.5 py-0.5 border border-amber-200 rounded font-black mt-1">Feedback Sent</span>
+                </>
               ) : (
                 <>
-                  <p className="text-[9px] text-rose-600 font-bold mt-0.5">Due: {formatDate(dueDateObj)}</p>
-                  <span className="inline-block text-[8px] bg-yellow-50 text-yellow-700 px-1.5 py-0.5 border border-yellow-200 rounded font-black mt-1">Pending</span>
+                  <p className="text-[9px] text-slate-500 font-semibold mt-0.5">Awaiting Client</p>
+                  <span className="inline-block text-[8px] bg-yellow-50 text-yellow-700 px-1.5 py-0.5 border border-yellow-200 rounded font-black mt-1">Pending Approval</span>
                 </>
               )}
             </div>
@@ -710,11 +591,11 @@ export function AdminPaymentDetailPage() {
           {/* Stage 5 */}
           <div className="flex-1 min-w-[100px] flex flex-col items-center text-center space-y-2">
             <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs ${
-              request.status === 'project_active' || request.status === 'completed' || request.status === 'settlement_pending' || request.status === 'settlement_completed' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-slate-50 text-slate-400 border border-slate-200'
+              ['project_active', 'completed', 'settlement_pending', 'settlement_completed'].includes(request.status) ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-slate-50 text-slate-400 border border-slate-200'
             }`}>5</div>
             <div>
               <p className="text-[10px] font-black text-slate-900">Project Active</p>
-              <p className="text-[9px] text-slate-400 font-semibold mt-1">After Payment</p>
+              <p className="text-[9px] text-slate-400 font-semibold mt-1">Work In Progress</p>
             </div>
           </div>
 
@@ -724,11 +605,11 @@ export function AdminPaymentDetailPage() {
           {/* Stage 6 */}
           <div className="flex-1 min-w-[100px] flex flex-col items-center text-center space-y-2">
             <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs ${
-              request.status === 'completed' || request.status === 'settlement_pending' || request.status === 'settlement_completed' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-slate-50 text-slate-400 border border-slate-200'
+              ['completed', 'settlement_pending', 'settlement_completed'].includes(request.status) ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-slate-50 text-slate-400 border border-slate-200'
             }`}>6</div>
             <div>
               <p className="text-[10px] font-black text-slate-900">Project Completed</p>
-              <p className="text-[9px] text-slate-400 font-semibold mt-1">After Completion</p>
+              <p className="text-[9px] text-slate-400 font-semibold mt-1">Attendance Concluded</p>
             </div>
           </div>
 
@@ -742,7 +623,7 @@ export function AdminPaymentDetailPage() {
             }`}>7</div>
             <div>
               <p className="text-[10px] font-black text-slate-900">Settlement Released</p>
-              <p className="text-[9px] text-slate-400 font-semibold mt-1">After Deduction</p>
+              <p className="text-[9px] text-slate-400 font-semibold mt-1">Settled to Vendor</p>
             </div>
           </div>
 
@@ -756,20 +637,19 @@ export function AdminPaymentDetailPage() {
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
           <div className="flex justify-between items-center border-b border-slate-100 pb-2.5">
             <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-[#6366f1]" /> Upcoming Payments
+              <Calendar className="h-4 w-4 text-[#6366f1]" /> Corporate Client Projects
             </h3>
-            <button onClick={() => navigate('/admin/billing')} className="text-xs font-black text-[#6366f1] bg-[#f5f3ff] hover:bg-[#ede9fe] px-2.5 py-1 rounded-lg border border-[#ddd6fe]">
+            <button onClick={() => navigate('/admin/billing')} className="text-xs font-black text-[#6366f1] bg-[#f5f3ff] hover:bg-[#ede9fe] px-2.5 py-1 rounded-lg border border-[#ddd6fe] cursor-pointer">
               View All
             </button>
           </div>
           
           <div className="space-y-3 pt-1">
             {corporatePayments.length === 0 ? (
-              <p className="text-xs text-slate-400 font-semibold p-4 text-center">No other upcoming payments found.</p>
+              <p className="text-xs text-slate-400 font-semibold p-4 text-center">No other corporate projects found.</p>
             ) : (
               corporatePayments.map((p) => {
-                const pTotal = p.userPlatformFee ? Math.round(p.userPlatformFee * 1.18 + (p.totalLabourCost || 3000)) : 3000
-                const pAdvance = Math.round(pTotal * 0.3)
+                const pTotal = p.labourCharge || (p.userPlatformFee ? Math.round(p.userPlatformFee * 1.18 + (p.totalLabourCost || 3000)) : 3000)
                 
                 return (
                   <div
@@ -779,15 +659,15 @@ export function AdminPaymentDetailPage() {
                   >
                     <div>
                       <p className="text-xs font-black text-slate-900">{p.clientId?.corporateProfile?.companyName || p.clientId?.fullName || 'Client'}</p>
-                      <p className="text-[9px] text-slate-400 font-semibold">Request ID: {p.reference} &middot; Advance (30%)</p>
-                      <p className="text-[9px] text-rose-600 font-bold mt-0.5">Due: {formatDate(p.startDate)}</p>
+                      <p className="text-[9px] text-slate-400 font-semibold">Request ID: {p.reference} &middot; Project Value</p>
+                      <p className="text-[9px] text-slate-500 font-bold mt-0.5">Start: {formatDate(p.startDate)}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs font-black text-slate-900">{formatMoney(pAdvance)}</p>
+                      <p className="text-xs font-black text-slate-900">{formatMoney(pTotal)}</p>
                       <span className={`inline-block text-[8px] px-1.5 py-0.5 border rounded font-black mt-1 ${
-                        p.advancePaymentStatus === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                        ['project_active', 'completed', 'settlement_completed'].includes(p.status) ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'
                       }`}>
-                        {p.advancePaymentStatus === 'paid' ? 'Paid' : 'Pending'}
+                        {['project_active', 'completed', 'settlement_completed'].includes(p.status) ? 'Active' : 'In Review'}
                       </span>
                     </div>
                   </div>
@@ -814,7 +694,7 @@ export function AdminPaymentDetailPage() {
             ))}
           </div>
           
-          <button className="w-full text-center text-xs font-bold text-[#6366f1] bg-[#f5f3ff] hover:bg-[#ede9fe] border border-[#ddd6fe] py-2 rounded-xl mt-4 transition">
+          <button className="w-full text-center text-xs font-bold text-[#6366f1] bg-[#f5f3ff] hover:bg-[#ede9fe] border border-[#ddd6fe] py-2 rounded-xl mt-4 transition cursor-pointer">
             View Full Activity
           </button>
         </div>
@@ -825,7 +705,7 @@ export function AdminPaymentDetailPage() {
       <div className="bg-[#fffbeb] border border-[#fef3c7] p-4 rounded-xl flex items-center gap-3 shadow-sm">
         <Info className="h-5 w-5 text-amber-500 shrink-0" />
         <p className="text-xs font-bold text-amber-800 leading-snug">
-          Note: Workers will not be able to check-in until the advance payment is received and the project status is active.
+          Note: Workers can check-in and attendance begins once the quotation is approved and the project status is active.
         </p>
       </div>
 

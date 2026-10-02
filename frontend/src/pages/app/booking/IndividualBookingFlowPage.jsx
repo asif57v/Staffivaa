@@ -54,7 +54,6 @@ import {
 } from '../../../lib/individualBookingDraft.js'
 import { readAppUserLocation, writeAppUserLocation } from '../../../lib/appUserLocationStorage.js'
 import { useCreateRequestMutation, useCancelWorkforceRequestMutation, useGetPublicSystemPricingQuery } from '../../../store/api/workforceApi.js'
-import { enrichDiscoverLabourUi } from '../../../lib/discoverLabourDummyUi.js'
 import { store } from '../../../store/index.js'
 import {
   APP_HOME_LOCATION,
@@ -741,42 +740,6 @@ export function IndividualBookingFlowPage() {
     }
   }
 
-  const simulateAccept = useCallback(() => {
-    if (!activeBooking) return
-    const worker =
-      draft.matchMode === 'smart'
-        ? {
-          id: 'smart-match',
-          displayName: 'Matched worker',
-          photoUrl: enrichDiscoverLabourUi({ id: 'smart', displayName: 'Raju S.' }).photoUrl,
-          phone: '+91 98••• •••42',
-        }
-        : (draft.selectedWorkers || [])[0] || null
-
-    const updated = {
-      ...activeBooking,
-      status: 'accepted',
-      assignedWorker: worker,
-      jobTimelineStep: 'accepted',
-      etaMinutes: 2
-    }
-    setActiveBooking(updated)
-    const stored = loadIndividualBookings().map((b) => (b.id === updated.id ? updated : b))
-    saveIndividualBookings(stored)
-    goStep('active')
-    setNoMatch(false)
-  }, [activeBooking, draft.matchMode, draft.selectedWorkers, goStep])
-
-  const handleFindingComplete = () => {
-    // If a real API request exists, we wait for the polling logic to transition the page
-    if (activeBooking && activeBooking.requestId) return
-    simulateAccept()
-  }
-
-  const handleNoMatch = () => {
-    setNoMatch(true)
-  }
-
   const handleCancelBooking = useCallback(async () => {
     const booking = activeBooking || findBookingByRef(loadIndividualBookings(), refParam)
     const requestId = booking?.requestId
@@ -824,11 +787,9 @@ export function IndividualBookingFlowPage() {
   if (step === 'searching' && !noMatch) {
     return (
       <div className="pb-8">
-        <FlowHeader title="Matching labour" subtitle="Hang tight — this usually takes a few seconds" onBack={leaveFlow} />
+        <FlowHeader title="Assigning worker" subtitle="Hang tight — our team is assigning a worker to your booking" onBack={leaveFlow} />
         <BookingFindingScreen
           categoryLabel={draft.categoryName}
-          onComplete={handleFindingComplete}
-          onNoMatch={handleNoMatch}
           onCancel={handleCancelBooking}
           cancelling={cancellingBooking}
         />
@@ -839,13 +800,13 @@ export function IndividualBookingFlowPage() {
   if (noMatch) {
     return (
       <div className="space-y-4 pb-8">
-        <FlowHeader title="No Labour Assigned" subtitle="We couldn't find an available worker nearby" onBack={() => navigate('/app/discover/labours')} />
+        <FlowHeader title="Booking Closed" subtitle="This booking is no longer active" onBack={() => navigate('/app/discover/labours')} />
         <GlassPanel className="p-8 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-100">
             <AlertCircle className="h-8 w-8 text-slate-400" aria-hidden />
           </div>
-          <p className="mt-4 text-base font-bold text-slate-900">Booking Expired</p>
-          <p className="mt-2 text-sm text-slate-600">No labour was able to accept your request within the 3-minute window. This can happen during peak hours.</p>
+          <p className="mt-4 text-base font-bold text-slate-900">Booking Cancelled</p>
+          <p className="mt-2 text-sm text-slate-600">This booking was cancelled before a worker was assigned. You can book again anytime.</p>
           <motion.div layout className="mt-8 flex flex-col gap-3">
             <AppPrimaryButton
               type="button"

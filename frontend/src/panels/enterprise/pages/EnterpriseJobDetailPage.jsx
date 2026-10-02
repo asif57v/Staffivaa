@@ -18,6 +18,7 @@ import {
   useVerifyRechargePaymentMutation,
 } from '../../../store/api/enterpriseWalletApi.js'
 import { EnterpriseCandidateProfileDrawer } from '../components/EnterpriseCandidateProfileDrawer.jsx'
+import { EnterpriseDirectPaymentPanel } from '../components/EnterpriseDirectPaymentPanel.jsx'
 import { EnterpriseScheduleInterviewModal } from '../components/EnterpriseScheduleInterviewModal.jsx'
 import { EnterpriseSendOfferModal } from '../components/EnterpriseSendOfferModal.jsx'
 import { getSocket } from '../../../services/socket.js'
@@ -233,6 +234,15 @@ export function EnterpriseJobDetailPage() {
   const filledRatio = (job.acceptedCount || 0) / job.numberOfWorkers
   const filledPct = Math.min(Math.round(filledRatio * 100), 100)
 
+  // Daily/hourly requirements are handled by Staffivaa Admin (no labour applications / interviews)
+  const isAdminDispatch = job.dispatchMode === 'admin'
+  const adminStatus = job.adminRequestStatus || 'pending'
+  const adminStatusMeta = {
+    pending: { label: 'SENT TO ADMIN', badge: 'bg-amber-100 text-amber-800', card: 'bg-amber-50 border-amber-100 text-amber-900', text: 'Your request is with Staffivaa Admin for review. You will be notified once it is accepted.' },
+    accepted: { label: 'ACCEPTED BY ADMIN', badge: 'bg-emerald-100 text-emerald-800', card: 'bg-emerald-50 border-emerald-100 text-emerald-900', text: 'Staffivaa Admin has accepted this request and will arrange the workers.' },
+    rejected: { label: 'REJECTED BY ADMIN', badge: 'bg-rose-100 text-rose-800', card: 'bg-rose-50 border-rose-100 text-rose-900', text: 'Staffivaa Admin declined this request.' },
+  }[adminStatus]
+
   return (
     <div className="px-3.5 py-4 sm:p-6 pb-28 space-y-5 max-w-7xl mx-auto min-h-screen bg-slate-50/50">
       {/* Back button + Title + Conclude Action */}
@@ -247,6 +257,11 @@ export function EnterpriseJobDetailPage() {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-[20px] sm:text-[22px] font-extrabold text-slate-900 leading-tight">{job.jobTitle}</h1>
+              {isAdminDispatch && job.status !== 'closed' ? (
+                <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${adminStatusMeta.badge}`}>
+                  {adminStatusMeta.label}
+                </span>
+              ) : (
               <span
                 className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
                   job.status === 'closed'
@@ -260,6 +275,7 @@ export function EnterpriseJobDetailPage() {
               >
                 {job.status === 'closed' ? 'CONTRACT CONCLUDED' : job.status.toUpperCase()}
               </span>
+              )}
             </div>
             <p className="text-[12.5px] font-medium text-slate-500 mt-0.5">
               Category: <span className="font-bold text-slate-700">{job.categoryId?.name || job.department || 'General'}</span>
@@ -274,7 +290,7 @@ export function EnterpriseJobDetailPage() {
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
               Contract Concluded {job.timeline?.projectEndDate ? `(${new Date(job.timeline.projectEndDate).toLocaleDateString('en-IN')})` : ''}
             </div>
-          ) : (
+          ) : isAdminDispatch && adminStatus !== 'accepted' ? null : (
             <button
               onClick={() => setShowConcludeModal(true)}
               className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[12px] font-extrabold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
@@ -288,6 +304,63 @@ export function EnterpriseJobDetailPage() {
       {/* Main Job Overview Card */}
       <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-100 shadow-sm p-4 sm:p-6 space-y-4 sm:space-y-6">
         {/* Progress Bar & Vacancy Stats */}
+        {isAdminDispatch ? (
+          <div className={`border rounded-xl sm:rounded-2xl p-4 sm:p-5 space-y-1.5 ${adminStatusMeta.card}`}>
+            <p className="text-[11px] sm:text-[12px] font-extrabold uppercase tracking-wide opacity-70">
+              {job.salaryType} requirement · handled by Staffivaa Admin
+            </p>
+            <p className="text-[17px] sm:text-[20px] font-black">
+              {job.numberOfWorkers} Worker(s) Requested
+            </p>
+            <p className="text-[12.5px] font-semibold">{adminStatusMeta.text}</p>
+            {job.adminResponseNote && (
+              <p className="text-[12.5px] font-semibold">Admin note: {job.adminResponseNote}</p>
+            )}
+            {job.adminRespondedAt && (
+              <p className="text-[11px] font-medium opacity-70">
+                Updated {new Date(job.adminRespondedAt).toLocaleString('en-IN')}
+              </p>
+            )}
+
+            {adminStatus === 'accepted' && (
+              <div className="pt-3 mt-2 border-t border-current/10 space-y-2">
+                <p className="text-[11px] sm:text-[12px] font-extrabold uppercase tracking-wide opacity-70">
+                  Assigned Workers ({job.assignedWorkers?.length || 0} / {job.numberOfWorkers})
+                </p>
+                {job.assignedWorkers?.length > 0 ? (
+                  <ul className="grid gap-2 sm:grid-cols-2">
+                    {job.assignedWorkers.map((w) => {
+                      const name = w.workerId?.fullName || w.name
+                      const phone = w.workerId?.phone || w.phone
+                      return (
+                        <li key={w._id} className="flex items-center gap-2.5 rounded-xl bg-white/80 border border-white p-2.5 text-slate-900">
+                          {w.workerId?.profileImageUrl ? (
+                            <img src={w.workerId.profileImageUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+                          ) : (
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[13px] font-black text-indigo-700">
+                              {(name || '?').slice(0, 1).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-[13px] font-extrabold truncate">{name}</p>
+                            {phone && (
+                              <a href={`tel:${phone}`} className="text-[12px] font-semibold text-indigo-700">
+                                {phone}
+                              </a>
+                            )}
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : (
+                  <p className="text-[12.5px] font-semibold">Staffivaa will share worker details here once assigned.</p>
+                )}
+                <EnterpriseDirectPaymentPanel job={job} />
+              </div>
+            )}
+          </div>
+        ) : (
         <div className="bg-slate-50 border border-slate-100 rounded-xl sm:rounded-2xl p-4 sm:p-5 space-y-3">
           <div className="flex items-center justify-between">
             <div>
@@ -309,6 +382,7 @@ export function EnterpriseJobDetailPage() {
             <span>{(job.numberOfWorkers || 0) - (job.acceptedCount || 0)} Vacancies Remaining</span>
           </div>
         </div>
+        )}
 
         {/* Specs Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
@@ -655,7 +729,8 @@ export function EnterpriseJobDetailPage() {
         <div className="p-6 text-center text-slate-400 font-medium">Loading real-time worker attendance...</div>
       )}
 
-      {/* Candidates & Applicants section */}
+      {/* Candidates & Applicants section (not used for daily/hourly requests handled by Admin) */}
+      {!isAdminDispatch && (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-[18px] font-extrabold text-slate-900">Applicants for this Job ({applications.length})</h2>
@@ -760,6 +835,7 @@ export function EnterpriseJobDetailPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Candidate Profile Drawer */}
       <AnimatePresence>

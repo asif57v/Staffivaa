@@ -40,6 +40,9 @@ export const baseApi = createApi({
     return result
   },
   tagTypes: [
+    'AdminIndividualBookings',
+    'AdminEnterpriseDirectRequests',
+    'DirectPayments',
     'CorporateProfile',
     'CorporateDashboard',
     'Projects',

@@ -173,6 +173,12 @@ export function AdminLayout() {
     if (pathname === '/admin/enterprise-withdrawals') {
       updateSeen('pendingWithdrawalsCount', stats.pendingWithdrawalsCount || 0)
     }
+    if (pathname === '/admin/client-requests') {
+      updateSeen('pendingClientRequests', stats.pendingClientRequests || 0)
+    }
+    if (pathname === '/admin/enterprise-requests') {
+      updateSeen('pendingEnterpriseDirectRequests', stats.pendingEnterpriseDirectRequests || 0)
+    }
 
     if ((stats.pendingKyc || 0) < (updated.pendingKyc || 0)) updateSeen('pendingKyc', stats.pendingKyc || 0)
     if ((stats.newUsersToday || 0) < (updated.newUsersToday || 0)) updateSeen('newUsersToday', stats.newUsersToday || 0)
@@ -181,6 +187,8 @@ export function AdminLayout() {
     if ((stats.supportTickets || 0) < (updated.supportTickets || 0)) updateSeen('supportTickets', stats.supportTickets || 0)
     if ((stats.pendingRefundsCount || 0) < (updated.pendingRefundsCount || 0)) updateSeen('pendingRefundsCount', stats.pendingRefundsCount || 0)
     if ((stats.pendingWithdrawalsCount || 0) < (updated.pendingWithdrawalsCount || 0)) updateSeen('pendingWithdrawalsCount', stats.pendingWithdrawalsCount || 0)
+    if ((stats.pendingClientRequests || 0) < (updated.pendingClientRequests || 0)) updateSeen('pendingClientRequests', stats.pendingClientRequests || 0)
+    if ((stats.pendingEnterpriseDirectRequests || 0) < (updated.pendingEnterpriseDirectRequests || 0)) updateSeen('pendingEnterpriseDirectRequests', stats.pendingEnterpriseDirectRequests || 0)
 
     if (changed) {
       setLastSeen(updated)
@@ -350,6 +358,8 @@ export function AdminLayout() {
                   else if (to === '/admin/reports') badgeCount = Math.max(0, (stats.supportTickets || 0) - (lastSeen.supportTickets || 0))
                   else if (to === '/admin/refunds') badgeCount = Math.max(0, (stats.pendingRefundsCount || 0) - (lastSeen.pendingRefundsCount || 0))
                   else if (to === '/admin/enterprise-withdrawals') badgeCount = Math.max(0, (stats.pendingWithdrawalsCount || 0) - (lastSeen.pendingWithdrawalsCount || 0))
+                  else if (to === '/admin/client-requests') badgeCount = Math.max(0, (stats.pendingClientRequests || 0) - (lastSeen.pendingClientRequests || 0))
+                  else if (to === '/admin/enterprise-requests') badgeCount = Math.max(0, (stats.pendingEnterpriseDirectRequests || 0) - (lastSeen.pendingEnterpriseDirectRequests || 0))
                 }
                 
                 // Count unread notifications matching target route
@@ -567,6 +577,8 @@ export function AdminLayout() {
                               if (item.type.startsWith('SETTLEMENT')) return '/admin/wallet'
                               if (item.type === 'SUPPORT_TICKET_CREATED') return '/admin/reports'
                               if (item.type === 'PRICING_CHANGED') return '/admin/pricing'
+                              if (item.type === 'CORPORATE_CLIENT_REQUEST') return '/admin/client-requests'
+                              if (item.type === 'ENTERPRISE_DIRECT_REQUEST') return '/admin/enterprise-requests'
                               return '/admin'
                             }
 

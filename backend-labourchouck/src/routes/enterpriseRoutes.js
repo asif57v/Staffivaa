@@ -38,6 +38,8 @@ import {
   verifyPayrollInvoicePayment,
 } from '../controllers/enterprisePayrollController.js'
 
+import { getJobDirectPayments, payDirectJob } from '../controllers/enterpriseDirectPaymentController.js'
+
 const router = express.Router()
 
 // ── Labour Feed ──────────────────────────────────────────────────────────────
@@ -59,6 +61,8 @@ router.get('/security-settings', protect, getEnterpriseSecuritySettings)
 router.get('/jobs', protect, getEnterpriseJobs)
 router.post('/jobs', protect, createEnterpriseJob)
 router.patch('/jobs/:id/conclude', protect, concludeEnterpriseJob)
+router.get('/jobs/:id/direct-payments', protect, getJobDirectPayments)
+router.post('/jobs/:id/direct-payments', protect, payDirectJob)
 
 router.get('/company-applications', protect, getEnterpriseCompanyApplications)
 router.patch('/applications/:id/status', protect, updateApplicationStatus)

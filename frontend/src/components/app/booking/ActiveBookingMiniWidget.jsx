@@ -19,9 +19,6 @@ import {
 } from '../../../lib/individualBookings.js'
 import { store } from '../../../store/index.js'
 
-/** Searching chip should not linger forever if server already expired the request. */
-const SEARCHING_MAX_AGE_MS = 3 * 60 * 1000
-
 /**
  * Swiggy-style floating live-job chip — sits above bottom nav while a search
  * or active booking is in progress. Tap reopens the correct flow step.
@@ -87,27 +84,8 @@ export function ActiveBookingMiniWidget() {
     }
   }, [refresh])
 
-  // Drop stale "Finding labour" chips after search window ends
-  useEffect(() => {
-    if (!booking) return undefined
-    const status = String(booking.status || '').toLowerCase()
-    if (status !== 'searching') return undefined
-
-    const createdAt = booking.createdAt ? new Date(booking.createdAt).getTime() : 0
-    if (!createdAt) return undefined
-
-    const age = Date.now() - createdAt
-    if (age >= SEARCHING_MAX_AGE_MS) {
-      clearChip('search_expired', { notifyWorker: false })
-      return undefined
-    }
-
-    const remaining = SEARCHING_MAX_AGE_MS - age
-    const timer = window.setTimeout(() => {
-      clearChip('search_expired', { notifyWorker: false })
-    }, remaining)
-    return () => window.clearTimeout(timer)
-  }, [booking, clearChip])
+  // Searching bookings wait in the admin queue with no time limit; the server poll below clears the chip
+  // if the booking is cancelled.
 
   // Poll live bookings so home stays in sync when labour cancels / accepts
   useEffect(() => {

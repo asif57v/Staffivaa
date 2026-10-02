@@ -11,8 +11,17 @@ const quotationSchema = new mongoose.Schema(
     vendorId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
       index: true
+    },
+    adminId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      index: true
+    },
+    createdByRole: {
+      type: String,
+      enum: ['contractor', 'admin'],
+      default: 'contractor'
     },
     // Vendor editable fields
     labourRatePerWorker: { type: Number, required: true, min: 0 },

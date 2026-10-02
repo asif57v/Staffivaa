@@ -99,8 +99,16 @@ export function EnterpriseJobsPage() {
             const totalNeeded = job.numberOfWorkers || 1
             const filledPct = Math.min(Math.round((accepted / totalNeeded) * 100), 100)
 
-            const statusBadgeClass =
-              job.isFilled
+            const isAdminDispatch = job.dispatchMode === 'admin'
+            const adminBadge = {
+              pending: { text: 'SENT TO ADMIN', className: 'bg-amber-100 text-amber-800 border-amber-200' },
+              accepted: { text: 'ACCEPTED BY ADMIN', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+              rejected: { text: 'REJECTED BY ADMIN', className: 'bg-rose-100 text-rose-800 border-rose-200' },
+            }[job.adminRequestStatus || 'pending']
+
+            const statusBadgeClass = isAdminDispatch
+              ? adminBadge.className
+              : job.isFilled
                 ? 'bg-purple-100 text-purple-800 border-purple-200'
                 : job.isExpired
                 ? 'bg-rose-100 text-rose-800 border-rose-200'
@@ -110,7 +118,9 @@ export function EnterpriseJobsPage() {
                 ? 'bg-rose-100 text-rose-800 border-rose-200'
                 : 'bg-amber-100 text-amber-800 border-amber-200'
 
-            const statusText = job.isFilled
+            const statusText = isAdminDispatch
+              ? adminBadge.text
+              : job.isFilled
               ? 'FILLED'
               : job.isExpired
               ? 'EXPIRED'
@@ -133,6 +143,19 @@ export function EnterpriseJobsPage() {
                       <h3 className="text-[16px] sm:text-[18px] font-extrabold text-slate-900 leading-tight mt-1.5 break-words">
                         {job.jobTitle}
                       </h3>
+                      {job.createdAt && (
+                        <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-slate-400">
+                          <Clock className="h-3 w-3" />
+                          {new Date(job.createdAt).toLocaleString('en-IN', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true,
+                          })}
+                        </p>
+                      )}
                     </div>
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-wide border shrink-0 ${statusBadgeClass}`}>
                       {statusText}
@@ -141,6 +164,28 @@ export function EnterpriseJobsPage() {
                 </div>
 
                 {/* Progress Bar & Vacancy Stats */}
+                {isAdminDispatch ? (
+                  <div
+                    className={`rounded-2xl border p-3.5 text-[12px] font-semibold ${
+                      job.adminRequestStatus === 'accepted'
+                        ? 'bg-emerald-50 border-emerald-100 text-emerald-800'
+                        : job.adminRequestStatus === 'rejected'
+                        ? 'bg-rose-50 border-rose-100 text-rose-800'
+                        : 'bg-amber-50 border-amber-100 text-amber-800'
+                    }`}
+                  >
+                    <p className="flex items-center gap-1.5 font-extrabold">
+                      <Users className="h-4 w-4" /> {totalNeeded} worker(s) requested · {job.salaryType}
+                    </p>
+                    <p className="mt-1">
+                      {job.adminRequestStatus === 'accepted'
+                        ? `Accepted by Staffivaa · ${job.assignedWorkers?.length || 0} of ${totalNeeded} worker(s) assigned.`
+                        : job.adminRequestStatus === 'rejected'
+                        ? `Declined by Admin${job.adminResponseNote ? `: ${job.adminResponseNote}` : '.'}`
+                        : 'Waiting for Staffivaa Admin to review.'}
+                    </p>
+                  </div>
+                ) : (
                 <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3.5 space-y-2">
                   <div className="flex items-center justify-between text-[12px] font-extrabold text-slate-800">
                     <span className="flex items-center gap-1.5">
@@ -162,6 +207,7 @@ export function EnterpriseJobsPage() {
                     <span>{Math.max(0, totalNeeded - accepted)} Vacancies Open</span>
                   </div>
                 </div>
+                )}
 
                 {/* Specs Grid */}
                 <div className="grid grid-cols-2 gap-2 text-[12px]">
@@ -185,7 +231,7 @@ export function EnterpriseJobsPage() {
                     to={`/enterprise/jobs/${job._id}`}
                     className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-extrabold text-[12.5px] transition-all shadow-xs"
                   >
-                    View Details & Applicants <ChevronRight className="h-4 w-4" />
+                    {isAdminDispatch ? 'View Request Details' : 'View Details & Applicants'} <ChevronRight className="h-4 w-4" />
                   </Link>
                 </div>
               </motion.div>

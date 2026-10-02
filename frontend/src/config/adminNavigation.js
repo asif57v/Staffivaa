@@ -31,6 +31,8 @@ import {
   ShieldCheck,
   FileText,
   Sparkles,
+  Inbox,
+  CalendarClock,
 } from 'lucide-react'
 
 /**
@@ -90,6 +92,9 @@ export const ADMIN_NAV_SECTIONS = [
   {
     title: 'Operations',
     items: [
+      { to: '/admin/individual-bookings', label: 'Individual Bookings', icon: Home },
+      { to: '/admin/client-requests', label: 'Client Requests', icon: Inbox },
+      { to: '/admin/enterprise-requests', label: 'Enterprise Daily/Hourly', icon: CalendarClock },
       { to: '/admin/bookings', label: 'Bookings & requests', icon: ClipboardList },
       { to: '/admin/allocations', label: 'Workforce allocation', icon: Network },
       { to: '/admin/attendance', label: 'Attendance', icon: Clock },
@@ -133,6 +138,9 @@ export const ADMIN_NAV_SECTIONS = [
 ]
 
 const ROUTE_TITLES = [
+  { prefix: '/admin/individual-bookings', title: 'Individual Bookings' },
+  { prefix: '/admin/client-requests', title: 'Client Requests' },
+  { prefix: '/admin/enterprise-requests', title: 'Enterprise Daily/Hourly Requests' },
   { prefix: '/admin/legal-content', title: 'Legal Content Management' },
   { prefix: '/admin/individuals', title: 'Individual Users' },
   { prefix: '/admin/corporates', title: 'Corporate Clients' },

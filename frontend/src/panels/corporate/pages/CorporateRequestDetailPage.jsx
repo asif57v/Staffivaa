@@ -12,12 +12,10 @@ function formatDate(d) {
 
 const TIMELINE_STEPS = [
   { label: 'Request Created', statusKey: 'created' },
-  { label: 'Vendor Accepted', statusKey: 'accepted' },
-  { label: 'Workers Assigned', statusKey: 'assigned' },
+  { label: 'Request Accepted', statusKey: 'accepted' },
   { label: 'Quotation Submitted', statusKey: 'quote_submitted' },
   { label: 'Corporate Reviewing Quote', statusKey: 'quote_review' },
   { label: 'Quote Approved', statusKey: 'quote_approved' },
-  { label: 'Platform Fee / Payment', statusKey: 'advance_payment' },
   { label: 'Project Active', statusKey: 'project_active' },
   { label: 'Workers Check-In', statusKey: 'check_in' },
   { label: 'Attendance Running', statusKey: 'attendance' },
@@ -35,9 +33,6 @@ const getTimelineStepStatus = (stepKey, request, quotation, assignments) => {
       return 'completed'
     case 'accepted':
       return !['pending_review', 'searching', 'allocating'].includes(requestStatus) ? 'completed' : 'pending'
-    case 'assigned':
-      if (totalAssigned >= totalRequired && totalRequired > 0) return 'completed'
-      return ['assigned', 'payment_pending', 'advance_paid', 'project_active', 'attendance_tracking', 'completed', 'settlement_pending', 'settlement_completed'].includes(requestStatus) ? 'completed' : 'pending'
     case 'quote_submitted':
       if (['submitted', 'under_review', 'revision_requested', 'revised', 'approved'].includes(quoteStatus)) return 'completed'
       return 'pending'
@@ -47,11 +42,7 @@ const getTimelineStepStatus = (stepKey, request, quotation, assignments) => {
       if (quoteStatus === 'revision_requested') return 'active'
       return 'pending'
     case 'quote_approved':
-      if (quoteStatus === 'approved') return 'completed'
-      return 'pending'
-    case 'advance_payment':
-      if (['advance_paid', 'project_active', 'attendance_tracking', 'completed', 'settlement_pending', 'settlement_completed'].includes(requestStatus)) return 'completed'
-      if (['payment_pending', 'platform_fee_pending'].includes(requestStatus)) return 'active'
+      if (quoteStatus === 'approved' || ['project_active', 'attendance_tracking', 'completed', 'settlement_pending', 'settlement_completed'].includes(requestStatus)) return 'completed'
       return 'pending'
     case 'project_active':
       if (['project_active', 'attendance_tracking', 'completed', 'settlement_pending', 'settlement_completed'].includes(requestStatus)) return 'completed'
@@ -316,14 +307,16 @@ export function CorporateRequestDetailPage() {
   let statusTone = 'bg-orange-50 text-orange-700'
   let StatusIcon = AlertCircle
   
+  let isDirectAdmin = request.isDirectAdminAccept || request.acceptedByAdmin || quotation?.createdByRole === 'admin' || (!allocation?.vendorId && request.status === 'accepted')
+
   if (request.status === 'accepted' || request.status === 'allocated' || request.status === 'assigned') {
-    statusLabel = 'Assigned'
+    statusLabel = isDirectAdmin ? 'Accepted by Staffivaa' : 'Assigned to Vendor'
     statusTone = 'bg-blue-50 text-blue-700 border border-blue-100'
-    StatusIcon = Users
+    StatusIcon = CheckCircle2
   } else if (request.status === 'vendor_platform_fee_pending') {
-    statusLabel = 'Awaiting Vendor Fee'
-    statusTone = 'bg-amber-50 text-amber-700 border border-amber-200'
-    StatusIcon = AlertCircle
+    statusLabel = isDirectAdmin ? 'Accepted' : 'Awaiting Vendor Fee'
+    statusTone = isDirectAdmin ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-amber-50 text-amber-700 border border-amber-200'
+    StatusIcon = isDirectAdmin ? CheckCircle2 : AlertCircle
   } else if (request.status === 'corporate_platform_fee_pending') {
     statusLabel = 'Platform Fee Pending'
     statusTone = 'bg-rose-50 text-rose-700 border border-rose-200 animate-pulse'
@@ -544,33 +537,30 @@ export function CorporateRequestDetailPage() {
               </span>
             </div>
 
-            {/* Vendor Profile Brief */}
+            {/* Vendor / Direct Fulfilment Profile Brief */}
             <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
               <div className="h-10 w-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
                 <Building2 className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-extrabold text-slate-900 truncate">
-                  {quotation.vendorId?.contractorProfile?.companyName || quotation.vendorId?.fullName || 'Vendor Name'}
+                  {quotation.createdByRole === 'admin' || !quotation.vendorId
+                    ? 'Staffivaa Direct Operations (Verified)'
+                    : (quotation.vendorId?.contractorProfile?.companyName || quotation.vendorId?.fullName || 'Vendor Partner')}
                 </p>
                 <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-bold mt-0.5">
                   <Star className="h-3 w-3 fill-amber-400 text-amber-400 shrink-0" />
-                  <span>{quotation.vendorId?.contractorProfile?.rating || '4.8'} (Rating)</span>
+                  <span>{quotation.createdByRole === 'admin' ? '5.0' : (quotation.vendorId?.contractorProfile?.rating || '4.8')} (Rating)</span>
                   <span>&middot;</span>
                   <Award className="h-3 w-3 text-indigo-500 shrink-0" />
-                  <span>{quotation.vendorId?.contractorProfile?.experience || '5+'} Years Exp.</span>
+                  <span>{quotation.createdByRole === 'admin' ? 'Direct Platform Fulfillment' : `${quotation.vendorId?.contractorProfile?.experience || '5+'} Years Exp.`}</span>
                 </div>
                 {['project_active', 'in_progress', 'completed', 'settlement_pending', 'settlement_completed'].includes(request.status) ? (
                   <div className="flex items-center gap-1.5 text-[12px] text-emerald-600 font-bold mt-1">
                     <Phone className="h-3.5 w-3.5" />
-                    <span>{quotation.vendorId?.phone || '+91-XXXXXXXXXX'}</span>
+                    <span>{quotation.vendorId?.phone || '+91-Support Desk'}</span>
                   </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 text-[11px] text-amber-500 font-bold mt-1">
-                    <Phone className="h-3.5 w-3.5" />
-                    <span>Number hidden until fee paid</span>
-                  </div>
-                )}
+                ) : null}
               </div>
             </div>
 
@@ -604,7 +594,7 @@ export function CorporateRequestDetailPage() {
               )}
               {quotation.discount > 0 && (
                 <div className="flex justify-between items-center py-1 text-emerald-600 font-bold">
-                  <span>Special Vendor Discount</span>
+                  <span>Special Discount</span>
                   <span>- ₹{quotation.discount.toLocaleString()}</span>
                 </div>
               )}
@@ -675,9 +665,9 @@ export function CorporateRequestDetailPage() {
 
               {quotation.status === 'revision_requested' && (
                 <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-2xl text-[12px] text-amber-800 font-medium">
-                  <p className="font-extrabold mb-1">Feedback sent to vendor:</p>
+                  <p className="font-extrabold mb-1">Feedback sent to partner:</p>
                   <p className="italic">"{quotation.feedback || 'No comments'}"</p>
-                  <p className="mt-2 text-[10px] text-slate-400 font-bold">Waiting for vendor to submit a revised quotation.</p>
+                  <p className="mt-2 text-[10px] text-slate-400 font-bold">Waiting for revised quotation.</p>
                 </div>
               )}
 
@@ -700,14 +690,25 @@ export function CorporateRequestDetailPage() {
           </div>
         ) : (
           <div className="rounded-xl sm:rounded-[20px] bg-white p-2.5 sm:p-5 border border-slate-200 text-center space-y-3">
-            <div className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center mx-auto text-slate-400">
+            <div className="h-10 w-10 rounded-full bg-amber-50 flex items-center justify-center mx-auto text-amber-600">
               <FileText className="h-5 w-5" />
             </div>
             <div>
               <h4 className="text-sm font-bold text-slate-900">Quotation Pending</h4>
               <p className="text-xs text-slate-500 mt-1 leading-normal">
-                The vendor is currently allocating workers and compiling the project rates. Once submitted, the official quotation summary will appear here for review.
+                {isDirectAdmin ? 'Staffivaa Operations is reviewing and compiling the customized quotation for your project. Once submitted, it will appear here for your review and approval.' : 'The vendor is currently allocating workers and compiling the project rates. Once submitted, the official quotation summary will appear here for review.'}
               </p>
+              {user?.role === 'admin' && (
+                <div className="pt-3">
+                  <Link
+                    to="/admin/client-requests"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 px-4 py-2 text-xs font-black text-slate-950 shadow-sm transition cursor-pointer"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Admin Action: Create Quotation Now
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -789,7 +790,7 @@ export function CorporateRequestDetailPage() {
           </div>
         </div>
 
-        {/* Vendor Partner */}
+        {/* Vendor Partner Card (Only shown if vendor exists and assigned) */}
         {allocation?.vendorId && (
           <div className="rounded-xl sm:rounded-[20px] bg-[#fffdf0] p-2.5 sm:p-5 shadow-sm border border-amber-100">
             <div className="flex items-center gap-2 mb-3">
@@ -818,6 +819,19 @@ export function CorporateRequestDetailPage() {
                 ACCEPTED JOB
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Direct Admin Fulfillment Banner if Admin direct accepted */}
+        {isDirectAdmin && !allocation?.vendorId && (
+          <div className="rounded-xl sm:rounded-[20px] bg-slate-900 text-white p-4 shadow-sm border border-slate-800">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Shield className="h-4 w-4 text-amber-400" />
+              <h3 className="text-[14px] font-extrabold text-amber-400">Direct Staffivaa Management</h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This workforce deployment is directly handled and supervised by Staffivaa Operations with 100% attendance & replacement assurance.
+            </p>
           </div>
         )}
 
@@ -870,13 +884,13 @@ export function CorporateRequestDetailPage() {
 
       {/* Bottom Actions */}
       <div className="mt-4 p-4 pb-24 max-w-md mx-auto flex flex-col gap-3">
-        {request.status === 'corporate_platform_fee_pending' ? (
+        {!isDirectAdmin && request.status === 'corporate_platform_fee_pending' ? (
           <Link to={`/corporate/requests/${id}/payment`} className="w-full flex items-center justify-center text-center gap-2 rounded-[16px] bg-[#f5b800] py-3.5 text-[15px] font-black text-slate-900 transition hover:bg-[#e0a800] active:scale-[0.98] shadow-sm">
             {Number(request.corporatePlatformFeeAmount ?? 0) <= 0
               ? 'Claim Free Platform Fee to Unlock Quotation Phase'
               : 'Pay Platform Fee to Unlock Quotation Phase'}
           </Link>
-        ) : request.status === 'vendor_platform_fee_pending' ? (
+        ) : !isDirectAdmin && request.status === 'vendor_platform_fee_pending' ? (
           <button disabled className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-emerald-50 border border-emerald-200 py-3.5 text-[15px] font-bold text-emerald-600 cursor-not-allowed shadow-sm">
             Waiting for Vendor to Pay Platform Fee...
           </button>
@@ -888,6 +902,13 @@ export function CorporateRequestDetailPage() {
                 className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-white border border-slate-200 py-3.5 text-[15px] font-bold text-slate-600 transition hover:bg-slate-50 active:scale-[0.98] shadow-sm"
               >
                 <Phone className="h-4 w-4" /> Contact Vendor
+              </a>
+            ) : isDirectAdmin ? (
+              <a
+                href="mailto:support@staffivaa.com"
+                className="w-full flex items-center justify-center gap-2 rounded-[16px] bg-white border border-slate-200 py-3.5 text-[15px] font-bold text-slate-700 transition hover:bg-slate-50 active:scale-[0.98] shadow-sm"
+              >
+                <Phone className="h-4 w-4 text-brand" /> Contact Staffivaa Support Desk
               </a>
             ) : (
               <button

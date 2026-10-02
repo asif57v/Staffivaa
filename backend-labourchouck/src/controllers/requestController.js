@@ -24,12 +24,12 @@ import { triggerNotification } from '../utils/notificationTrigger.js'
 import { triggerBookingNotif } from '../utils/triggerBookingNotif.js'
 import {
   bookingCreatedNotif,
-  newJobOfferNotif,
   customerCancelledNotif,
   customerCancelledSelfNotif,
 } from '../utils/bookingNotificationCopy.js'
 import { SystemSettings } from '../models/SystemSettings.js'
 import LocationMatchingService from '../services/LocationMatchingService.js'
+import { notifyAdminsIndividualBookingPending } from './individualDispatchController.js'
 
 function parseLines(lines) {
   if (!Array.isArray(lines) || !lines.length) return null
@@ -270,160 +270,20 @@ export const createRequest = asyncHandler(async (req, res) => {
     commissionTrigger: settings.commissionTrigger,
     commissionDueDays: settings.commissionDueDays,
 
-    status: sourceType === REQUEST_SOURCE.INDIVIDUAL ? REQUEST_STATUS.SEARCHING : REQUEST_STATUS.ALLOCATING,
+    status: sourceType === REQUEST_SOURCE.INDIVIDUAL ? REQUEST_STATUS.SEARCHING : REQUEST_STATUS.ADMIN_REVIEW,
     ...(sourceType === REQUEST_SOURCE.INDIVIDUAL && {
-      expiresAt: new Date(Date.now() + 3 * 60 * 1000),
+      // Individual bookings wait in the admin queue (no auto-expiry); admin manually offers them to workers.
+      dispatchMode: 'admin',
       userPlatformFee: 0,
       userPaymentStatus: 'paid',
     }),
   })
 
-  // Send offers to matching workers (for INDIVIDUAL requests)
-  if (sourceType === REQUEST_SOURCE.INDIVIDUAL && parsedLines?.length > 0) {
-    const categoryId = parsedLines[0].categoryId
-
-    // 1. Fetch candidate workers matching skill or general labour role (including offline for push notifications)
-    let candidates = await User.find({
-      role: USER_ROLES.LABOUR,
-      isActive: true,
-      $or: [
-        ...(categoryId ? [{ 'labourProfile.categoryIds': categoryId }, { 'labourProfile.categoryIds': categoryId.toString() }] : []),
-        { 'labourProfile.categoryIds': { $size: 0 } },
-        { 'labourProfile.categoryIds': { $exists: false } }
-      ]
-    }).limit(50)
-
-    // Fallback 1: If no candidate matched skill query, grab all active labour workers
-    if (!candidates || candidates.length === 0) {
-      candidates = await User.find({
-        role: USER_ROLES.LABOUR,
-        isActive: true,
-      }).limit(50)
-    }
-
-    let matchingWorkers = []
-    if (request.locationLat && request.locationLng && candidates.length > 0) {
-      matchingWorkers = candidates.filter((w) => {
-        if (!w.labourProfile || w.labourProfile.locationLat == null || w.labourProfile.locationLng == null) {
-          return false
-        }
-        const radius = Number(w.labourProfile.workRadius) || 15
-        const R = 6371
-        const dLat = (w.labourProfile.locationLat - request.locationLat) * (Math.PI / 180)
-        const dLon = (w.labourProfile.locationLng - request.locationLng) * (Math.PI / 180)
-        const a =
-          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos(request.locationLat * (Math.PI / 180)) *
-            Math.cos(w.labourProfile.locationLat * (Math.PI / 180)) *
-            Math.sin(dLon / 2) *
-            Math.sin(dLon / 2)
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        const distanceKm = R * c
-        const isWithinRadius = distanceKm <= radius
-        console.log(
-          `[WorkerMatching] Worker ${w._id} (${w.fullName || 'Labour'}) distance: ${distanceKm.toFixed(2)} km, workRadius: ${radius} km -> ${isWithinRadius ? 'MATCHED' : 'OUT_OF_RADIUS'}`
-        )
-        return isWithinRadius
-      })
-    } else {
-      matchingWorkers = candidates
-    }
-
-    if (matchingWorkers.length > 0) {
-      const allocation = await Allocation.create({
-        requestId: request._id,
-        notes: 'Auto-allocated by skill and distance match for individual booking',
-      })
-
-      const LabourCategory = mongoose.model('LabourCategory')
-      const category = categoryId ? await LabourCategory.findById(categoryId) : null
-      const baseRate = category?.baseRate || 800
-
-      const assignmentsToCreate = matchingWorkers.map((worker) => ({
-        allocationId: allocation._id,
-        requestId: request._id,
-        labourId: worker._id,
-        categoryId,
-        status: ASSIGNMENT_STATUS.OFFERED,
-        perDayRate: baseRate,
-      }))
-
-      const createdAssignments = await Assignment.insertMany(assignmentsToCreate)
-
-      // Notify all matching workers instantly with rich payload for popup card + FCM Push Notification
-      console.log(
-        `[createRequest] Notifying ${createdAssignments.length} worker(s) with NEW_ORDER for request ${request._id}`,
-      )
-      await Promise.all(
-        createdAssignments.map(async (assignment) => {
-          try {
-            const worker = matchingWorkers.find((w) => String(w._id) === String(assignment.labourId))
-            let workerDistanceKm = null
-            if (
-              worker?.labourProfile?.locationLat != null &&
-              worker?.labourProfile?.locationLng != null &&
-              request.locationLat != null &&
-              request.locationLng != null
-            ) {
-              const R = 6371
-              const dLat = (worker.labourProfile.locationLat - request.locationLat) * (Math.PI / 180)
-              const dLon = (worker.labourProfile.locationLng - request.locationLng) * (Math.PI / 180)
-              const a =
-                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(request.locationLat * (Math.PI / 180)) *
-                  Math.cos(worker.labourProfile.locationLat * (Math.PI / 180)) *
-                  Math.sin(dLon / 2) *
-                  Math.sin(dLon / 2)
-              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-              workerDistanceKm = Math.round(R * c * 10) / 10
-            }
-
-            const effectiveDistanceKm = workerDistanceKm != null ? workerDistanceKm : request.distanceKm
-
-            emitToUser('labour', assignment.labourId.toString(), 'assignment_assigned', {
-              assignmentId: assignment._id.toString(),
-              type: 'new_order',
-              requestId: request._id.toString(),
-              clientName: user.fullName || 'Customer',
-              locationText: request.locationText || '',
-              locationLat: request.locationLat,
-              locationLng: request.locationLng,
-              distanceKm: effectiveDistanceKm,
-              categoryName: category?.name || 'Worker',
-              perDayRate: baseRate,
-              startDate: request.startDate,
-              shiftStart: request.shiftStart || '',
-              shiftEnd: request.shiftEnd || '',
-              timeoutSeconds: 60,
-            })
-
-            await triggerBookingNotif({
-              userId: assignment.labourId,
-              copy: newJobOfferNotif({
-                customerName: user.fullName,
-                categoryName: category?.name,
-                locationText: request.locationText,
-              }),
-              relatedId: assignment._id,
-              relatedModel: 'Assignment',
-              requestId: request._id,
-              fcmExtra: {
-                clientName: user.fullName || 'Customer',
-                locationText: request.locationText || '',
-                locationLat: request.locationLat != null ? String(request.locationLat) : '',
-                locationLng: request.locationLng != null ? String(request.locationLng) : '',
-                distanceKm: effectiveDistanceKm != null ? String(effectiveDistanceKm) : '',
-                categoryName: category?.name || 'Worker',
-                perDayRate: String(baseRate),
-                timeoutSeconds: '60',
-              },
-            })
-          } catch (err) {
-            console.error('[Notification Error for worker]:', assignment.labourId, err.message)
-          }
-        })
-      )
-    }
+  if (sourceType === REQUEST_SOURCE.INDIVIDUAL) {
+    console.log(`[IndividualBooking] Routing request ${request._id} to Admin for manual worker assignment`)
+    notifyAdminsIndividualBookingPending(request, { clientName: user.fullName }).catch((err) =>
+      console.error('[Admin Notification Error]:', err.message),
+    )
   }
 
   // Notify Customer / User that booking was created successfully
@@ -437,59 +297,33 @@ export const createRequest = asyncHandler(async (req, res) => {
 
   emitToUser('individual', user._id.toString(), 'request_created', { requestId: request._id.toString() })
   if (sourceType === REQUEST_SOURCE.CORPORATE) {
-    console.log(`[LocationMatching] Finding eligible vendors (location + skills) for request ${request._id}`)
-    const eligibleVendorIds = await LocationMatchingService.findEligibleVendors(request, settings?.radiusConfig)
+    // Notify admin about new corporate client request (routed to admin instead of vendor)
+    console.log(`[CorporateRequest] Routing request ${request._id} to Admin panel for review`)
 
-    console.log(`[LocationMatching] Found ${eligibleVendorIds.length} eligible vendors. Dispatching notifications...`)
+    const clientCompany = user.corporateProfile?.companyName || user.fullName || 'Corporate Client'
+    const firstLineCategory = parsedLines?.[0]?.categoryId || 'Worker'
 
-    let populatedRequest = null
-    try {
-      populatedRequest = await WorkforceRequest.findById(request._id)
-        .populate('clientId', 'fullName corporateProfile.companyName')
-        .populate('projectId', 'name')
-        .populate('siteId', 'name')
-        .populate('lines.categoryId', 'name group')
-        .lean()
-    } catch (e) {
-      console.warn('[Populate Request Error]:', e.message)
-    }
+    // Notify all admins via socket
+    emitToRole('admin', 'corporate_client_request_created', {
+      requestId: request._id.toString(),
+      reference: request.reference,
+      clientName: clientCompany,
+      locationText: request.locationText || '',
+    })
 
-    const firstLineCategory = populatedRequest?.lines?.[0]?.categoryId?.name || 'Worker'
-    const clientCompany = populatedRequest?.clientId?.corporateProfile?.companyName || populatedRequest?.clientId?.fullName || user.fullName || 'Corporate Client'
-
-    for (const vId of eligibleVendorIds) {
-      const notifTitle = 'New Matching Corporate Request 🏗️'
-      const notifBody = `New request matching your workforce skills and area (${request.locationText || 'nearby site'}).`
-
-      emitToVendor(vId, 'corporate_request_created', {
-        requestId: request._id.toString(),
-        title: notifTitle,
-        body: notifBody,
-        reference: request.reference,
-        request: populatedRequest || request,
-      })
-
+    // Send push notification to admins
+    const admins = await User.find({ role: USER_ROLES.ADMIN, isActive: true }).select('_id').lean()
+    for (const admin of admins) {
       triggerNotification({
-        userId: vId,
-        title: notifTitle,
-        body: notifBody,
-        type: 'NEW_ORDER',
+        userId: admin._id,
+        title: 'New Corporate Client Request 🏗️',
+        body: `${clientCompany} submitted a new workforce request (${request.locationText || 'location pending'}).`,
+        type: 'CORPORATE_CLIENT_REQUEST',
         relatedId: request._id,
         relatedModel: 'WorkforceRequest',
-        url: '/vendor/requests',
-        recipientRole: 'contractor',
-        fcmExtra: {
-          requestId: request._id.toString(),
-          locationText: request.locationText || '',
-          locationLat: request.locationLat != null ? String(request.locationLat) : '',
-          locationLng: request.locationLng != null ? String(request.locationLng) : '',
-          categoryName: firstLineCategory,
-          clientName: clientCompany,
-          url: '/vendor/requests',
-          bookingType: 'corporate',
-          timeoutSeconds: '60',
-        },
-      }).catch((err) => console.error('[Vendor Notification Error]:', vId, err.message))
+        url: '/admin/client-requests',
+        recipientRole: 'admin',
+      }).catch((err) => console.error('[Admin Notification Error]:', admin._id, err.message))
     }
   }
 
@@ -1267,3 +1101,227 @@ export const payPlatformFee = asyncHandler(async (req, res) => {
 
   sendSuccess(res, { message: 'Platform fee paid successfully', request })
 })
+
+/**
+ * Admin — List incoming corporate client requests (admin_review status).
+ * These are requests that were previously routed to vendors but now land here first.
+ */
+export const listAdminCorporateClientRequests = asyncHandler(async (req, res) => {
+  const filter = {
+    sourceType: REQUEST_SOURCE.CORPORATE,
+  }
+
+  // Handle special status filter for revision_requested
+  if (req.query.status === 'revision_requested') {
+    const revisionQuotes = await Quotation.find({ status: 'revision_requested' }).select('requestId').lean()
+    const revRequestIds = revisionQuotes.map((q) => q.requestId)
+    filter._id = { $in: revRequestIds }
+  } else if (req.query.status) {
+    filter.status = req.query.status
+  } else {
+    filter.status = REQUEST_STATUS.ADMIN_REVIEW
+  }
+
+  const requests = await WorkforceRequest.find(filter)
+    .sort({ createdAt: -1 })
+    .limit(200)
+    .populate('clientId', 'fullName phone role corporateProfile.companyName')
+    .populate('projectId', 'name')
+    .populate('siteId', 'name')
+    .populate('lines.categoryId', 'name group')
+    .lean()
+
+  // Attach active allocation, vendor, and quotation info
+  const requestIds = requests.map((r) => r._id)
+  const [allocations, quotations] = await Promise.all([
+    Allocation.find({ requestId: { $in: requestIds } })
+      .populate('vendorId', 'fullName phone contractorProfile.businessName contractorProfile.city contractorProfile.skills')
+      .lean(),
+    Quotation.find({ requestId: { $in: requestIds } }).lean(),
+  ])
+
+  const allocMap = {}
+  for (const alloc of allocations) {
+    allocMap[alloc.requestId.toString()] = alloc
+  }
+
+  const quoteMap = {}
+  for (const q of quotations) {
+    quoteMap[q.requestId.toString()] = q
+  }
+
+  const enrichedRequests = requests.map((r) => ({
+    ...r,
+    allocation: allocMap[r._id.toString()] || null,
+    assignedVendor: allocMap[r._id.toString()]?.vendorId || null,
+    quotation: quoteMap[r._id.toString()] || null,
+  }))
+
+  sendSuccess(res, { data: { requests: enrichedRequests } })
+})
+
+/**
+ * Admin — Send/Dispatch a corporate client request to a specific Vendor.
+ * Dispatches via socket ('corporate_request_created') and push notification,
+ * exactly triggering the vendor popup and marketplace feed.
+ */
+export const sendToVendorCorporateRequestAdmin = asyncHandler(async (req, res) => {
+  const { vendorId } = req.body
+  if (!vendorId || !mongoose.Types.ObjectId.isValid(vendorId)) {
+    return sendError(res, { message: 'Valid vendorId is required', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const vendor = await User.findOne({ _id: vendorId, role: USER_ROLES.CONTRACTOR })
+  if (!vendor) {
+    return sendError(res, { message: 'Selected vendor not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  const request = await WorkforceRequest.findOne({
+    _id: req.params.id,
+    sourceType: REQUEST_SOURCE.CORPORATE,
+  })
+    .populate('clientId', 'fullName phone role corporateProfile.companyName')
+    .populate('projectId', 'name')
+    .populate('siteId', 'name')
+    .populate('lines.categoryId', 'name group')
+
+  if (!request) {
+    return sendError(res, { message: 'Request not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  // Create or update allocation for this request and vendor
+  let allocation = await Allocation.findOne({ requestId: request._id })
+  if (!allocation) {
+    allocation = await Allocation.create({
+      requestId: request._id,
+      vendorId: vendor._id,
+      adminId: req.user._id,
+      notes: 'Dispatched to vendor by Admin',
+    })
+  } else {
+    allocation.vendorId = vendor._id
+    allocation.adminId = req.user._id
+    allocation.notes = 'Re-dispatched to vendor by Admin'
+    await allocation.save()
+  }
+
+  // Populate line categories if needed for payload
+  const clientName = request.clientId?.corporateProfile?.companyName || request.clientId?.fullName || 'Corporate Client'
+
+  // 1. Emit socket to the specific vendor - matching PanelShell incomingVendorRequest handler
+  emitToVendor(vendor._id.toString(), 'corporate_request_created', {
+    requestId: request._id.toString(),
+    reference: request.reference,
+    clientName,
+    locationText: request.locationText || '',
+    request: request.toObject ? request.toObject() : request,
+  })
+
+  // 2. Also emit vendor_allocated_job socket event
+  emitToVendor(vendor._id.toString(), 'vendor_allocated_job', {
+    requestId: request._id.toString(),
+    allocationId: allocation._id.toString(),
+    title: 'New Corporate Workforce Request 🏗️',
+    body: `${clientName} has a workforce request at ${request.locationText || 'your service area'}. Tap to review and accept.`,
+  })
+
+  // 3. Send Push Notification to Vendor
+  triggerNotification({
+    userId: vendor._id,
+    title: 'New Corporate Request 🏗️',
+    body: `Admin dispatched a corporate request from ${clientName} (${request.locationText || 'location specified'}).`,
+    type: 'CORPORATE_CLIENT_REQUEST',
+    relatedId: request._id,
+    relatedModel: 'WorkforceRequest',
+    url: '/vendor/requests',
+    recipientRole: 'vendor',
+  }).catch((err) => console.error('[Vendor Notification Error]:', vendor._id, err.message))
+
+  // Log audit
+  await logAudit({
+    adminId: req.user._id,
+    action: 'Dispatch Corporate Request to Vendor',
+    previousValue: { status: request.status },
+    newValue: { status: request.status, vendorId: vendor._id, vendorName: vendor.contractorProfile?.businessName || vendor.fullName },
+    module: 'Operations',
+    req,
+  })
+
+  sendSuccess(res, {
+    message: `Request successfully dispatched to ${vendor.contractorProfile?.businessName || vendor.fullName}`,
+    data: { request, allocation, vendor },
+  })
+})
+
+/**
+ * Admin — Direct Accept a corporate client request (Case A: No vendor involved).
+ * - No advance payment step
+ * - No "waiting for vendor" status
+ * - No vendor platform fee deduction
+ * - Client sees "accepted" status immediately
+ * - Quotation phase unlocked immediately for Admin to create & negotiate quotations with client
+ */
+export const acceptCorporateRequestAdmin = asyncHandler(async (req, res) => {
+  const request = await WorkforceRequest.findOne({
+    _id: req.params.id,
+    sourceType: REQUEST_SOURCE.CORPORATE,
+    status: REQUEST_STATUS.ADMIN_REVIEW,
+  })
+
+  if (!request) {
+    return sendError(res, { message: 'Request not available or already accepted', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  // Create allocation without vendor (handled directly by Admin)
+  const allocation = await Allocation.create({
+    requestId: request._id,
+    adminId: req.user._id,
+    notes: 'Admin directly accepted corporate client request (in-house execution)',
+  })
+
+  // Mark request as directly accepted by Admin
+  request.status = REQUEST_STATUS.ACCEPTED
+  request.acceptedByAdmin = true
+  request.isDirectAdminAccept = true
+  request.quotationUnlocked = true
+  request.vendorPlatformFeeStatus = 'paid' // Exempt / skipped
+  request.corporatePlatformFeeStatus = 'paid' // Exempt / skipped in direct admin accept
+  request.vendorPlatformFeeAmount = 0
+  request.corporatePlatformFeeAmount = 0
+  request.reviewedBy = req.user._id
+  request.reviewedAt = new Date()
+  request.acceptedAt = new Date()
+  await request.save()
+
+  // Notify corporate client immediately that request has been accepted
+  emitToCorporate(request.clientId.toString(), 'request_accepted_by_admin', {
+    requestId: request._id.toString(),
+    status: REQUEST_STATUS.ACCEPTED,
+    isDirectAdminAccept: true,
+  })
+
+  emitToCorporate(request.clientId.toString(), 'request_status_update', {
+    requestId: request._id.toString(),
+    status: REQUEST_STATUS.ACCEPTED,
+  })
+
+  sendNotificationToUser(
+    request.clientId.toString(),
+    'Request Accepted',
+    'Your workforce request has been accepted by Admin and is now active.',
+    { url: `/corporate/requests/${request._id}`, recipientRole: 'corporate' }
+  )
+
+  // Log audit trail
+  await logAudit({
+    adminId: req.user._id,
+    action: 'Direct Accept Corporate Client Request (No Vendor)',
+    previousValue: { status: REQUEST_STATUS.ADMIN_REVIEW },
+    newValue: { status: request.status, isDirectAdminAccept: true },
+    module: 'Operations',
+    req,
+  })
+
+  sendSuccess(res, { message: 'Request directly accepted by Admin', data: { allocation, request } })
+})
+

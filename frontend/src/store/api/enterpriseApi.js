@@ -7,6 +7,20 @@ export const enterpriseApi = baseApi.injectEndpoints({
     getEnterpriseJobs: builder.query({
       query: () => '/enterprise/jobs',
       providesTags: ['EnterpriseJobs'],
+      // Refresh when Admin accepts/rejects a daily/hourly request
+      async onCacheEntryAdded(_arg, { dispatch, cacheDataLoaded, cacheEntryRemoved }) {
+        const socket = getSocket()
+        if (!socket) return
+        try {
+          await cacheDataLoaded
+          const refresh = () => dispatch(enterpriseApi.util.invalidateTags(['EnterpriseJobs']))
+          socket.on('enterprise_jobs_updated', refresh)
+          await cacheEntryRemoved
+          socket.off('enterprise_jobs_updated', refresh)
+        } catch {
+          /* no-op */
+        }
+      },
     }),
     createEnterpriseJob: builder.mutation({
       query: (body) => ({ url: '/enterprise/jobs', method: 'POST', body }),
@@ -87,6 +101,20 @@ export const enterpriseApi = baseApi.injectEndpoints({
         body: { endDate },
       }),
       invalidatesTags: ['EnterpriseJobs', 'EnterpriseApplications', 'EnterpriseWorkforce', 'LabourEmployment'],
+    }),
+
+    // ── Daily/Hourly job payments (from enterprise wallet) ───────────────────
+    getJobDirectPayments: builder.query({
+      query: (id) => `/enterprise/jobs/${id}/direct-payments`,
+      providesTags: ['DirectPayments'],
+    }),
+    payDirectJob: builder.mutation({
+      query: ({ id, periodKey, hours }) => ({
+        url: `/enterprise/jobs/${id}/direct-payments`,
+        method: 'POST',
+        body: { periodKey, hours },
+      }),
+      invalidatesTags: ['DirectPayments', 'EnterpriseJobs', 'EnterpriseWallet', 'EnterpriseWalletTransactions'],
     }),
 
     // ── Enterprise HR Hiring & Applications ──────────────────────────────────
@@ -267,6 +295,8 @@ export const enterpriseApi = baseApi.injectEndpoints({
 
 export const {
   useGetEnterpriseJobsQuery,
+  useGetJobDirectPaymentsQuery,
+  usePayDirectJobMutation,
   useCreateEnterpriseJobMutation,
   useGetPublicEnterpriseJobsQuery,
   useGetPublicEnterpriseJobByIdQuery,

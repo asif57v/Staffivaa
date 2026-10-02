@@ -58,6 +58,9 @@ const AdminJoiningPaymentsPage = lazy(() => import('./pages/admin/AdminJoiningPa
 const AdminEnterprisePayrollsPage = lazy(() => import('./pages/admin/AdminEnterprisePayrollsPage.jsx').then(m => ({ default: m.AdminEnterprisePayrollsPage })))
 const AdminEnterpriseAttendancePage = lazy(() => import('./pages/admin/AdminEnterpriseAttendancePage.jsx').then(m => ({ default: m.AdminEnterpriseAttendancePage })))
 const AdminWithdrawalRequestsPage = lazy(() => import('./pages/admin/AdminWithdrawalRequestsPage.jsx').then(m => ({ default: m.AdminWithdrawalRequestsPage })))
+const AdminClientRequestsPage = lazy(() => import('./pages/admin/AdminClientRequestsPage.jsx').then(m => ({ default: m.AdminClientRequestsPage })))
+const AdminIndividualBookingsPage = lazy(() => import('./pages/admin/AdminIndividualBookingsPage.jsx').then(m => ({ default: m.AdminIndividualBookingsPage })))
+const AdminEnterpriseDirectRequestsPage = lazy(() => import('./pages/admin/AdminEnterpriseDirectRequestsPage.jsx').then(m => ({ default: m.AdminEnterpriseDirectRequestsPage })))
 const AdminLegalContentPage = lazy(() => import('./pages/admin/AdminLegalContentPage.jsx').then(m => ({ default: m.AdminLegalContentPage })))
 const PublicLegalPage = lazy(() => import('./pages/PublicLegalPage.jsx').then(m => ({ default: m.PublicLegalPage })))
 
@@ -183,6 +186,9 @@ function App() {
                 <Route path="enterprise-attendance" element={<AdminEnterpriseAttendancePage />} />
                 <Route path="enterprise-withdrawals" element={<AdminWithdrawalRequestsPage />} />
                 <Route path="buildmart" element={<AdminBuildMartLeadsPage />} />
+                <Route path="client-requests" element={<AdminClientRequestsPage />} />
+                <Route path="individual-bookings" element={<AdminIndividualBookingsPage />} />
+                <Route path="enterprise-requests" element={<AdminEnterpriseDirectRequestsPage />} />
                 <Route path="bookings" element={<AdminBookingsPage />} />
                 <Route path="allocations" element={<AdminAllocationsPage />} />
                 <Route path="attendance" element={<AdminAttendancePage />} />

@@ -4,11 +4,19 @@ import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { Allocation } from '../models/Allocation.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
-import { emitToCorporate, emitToVendor } from '../utils/socket.js'
+import { emitToCorporate, emitToVendor, emitToRole } from '../utils/socket.js'
+import { User } from '../models/User.js'
+import { sendNotificationToUsers } from '../services/notificationService.js'
 import CommissionService from '../services/CommissionService.js'
 
 export const submitQuotationVendor = asyncHandler(async (req, res) => {
-  const { requestId } = req.body
+  let requestId = req.body.requestId || req.params.id
+
+  // If allocation ID passed instead of request ID
+  const allocation = await Allocation.findById(requestId)
+  if (allocation) {
+    requestId = allocation.requestId
+  }
 
   const request = await WorkforceRequest.findById(requestId)
   if (!request) {
@@ -61,6 +69,8 @@ export const submitQuotationVendor = asyncHandler(async (req, res) => {
 
   let quotation = await Quotation.findOne({ requestId })
 
+  const isCallerAdmin = req.user.role === 'admin'
+
   if (quotation) {
     // Save history of the current state before editing
     if (!quotation.revisions) quotation.revisions = []
@@ -105,6 +115,11 @@ export const submitQuotationVendor = asyncHandler(async (req, res) => {
     quotation.accommodation = Number(accommodationCharges) || 0
     quotation.food = Number(foodCharges) || 0
 
+    if (isCallerAdmin) {
+      quotation.adminId = req.user._id
+      quotation.createdByRole = 'admin'
+    }
+
     // Set status
     quotation.status = quotation.status === 'revision_requested' ? 'revised' : 'submitted'
   } else {
@@ -134,7 +149,9 @@ export const submitQuotationVendor = asyncHandler(async (req, res) => {
 
     quotation = new Quotation({
       requestId,
-      vendorId: req.user._id,
+      vendorId: isCallerAdmin ? undefined : req.user._id,
+      adminId: isCallerAdmin ? req.user._id : undefined,
+      createdByRole: isCallerAdmin ? 'admin' : 'contractor',
       labourRatePerWorker: Number(labourRatePerWorker),
       numberOfWorkers: Number(numberOfWorkers),
       workingDays: Number(workingDays),
@@ -182,6 +199,7 @@ export const getQuotationForRequest = asyncHandler(async (req, res) => {
 
   const quotation = await Quotation.findOne({ requestId })
     .populate('vendorId', 'fullName email contractorProfile.companyName contractorProfile.experience contractorProfile.rating')
+    .populate('adminId', 'fullName email')
     .lean()
   
   if (!quotation) {
@@ -212,8 +230,8 @@ export const respondToQuotationCorporate = asyncHandler(async (req, res) => {
     
     await request.save()
 
-    // Trigger Commission Generation if applicable
-    if (request.revenueModel === 'platform_fee_plus_commission' && request.commissionTrigger === 'after_quotation_accepted') {
+    // Trigger Commission Generation if applicable (only if vendor involved)
+    if (quotation.vendorId && request.revenueModel === 'platform_fee_plus_commission' && request.commissionTrigger === 'after_quotation_accepted') {
       try {
         await CommissionService.generateCommission(request, quotation)
       } catch (err) {
@@ -233,24 +251,72 @@ export const respondToQuotationCorporate = asyncHandler(async (req, res) => {
 
   await quotation.save()
 
-  // Emit socket event to Vendor
-  emitToVendor(quotation.vendorId.toString(), 'corporate_responded_quotation', {
+  // Emit socket event to Vendor (if vendor exists)
+  if (quotation.vendorId) {
+    emitToVendor(quotation.vendorId.toString(), 'corporate_responded_quotation', {
+      requestId: request._id.toString(),
+      quotationId: quotation._id.toString(),
+      action,
+      status: quotation.status,
+      feedback: quotation.feedback,
+    })
+    emitToVendor(quotation.vendorId.toString(), 'request_status_update', {
+      requestId: request._id.toString(),
+      status: request.status,
+      quotationStatus: quotation.status,
+      feedback: quotation.feedback,
+    })
+  }
+
+  // Always emit socket event to Admin role room so Admin panel updates in real-time
+  emitToRole('admin', 'corporate_responded_quotation', {
     requestId: request._id.toString(),
     quotationId: quotation._id.toString(),
     action,
-    status: quotation.status
+    status: quotation.status,
+    feedback: quotation.feedback,
+  })
+  emitToRole('admin', 'request_status_update', {
+    requestId: request._id.toString(),
+    status: request.status,
+    quotationStatus: quotation.status,
+    feedback: quotation.feedback,
   })
 
-  // Emit general request status updates
+  // Emit general request status updates to Corporate client
   emitToCorporate(request.clientId.toString(), 'request_status_update', {
     requestId: request._id.toString(),
-    status: request.status
+    status: request.status,
+    quotationStatus: quotation.status,
   })
-  
-  emitToVendor(quotation.vendorId.toString(), 'request_status_update', {
-    requestId: request._id.toString(),
-    status: request.status
-  })
+
+  // Send Notification to Admins
+  try {
+    const adminUsers = await User.find({ role: { $in: ['admin', 'superadmin'] } }).select('_id')
+    const adminIds = adminUsers.map((a) => a._id)
+    const clientName = request.clientId?.corporateProfile?.companyName || request.clientId?.fullName || 'Corporate Client'
+
+    let notifTitle = 'Quotation Update'
+    let notifBody = `${clientName} updated quotation for request ${request.reference}`
+    if (action === 'revision') {
+      notifTitle = 'Quotation Revision Requested'
+      notifBody = `${clientName} requested price revision for ${request.reference}: "${quotation.feedback}"`
+    } else if (action === 'approve') {
+      notifTitle = 'Quotation Approved'
+      notifBody = `${clientName} approved quotation for ${request.reference}. Project is now Active!`
+    } else if (action === 'reject') {
+      notifTitle = 'Quotation Rejected'
+      notifBody = `${clientName} rejected quotation for ${request.reference}.`
+    }
+
+    sendNotificationToUsers(adminIds, notifTitle, notifBody, {
+      requestId: request._id.toString(),
+      recipientRole: 'admin',
+      url: `/admin/client-requests`,
+    }).catch(() => {})
+  } catch (err) {
+    console.error('Error sending admin notification on quotation response:', err)
+  }
 
   sendSuccess(res, { data: { quotation, request } })
 })

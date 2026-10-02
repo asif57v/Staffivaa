@@ -7,7 +7,17 @@ import {
   getEnterpriseJobs,
   updateEnterpriseJobStatus,
   getAdminEnterpriseApplications,
+  getEnterpriseDirectRequests,
+  respondEnterpriseDirectRequest,
+  getDirectRequestMatchingWorkers,
+  assignDirectRequestWorkers,
+  removeDirectRequestWorker,
 } from '../controllers/adminEnterpriseController.js'
+import {
+  sendJobEndReminder,
+  payoutAssignedWorker,
+  getAdminDirectPayments,
+} from '../controllers/enterpriseDirectPaymentController.js'
 import {
   getAdminJoiningPayments,
   verifyApproveJoining,
@@ -37,6 +47,16 @@ router.put('/companies/:id/status', updateEnterpriseCompanyStatus)
 // Jobs
 router.get('/jobs', getEnterpriseJobs)
 router.put('/jobs/:id/status', updateEnterpriseJobStatus)
+
+// Daily/Hourly Requests (routed to Admin instead of the labour feed)
+router.get('/direct-requests', getEnterpriseDirectRequests)
+router.patch('/direct-requests/:id/respond', respondEnterpriseDirectRequest)
+router.get('/direct-requests/:id/matching-workers', getDirectRequestMatchingWorkers)
+router.post('/direct-requests/:id/assign-workers', assignDirectRequestWorkers)
+router.delete('/direct-requests/:id/assigned-workers/:entryId', removeDirectRequestWorker)
+router.post('/direct-requests/:id/send-reminder', sendJobEndReminder)
+router.post('/direct-requests/:id/assigned-workers/:entryId/payout', payoutAssignedWorker)
+router.get('/direct-payments', getAdminDirectPayments)
 
 // Applications & Placement Activity
 router.get('/applications', getAdminEnterpriseApplications)

@@ -69,6 +69,56 @@ const enterpriseJobSchema = new mongoose.Schema(
     
     // Job visibility
     isLive: { type: Boolean, default: false },
+
+    // Routing: monthly jobs go to the labour feed; daily/hourly jobs go to Admin for direct fulfilment
+    dispatchMode: {
+      type: String,
+      enum: ['labour_feed', 'admin'],
+      default: 'labour_feed',
+      index: true,
+    },
+    adminRequestStatus: {
+      type: String,
+      enum: ['pending', 'accepted', 'rejected'],
+    },
+    adminRespondedAt: { type: Date },
+    adminRespondedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    adminResponseNote: { type: String, trim: true },
+
+    // Workers assigned by Admin to a daily/hourly request. Either a registered labour (workerId)
+    // or an off-app worker captured by name + phone (isExternal).
+    assignedWorkers: [
+      {
+        workerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        isExternal: { type: Boolean, default: false },
+        name: { type: String, trim: true },
+        phone: { type: String, trim: true },
+        assignedAt: { type: Date, default: Date.now },
+        assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        // Per-period payout records (one per periodKey) so the books stay clear
+        payouts: [
+          {
+            periodKey: { type: String, required: true },
+            amount: { type: Number, required: true },
+            mode: { type: String, enum: ['wallet', 'cash', 'upi', 'bank', 'other'], required: true },
+            note: { type: String, trim: true },
+            paidAt: { type: Date, default: Date.now },
+            paidBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+            walletTransactionId: { type: mongoose.Schema.Types.ObjectId, ref: 'WalletTransaction' },
+          },
+        ],
+      },
+    ],
+
+    // Admin -> Enterprise "job ending soon" reminders (daily/hourly only)
+    reminders: [
+      {
+        hoursBefore: { type: Number, required: true },
+        message: { type: String, trim: true },
+        sentAt: { type: Date, default: Date.now },
+        sentBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      },
+    ],
   },
   { timestamps: true }
 )

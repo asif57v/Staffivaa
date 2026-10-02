@@ -14,7 +14,7 @@ import {
 } from '../services/walletDeductionService.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
-import { emitRequestStatusUpdate, getIO, emitToUser, emitToVendor } from '../utils/socket.js'
+import { emitRequestStatusUpdate, getIO, emitToUser, emitToVendor, emitToRole } from '../utils/socket.js'
 import { logAudit } from '../utils/auditLogger.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
 import { triggerBookingNotif } from '../utils/triggerBookingNotif.js'
@@ -28,6 +28,7 @@ import {
   labourReassignedNotif,
   previousAssignmentCancelledNotif,
 } from '../utils/bookingNotificationCopy.js'
+import { notifyAdminsIndividualBookingPending } from './individualDispatchController.js'
 
 export const createAllocationAdmin = asyncHandler(async (req, res) => {
   const { requestId, vendorId, labourIds, notes } = req.body
@@ -689,10 +690,17 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       request.platformFeePendingAt = null
       request.labourPaymentStatus = 'pending'
       request.labourRazorpayOrderId = null
-      
-      // Extend expiration timer by 10 minutes so listLabourAssignments does not filter it out
-      request.expiresAt = new Date(Date.now() + 10 * 60 * 1000)
-      
+
+      const isAdminDispatch = request.dispatchMode === 'admin'
+
+      if (isAdminDispatch) {
+        // Goes back to the admin queue (no expiry) for manual re-assignment
+        request.expiresAt = undefined
+      } else {
+        // Extend expiration timer by 10 minutes so listLabourAssignments does not filter it out
+        request.expiresAt = new Date(Date.now() + 10 * 60 * 1000)
+      }
+
       if (isUserPaid) {
         request.platformFeePaymentLifecycle = 'partial'
       } else {
@@ -700,7 +708,15 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       }
       await request.save()
 
-      // --- RE-BROADCAST REAL-TIME SEARCH TO ALL NEARBY WORKERS ---
+      if (isAdminDispatch) {
+        const clientUser = await User.findById(request.clientId).select('fullName').lean()
+        notifyAdminsIndividualBookingPending(request, {
+          clientName: clientUser?.fullName,
+          reason: 'worker_cancelled',
+        }).catch((err) => console.error('[Admin Notification Error]:', err.message))
+      }
+
+      // --- RE-BROADCAST REAL-TIME SEARCH TO ALL NEARBY WORKERS (legacy auto-dispatch only) ---
       const categoryId = request.lines?.[0]?.categoryId
       const clientUser = await User.findById(request.clientId).select('fullName').lean()
       
@@ -756,7 +772,7 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
         matchingWorkers = candidates
       }
 
-      if (matchingWorkers.length > 0) {
+      if (!isAdminDispatch && matchingWorkers.length > 0) {
         await Assignment.deleteMany({ requestId: request._id, status: { $ne: ASSIGNMENT_STATUS.CANCELLED } })
 
         let allocation = await Allocation.findOne({ requestId: request._id })
@@ -882,5 +898,6 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
   }
   await assignment.save()
   const updatedRequest = await WorkforceRequest.findById(assignment.requestId).lean();
+  emitToRole('admin', 'individual_booking_updated', { requestId: assignment.requestId.toString(), action })
   sendSuccess(res, { data: { assignment: assignment.toObject(), request: updatedRequest } })
 })

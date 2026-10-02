@@ -50,7 +50,7 @@ export function bookingCreatedNotif(reference) {
   const ref = reference || 'new'
   return {
     title: 'Booking Created!',
-    body: `Your job booking #${ref} has been created and sent to nearby workers.`,
+    body: `Your job booking #${ref} has been created. Our team is assigning a worker for you.`,
     type: NOTIF_TYPE.BOOKING_CREATED,
   }
 }

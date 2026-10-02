@@ -8,6 +8,7 @@ import { SupportTicket } from '../models/SupportTicket.js'
 import { Assignment } from '../models/Assignment.js'
 import { RefundRequest } from '../models/RefundRequest.js'
 import { Withdrawal } from '../models/Withdrawal.js'
+import { EnterpriseJob } from '../models/EnterpriseJob.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { sendSuccess } from '../utils/apiResponse.js'
 
@@ -52,7 +53,22 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     { $group: { _id: null, total: { $sum: '$amount' } } }
   ])
   const monthlyRevenue = monthlyRevAgg[0]?.total || 0
-  
+
+  // Revenue for the admin-selected period (all time when no from/to given)
+  const periodMatch = { type: 'Credit', status: 'Completed' }
+  const fromDate = req.query.from ? new Date(req.query.from) : null
+  const toDate = req.query.to ? new Date(req.query.to) : null
+  if ((fromDate && !Number.isNaN(fromDate.getTime())) || (toDate && !Number.isNaN(toDate.getTime()))) {
+    periodMatch.createdAt = {}
+    if (fromDate && !Number.isNaN(fromDate.getTime())) periodMatch.createdAt.$gte = fromDate
+    if (toDate && !Number.isNaN(toDate.getTime())) periodMatch.createdAt.$lte = toDate
+  }
+  const periodRevAgg = await WalletTransaction.aggregate([
+    { $match: periodMatch },
+    { $group: { _id: null, total: { $sum: '$amount' } } }
+  ])
+  const periodRevenue = periodRevAgg[0]?.total || 0
+
   // Platform Earnings
   const earningsAgg = await WalletTransaction.aggregate([
     { $match: { status: 'Completed', $or: [{ type: 'Commission' }, { platform_fee: true }] } },
@@ -88,6 +104,10 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
   const pendingRefundsCount = await RefundRequest.countDocuments({ status: 'PENDING' })
   const pendingWithdrawalsCount = await Withdrawal.countDocuments({ status: 'Pending' })
   
+  // Pending Corporate Client Requests (admin_review)
+  const pendingClientRequests = await WorkforceRequest.countDocuments({ sourceType: 'corporate', status: 'admin_review' })
+  const pendingEnterpriseDirectRequests = await EnterpriseJob.countDocuments({ dispatchMode: 'admin', adminRequestStatus: 'pending' })
+  
   return sendSuccess(res, {
     data: {
       totalUsers,
@@ -104,6 +124,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       totalBookings,
       monthlyRevenue,
       dailyRevenue,
+      periodRevenue,
       platformEarnings,
       vendorSettlements,
       pendingSettlements,
@@ -113,6 +134,8 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       newUsersToday,
       pendingRefundsCount,
       pendingWithdrawalsCount,
+      pendingClientRequests,
+      pendingEnterpriseDirectRequests,
     }
   })
 })

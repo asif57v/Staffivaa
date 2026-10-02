@@ -258,15 +258,38 @@ export const createEnterpriseJob = asyncHandler(async (req, res) => {
     jobDescription, timeline
   } = req.body
 
+  // Daily & hourly requirements are routed to Admin for direct fulfilment (no labour feed, no interviews).
+  // Monthly requirements keep the existing labour-feed hiring pipeline.
+  const isAdminDispatch = ADMIN_DISPATCH_SALARY_TYPES.includes(salaryType)
+
   const job = await EnterpriseJob.create({
     enterpriseId: req.user._id,
     jobTitle, department, categoryId, numberOfWorkers, locationText, locationPoint,
     salary, salaryType, experienceRequired, workingHours, shift,
     providesAccommodation, providesFood, providesTransportation, contractDuration,
     jobDescription, timeline,
-    status: 'approved', // Auto-approved for real-time reflection
-    isLive: true,
+    ...(isAdminDispatch
+      ? { status: 'pending', isLive: false, dispatchMode: 'admin', adminRequestStatus: 'pending' }
+      : { status: 'approved', isLive: true, dispatchMode: 'labour_feed' }), // Auto-approved for real-time reflection
   })
+
+  if (isAdminDispatch) {
+    await notifyAdminsOfDirectRequest(req.user._id, job)
+
+    await logAudit({
+      adminId: req.user._id,
+      action: 'Enterprise Daily/Hourly Request Sent to Admin',
+      module: 'Enterprise Jobs',
+      details: { jobId: job._id, title: job.jobTitle, salaryType: job.salaryType },
+      req,
+    })
+
+    return sendSuccess(res, {
+      statusCode: HTTP_STATUS.CREATED,
+      message: 'Request sent to Staffivaa Admin for review.',
+      data: job,
+    })
+  }
 
   // Emit event to all labours so their banner updates in real-time
   emitToRole('labour', 'enterprise_jobs_updated', { type: 'enterprise_job_created', jobId: job._id })
@@ -339,6 +362,33 @@ export const createEnterpriseJob = asyncHandler(async (req, res) => {
   })
 })
 
+const ADMIN_DISPATCH_SALARY_TYPES = ['daily', 'hourly']
+
+/** Notify all admins that an enterprise raised a daily/hourly requirement */
+async function notifyAdminsOfDirectRequest(enterpriseId, job) {
+  try {
+    const enterpriseUser = await User.findById(enterpriseId).select('fullName enterpriseProfile')
+    const companyName = enterpriseUser?.enterpriseProfile?.companyName || enterpriseUser?.fullName || 'Enterprise Client'
+    const body = `${companyName} requested ${job.numberOfWorkers} worker(s) for "${job.jobTitle}" (₹${Number(job.salary).toLocaleString('en-IN')}/${job.salaryType}) in ${job.locationText}.`
+
+    const adminUsers = await User.find({ role: USER_ROLES.ADMIN }).select('_id')
+    for (const admin of adminUsers) {
+      triggerNotification({
+        userId: admin._id,
+        title: 'New Enterprise Daily/Hourly Request 📥',
+        body,
+        type: 'ENTERPRISE_DIRECT_REQUEST',
+        relatedId: job._id,
+        relatedModel: 'EnterpriseJob',
+      }).catch((err) => console.error('[Admin Notification Error]:', err.message))
+    }
+
+    emitToRole('admin', 'admin_notification', { type: 'ENTERPRISE_DIRECT_REQUEST', message: body, jobId: job._id })
+  } catch (err) {
+    console.error('[Enterprise Direct Request Notification Error]:', err)
+  }
+}
+
 const HIRED_STATUSES = [
   'offer_accepted',
   'waiting_for_joining_payment',
@@ -355,6 +405,7 @@ export const getEnterpriseJobs = asyncHandler(async (req, res) => {
 
   const jobs = await EnterpriseJob.find({ enterpriseId: req.user._id })
     .populate('categoryId', CATEGORY_SELECT)
+    .populate('assignedWorkers.workerId', 'fullName phone profileImageUrl')
     .sort({ createdAt: -1 })
 
   const now = new Date()
@@ -395,7 +446,7 @@ export const getEnterpriseJobs = asyncHandler(async (req, res) => {
 export const getPublicEnterpriseJobs = asyncHandler(async (req, res) => {
   const { category, minSalary, maxSalary, location, search } = req.query
 
-  const query = { isLive: true, status: 'approved' }
+  const query = { isLive: true, status: 'approved', dispatchMode: { $ne: 'admin' } }
 
   if (category) query.categoryId = category
 
@@ -481,7 +532,7 @@ export const getPublicEnterpriseJobs = asyncHandler(async (req, res) => {
 
 /** GET /api/enterprise/public-jobs/:id - Single job detail */
 export const getPublicEnterpriseJobById = asyncHandler(async (req, res) => {
-  const job = await EnterpriseJob.findOne({ _id: req.params.id, isLive: true, status: 'approved' })
+  const job = await EnterpriseJob.findOne({ _id: req.params.id, isLive: true, status: 'approved', dispatchMode: { $ne: 'admin' } })
     .populate('enterpriseId', COMPANY_SELECT)
     .populate('categoryId', CATEGORY_SELECT)
 
@@ -558,7 +609,7 @@ export const applyToEnterpriseJob = asyncHandler(async (req, res) => {
 
   const { jobId } = req.body
 
-  const job = await EnterpriseJob.findOne({ _id: jobId, isLive: true, status: 'approved' })
+  const job = await EnterpriseJob.findOne({ _id: jobId, isLive: true, status: 'approved', dispatchMode: { $ne: 'admin' } })
   if (!job) {
     return sendError(res, { message: 'Job not found or not accepting applications', statusCode: HTTP_STATUS.NOT_FOUND })
   }

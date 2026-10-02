@@ -35,7 +35,10 @@ export function EnterpriseJobNewPage() {
     contractDuration: '',
     jobDescription: '',
     timeline: {
-      applicationStartDate: new Date().toISOString().slice(0, 10),
+      applicationStartDate: (() => {
+        const d = new Date()
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      })(),
       applicationLastDate: '',
       interviewStartDate: '',
       expectedJoiningDate: '',
@@ -44,8 +47,20 @@ export function EnterpriseJobNewPage() {
     }
   })
 
+  // Daily/hourly requirements go to Admin instead of the labour feed (no interview round)
+  const isAdminDispatch = formData.salaryType === 'daily' || formData.salaryType === 'hourly'
+
   const [shiftStartTime, setShiftStartTime] = useState('09:00')
   const [shiftEndTime, setShiftEndTime] = useState('18:00')
+
+  // Daily/hourly bookings cannot start in the past (local date/time)
+  const pad2 = (n) => String(n).padStart(2, '0')
+  const nowLocal = new Date()
+  const todayStr = `${nowLocal.getFullYear()}-${pad2(nowLocal.getMonth() + 1)}-${pad2(nowLocal.getDate())}`
+  const nowTimeStr = `${pad2(nowLocal.getHours())}:${pad2(nowLocal.getMinutes())}`
+  const dateMin = isAdminDispatch ? todayStr : undefined
+  const startsToday = isAdminDispatch && formData.timeline.expectedJoiningDate === todayStr
+  const shiftStartInPast = startsToday && shiftStartTime < nowTimeStr
 
   const formatTime12Hour = (time24) => {
     if (!time24) return ''
@@ -151,6 +166,16 @@ export function EnterpriseJobNewPage() {
 
     // Timeline Validations
     const { timeline } = formData
+    if (isAdminDispatch) {
+      if (timeline.applicationStartDate < todayStr || timeline.applicationLastDate < todayStr || timeline.expectedJoiningDate < todayStr) {
+        toast.error('Past dates cannot be selected for daily/hourly requests')
+        return
+      }
+      if (shiftStartInPast) {
+        toast.error(`Shift start time must be after the current time (${formatTime12Hour(nowTimeStr)}) for today's booking`)
+        return
+      }
+    }
     if (!timeline.applicationLastDate || !timeline.expectedJoiningDate) {
       toast.error('Application Deadline and Expected Joining Date are required')
       return
@@ -159,7 +184,7 @@ export function EnterpriseJobNewPage() {
       toast.error('Application Deadline must be after Start Date')
       return
     }
-    if (timeline.interviewStartDate && new Date(timeline.expectedJoiningDate) < new Date(timeline.interviewStartDate)) {
+    if (!isAdminDispatch && timeline.interviewStartDate && new Date(timeline.expectedJoiningDate) < new Date(timeline.interviewStartDate)) {
       toast.error('Expected Joining Date must be after Interview Date')
       return
     }
@@ -167,7 +192,7 @@ export function EnterpriseJobNewPage() {
       toast.error('Expected Joining Date must be after Application Deadline')
       return
     }
-    if (timeline.projectEndDate && timeline.projectStartDate && new Date(timeline.projectEndDate) <= new Date(timeline.projectStartDate)) {
+    if (!isAdminDispatch && timeline.projectEndDate && timeline.projectStartDate && new Date(timeline.projectEndDate) <= new Date(timeline.projectStartDate)) {
       toast.error('Project End Date must be after Project Start Date')
       return
     }
@@ -178,10 +203,18 @@ export function EnterpriseJobNewPage() {
         numberOfWorkers: parseInt(formData.numberOfWorkers, 10),
         salary: Number(formData.salary),
         workingHours: parseInt(formData.workingHours, 10),
+        // No interview round or project dates for daily/hourly requirements
+        ...(isAdminDispatch && {
+          timeline: { ...formData.timeline, interviewStartDate: '', projectStartDate: '', projectEndDate: '' },
+        }),
       }
 
       await createJob(payload).unwrap()
-      toast.success('Job requirement created successfully! Published live.')
+      toast.success(
+        isAdminDispatch
+          ? 'Request sent to Staffivaa Admin for review. You will be notified once it is accepted.'
+          : 'Job requirement created successfully! Published live.'
+      )
       navigate('/enterprise/jobs')
     } catch (err) {
       if (err?.data?.data?.insufficientSecurityBalance) {
@@ -302,6 +335,11 @@ export function EnterpriseJobNewPage() {
                 <option value="daily">Daily</option>
                 <option value="hourly">Hourly</option>
               </select>
+              {isAdminDispatch && (
+                <p className="rounded-lg bg-indigo-50 px-3 py-2 text-[11.5px] font-semibold text-indigo-700 ring-1 ring-indigo-100">
+                  Daily and hourly requirements are sent to Staffivaa Admin, who will arrange workers for you. There is no interview round.
+                </p>
+              )}
             </div>
           </div>
 
@@ -330,9 +368,15 @@ export function EnterpriseJobNewPage() {
                 <input
                   type="time"
                   value={shiftStartTime}
+                  min={startsToday ? nowTimeStr : undefined}
                   onChange={(e) => updateShiftFromTimes(e.target.value, shiftEndTime)}
                   className="w-full rounded-[10px] border border-slate-200 bg-slate-50 px-4 py-3 text-[14px] font-medium text-slate-900 outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
                 />
+                {shiftStartInPast && (
+                  <p className="text-[11px] font-semibold text-rose-600">
+                    Today's booking: select a time after {formatTime12Hour(nowTimeStr)}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -431,6 +475,7 @@ export function EnterpriseJobNewPage() {
                   required
                   type="date"
                   name="applicationStartDate"
+                  min={dateMin}
                   value={formData.timeline.applicationStartDate}
                   onChange={handleTimelineChange}
                   className="w-full rounded-[10px] border border-slate-200 bg-slate-50 px-4 py-3 text-[14px] font-medium text-slate-900 outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
@@ -444,25 +489,28 @@ export function EnterpriseJobNewPage() {
                   required
                   type="date"
                   name="applicationLastDate"
+                  min={dateMin}
                   value={formData.timeline.applicationLastDate}
                   onChange={handleTimelineChange}
                   className="w-full rounded-[10px] border border-slate-200 bg-slate-50 px-4 py-3 text-[14px] font-medium text-slate-900 outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-[12px] font-bold text-slate-700 uppercase tracking-wide flex justify-between">
-                  <span>Interview Start Date</span>
-                  <span className="text-slate-400 font-normal normal-case">(Optional)</span>
-                </label>
-                <input
-                  type="date"
-                  name="interviewStartDate"
-                  value={formData.timeline.interviewStartDate}
-                  onChange={handleTimelineChange}
-                  className="w-full rounded-[10px] border border-slate-200 bg-slate-50 px-4 py-3 text-[14px] font-medium text-slate-900 outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
-                />
-              </div>
+              {!isAdminDispatch && (
+                <div className="space-y-1.5">
+                  <label className="block text-[12px] font-bold text-slate-700 uppercase tracking-wide flex justify-between">
+                    <span>Interview Start Date</span>
+                    <span className="text-slate-400 font-normal normal-case">(Optional)</span>
+                  </label>
+                  <input
+                    type="date"
+                    name="interviewStartDate"
+                    value={formData.timeline.interviewStartDate}
+                    onChange={handleTimelineChange}
+                    className="w-full rounded-[10px] border border-slate-200 bg-slate-50 px-4 py-3 text-[14px] font-medium text-slate-900 outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
+                  />
+                </div>
+              )}
               <div className="space-y-1.5">
                 <label className="block text-[12px] font-bold text-slate-700 uppercase tracking-wide flex items-center justify-between">
                   <span>Expected Joining Date *</span>
@@ -472,12 +520,15 @@ export function EnterpriseJobNewPage() {
                   required
                   type="date"
                   name="expectedJoiningDate"
+                  min={dateMin}
                   value={formData.timeline.expectedJoiningDate}
                   onChange={handleTimelineChange}
                   className="w-full rounded-[10px] border border-slate-200 bg-slate-50 px-4 py-3 text-[14px] font-bold text-indigo-900 outline-none transition focus:border-indigo-500 focus:bg-indigo-50 focus:ring-4 focus:ring-indigo-500/20"
                 />
               </div>
 
+              {!isAdminDispatch && (
+              <>
               <div className="space-y-1.5">
                 <label className="block text-[12px] font-bold text-slate-700 uppercase tracking-wide flex justify-between">
                   <span>Project Start Date</span>
@@ -504,6 +555,8 @@ export function EnterpriseJobNewPage() {
                   className="w-full rounded-[10px] border border-slate-200 bg-slate-50 px-4 py-3 text-[14px] font-medium text-slate-900 outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
                 />
               </div>
+              </>
+              )}
             </div>
           </div>
 
@@ -537,7 +590,7 @@ export function EnterpriseJobNewPage() {
               ) : (
                 <>
                   <CheckCircle2 className="h-5 w-5" />
-                  Post Requirement
+                  {isAdminDispatch ? 'Send Request to Admin' : 'Post Requirement'}
                 </>
               )}
             </button>

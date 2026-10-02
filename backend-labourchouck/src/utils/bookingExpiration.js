@@ -21,9 +21,11 @@ export function startBookingExpirationJob() {
     try {
       const timeoutThreshold = new Date(Date.now() - 2.5 * 60 * 1000)
       
-      // 1. Find bookings in searching status older than 2.5 minutes
+      // 1. Find auto-broadcast bookings in searching status older than 2.5 minutes
+      // (admin-dispatched bookings wait in the admin queue and never auto-expire)
       const expiredBookings = await WorkforceRequest.find({
         status: REQUEST_STATUS.SEARCHING,
+        dispatchMode: { $ne: 'admin' },
         createdAt: { $lt: timeoutThreshold }
       })
 

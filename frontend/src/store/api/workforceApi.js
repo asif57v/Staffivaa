@@ -276,6 +276,56 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       providesTags: ['AdminRequests'],
     }),
+    getAdminClientRequests: build.query({
+      query: (params) => ({ url: '/admin/workforce/client-requests', params }),
+      transformResponse: unwrap,
+      providesTags: ['AdminClientRequests'],
+    }),
+    acceptClientRequest: build.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/admin/workforce/client-requests/${id}/accept`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: ['AdminClientRequests', 'AdminRequests', 'Requests', 'AdminDashboard'],
+    }),
+    sendToVendorClientRequest: build.mutation({
+      query: ({ id, vendorId }) => ({
+        url: `/admin/workforce/client-requests/${id}/send-to-vendor`,
+        method: 'POST',
+        body: { vendorId },
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: ['AdminClientRequests', 'AdminRequests', 'Requests'],
+    }),
+    getAdminIndividualBookings: build.query({
+      query: (params) => ({ url: '/admin/workforce/individual-bookings', params }),
+      transformResponse: unwrap,
+      providesTags: ['AdminIndividualBookings'],
+    }),
+    getIndividualBookingWorkers: build.query({
+      query: ({ id, ...params }) => ({ url: `/admin/workforce/individual-bookings/${id}/workers`, params }),
+      transformResponse: unwrap,
+      providesTags: ['AdminIndividualBookings'],
+    }),
+    assignIndividualBookingWorkers: build.mutation({
+      query: ({ id, labourIds }) => ({
+        url: `/admin/workforce/individual-bookings/${id}/assign`,
+        method: 'POST',
+        body: { labourIds },
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: ['AdminIndividualBookings', 'AdminRequests'],
+    }),
+    withdrawIndividualBookingOffer: build.mutation({
+      query: (assignmentId) => ({
+        url: `/admin/workforce/individual-bookings/assignments/${assignmentId}/withdraw`,
+        method: 'POST',
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: ['AdminIndividualBookings'],
+    }),
     patchRequestStatus: build.mutation({
       query: ({ id, ...body }) => ({
         url: `/admin/workforce/requests/${id}/status`,
@@ -443,6 +493,20 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       providesTags: (r, e, jobId) => [{ type: 'Quotation', id: jobId }],
     }),
+    getAdminQuotation: build.query({
+      query: (requestId) => `/admin/workforce/requests/${requestId}/quotation`,
+      transformResponse: unwrap,
+      providesTags: (r, e, requestId) => [{ type: 'Quotation', id: requestId }],
+    }),
+    submitAdminQuotation: build.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/admin/workforce/requests/${id}/quotation`,
+        method: 'POST',
+        body,
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: (r, e, { id }) => [{ type: 'Quotation', id: id }, 'Requests', 'AdminDashboard'],
+    }),
     submitQuotation: build.mutation({
       query: ({ id, ...body }) => ({
         url: `/vendor/jobs/${id}/quotation`,
@@ -462,7 +526,7 @@ export const workforceApi = baseApi.injectEndpoints({
       invalidatesTags: (r, e, { id }) => [{ type: 'Quotation', id: id }, 'Requests', 'VendorJobs'],
     }),
     getAdminDashboardStats: build.query({
-      query: () => '/admin/dashboard/stats',
+      query: (params) => ({ url: '/admin/dashboard/stats', params }),
       transformResponse: unwrap,
       providesTags: ['AdminDashboard'],
       async onCacheEntryAdded(arg, { updateCachedData, cacheDataLoaded, cacheEntryRemoved, dispatch }) {
@@ -663,6 +727,8 @@ export const {
   useVerifyAttendanceMutation,
   useGetQuotationQuery,
   useGetVendorQuotationQuery,
+  useGetAdminQuotationQuery,
+  useSubmitAdminQuotationMutation,
   useSubmitQuotationMutation,
   useRespondToQuotationMutation,
   useGetAdminDashboardStatsQuery,
@@ -680,4 +746,11 @@ export const {
   useCloseTicketMutation,
   useGetSettingsQuery,
   useUpdateSettingsMutation,
+  useGetAdminClientRequestsQuery,
+  useAcceptClientRequestMutation,
+  useSendToVendorClientRequestMutation,
+  useGetAdminIndividualBookingsQuery,
+  useGetIndividualBookingWorkersQuery,
+  useAssignIndividualBookingWorkersMutation,
+  useWithdrawIndividualBookingOfferMutation,
 } = workforceApi

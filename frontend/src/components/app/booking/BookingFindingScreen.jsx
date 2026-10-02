@@ -4,13 +4,14 @@ import { Loader2, MapPin, Radio, Sparkles } from 'lucide-react'
 import { AppButton } from '../../app-ui/buttons/AppButton.jsx'
 
 const MESSAGES = [
-  'Request sent to nearby workers…',
-  'Checking availability in your area…',
-  'Matching skills to your job…',
-  'Almost there — confirming response…',
+  'Booking received by our team…',
+  'Selecting the right worker for your job…',
+  'Checking worker availability in your area…',
+  'You will be notified as soon as a worker accepts…',
 ]
 
-export function BookingFindingScreen({ categoryLabel, onComplete, onNoMatch, onCancel, cancelling = false }) {
+// No client-side timeout: individual bookings wait in the admin queue until a worker is assigned.
+export function BookingFindingScreen({ categoryLabel, onCancel, cancelling = false }) {
   const reduce = useReducedMotion()
   const [msgIndex, setMsgIndex] = useState(0)
   const [progress, setProgress] = useState(0)
@@ -23,16 +24,11 @@ export function BookingFindingScreen({ categoryLabel, onComplete, onNoMatch, onC
       setProgress((p) => (p >= 100 ? 0 : p + 4))
     }, 180)
 
-    const timeoutTimer = window.setTimeout(() => {
-      if (onNoMatch) onNoMatch()
-    }, 3 * 60 * 1000)
-
     return () => {
       window.clearInterval(msgTimer)
       window.clearInterval(progTimer)
-      window.clearTimeout(timeoutTimer)
     }
-  }, [onNoMatch])
+  }, [])
 
   return (
     <motion.div
@@ -68,7 +64,7 @@ export function BookingFindingScreen({ categoryLabel, onComplete, onNoMatch, onC
         </motion.span>
       </motion.div>
 
-      <h2 className="mt-8 text-xl font-black tracking-tight text-slate-900">Finding available labour near you</h2>
+      <h2 className="mt-8 text-xl font-black tracking-tight text-slate-900">Assigning a worker for you</h2>
       {categoryLabel ? (
         <p className="mt-1 text-sm font-semibold text-brand">{categoryLabel}</p>
       ) : null}
@@ -89,7 +85,7 @@ export function BookingFindingScreen({ categoryLabel, onComplete, onNoMatch, onC
             transition={{ duration: 0.2 }}
           />
         </motion.div>
-        <p className="mt-2 text-[11px] font-semibold text-slate-500">Est. response · 2–5 min</p>
+        <p className="mt-2 text-[11px] font-semibold text-slate-500">Our team is assigning the best worker nearby</p>
       </motion.div>
 
       <div className="mt-8 flex flex-wrap justify-center gap-2">

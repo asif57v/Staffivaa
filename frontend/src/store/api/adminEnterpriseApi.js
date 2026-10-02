@@ -27,6 +27,62 @@ export const adminEnterpriseApi = baseApi.injectEndpoints({
       invalidatesTags: ['AdminEnterpriseJob'],
     }),
 
+    // ── Daily/Hourly Requests routed to Admin ────────────────────────────────
+    getAdminEnterpriseDirectRequests: builder.query({
+      query: (params) => ({ url: '/admin/enterprise/direct-requests', params }),
+      providesTags: ['AdminEnterpriseDirectRequests'],
+    }),
+    respondAdminEnterpriseDirectRequest: builder.mutation({
+      query: ({ id, action, note }) => ({
+        url: `/admin/enterprise/direct-requests/${id}/respond`,
+        method: 'PATCH',
+        body: { action, note },
+      }),
+      invalidatesTags: ['AdminEnterpriseDirectRequests', 'AdminEnterpriseJob', 'EnterpriseJobs'],
+    }),
+    getDirectRequestMatchingWorkers: builder.query({
+      query: ({ id, search, showAll }) => ({
+        url: `/admin/enterprise/direct-requests/${id}/matching-workers`,
+        params: { search: search || undefined, showAll: showAll ? 'true' : undefined },
+      }),
+      providesTags: ['AdminEnterpriseDirectRequests'],
+    }),
+    assignDirectRequestWorkers: builder.mutation({
+      query: ({ id, workerIds, externalWorkers }) => ({
+        url: `/admin/enterprise/direct-requests/${id}/assign-workers`,
+        method: 'POST',
+        body: { workerIds, externalWorkers },
+      }),
+      invalidatesTags: ['AdminEnterpriseDirectRequests', 'EnterpriseJobs'],
+    }),
+    removeDirectRequestWorker: builder.mutation({
+      query: ({ id, entryId }) => ({
+        url: `/admin/enterprise/direct-requests/${id}/assigned-workers/${entryId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['AdminEnterpriseDirectRequests', 'EnterpriseJobs'],
+    }),
+    sendDirectRequestReminder: builder.mutation({
+      query: ({ id, hoursBefore, note }) => ({
+        url: `/admin/enterprise/direct-requests/${id}/send-reminder`,
+        method: 'POST',
+        body: { hoursBefore, note },
+      }),
+      invalidatesTags: ['AdminEnterpriseDirectRequests'],
+    }),
+    payoutDirectRequestWorker: builder.mutation({
+      query: ({ id, entryId, ...body }) => ({
+        url: `/admin/enterprise/direct-requests/${id}/assigned-workers/${entryId}/payout`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['AdminEnterpriseDirectRequests', 'EnterpriseJobs'],
+    }),
+    getAdminDirectPayments: builder.query({
+      query: (params) => ({ url: '/admin/enterprise/direct-payments', params }),
+      providesTags: ['DirectPayments'],
+    }),
+
     // ── Admin Joining Payments & Escrow Management ───────────────────────────
     getAdminJoiningPayments: builder.query({
       query: (params) => ({ url: '/admin/enterprise/joining-payments', params }),
@@ -141,6 +197,14 @@ export const {
   useUpdateAdminEnterpriseCompanyStatusMutation,
   useGetAdminEnterpriseJobsQuery,
   useUpdateAdminEnterpriseJobStatusMutation,
+  useGetAdminEnterpriseDirectRequestsQuery,
+  useRespondAdminEnterpriseDirectRequestMutation,
+  useGetDirectRequestMatchingWorkersQuery,
+  useAssignDirectRequestWorkersMutation,
+  useRemoveDirectRequestWorkerMutation,
+  useSendDirectRequestReminderMutation,
+  usePayoutDirectRequestWorkerMutation,
+  useGetAdminDirectPaymentsQuery,
   useGetAdminJoiningPaymentsQuery,
   useVerifyApproveJoiningMutation,
   useRefundJoiningPaymentMutation,

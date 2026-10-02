@@ -18,7 +18,7 @@ const workforceRequestSchema = new mongoose.Schema(
   {
     reference: { type: String, unique: true, index: true },
     sourceType: {
-      type: String,
+      type: String, 
       enum: Object.values(REQUEST_SOURCE),
       required: true,
       index: true,
@@ -96,6 +96,11 @@ const workforceRequestSchema = new mongoose.Schema(
       index: true,
     },
     bookingType: { type: String, trim: true },
+    // 'admin' = individual booking waits in the admin queue and is offered to workers only when admin assigns.
+    // 'auto' = legacy broadcast to all matching nearby workers.
+    dispatchMode: { type: String, enum: ['auto', 'admin'], default: 'auto', index: true },
+    adminDispatchedAt: Date,
+    adminDispatchedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     advancePaymentStatus: {
       type: String,
       enum: ['pending', 'paid', 'failed'],
@@ -124,6 +129,8 @@ const workforceRequestSchema = new mongoose.Schema(
     vendorPlatformFeePaidAt: Date,
     corporatePlatformFeePaidAt: Date,
     quotationUnlocked: { type: Boolean, default: false },
+    acceptedByAdmin: { type: Boolean, default: false },
+    isDirectAdminAccept: { type: Boolean, default: false },
 
     // Revenue Configuration Snapshot (Phase 1)
     revenueModel: { type: String, enum: ['platform_fee_only', 'platform_fee_plus_commission'], default: 'platform_fee_plus_commission' },

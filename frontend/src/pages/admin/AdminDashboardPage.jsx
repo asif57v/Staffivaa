@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, useReducedMotion } from 'framer-motion'
 import {
@@ -27,12 +28,40 @@ import {
 export function AdminDashboardPage() {
   const reduce = useReducedMotion()
 
+  const [filterMode, setFilterMode] = useState('all')
+  const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().slice(0, 7))
+  const [filterDate, setFilterDate] = useState(() => new Date().toISOString().slice(0, 10))
+
+  const { range, periodLabel } = useMemo(() => {
+    if (filterMode === 'month' && filterMonth) {
+      const [y, m] = filterMonth.split('-').map(Number)
+      return {
+        range: {
+          from: new Date(y, m - 1, 1).toISOString(),
+          to: new Date(y, m, 0, 23, 59, 59, 999).toISOString(),
+        },
+        periodLabel: new Date(y, m - 1, 1).toLocaleString('en-IN', { month: 'short', year: 'numeric' }),
+      }
+    }
+    if (filterMode === 'date' && filterDate) {
+      const [y, m, d] = filterDate.split('-').map(Number)
+      return {
+        range: {
+          from: new Date(y, m - 1, d).toISOString(),
+          to: new Date(y, m - 1, d, 23, 59, 59, 999).toISOString(),
+        },
+        periodLabel: new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+      }
+    }
+    return { range: undefined, periodLabel: 'All time' }
+  }, [filterMode, filterMonth, filterDate])
+
   const {
     data: stats,
     isLoading: statsLoading,
     isError: statsError,
     refetch: refetchStats
-  } = useGetAdminDashboardStatsQuery()
+  } = useGetAdminDashboardStatsQuery(range)
 
   const {
     data: analytics,
@@ -88,7 +117,7 @@ export function AdminDashboardPage() {
   }
 
   const cards = [
-    { label: 'Monthly Revenue', value: `₹${stats.monthlyRevenue.toLocaleString()}`, hint: 'Wallet Credits', icon: BadgeIndianRupee, tone: 'from-brand/20 to-emerald-50', to: '/admin/wallet' },
+    { label: 'Revenue', value: `₹${(stats.periodRevenue ?? 0).toLocaleString()}`, hint: `Wallet Credits · ${periodLabel}`, icon: BadgeIndianRupee, tone: 'from-brand/20 to-emerald-50', to: '/admin/wallet' },
     { label: 'Active Workforce', value: stats.activeWorkforce, hint: 'Workers on-site', icon: HardHat, tone: 'from-sky-500/15 to-slate-50', to: '/admin/allocations' },
     { label: 'Pending KYC Review', value: stats.pendingKyc, hint: 'KYC Action required', icon: Shield, tone: 'from-violet-500/15 to-slate-50', to: '/admin/labour' },
     { label: 'Daily Revenue', value: `₹${stats.dailyRevenue.toLocaleString()}`, hint: "Today's payments", icon: Activity, tone: 'from-amber-500/15 to-amber-50/50', to: '/admin/wallet' },
@@ -105,7 +134,41 @@ export function AdminDashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
       >
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 md:text-3xl">Control centre</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 md:text-3xl">Control centre</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-xl bg-white p-1 ring-1 ring-slate-200 shadow-sm">
+              {[['all', 'All'], ['month', 'Month'], ['date', 'Date']].map(([key, text]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setFilterMode(key)}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                    filterMode === key ? 'bg-brand text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
+            {filterMode === 'month' && (
+              <input
+                type="month"
+                value={filterMonth}
+                onChange={(e) => setFilterMonth(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm"
+              />
+            )}
+            {filterMode === 'date' && (
+              <input
+                type="date"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm"
+              />
+            )}
+          </div>
+        </div>
       </motion.div>
 
       <div className="grid gap-6 grid-cols-4 w-full">
