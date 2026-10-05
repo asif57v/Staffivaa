@@ -35,37 +35,15 @@ export const VENDOR_KYC_SLOTS = [
   },
 ]
 
+// Corporate KYC is a single Aadhaar card photo. The slot id stays `aadhaar_front` so it keeps
+// mapping to `kycFrontImageUrl` and existing uploads / saved drafts still load.
 export const CORPORATE_KYC_SLOTS = [
   {
     id: 'aadhaar_front',
-    label: 'Authorized Signatory Aadhaar (Front)',
-    desc: 'Front side with photo and full name of Signatory / Director',
+    label: 'Authorized Signatory Aadhaar Card',
+    desc: 'Clear photo of the Aadhaar card of the Signatory / Director',
     required: true,
     aspectRatio: 1.586,
-    cropShape: 'rect',
-  },
-  {
-    id: 'aadhaar_back',
-    label: 'Authorized Signatory Aadhaar (Back)',
-    desc: 'Back side with address of Authorized Signatory',
-    required: true,
-    aspectRatio: 1.586,
-    cropShape: 'rect',
-  },
-  {
-    id: 'pan',
-    label: 'Company / Corporate PAN Card',
-    desc: 'Clear photo of Company / Firm PAN card or certificate',
-    required: true,
-    aspectRatio: 1.586,
-    cropShape: 'rect',
-  },
-  {
-    id: 'selfie',
-    label: 'Authorized Person Live Photo / Selfie',
-    desc: 'Live face photo / selfie of representative (optional)',
-    required: false,
-    aspectRatio: 1.0,
     cropShape: 'rect',
   },
 ]
@@ -106,7 +84,7 @@ export function BusinessKycPhotoUploadGrid({
         </div>
       </div>
 
-      <div className="grid gap-3.5 sm:grid-cols-2">
+      <div className={`grid gap-3.5 ${slots.length > 1 ? 'sm:grid-cols-2' : ''}`}>
         {slots.map((slot) => {
           const slotValue = photos[slot.id]
           const slotError = errors[slot.id]

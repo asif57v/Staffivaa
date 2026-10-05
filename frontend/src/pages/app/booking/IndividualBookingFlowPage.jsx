@@ -53,7 +53,7 @@ import {
   writeBookingDraft,
 } from '../../../lib/individualBookingDraft.js'
 import { readAppUserLocation, writeAppUserLocation } from '../../../lib/appUserLocationStorage.js'
-import { useCreateRequestMutation, useCancelWorkforceRequestMutation, useGetPublicSystemPricingQuery } from '../../../store/api/workforceApi.js'
+import { useCreateRequestMutation, useCancelWorkforceRequestMutation, useRetryIndividualSearchMutation, useGetPublicSystemPricingQuery } from '../../../store/api/workforceApi.js'
 import { store } from '../../../store/index.js'
 import {
   APP_HOME_LOCATION,
@@ -111,6 +111,7 @@ export function IndividualBookingFlowPage() {
   const navigate = useNavigate()
   const [createRequest] = useCreateRequestMutation()
   const [cancelRequest, { isLoading: cancellingBooking }] = useCancelWorkforceRequestMutation()
+  const [retrySearch, { isLoading: retryingSearch }] = useRetryIndividualSearchMutation()
   const { data: pricingData } = useGetPublicSystemPricingQuery()
   const location = useLocation()
   const reduce = useReducedMotion()
@@ -125,6 +126,9 @@ export function IndividualBookingFlowPage() {
   const [typeSheetOpen, setTypeSheetOpen] = useState(false)
   const [activeBooking, setActiveBooking] = useState(null)
   const [noMatch, setNoMatch] = useState(false)
+  // Server-side search window ran out (cancelReason search_expired); customer can retry the same booking.
+  const [searchExpired, setSearchExpired] = useState(false)
+  const [searchAttempt, setSearchAttempt] = useState(0)
   const [imageFiles, setImageFiles] = useState([])
   const [isLocating, setIsLocating] = useState(false)
   const [autocomplete, setAutocomplete] = useState(null)
@@ -265,6 +269,13 @@ export function IndividualBookingFlowPage() {
       )
     }
 
+    // Search window ran out on the server: keep the booking locally so the customer can "Try again".
+    const handleSearchExpired = () => {
+      if (cancelled || stopPolling) return
+      stopPolling = true
+      setSearchExpired(true)
+    }
+
     const pollSpecificRequest = async (id) => {
       if (cancelled || stopPolling || !id) return
       try {
@@ -289,6 +300,10 @@ export function IndividualBookingFlowPage() {
         const json = await res.json()
         const { request, assignments } = json?.data || json || {}
 
+        if (request?.status === 'cancelled' && request?.cancelReason === 'search_expired') {
+          handleSearchExpired()
+          return
+        }
         if (request?.status === 'cancelled' || request?.status === 'timed_out' || request?.status === 'expired' || request?.status === 'failed') {
           console.log('[Homeowner] Request status is cancelled/expired:', request?.status)
           handleCancellationOrTimeout()
@@ -336,6 +351,10 @@ export function IndividualBookingFlowPage() {
         if (!requestId) return
 
         const activeReq = requests.find(r => String(r._id) === String(requestId))
+        if (activeReq?.status === 'cancelled' && activeReq?.cancelReason === 'search_expired') {
+          handleSearchExpired()
+          return
+        }
         if (!activeReq || activeReq.status === 'cancelled' || activeReq.status === 'timed_out' || activeReq.status === 'expired') {
           console.log('[Homeowner] Active request not found or cancelled in pollAllRequests')
           handleCancellationOrTimeout()
@@ -471,6 +490,10 @@ export function IndividualBookingFlowPage() {
 
       socket.on('bookingExpired', (data) => {
         console.log('[Homeowner] bookingExpired socket event received:', data)
+        if (data?.reason === 'search_expired') {
+          if (!data?.requestId || !requestId || String(data.requestId) === String(requestId)) handleSearchExpired()
+          return
+        }
         handleCancellationOrTimeout()
       })
 
@@ -508,7 +531,7 @@ export function IndividualBookingFlowPage() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: avoid re-poll loop on activeBooking object identity
-  }, [step, activeBooking?.requestId, activeBooking?.status, activeBooking?.ref, activeBooking?.id, goStep, leaveFlow])
+  }, [step, activeBooking?.requestId, activeBooking?.status, activeBooking?.ref, activeBooking?.id, goStep, leaveFlow, searchAttempt])
 
   useEffect(() => {
     if (!refParam || activeBooking) return
@@ -693,14 +716,27 @@ export function IndividualBookingFlowPage() {
       record.etaMinutes = null
 
       let apiRequestId = null
+      const isScheduled = draft.bookingType === 'scheduled'
+      const startDate = isScheduled && draft.serviceDate ? draft.serviceDate : todayISODate()
+      const durationDays = durationKindToDays(draft.durationKind, draft.durationDays)
+      let endDate
+      if (durationDays > 1) {
+        const [y, m, d] = startDate.split('-').map(Number)
+        const end = new Date(Date.UTC(y, m - 1, d + durationDays - 1))
+        endDate = end.toISOString().slice(0, 10)
+      }
+      const [slotStart, slotEnd] = isScheduled && draft.timeSlot ? draft.timeSlot.split('–').map((s) => s.trim()) : []
       const res = await createRequest({
         lines: [{ categoryId: draft.categoryId, quantity: draft.workers || 1 }],
-        startDate: draft.bookingType === 'scheduled' && draft.serviceDate ? draft.serviceDate : new Date().toISOString().slice(0, 10),
+        startDate,
+        ...(endDate ? { endDate } : {}),
+        ...(slotStart ? { shiftStart: slotStart, shiftEnd: slotEnd } : {}),
         locationText: draft.address.trim(),
         locationLat: draft.lat,
         locationLng: draft.lng,
         notes: payload.notes,
         bookingType: draft.bookingType,
+        durationKind: draft.durationKind || 'few_hours',
         scheduleType: 'daily',
       }).unwrap()
       console.log('[Homeowner] createRequest response:', res)
@@ -721,6 +757,7 @@ export function IndividualBookingFlowPage() {
 
       console.log('[Homeowner] Setting activeBooking with requestId:', record.requestId, 'record:', record)
       setActiveBooking(record)
+      setSearchExpired(false)
       patchBookingDraft({ lastRef: record.ref })
 
       navigate(buildBookingFlowPath('searching', {
@@ -768,6 +805,24 @@ export function IndividualBookingFlowPage() {
     leaveFlow()
   }, [activeBooking, cancelRequest, leaveFlow, refParam])
 
+  /** Reopens (or extends) the booking's search window on the server. Returns false if it could not. */
+  const handleRetrySearch = useCallback(async () => {
+    const booking = activeBooking || findBookingByRef(loadIndividualBookings(), refParam)
+    const requestId = booking?.requestId
+    if (requestId) {
+      try {
+        await retrySearch(requestId).unwrap()
+      } catch (err) {
+        console.error('[Homeowner] retry search failed:', err)
+        window.alert(err?.data?.message || 'Could not search again. Please try booking again.')
+        return false
+      }
+    }
+    setSearchExpired(false)
+    setSearchAttempt((n) => n + 1)
+    return true
+  }, [activeBooking, refParam, retrySearch])
+
   const handleFlowBack = useCallback(() => {
     if (step === 'review' || step === 'summary') {
       goStep('details')
@@ -792,6 +847,9 @@ export function IndividualBookingFlowPage() {
           categoryLabel={draft.categoryName}
           onCancel={handleCancelBooking}
           cancelling={cancellingBooking}
+          expired={searchExpired}
+          onRetry={handleRetrySearch}
+          retrying={retryingSearch}
         />
       </div>
     )

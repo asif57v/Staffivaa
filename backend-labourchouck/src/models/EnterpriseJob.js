@@ -95,11 +95,32 @@ const enterpriseJobSchema = new mongoose.Schema(
         phone: { type: String, trim: true },
         assignedAt: { type: Date, default: Date.now },
         assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        // Admin-set pay for this worker per salaryType unit (per day / per hour). This is what the worker sees
+        // and what gets credited on payout; the rest of the enterprise rate is Staffivaa's margin.
+        // Missing on older assignments → falls back to the enterprise rate (job.salary).
+        payRate: { type: Number, min: 0 },
+        // In-app check-in OTP: enterprise generates it, only this worker can verify it from their app.
+        checkInOtp: {
+          code: { type: String },
+          dateKey: { type: String }, // YYYY-MM-DD (IST) the OTP is for
+          generatedAt: { type: Date },
+          expiresAt: { type: Date },
+          attempts: { type: Number, default: 0 },
+        },
+        checkIns: [
+          {
+            dateKey: { type: String, required: true },
+            verifiedAt: { type: Date, default: Date.now },
+          },
+        ],
         // Per-period payout records (one per periodKey) so the books stay clear
         payouts: [
           {
             periodKey: { type: String, required: true },
-            amount: { type: Number, required: true },
+            amount: { type: Number, required: true }, // what the worker received (payRate × units)
+            grossAmount: { type: Number }, // per-worker amount the enterprise paid for this period
+            commissionPercent: { type: Number, default: 0 }, // Staffivaa margin as % of grossAmount
+            commissionAmount: { type: Number, default: 0 }, // Staffivaa margin (grossAmount − amount)
             mode: { type: String, enum: ['wallet', 'cash', 'upi', 'bank', 'other'], required: true },
             note: { type: String, trim: true },
             paidAt: { type: Date, default: Date.now },

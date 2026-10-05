@@ -8,6 +8,7 @@ import { USER_ROLES, ENTERPRISE_STATUS } from '../constants/roles.js'
 import { logAudit } from '../utils/auditLogger.js'
 import { emitToRole, emitToUser } from '../utils/socket.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
+import { parseWorkerPayRate } from './enterpriseDirectPaymentController.js'
 
 /** GET /api/admin/enterprise/companies */
 export const getEnterpriseCompanies = asyncHandler(async (req, res) => {
@@ -301,6 +302,10 @@ export const assignDirectRequestWorkers = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'Accept the request before assigning workers', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
 
+  // Pay the admin sets for these workers (shown to them; credited on payout). Defaults to the enterprise rate.
+  const { payRate, error: payError } = parseWorkerPayRate(job, req.body.payRate)
+  if (payError) return sendError(res, { message: payError, statusCode: HTTP_STATUS.BAD_REQUEST })
+
   const alreadyIds = new Set(job.assignedWorkers.filter((w) => w.workerId).map((w) => String(w.workerId)))
   const alreadyPhones = new Set(job.assignedWorkers.map((w) => w.phone).filter(Boolean))
 
@@ -329,8 +334,15 @@ export const assignDirectRequestWorkers = asyncHandler(async (req, res) => {
   }
 
   const newEntries = [
-    ...registered.map((u) => ({ workerId: u._id, isExternal: false, name: u.fullName, phone: u.phone, assignedBy: req.user._id })),
-    ...external.map((e) => ({ ...e, isExternal: true, assignedBy: req.user._id })),
+    ...registered.map((u) => ({
+      workerId: u._id,
+      isExternal: false,
+      name: u.fullName,
+      phone: u.phone,
+      payRate,
+      assignedBy: req.user._id,
+    })),
+    ...external.map((e) => ({ ...e, isExternal: true, payRate, assignedBy: req.user._id })),
   ]
 
   if (newEntries.length === 0) {
@@ -364,7 +376,7 @@ export const assignDirectRequestWorkers = asyncHandler(async (req, res) => {
     triggerNotification({
       userId: u._id,
       title: 'New Work Assignment 🏗️',
-      body: `You have been assigned to "${job.jobTitle}" at ${job.locationText}. Joining: ${joiningStr}.`,
+      body: `You have been assigned to "${job.jobTitle}" at ${job.locationText}. Joining: ${joiningStr}. Pay: ₹${payRate.toLocaleString('en-IN')} / ${job.salaryType === 'hourly' ? 'hour' : 'day'}.`,
       type: 'ENTERPRISE_DIRECT_ASSIGNMENT',
       relatedId: job._id,
       relatedModel: 'EnterpriseJob',
@@ -377,7 +389,7 @@ export const assignDirectRequestWorkers = asyncHandler(async (req, res) => {
     adminId: req.user._id,
     action: 'Assigned Workers to Enterprise Daily/Hourly Request',
     module: 'Enterprise Admin',
-    details: { jobId: job._id, workers: newEntries.map((e) => ({ name: e.name, phone: e.phone, isExternal: e.isExternal })) },
+    details: { jobId: job._id, payRate, workers: newEntries.map((e) => ({ name: e.name, phone: e.phone, isExternal: e.isExternal })) },
     req,
   })
 
@@ -411,4 +423,52 @@ export const removeDirectRequestWorker = asyncHandler(async (req, res) => {
   })
 
   return sendSuccess(res, { message: `${removedName} removed`, data: job })
+})
+
+/**
+ * PATCH /api/admin/enterprise/direct-requests/:id/assigned-workers/:entryId  { payRate }
+ * Change an assigned worker's pay. Applies to future payouts only — already-paid days keep their amounts.
+ */
+export const updateDirectRequestWorkerPay = asyncHandler(async (req, res) => {
+  const job = await EnterpriseJob.findOne({ _id: req.params.id, dispatchMode: 'admin' })
+  if (!job) {
+    return sendError(res, { message: 'Request not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+  const entry = job.assignedWorkers.id(req.params.entryId)
+  if (!entry) {
+    return sendError(res, { message: 'Assigned worker not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  const { payRate, error } = parseWorkerPayRate(job, req.body?.payRate)
+  if (error) return sendError(res, { message: error, statusCode: HTTP_STATUS.BAD_REQUEST })
+
+  const previous = Number(entry.payRate) > 0 ? Number(entry.payRate) : Number(job.salary)
+  entry.payRate = payRate
+  await job.save()
+  await job.populate('assignedWorkers.workerId', ASSIGNED_WORKER_SELECT)
+
+  const unit = job.salaryType === 'hourly' ? 'hour' : 'day'
+  if (entry.workerId && !entry.isExternal && previous !== payRate) {
+    const workerId = String(entry.workerId._id || entry.workerId)
+    triggerNotification({
+      userId: workerId,
+      title: 'Your pay was updated 💼',
+      body: `Pay for "${job.jobTitle}" is now ₹${payRate.toLocaleString('en-IN')} / ${unit}.`,
+      type: 'ENTERPRISE_DIRECT_PAY_UPDATED',
+      relatedId: job._id,
+      relatedModel: 'EnterpriseJob',
+      url: '/app/enterprise-jobs',
+    }).catch((err) => console.error('[Notification Error]:', err.message))
+    emitToUser('labour', workerId, 'enterprise_direct_assignment_updated', { type: 'pay_updated', jobId: job._id })
+  }
+
+  await logAudit({
+    adminId: req.user._id,
+    action: 'Updated Worker Pay (Enterprise Daily/Hourly Request)',
+    module: 'Enterprise Admin',
+    details: { jobId: job._id, worker: entry.name, previous, payRate },
+    req,
+  })
+
+  return sendSuccess(res, { message: `${entry.name || 'Worker'}'s pay set to ₹${payRate} / ${unit}`, data: job })
 })

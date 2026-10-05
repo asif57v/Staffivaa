@@ -56,13 +56,22 @@ export function isPanStrictlyValid(pan) {
   return PAN_RE.test(normalizePanValue(pan))
 }
 
+/** The single Aadhaar card photo (kept under the `aadhaar_front` slot / `kycFrontImageUrl`). */
+function hasAadhaarPhoto(profile = {}) {
+  if (String(profile.kycFrontImageUrl || '').trim()) return true
+  const photos = Array.isArray(profile.kycPhotos) ? profile.kycPhotos : []
+  if (photos.some((p) => p?.url && p.type === CORPORATE_DOCUMENT_TYPES.AADHAAR_FRONT)) return true
+  const docs = Array.isArray(profile.documents) ? profile.documents : []
+  return docs.some(
+    (d) =>
+      d?.url &&
+      [CORPORATE_DOCUMENT_TYPES.AADHAAR_FRONT, CORPORATE_DOCUMENT_TYPES.AUTHORIZED_SIGNATORY_ID].includes(d.documentType),
+  )
+}
+
 export function getCorporateVerificationChecklist(profile = {}) {
   const gst = String(profile.gstNumber || '').trim().toUpperCase()
   const hasGst = gst.length > 0
-  const docCount =
-    (Array.isArray(profile.documents) ? profile.documents.length : 0) +
-    (Array.isArray(profile.kycPhotos) ? profile.kycPhotos.length : 0) +
-    (profile.kycFrontImageUrl || profile.kycBackImageUrl || profile.kycPanImageUrl || profile.kycSelfieUrl ? 1 : 0)
 
   return [
     {
@@ -102,19 +111,18 @@ export function getCorporateVerificationChecklist(profile = {}) {
     },
     {
       id: 'pan_number',
-      label: 'Company PAN (10 characters)',
-      done: isPanFieldComplete(profile.panNumber),
-      required: true,
-      section: 'form',
-      hint: 'Format: ABCDE1234F',
-    },
-    {
-      id: 'doc_any',
-      label: 'Additional business certificates / documents (Optional)',
-      done: docCount > 0,
+      label: 'Company PAN',
+      done: !normalizePanValue(profile.panNumber) || isPanFieldComplete(profile.panNumber),
       required: false,
       section: 'optional',
-      hint: 'GST certificate, certificate of incorporation, trade license, etc.',
+      hint: 'Enter a valid 10-character PAN (ABCDE1234F) or clear the field',
+    },
+    {
+      id: 'aadhaar_photo',
+      label: 'Authorized signatory Aadhaar card photo',
+      done: hasAadhaarPhoto(profile),
+      required: true,
+      section: 'kyc',
     },
     {
       id: 'gst_number',
@@ -133,7 +141,7 @@ export function getCorporateVerificationChecklist(profile = {}) {
     },
     {
       id: 'contact_details',
-      label: 'Contact person & billing email',
+      label: 'Contact person',
       done: true,
       required: false,
       section: 'optional',
@@ -171,6 +179,13 @@ export function validateCorporateProfileForSubmit(profile = {}) {
         ok: false,
         checklist: progress.checklist,
         message: 'GSTIN must be exactly 15 characters — fix it or clear the GST field',
+      }
+    }
+    if (normalizePanValue(profile.panNumber) && !isPanFieldComplete(profile.panNumber)) {
+      return {
+        ok: false,
+        checklist: progress.checklist,
+        message: 'Company PAN must be exactly 10 characters — fix it or clear the PAN field',
       }
     }
     return { ok: true, checklist: progress.checklist }

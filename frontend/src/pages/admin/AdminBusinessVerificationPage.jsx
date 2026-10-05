@@ -72,21 +72,35 @@ function getAdminKycDocumentSlots(profile, user = null, variant = 'contractor') 
     return ''
   }
 
-  const frontUrl = findUrl('aadhaar_front', ['kycFrontImageUrl', 'frontImageUrl'], ['front', 'aadhaar front', 'aadhar front', 'signatory id', 'proprietor id'])
-  const backUrl = findUrl('aadhaar_back', ['kycBackImageUrl', 'backImageUrl'], ['back', 'aadhaar back', 'aadhar back'])
-  const panUrl = findUrl('pan', ['kycPanImageUrl', 'panImageUrl'], ['pan', 'pancard', 'pan card'])
-  const selfieUrl = findUrl('selfie', ['kycSelfieUrl', 'selfieUrl'], ['selfie', 'face', 'photo', 'proprietor selfie', 'representative selfie', 'signatory photo'])
+  const frontUrl = findUrl('aadhaar_front', ['kycFrontImageUrl', 'frontImageUrl'], ['front', 'aadhaar front', 'aadhar front', 'aadhaar card', 'signatory id', 'proprietor id'])
 
-  const isCorp = variant === 'corporate'
+  // Corporate KYC is a single Aadhaar card photo; older back / PAN / selfie uploads fall through to the extras below.
+  const slots =
+    variant === 'corporate'
+      ? [{ id: 'aadhaar_front', label: 'Signatory Aadhaar Card', url: frontUrl, isRequired: true }]
+      : [
+          { id: 'aadhaar_front', label: 'Aadhaar Card (Front)', url: frontUrl, isRequired: true },
+          {
+            id: 'aadhaar_back',
+            label: 'Aadhaar Card (Back)',
+            url: findUrl('aadhaar_back', ['kycBackImageUrl', 'backImageUrl'], ['back', 'aadhaar back', 'aadhar back']),
+            isRequired: true,
+          },
+          {
+            id: 'pan',
+            label: 'Business PAN Card',
+            url: findUrl('pan', ['kycPanImageUrl', 'panImageUrl'], ['pan', 'pancard', 'pan card']),
+            isRequired: true,
+          },
+          {
+            id: 'selfie',
+            label: 'Proprietor Live Photo',
+            url: findUrl('selfie', ['kycSelfieUrl', 'selfieUrl'], ['selfie', 'face', 'photo', 'proprietor selfie', 'representative selfie', 'signatory photo']),
+            isRequired: false,
+          },
+        ]
 
-  const slots = [
-    { id: 'aadhaar_front', label: isCorp ? 'Signatory Aadhaar (Front)' : 'Aadhaar Card (Front)', url: frontUrl, isRequired: true },
-    { id: 'aadhaar_back', label: isCorp ? 'Signatory Aadhaar (Back)' : 'Aadhaar Card (Back)', url: backUrl, isRequired: true },
-    { id: 'pan', label: isCorp ? 'Company PAN Card' : 'Business PAN Card', url: panUrl, isRequired: true },
-    { id: 'selfie', label: isCorp ? 'Signatory Live Photo' : 'Proprietor Live Photo', url: selfieUrl, isRequired: false },
-  ]
-
-  const primaryUrls = new Set([frontUrl, backUrl, panUrl, selfieUrl].filter(Boolean))
+  const primaryUrls = new Set(slots.map((s) => s.url).filter(Boolean))
   const extraPhotos = photos
     .filter((p) => p?.url && !primaryUrls.has(p.url))
     .map((p, i) => ({
@@ -875,10 +889,12 @@ export function AdminBusinessVerificationPage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                          {tab === 'corporate' ? 'Authorized Signatory & Company KYC' : 'Proprietor & Contractor KYC Photos'}
+                          {tab === 'corporate' ? 'Authorized Signatory KYC' : 'Proprietor & Contractor KYC Photos'}
                         </p>
                         <p className="text-xs text-slate-500 mt-0.5">
-                          Aadhaar (Front & Back), PAN Card, and Live Face Selfie
+                          {tab === 'corporate'
+                            ? 'Aadhaar Card photo'
+                            : 'Aadhaar (Front & Back), PAN Card, and Live Face Selfie'}
                         </p>
                       </div>
                       {(() => {
@@ -899,7 +915,7 @@ export function AdminBusinessVerificationPage() {
                     {(() => {
                       const kycSlots = getAdminKycDocumentSlots(p, detailUser, tab)
                       return (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className={`grid gap-3 ${tab === 'corporate' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
                           {kycSlots.map((slot) => (
                             <div
                               key={slot.id}
@@ -974,7 +990,8 @@ export function AdminBusinessVerificationPage() {
                     })()}
                   </div>
 
-                  {/* Documents Section */}
+                  {/* Documents Section — corporates no longer upload extra documents; only show older uploads */}
+                  {(tab !== 'corporate' || (p?.documents ?? []).length > 0) && (
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-400">Additional Business Certificates & Documents</p>
                     {(p?.documents ?? []).length === 0 ? (
@@ -1030,6 +1047,7 @@ export function AdminBusinessVerificationPage() {
                       </ul>
                     )}
                   </div>
+                  )}
 
                   {/* Audit Timeline */}
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

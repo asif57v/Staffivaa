@@ -89,6 +89,63 @@ export const enterpriseApi = baseApi.injectEndpoints({
       providesTags: ['LabourEmployment'],
     }),
 
+    getLabourDirectAssignments: builder.query({
+      query: () => '/enterprise/my-direct-assignments',
+      providesTags: ['LabourEmployment'],
+      // Refresh instantly when the enterprise generates a check-in OTP
+      async onCacheEntryAdded(_arg, { dispatch, cacheDataLoaded, cacheEntryRemoved }) {
+        const socket = getSocket()
+        if (!socket) return
+        try {
+          await cacheDataLoaded
+          const refresh = () => dispatch(enterpriseApi.util.invalidateTags(['LabourEmployment']))
+          socket.on('enterprise_direct_assignment_updated', refresh)
+          await cacheEntryRemoved
+          socket.off('enterprise_direct_assignment_updated', refresh)
+        } catch {
+          /* no-op */
+        }
+      },
+    }),
+    verifyEnterpriseCheckInOtp: builder.mutation({
+      query: ({ jobId, code }) => ({ url: `/enterprise/my-direct-assignments/${jobId}/verify-otp`, method: 'POST', body: { code } }),
+      invalidatesTags: ['LabourEmployment'],
+    }),
+    requestEnterpriseCheckIn: builder.mutation({
+      query: (jobId) => ({ url: `/enterprise/my-direct-assignments/${jobId}/request-checkin`, method: 'POST' }),
+      invalidatesTags: ['LabourEmployment'],
+    }),
+    startEnterpriseDirectWork: builder.mutation({
+      query: (jobId) => ({ url: `/enterprise/my-direct-assignments/${jobId}/start-work`, method: 'POST' }),
+      invalidatesTags: ['LabourEmployment'],
+    }),
+    endEnterpriseDirectWork: builder.mutation({
+      query: (jobId) => ({ url: `/enterprise/my-direct-assignments/${jobId}/end-work`, method: 'POST' }),
+      invalidatesTags: ['LabourEmployment'],
+    }),
+    verifyEnterpriseCheckoutOtp: builder.mutation({
+      query: ({ jobId, code }) => ({
+        url: `/enterprise/my-direct-assignments/${jobId}/verify-checkout-otp`,
+        method: 'POST',
+        body: { code },
+      }),
+      invalidatesTags: ['LabourEmployment'],
+    }),
+    regenerateEnterpriseCheckoutOtp: builder.mutation({
+      query: ({ jobId, entryId }) => ({
+        url: `/enterprise/jobs/${jobId}/assigned-workers/${entryId}/checkout-otp`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['EnterpriseJobs'],
+    }),
+    generateEnterpriseCheckInOtp: builder.mutation({
+      query: ({ jobId, entryId }) => ({
+        url: `/enterprise/jobs/${jobId}/assigned-workers/${entryId}/checkin-otp`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['EnterpriseJobs'],
+    }),
+
     getLabourEmploymentHistory: builder.query({
       query: () => '/enterprise/my-employment/history',
       providesTags: ['LabourEmployment', 'EnterprisePayrolls'],
@@ -304,6 +361,14 @@ export const {
   useGetMyEnterpriseApplicationsQuery,
   useRespondToOfferMutation,
   useGetLabourCurrentEmploymentQuery,
+  useGetLabourDirectAssignmentsQuery,
+  useVerifyEnterpriseCheckInOtpMutation,
+  useGenerateEnterpriseCheckInOtpMutation,
+  useRequestEnterpriseCheckInMutation,
+  useStartEnterpriseDirectWorkMutation,
+  useEndEnterpriseDirectWorkMutation,
+  useVerifyEnterpriseCheckoutOtpMutation,
+  useRegenerateEnterpriseCheckoutOtpMutation,
   useGetLabourEmploymentHistoryQuery,
   useConcludeEnterpriseJobMutation,
   useGetEnterpriseCompanyApplicationsQuery,

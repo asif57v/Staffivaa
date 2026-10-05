@@ -45,6 +45,15 @@ const attendanceRecordSchema = new mongoose.Schema(
     workingHoursStartedAt: Date,
     workingHoursEndedAt: Date,
     totalWorkingMinutes: { type: Number, default: 0 },
+    // 'enterprise_direct' = admin-assigned daily/hourly enterprise work (OTP check-in → start → end → OTP check-out)
+    source: { type: String, trim: true, index: true },
+    endRequestedAt: Date,
+    checkOutOtp: {
+      code: { type: String },
+      generatedAt: { type: Date },
+      expiresAt: { type: Date },
+      attempts: { type: Number, default: 0 },
+    },
     paymentStatus: {
       type: String,
       enum: ['pending', 'paid'],

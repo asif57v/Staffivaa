@@ -52,6 +52,9 @@ import {
 import { AppUserLocationModal } from '../../../components/app/AppUserLocationModal.jsx'
 import { LabourCheckOutConfirmModal } from '../../../components/labour/LabourCheckOutConfirmModal.jsx'
 import { useGetNotificationsQuery } from '../../../store/api/workforceApi.js'
+import { useGetPublicEnterpriseJobsQuery, useGetLabourDirectAssignmentsQuery } from '../../../store/api/enterpriseApi.js'
+import { DirectWorkDayPanel } from '../../../components/app/CheckInOtpBox.jsx'
+import { todayCheckInOf } from '../../../lib/checkInOtp.js'
 import {
   bucketsFromAssignments,
 } from '../../../lib/labourJobDemoStorage.js'
@@ -413,9 +416,32 @@ export function LabourHomeScreen({ user }) {
   const { data: notifRes } = useGetNotificationsQuery(undefined)
   const notifItems = notifRes?.notifications || notifRes?.data?.notifications || []
   const unreadCount = notifRes?.unreadCount ?? notifRes?.data?.unreadCount ?? 0
+  // Only count unread job alerts whose job is still open — alerts for closed/filled/deleted jobs
+  // would otherwise show "N New Enterprise Jobs" while the portal has none.
+  const { data: publicJobsRes } = useGetPublicEnterpriseJobsQuery()
+
+  // Enterprise generated a check-in OTP → ask for it right here on Home (socket refresh via enterpriseApi)
+  const { data: directAssignmentsRes } = useGetLabourDirectAssignmentsQuery(undefined, { pollingInterval: 60000 })
+  const pendingOtpJobs = useMemo(
+    () =>
+      (directAssignmentsRes?.data || []).filter(
+        (j) =>
+          (j.pendingCheckInOtp && !todayCheckInOf(j)) ||
+          (j.todayAttendance?.state === 'checkout_pending' && j.todayAttendance?.checkOutOtp),
+      ),
+    [directAssignmentsRes],
+  )
   const enterpriseJobAlertsCount = useMemo(() => {
-    return notifItems.filter(n => (n.type === 'ENTERPRISE_JOB_ALERT' || n.relatedModel === 'EnterpriseJob') && !n.isRead).length
-  }, [notifItems])
+    const openJobIds = new Set((publicJobsRes?.data || []).map((j) => String(j._id)))
+    if (!openJobIds.size) return 0
+    const alertedJobIds = new Set(
+      notifItems
+        .filter((n) => (n.type === 'ENTERPRISE_JOB_ALERT' || n.relatedModel === 'EnterpriseJob') && !n.isRead)
+        .map((n) => String(n.relatedId))
+        .filter((id) => openJobIds.has(id)),
+    )
+    return alertedJobIds.size
+  }, [notifItems, publicJobsRes])
   const notifications = useMemo(() => ({ unreadCount }), [unreadCount])
 
   const hasWorkLocation = useMemo(() => hasAppUserLocation(appLocation), [appLocation])
@@ -759,6 +785,24 @@ export function LabourHomeScreen({ user }) {
               </div>
             </div>
           </FadeInSection>
+        )}
+
+        {/* Enterprise check-in OTP waiting to be entered */}
+        {pendingOtpJobs.length > 0 && (
+          <section className="space-y-3" aria-label="Check-in OTP">
+            {pendingOtpJobs.map((job) => (
+              <div key={job._id} className="rounded-[1.25rem] border border-indigo-200 bg-white p-4 shadow-[0_8px_30px_rgb(79,70,229,0.12)]">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-500">
+                  {job.companyName} · {job.todayAttendance ? 'check-out' : 'check-in'}
+                </p>
+                <p className="mb-3 text-[15px] font-extrabold text-slate-900">{job.jobTitle}</p>
+                <DirectWorkDayPanel
+                  job={job}
+                  onCheckInVerified={(verified) => navigate(`/app/enterprise-jobs?job=${verified._id}`)}
+                />
+              </div>
+            ))}
+          </section>
         )}
 
         {/* 3. Today's job */}

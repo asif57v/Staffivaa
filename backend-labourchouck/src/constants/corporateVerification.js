@@ -15,8 +15,10 @@ export const CORPORATE_DOCUMENT_TYPES = {
 
 export const CORPORATE_DOCUMENT_TYPE_LIST = Object.values(CORPORATE_DOCUMENT_TYPES)
 
+/** Corporate KYC takes a single Aadhaar card photo (stored as `aadhaar_front` / `kycFrontImageUrl`).
+ *  Back / PAN / selfie types stay listed only so older uploads still resolve a label. */
 export const CORPORATE_DOCUMENT_LABELS = {
-  [CORPORATE_DOCUMENT_TYPES.AADHAAR_FRONT]: 'Authorized Signatory Aadhaar (Front)',
+  [CORPORATE_DOCUMENT_TYPES.AADHAAR_FRONT]: 'Authorized Signatory Aadhaar Card',
   [CORPORATE_DOCUMENT_TYPES.AADHAAR_BACK]: 'Authorized Signatory Aadhaar (Back)',
   [CORPORATE_DOCUMENT_TYPES.PAN]: 'Company / Director PAN Card',
   [CORPORATE_DOCUMENT_TYPES.SELFIE]: 'Authorized Representative Selfie / Live Face Photo',

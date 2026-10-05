@@ -750,12 +750,17 @@ export function AppShell() {
     return notifData?.data?.notifications || notifData?.notifications || []
   }, [notifData])
 
+  const { data: publicJobsRes } = enterpriseApi.useGetPublicEnterpriseJobsQuery(undefined, { skip: !isLabour })
+
   const { unreadEnterpriseNotifsCount, unreadRegularJobNotifsCount } = useMemo(() => {
     let enterpriseCount = 0
     let regularJobCount = 0
+    const openJobIds = new Set((publicJobsRes?.data || []).map((j) => String(j._id)))
 
     notifList.forEach((n) => {
       if (n.isRead) return
+      // Job alerts only count while that job is still open on the portal.
+      if (n.type === 'ENTERPRISE_JOB_ALERT' && !openJobIds.has(String(n.relatedId))) return
       const isEnterprise =
         n.type === 'ENTERPRISE_JOB_ALERT' ||
         n.type?.startsWith('ENTERPRISE_') ||
@@ -791,7 +796,7 @@ export function AppShell() {
       unreadEnterpriseNotifsCount: enterpriseCount,
       unreadRegularJobNotifsCount: regularJobCount,
     }
-  }, [notifList])
+  }, [notifList, publicJobsRes])
 
   const pendingJobsCount = useMemo(() => {
     let count = 0

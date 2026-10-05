@@ -12,6 +12,8 @@ import {
   useUpdateApplicationStatusMutation,
   useGetJobWorkersAttendanceQuery,
   useConcludeEnterpriseJobMutation,
+  useGenerateEnterpriseCheckInOtpMutation,
+  useRegenerateEnterpriseCheckoutOtpMutation,
 } from '../../../store/api/enterpriseApi.js'
 import {
   useCreateRechargeOrderMutation,
@@ -23,6 +25,290 @@ import { EnterpriseScheduleInterviewModal } from '../components/EnterpriseSchedu
 import { EnterpriseSendOfferModal } from '../components/EnterpriseSendOfferModal.jsx'
 import { getSocket } from '../../../services/socket.js'
 import toast from 'react-hot-toast'
+
+// ⏱️ Countdown to job start / end -------------------------------------------------
+// Timeline dates are stored as calendar dates (UTC midnight); the shift ("09:00 AM – 06:00 PM")
+// gives the time of day. Falls back to start/end of the day when the shift can't be parsed.
+function parseShiftTime(text) {
+  const m = String(text || '').trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/i)
+  if (!m) return null
+  let h = Number(m[1])
+  const min = Number(m[2] || 0)
+  const ampm = m[3]?.toUpperCase()
+  if (ampm === 'PM' && h < 12) h += 12
+  if (ampm === 'AM' && h === 12) h = 0
+  if (h > 23 || min > 59) return null
+  return { h, min }
+}
+
+function atLocalTime(dateValue, time, fallback) {
+  if (!dateValue) return null
+  const d = new Date(dateValue)
+  if (Number.isNaN(d.getTime())) return null
+  const t = time || fallback
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), t.h, t.min, 0)
+}
+
+function formatLeft(ms) {
+  const totalMin = Math.max(0, Math.floor(ms / 60000))
+  const days = Math.floor(totalMin / 1440)
+  const hrs = Math.floor((totalMin % 1440) / 60)
+  const mins = totalMin % 60
+  if (days > 0) return `${days}d ${hrs}h ${mins}m`
+  if (hrs > 0) return `${hrs}h ${mins}m`
+  const secs = Math.max(0, Math.floor(ms / 1000) % 60)
+  return `${mins}m ${String(secs).padStart(2, '0')}s`
+}
+
+function JobCountdown({ job }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
+
+  const [shiftStartText, shiftEndText] = String(job.shift || '').split(/[–-]/)
+  const start = atLocalTime(job.timeline?.expectedJoiningDate, parseShiftTime(shiftStartText), { h: 0, min: 0 })
+  const end = atLocalTime(job.timeline?.projectEndDate, parseShiftTime(shiftEndText), { h: 23, min: 59 })
+  if (!start || job.status === 'closed') return null
+
+  let tone = 'bg-indigo-600 text-white'
+  let label
+  if (now < start.getTime()) {
+    label = `Starts in ${formatLeft(start.getTime() - now)}`
+  } else if (end && now < end.getTime()) {
+    tone = 'bg-emerald-600 text-white'
+    label = `In progress · ends in ${formatLeft(end.getTime() - now)}`
+  } else if (end) {
+    tone = 'bg-slate-700 text-white'
+    label = 'Work period ended'
+  } else {
+    tone = 'bg-emerald-600 text-white'
+    label = 'In progress'
+  }
+
+  const fmt = (d) => d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+  return (
+    <div className="flex flex-wrap items-center gap-2 pt-1">
+      <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-extrabold ${tone}`}>
+        <Clock className="h-3.5 w-3.5" />
+        {label}
+      </span>
+      <span className="text-[11.5px] font-semibold opacity-70">
+        {fmt(start)}
+        {end ? ` → ${fmt(end)}` : ''}
+      </span>
+    </div>
+  )
+}
+
+// 🔐 In-app check-in OTP for one assigned worker -----------------------------------
+function istDateKey(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(date)
+}
+
+const fmtClock = (d) => (d ? new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—')
+
+/** Today's stage for a checked-in worker: working timer, check-out OTP to share, or completed hours. */
+function WorkerDayStatus({ job, entry, record }) {
+  const [regenerate, { isLoading }] = useRegenerateEnterpriseCheckoutOtpMutation()
+  const [now, setNow] = useState(() => Date.now())
+  const ticking = record.state === 'working' || record.state === 'checkout_pending'
+  useEffect(() => {
+    if (!ticking) return undefined
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [ticking])
+
+  if (record.state === 'checked_in') {
+    return (
+      <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-extrabold text-emerald-800">
+        <CheckCircle2 className="h-3.5 w-3.5" /> Checked in {fmtClock(record.checkInAt)} · waiting to start
+      </p>
+    )
+  }
+
+  if (record.state === 'working') {
+    const mins = Math.max(0, Math.floor((now - new Date(record.startedAt).getTime()) / 60000))
+    return (
+      <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-extrabold text-sky-800">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-sky-500" />
+        Working since {fmtClock(record.startedAt)} · {Math.floor(mins / 60)}h {mins % 60}m
+      </p>
+    )
+  }
+
+  if (record.state === 'checkout_pending') {
+    const handleRegenerate = async () => {
+      try {
+        await regenerate({ jobId: job._id, entryId: entry._id }).unwrap()
+        toast.success('New check-out OTP generated')
+      } catch (err) {
+        toast.error(err?.data?.message || 'Could not generate OTP')
+      }
+    }
+    const left = record.checkOutOtp ? Math.max(0, Math.floor((new Date(record.checkOutOtp.expiresAt).getTime() - now) / 1000)) : 0
+    return (
+      <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5">
+        <p className="text-[10.5px] font-extrabold uppercase tracking-wide text-amber-600">
+          Check-out OTP · worker ended work at {fmtClock(record.endRequestedAt)}
+        </p>
+        {record.checkOutOtp?.code && left > 0 ? (
+          <>
+            <p className="font-mono text-[24px] font-black tracking-[0.3em] text-amber-900">{record.checkOutOtp.code}</p>
+            <p className="text-[11px] font-semibold text-amber-700">
+              Share this with the worker to close today&apos;s attendance · expires in {Math.floor(left / 60)}:
+              {String(left % 60).padStart(2, '0')}
+            </p>
+          </>
+        ) : (
+          <p className="text-[11px] font-semibold text-amber-700">OTP expired.</p>
+        )}
+        <button
+          type="button"
+          onClick={handleRegenerate}
+          disabled={isLoading}
+          className="mt-1.5 text-[11px] font-extrabold text-amber-800 underline disabled:opacity-50"
+        >
+          Generate new check-out OTP
+        </button>
+      </div>
+    )
+  }
+
+  const h = Math.floor((record.totalWorkingMinutes || 0) / 60)
+  const m = (record.totalWorkingMinutes || 0) % 60
+  return (
+    <p className="mt-1.5 inline-flex flex-wrap items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-extrabold text-emerald-800">
+      <CheckCircle2 className="h-3.5 w-3.5" /> Completed · {fmtClock(record.startedAt)}–{fmtClock(record.endedAt)} · {h}h {m}m
+    </p>
+  )
+}
+
+/** Day-wise attendance log for all assigned workers of this job. */
+function DirectAttendanceTable({ job }) {
+  const records = job.directAttendance || []
+  if (!records.length) return null
+  const nameOf = (workerId) => {
+    const e = (job.assignedWorkers || []).find((w) => String(w.workerId?._id || w.workerId) === String(workerId))
+    return e?.workerId?.fullName || e?.name || 'Worker'
+  }
+  const LABEL = { completed: 'Completed', working: 'Working', checked_in: 'Checked in', checkout_pending: 'Check-out pending' }
+  return (
+    <div className="pt-3 mt-2 border-t border-current/10 space-y-2">
+      <p className="text-[11px] sm:text-[12px] font-extrabold uppercase tracking-wide opacity-70">Attendance log</p>
+      <div className="overflow-x-auto rounded-xl bg-white/80 border border-white">
+        <table className="w-full min-w-120 text-left text-[12px] text-slate-700">
+          <thead className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">
+            <tr>
+              <th className="px-3 py-2">Date</th>
+              <th className="px-3 py-2">Worker</th>
+              <th className="px-3 py-2">Check-in</th>
+              <th className="px-3 py-2">Start – End</th>
+              <th className="px-3 py-2">Hours</th>
+              <th className="px-3 py-2">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {records.map((r) => (
+              <tr key={r._id}>
+                <td className="px-3 py-2 font-bold text-slate-900">
+                  {new Date(`${r.dateKey}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                </td>
+                <td className="px-3 py-2">{nameOf(r.workerId)}</td>
+                <td className="px-3 py-2">{fmtClock(r.checkInAt)}</td>
+                <td className="px-3 py-2">
+                  {fmtClock(r.startedAt)} – {fmtClock(r.endedAt || r.endRequestedAt)}
+                </td>
+                <td className="px-3 py-2 font-extrabold text-slate-900">
+                  {r.state === 'completed' ? `${Math.floor(r.totalWorkingMinutes / 60)}h ${r.totalWorkingMinutes % 60}m` : '—'}
+                </td>
+                <td className="px-3 py-2 font-bold">{LABEL[r.state] || r.state}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function WorkerCheckInOtp({ job, entry }) {
+  const [generateOtp, { isLoading }] = useGenerateEnterpriseCheckInOtpMutation()
+  const [now, setNow] = useState(() => Date.now())
+  const otp = entry.checkInOtp
+  const otpActive = Boolean(otp?.code && otp.expiresAt && new Date(otp.expiresAt).getTime() > now)
+
+  useEffect(() => {
+    if (!otpActive) return undefined
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [otpActive])
+
+  const workerIdStr = String(entry.workerId?._id || entry.workerId || '')
+  const todayRecord = (job.directAttendance || []).find(
+    (r) => String(r.workerId) === workerIdStr && r.dateKey === istDateKey(),
+  )
+  if (todayRecord) return <WorkerDayStatus job={job} entry={entry} record={todayRecord} />
+
+  const todayCheckIn = (entry.checkIns || []).find((c) => c.dateKey === istDateKey())
+  if (todayCheckIn) {
+    return (
+      <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-extrabold text-emerald-800">
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        Verified today ·{' '}
+        {new Date(todayCheckIn.verifiedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+      </p>
+    )
+  }
+
+  if (entry.isExternal || !entry.workerId) {
+    return <p className="mt-1.5 text-[11px] font-semibold text-slate-400">Off-app worker · OTP not available</p>
+  }
+
+  const handleGenerate = async () => {
+    try {
+      await generateOtp({ jobId: job._id, entryId: entry._id }).unwrap()
+      toast.success('OTP generated — share it with the worker')
+    } catch (err) {
+      toast.error(err?.data?.message || 'Could not generate OTP')
+    }
+  }
+
+  if (otpActive) {
+    const left = Math.max(0, Math.floor((new Date(otp.expiresAt).getTime() - now) / 1000))
+    return (
+      <div className="mt-2 rounded-xl border border-indigo-100 bg-indigo-50 p-2.5">
+        <p className="text-[10.5px] font-extrabold uppercase tracking-wide text-indigo-500">Check-in OTP</p>
+        <p className="font-mono text-[24px] font-black tracking-[0.3em] text-indigo-900">{otp.code}</p>
+        <p className="text-[11px] font-semibold text-indigo-700">
+          Waiting for the worker to enter it in their app · expires in {Math.floor(left / 60)}:
+          {String(left % 60).padStart(2, '0')}
+        </p>
+        <button
+          type="button"
+          onClick={handleGenerate}
+          disabled={isLoading}
+          className="mt-1.5 text-[11px] font-extrabold text-indigo-700 underline disabled:opacity-50"
+        >
+          Generate new OTP
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleGenerate}
+      disabled={isLoading}
+      className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-[11.5px] font-extrabold text-white disabled:opacity-50"
+    >
+      {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+      Generate check-in OTP
+    </button>
+  )
+}
 
 // 💳 Dynamic Razorpay Gateway Script Loader
 const loadRazorpayScript = () => {
@@ -312,6 +598,7 @@ export function EnterpriseJobDetailPage() {
             <p className="text-[17px] sm:text-[20px] font-black">
               {job.numberOfWorkers} Worker(s) Requested
             </p>
+            {adminStatus !== 'rejected' && <JobCountdown job={job} />}
             <p className="text-[12.5px] font-semibold">{adminStatusMeta.text}</p>
             {job.adminResponseNote && (
               <p className="text-[12.5px] font-semibold">Admin note: {job.adminResponseNote}</p>
@@ -331,7 +618,6 @@ export function EnterpriseJobDetailPage() {
                   <ul className="grid gap-2 sm:grid-cols-2">
                     {job.assignedWorkers.map((w) => {
                       const name = w.workerId?.fullName || w.name
-                      const phone = w.workerId?.phone || w.phone
                       return (
                         <li key={w._id} className="flex items-center gap-2.5 rounded-xl bg-white/80 border border-white p-2.5 text-slate-900">
                           {w.workerId?.profileImageUrl ? (
@@ -341,13 +627,10 @@ export function EnterpriseJobDetailPage() {
                               {(name || '?').slice(0, 1).toUpperCase()}
                             </div>
                           )}
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <p className="text-[13px] font-extrabold truncate">{name}</p>
-                            {phone && (
-                              <a href={`tel:${phone}`} className="text-[12px] font-semibold text-indigo-700">
-                                {phone}
-                              </a>
-                            )}
+                            <p className="text-[11.5px] font-semibold text-slate-500">Arranged by Staffivaa</p>
+                            {job.status !== 'closed' && <WorkerCheckInOtp job={job} entry={w} />}
                           </div>
                         </li>
                       )
@@ -356,6 +639,7 @@ export function EnterpriseJobDetailPage() {
                 ) : (
                   <p className="text-[12.5px] font-semibold">Staffivaa will share worker details here once assigned.</p>
                 )}
+                <DirectAttendanceTable job={job} />
                 <EnterpriseDirectPaymentPanel job={job} />
               </div>
             )}

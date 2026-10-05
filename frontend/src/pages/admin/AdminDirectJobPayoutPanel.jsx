@@ -21,7 +21,7 @@ const MANUAL_MODES = [
 
 /** Reminder, enterprise payments and per-worker payouts for an accepted daily/hourly request */
 export function AdminDirectJobPayoutPanel({ job }) {
-  const { data } = useGetAdminDirectPaymentsQuery({ jobId: job._id })
+  const { data } = useGetAdminDirectPaymentsQuery({ jobId: job._id }, { pollingInterval: 30000, refetchOnMountOrArgChange: true })
   const payments = data?.data?.payments ?? []
   const [sendReminder, { isLoading: reminding }] = useSendDirectRequestReminderMutation()
   const [payout, { isLoading: paying }] = usePayoutDirectRequestWorkerMutation()
@@ -30,6 +30,15 @@ export function AdminDirectJobPayoutPanel({ job }) {
   const [customHours, setCustomHours] = useState('')
   const [period, setPeriod] = useState('')
   const [manualMode, setManualMode] = useState('cash')
+
+  // Worker gets the pay set at assignment (payRate × units); the rest of what the enterprise paid is Staffivaa's.
+  // Mirrors workerPayoutSplit() on the server.
+  const splitFor = (w, payment) => {
+    const gross = Math.round(payment.rate * payment.units)
+    const rate = Number(w.payRate) > 0 ? Number(w.payRate) : payment.rate
+    const net = Math.min(gross, Math.round(rate * payment.units))
+    return { gross, net, margin: gross - net }
+  }
 
   const activePeriod = payments.some((p) => p.periodKey === period) ? period : payments[0]?.periodKey || ''
   const reminders = job.reminders || []
@@ -48,7 +57,13 @@ export function AdminDirectJobPayoutPanel({ job }) {
     }
   }
 
-  const handlePayout = async (w, isRegistered) => {
+  const handlePayout = async (w, isRegistered, split) => {
+    const name = w.workerId?.fullName || w.name || 'this worker'
+    const breakdown = `Enterprise paid ${inr(split.gross)} · worker pay ${inr(split.net)} · Staffivaa keeps ${inr(split.margin)}`
+    const confirmText = isRegistered
+      ? `Add ${inr(split.net)} to ${name}'s wallet?\n\n${breakdown}`
+      : `Mark ${name} as paid ${inr(split.net)} (${manualMode})?\n\n${breakdown}`
+    if (!window.confirm(confirmText)) return
     try {
       const res = await payout({
         id: job._id,
@@ -136,7 +151,9 @@ export function AdminDirectJobPayoutPanel({ job }) {
       {payments.length > 0 && job.assignedWorkers?.length > 0 && (
         <div className="rounded-xl bg-white p-3.5 ring-1 ring-slate-100 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Worker payouts</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Worker payouts · at each worker&apos;s assigned pay
+            </p>
             <select
               value={activePeriod}
               onChange={(e) => setPeriod(e.target.value)}
@@ -154,7 +171,7 @@ export function AdminDirectJobPayoutPanel({ job }) {
               const isRegistered = Boolean(w.workerId) && !w.isExternal
               const paid = (w.payouts || []).find((p) => p.periodKey === activePeriod)
               const payment = payments.find((p) => p.periodKey === activePeriod)
-              const amount = payment ? Math.round(payment.rate * payment.units) : 0
+              const split = payment ? splitFor(w, payment) : { gross: 0, net: 0, margin: 0 }
               return (
                 <li key={w._id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-2.5 ring-1 ring-slate-100">
                   <div className="min-w-0">
@@ -162,10 +179,17 @@ export function AdminDirectJobPayoutPanel({ job }) {
                     <p className="text-[11px] text-slate-500">{isRegistered ? 'Registered · wallet payout' : 'Not on app · manual payout'}</p>
                   </div>
                   {paid ? (
-                    <p className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      Paid {inr(paid.amount)} ({paid.mode}) · {fmtDateTime(paid.paidAt)}
-                    </p>
+                    <div className="text-right">
+                      <p className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Paid {inr(paid.amount)} ({paid.mode}) · {fmtDateTime(paid.paidAt)}
+                      </p>
+                      {paid.commissionAmount > 0 && (
+                        <p className="text-[10.5px] font-semibold text-slate-500">
+                          Enterprise paid {inr(paid.grossAmount)} · Staffivaa kept {inr(paid.commissionAmount)}
+                        </p>
+                      )}
+                    </div>
                   ) : (
                     <div className="flex items-center gap-2">
                       {!isRegistered && (
@@ -179,11 +203,16 @@ export function AdminDirectJobPayoutPanel({ job }) {
                           ))}
                         </select>
                       )}
-                      <span className="text-[11px] font-black text-amber-700">Pending · {inr(amount)}</span>
+                      <span className="text-right text-[11px] font-black text-amber-700">
+                        Pending · {inr(split.net)}
+                        <span className="block text-[10px] font-semibold text-slate-500">
+                          Enterprise paid {inr(split.gross)} · Staffivaa keeps {inr(split.margin)}
+                        </span>
+                      </span>
                       <button
                         type="button"
                         disabled={paying}
-                        onClick={() => handlePayout(w, isRegistered)}
+                        onClick={() => handlePayout(w, isRegistered, split)}
                         className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-black text-white hover:bg-emerald-700 disabled:opacity-50"
                       >
                         {isRegistered ? <Wallet className="h-3.5 w-3.5" /> : <IndianRupee className="h-3.5 w-3.5" />}

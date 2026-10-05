@@ -96,11 +96,15 @@ const workforceRequestSchema = new mongoose.Schema(
       index: true,
     },
     bookingType: { type: String, trim: true },
+    durationKind: { type: String, enum: ['few_hours', 'full_day', 'multi_day'] },
     // 'admin' = individual booking waits in the admin queue and is offered to workers only when admin assigns.
     // 'auto' = legacy broadcast to all matching nearby workers.
     dispatchMode: { type: String, enum: ['auto', 'admin'], default: 'auto', index: true },
     adminDispatchedAt: Date,
     adminDispatchedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    // Individual bookings: search window end. Past this with no worker, the booking expires (cancelReason search_expired).
+    searchExpiresAt: Date,
+    searchExpiredAt: Date,
     advancePaymentStatus: {
       type: String,
       enum: ['pending', 'paid', 'failed'],

@@ -56,6 +56,11 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       invalidatesTags: (_r, _e, id) => [{ type: 'Requests', id }, 'Requests', 'Assignments'],
     }),
+    retryIndividualSearch: build.mutation({
+      query: (id) => ({ url: `/workforce/requests/${id}/retry-search`, method: 'POST' }),
+      transformResponse: unwrap,
+      invalidatesTags: (_r, _e, id) => [{ type: 'Requests', id }, 'Requests'],
+    }),
     createRazorpayOrder: build.mutation({
       query: (id) => ({ url: `/workforce/requests/${id}/payment/order`, method: 'POST' }),
       transformResponse: unwrap,
@@ -658,6 +663,7 @@ export const {
   useGetRequestQuery,
   useCreateRequestMutation,
   useCancelWorkforceRequestMutation,
+  useRetryIndividualSearchMutation,
   useCreateRazorpayOrderMutation,
   useVerifyRazorpayPaymentMutation,
   usePayPlatformFeeMutation,

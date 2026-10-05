@@ -23,6 +23,10 @@ import {
   markWorkerJoined,
   getActiveWorkforce,
   getLabourCurrentEmployment,
+  getLabourDirectAssignments,
+  generateCheckInOtp,
+  verifyCheckInOtp,
+  requestCheckInOtp,
   getLabourEmploymentHistory,
   concludeEnterpriseJob,
   getEnterpriseWorkerAttendance,
@@ -39,6 +43,12 @@ import {
 } from '../controllers/enterprisePayrollController.js'
 
 import { getJobDirectPayments, payDirectJob } from '../controllers/enterpriseDirectPaymentController.js'
+import {
+  startDirectWork,
+  endDirectWork,
+  verifyDirectCheckoutOtp,
+  regenerateDirectCheckoutOtp,
+} from '../controllers/enterpriseDirectAttendanceController.js'
 
 const router = express.Router()
 
@@ -52,6 +62,14 @@ router.get('/my-applications', protect, getMyApplications)
 router.get('/applications/:id/interview', protect, getInterviewDetails)
 router.post('/applications/:id/respond-offer', protect, respondToOffer)
 router.get('/my-employment', protect, getLabourCurrentEmployment)
+router.get('/my-direct-assignments', protect, getLabourDirectAssignments)
+router.post('/my-direct-assignments/:jobId/request-checkin', protect, requestCheckInOtp)
+router.post('/my-direct-assignments/:jobId/verify-otp', protect, verifyCheckInOtp)
+router.post('/jobs/:id/assigned-workers/:entryId/checkin-otp', protect, generateCheckInOtp)
+router.post('/jobs/:id/assigned-workers/:entryId/checkout-otp', protect, regenerateDirectCheckoutOtp)
+router.post('/my-direct-assignments/:jobId/start-work', protect, startDirectWork)
+router.post('/my-direct-assignments/:jobId/end-work', protect, endDirectWork)
+router.post('/my-direct-assignments/:jobId/verify-checkout-otp', protect, verifyDirectCheckoutOtp)
 router.get('/my-employment/history', protect, getLabourEmploymentHistory)
 router.get('/my-payrolls', protect, getMyEnterprisePayrolls)
 

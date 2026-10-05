@@ -5,6 +5,7 @@ import {
   REQUEST_STATUS,
   SCHEDULE_TYPE,
   ASSIGNMENT_STATUS,
+  INDIVIDUAL_SEARCH_SECONDS,
 } from '../constants/workforceConstants.js'
 import { WorkforceRequest, generateRequestReference } from '../models/WorkforceRequest.js'
 import { Assignment } from '../models/Assignment.js'
@@ -70,6 +71,7 @@ export const createRequest = asyncHandler(async (req, res) => {
     notes,
     billingMode,
     bookingType,
+    durationKind,
   } = req.body
 
   const parsedLines = parseLines(lines)
@@ -251,6 +253,7 @@ export const createRequest = asyncHandler(async (req, res) => {
     notes,
     billingMode,
     bookingType,
+    durationKind: ['few_hours', 'full_day', 'multi_day'].includes(durationKind) ? durationKind : undefined,
     labourCharge: Math.round(estimatedTotalLabourCost),
     userPlatformFee: Math.round(userPlatformFee),
     labourPlatformFee: Math.round(labourPlatformFeeValue),
@@ -274,6 +277,7 @@ export const createRequest = asyncHandler(async (req, res) => {
     ...(sourceType === REQUEST_SOURCE.INDIVIDUAL && {
       // Individual bookings wait in the admin queue (no auto-expiry); admin manually offers them to workers.
       dispatchMode: 'admin',
+      searchExpiresAt: new Date(Date.now() + INDIVIDUAL_SEARCH_SECONDS * 1000),
       userPlatformFee: 0,
       userPaymentStatus: 'paid',
     }),

@@ -18,6 +18,8 @@ import {
   X,
   UserPlus,
   Trash2,
+  Pencil,
+  Check,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
@@ -25,6 +27,7 @@ import {
   useGetAdminEnterpriseDirectRequestsQuery,
   useRespondAdminEnterpriseDirectRequestMutation,
   useRemoveDirectRequestWorkerMutation,
+  useUpdateDirectRequestWorkerPayMutation,
 } from '../../store/api/adminEnterpriseApi.js'
 import { EnterpriseAssignWorkersModal } from './EnterpriseAssignWorkersModal.jsx'
 import { AdminDirectPaymentsList } from './AdminDirectPaymentsList.jsx'
@@ -68,6 +71,89 @@ function DetailTile({ label, icon: Icon, children }) {
         <span className="min-w-0">{children}</span>
       </p>
     </div>
+  )
+}
+
+/** Assigned worker's pay (what the worker sees / gets credited) with inline edit. */
+function WorkerPayEditor({ job, entry }) {
+  const enterpriseRate = Number(job.salary) || 0
+  const unit = job.salaryType === 'hourly' ? 'hour' : 'day'
+  const current = Number(entry.payRate) > 0 ? Number(entry.payRate) : enterpriseRate
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(String(current))
+  const [updatePay, { isLoading }] = useUpdateDirectRequestWorkerPayMutation()
+
+  const save = async () => {
+    const pay = Math.round(Number(value))
+    if (!Number.isFinite(pay) || pay <= 0 || pay > enterpriseRate) {
+      toast.error(`Pay must be between ₹1 and ₹${enterpriseRate} / ${unit}`)
+      return
+    }
+    try {
+      const res = await updatePay({ id: job._id, entryId: entry._id, payRate: pay }).unwrap()
+      toast.success(res?.message || 'Pay updated')
+      setEditing(false)
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to update pay')
+    }
+  }
+
+  if (editing) {
+    return (
+      <div className="mt-1 flex items-center gap-1.5">
+        <span className="flex items-center gap-0.5 rounded-md border border-slate-200 bg-white px-1.5 py-0.5">
+          <span className="text-[11px] font-black text-slate-500">₹</span>
+          <input
+            type="number"
+            min="1"
+            max={enterpriseRate}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="w-16 bg-transparent text-[11px] font-black text-slate-900 outline-none"
+            autoFocus
+          />
+        </span>
+        <span className="text-[10px] font-semibold text-slate-500">/ {unit}</span>
+        <button
+          type="button"
+          disabled={isLoading}
+          onClick={save}
+          className="rounded-md bg-emerald-600 p-1 text-white hover:bg-emerald-700 disabled:opacity-50"
+          aria-label="Save pay"
+        >
+          <Check className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setValue(String(current))
+            setEditing(false)
+          }}
+          className="rounded-md p-1 text-slate-400 hover:bg-slate-100"
+          aria-label="Cancel"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <p className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+      Pay <span className="font-black text-emerald-700">₹{current.toLocaleString('en-IN')}</span> / {unit}
+      <span className="text-slate-400">· margin ₹{Math.max(0, enterpriseRate - current).toLocaleString('en-IN')}</span>
+      <button
+        type="button"
+        onClick={() => {
+          setValue(String(current))
+          setEditing(true)
+        }}
+        className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-brand"
+        aria-label="Edit pay"
+      >
+        <Pencil className="h-3 w-3" />
+      </button>
+    </p>
   )
 }
 
@@ -335,6 +421,7 @@ export function AdminEnterpriseDirectRequestsPage() {
                                     {w.isExternal ? 'Not on app' : 'Registered'}
                                   </span>
                                 </p>
+                                <WorkerPayEditor job={job} entry={w} />
                               </div>
                               <button
                                 type="button"

@@ -97,21 +97,37 @@ function getBusinessKycDocumentSlots(profile, user = null, role = 'contractor') 
     return ''
   }
 
-  const frontUrl = findUrl('aadhaar_front', ['kycFrontImageUrl', 'frontImageUrl'], ['front', 'aadhaar front', 'aadhar front', 'signatory id', 'proprietor id'])
-  const backUrl = findUrl('aadhaar_back', ['kycBackImageUrl', 'backImageUrl'], ['back', 'aadhaar back', 'aadhar back'])
-  const panUrl = findUrl('pan', ['kycPanImageUrl', 'panImageUrl'], ['pan', 'pancard', 'pan card'])
-  const selfieUrl = findUrl('selfie', ['kycSelfieUrl', 'selfieUrl'], ['selfie', 'face', 'photo', 'proprietor selfie', 'representative selfie', 'signatory photo'])
+  const frontUrl = findUrl('aadhaar_front', ['kycFrontImageUrl', 'frontImageUrl'], ['front', 'aadhaar front', 'aadhar front', 'aadhaar card', 'signatory id', 'proprietor id'])
 
   const isCorp = role === 'corporate' || role === 'enterprise'
 
-  const slots = [
-    { id: 'aadhaar_front', label: isCorp ? 'Signatory Aadhaar (Front)' : 'Aadhaar Card (Front)', url: frontUrl, isRequired: true },
-    { id: 'aadhaar_back', label: isCorp ? 'Signatory Aadhaar (Back)' : 'Aadhaar Card (Back)', url: backUrl, isRequired: true },
-    { id: 'pan', label: isCorp ? 'Company PAN Card' : 'Business PAN Card', url: panUrl, isRequired: true },
-    { id: 'selfie', label: isCorp ? 'Signatory Live Photo' : 'Proprietor Live Photo', url: selfieUrl, isRequired: false },
-  ]
+  // Corporate KYC is a single Aadhaar card photo; older back / PAN / selfie uploads fall through to the extras below.
+  const slots =
+    role === 'corporate'
+      ? [{ id: 'aadhaar_front', label: 'Signatory Aadhaar Card', url: frontUrl, isRequired: true }]
+      : [
+          { id: 'aadhaar_front', label: isCorp ? 'Signatory Aadhaar (Front)' : 'Aadhaar Card (Front)', url: frontUrl, isRequired: true },
+          {
+            id: 'aadhaar_back',
+            label: isCorp ? 'Signatory Aadhaar (Back)' : 'Aadhaar Card (Back)',
+            url: findUrl('aadhaar_back', ['kycBackImageUrl', 'backImageUrl'], ['back', 'aadhaar back', 'aadhar back']),
+            isRequired: true,
+          },
+          {
+            id: 'pan',
+            label: isCorp ? 'Company PAN Card' : 'Business PAN Card',
+            url: findUrl('pan', ['kycPanImageUrl', 'panImageUrl'], ['pan', 'pancard', 'pan card']),
+            isRequired: true,
+          },
+          {
+            id: 'selfie',
+            label: isCorp ? 'Signatory Live Photo' : 'Proprietor Live Photo',
+            url: findUrl('selfie', ['kycSelfieUrl', 'selfieUrl'], ['selfie', 'face', 'photo', 'proprietor selfie', 'representative selfie', 'signatory photo']),
+            isRequired: false,
+          },
+        ]
 
-  const primaryUrls = new Set([frontUrl, backUrl, panUrl, selfieUrl].filter(Boolean))
+  const primaryUrls = new Set(slots.map((s) => s.url).filter(Boolean))
   const extraPhotos = photos
     .filter((p) => p?.url && !primaryUrls.has(p.url))
     .map((p, i) => ({
@@ -1162,8 +1178,8 @@ export function AdminUserDetailsPage() {
                           <p className="mt-1 text-base font-medium text-slate-900">{user.corporateProfile.contactPersonName || '—'}</p>
                         </div>
                         <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Contact Email</p>
-                          <p className="mt-1 text-base font-medium text-slate-900">{user.corporateProfile.contactEmail || '—'}</p>
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Account Email</p>
+                          <p className="mt-1 text-base font-medium text-slate-900">{user.email || user.corporateProfile.contactEmail || '—'}</p>
                         </div>
                       </div>
                       {user.corporateProfile.registeredAddress && (
@@ -1177,7 +1193,7 @@ export function AdminUserDetailsPage() {
                       <div>
                         <div className="flex items-center justify-between mb-3">
                           <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                            KYC Photos & Documents (Signatory Aadhaar, PAN, Selfie)
+                            KYC Photos & Documents (Signatory Aadhaar Card)
                           </p>
                           {(() => {
                             const slots = getBusinessKycDocumentSlots(user.corporateProfile, user, 'corporate')

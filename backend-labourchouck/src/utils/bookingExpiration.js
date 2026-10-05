@@ -7,6 +7,7 @@ import { Wallet } from '../models/Wallet.js'
 import { RefundRequest } from '../models/RefundRequest.js'
 import { REQUEST_STATUS } from '../constants/workforceConstants.js'
 import { getIO, emitToUser } from './socket.js'
+import { expireIndividualSearches } from '../controllers/individualDispatchController.js'
 import { triggerNotification } from './notificationTrigger.js'
 import {
   searchExpiredUserNotif,
@@ -16,6 +17,11 @@ import {
 } from './bookingNotificationCopy.js'
 
 export function startBookingExpirationJob() {
+  // Individual bookings have a short (90s) search window, so check them often.
+  setInterval(() => {
+    expireIndividualSearches().catch((err) => console.error('Error expiring individual searches:', err))
+  }, 10 * 1000)
+
   // Check every 1 minute
   setInterval(async () => {
     try {

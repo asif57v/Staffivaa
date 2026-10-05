@@ -16,6 +16,7 @@ import {
   Wallet,
   X,
   XCircle,
+  Zap,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
@@ -31,6 +32,7 @@ const TABS = [
   { value: 'awaiting', label: 'Awaiting Assignment' },
   { value: 'active', label: 'Worker Assigned' },
   { value: 'completed', label: 'Completed' },
+  { value: 'expired', label: 'Expired' },
   { value: 'cancelled', label: 'Cancelled' },
   { value: 'all', label: 'All' },
 ]
@@ -78,6 +80,51 @@ function timeAgo(d) {
   return `${Math.floor(hrs / 24)} d ago`
 }
 
+// startDate/endDate are stored as date-only values (UTC midnight), so format them in UTC to avoid
+// showing a fake "05:30 am" time or the wrong day.
+function formatDateOnly(d) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+const DURATION_LABEL = { few_hours: 'Few hours', full_day: 'Full day', multi_day: 'Multi day' }
+
+function durationText(request) {
+  let days = 1
+  if (request.startDate && request.endDate) {
+    days = Math.round((new Date(request.endDate) - new Date(request.startDate)) / 86400000) + 1
+  }
+  if (days > 1) return `${days} days (till ${formatDateOnly(request.endDate)})`
+  return DURATION_LABEL[request.durationKind] || null
+}
+
+function isSearchExpired(request) {
+  return request.status === 'cancelled' && request.cancelReason === 'search_expired'
+}
+
+/** Seconds left in the customer's search window (null when the booking has no window). */
+function useSearchSecondsLeft(searchExpiresAt, active) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!active || !searchExpiresAt) return undefined
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [active, searchExpiresAt])
+  if (!active || !searchExpiresAt) return null
+  return Math.max(0, Math.ceil((new Date(searchExpiresAt).getTime() - now) / 1000))
+}
+
+function workerCount(lines) {
+  if (!Array.isArray(lines)) return 1
+  return lines.reduce((sum, l) => sum + (Number(l.quantity) || 1), 0) || 1
+}
+
 function categoryNames(lines) {
   if (!Array.isArray(lines)) return '—'
   return lines.map((l) => `${l.categoryId?.name || 'Worker'}${l.quantity > 1 ? ` ×${l.quantity}` : ''}`).join(', ') || '—'
@@ -116,12 +163,18 @@ export function AdminIndividualBookingsPage() {
       )
     }
     const onUpdate = () => refetch()
+    const onBookingUpdated = (payload) => {
+      refetch()
+      if (payload?.reason === 'search_expired') {
+        toast('A booking expired — no worker was assigned in time', { icon: '⌛', id: `ib-exp-${payload?.requestId}` })
+      }
+    }
     socket.on('individual_booking_pending', onPending)
-    socket.on('individual_booking_updated', onUpdate)
+    socket.on('individual_booking_updated', onBookingUpdated)
     socket.on('request_cancelled', onUpdate)
     return () => {
       socket.off('individual_booking_pending', onPending)
-      socket.off('individual_booking_updated', onUpdate)
+      socket.off('individual_booking_updated', onBookingUpdated)
       socket.off('request_cancelled', onUpdate)
     }
   }, [socket, refetch])
@@ -213,6 +266,7 @@ export function AdminIndividualBookingsPage() {
             <BookingCard
               key={r._id}
               request={r}
+              searchWindowSeconds={data?.searchWindowSeconds ?? 90}
               onAssign={() => setAssignTarget(r)}
               onWithdraw={handleWithdraw}
             />
@@ -225,11 +279,19 @@ export function AdminIndividualBookingsPage() {
   )
 }
 
-function BookingCard({ request, onAssign, onWithdraw }) {
+function BookingCard({ request, onAssign, onWithdraw, searchWindowSeconds = 90 }) {
   const client = request.clientId || {}
   const assignments = request.assignments || []
   const canAssign = request.status === 'searching' && !request.labourId
   const ringing = assignments.filter((a) => a.status === 'offered')
+  const isInstant = request.bookingType !== 'scheduled'
+  const workers = workerCount(request.lines)
+  const expired = isSearchExpired(request)
+  // Older bookings have no searchExpiresAt; their window started at creation (same rule as the server).
+  const searchEndsAt =
+    request.searchExpiresAt ||
+    (request.createdAt ? new Date(new Date(request.createdAt).getTime() + searchWindowSeconds * 1000).toISOString() : null)
+  const secondsLeft = useSearchSecondsLeft(searchEndsAt, canAssign)
 
   return (
     <GlassPanel className="p-5">
@@ -239,19 +301,36 @@ function BookingCard({ request, onAssign, onWithdraw }) {
             <span className="font-mono text-xs font-black text-slate-500">{request.reference}</span>
             <span
               className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ring-1 ${
-                request.status === 'searching'
-                  ? 'bg-rose-50 text-rose-700 ring-rose-200'
-                  : request.status === 'cancelled'
-                    ? 'bg-slate-100 text-slate-500 ring-slate-200'
-                    : 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                expired
+                  ? 'bg-amber-50 text-amber-700 ring-amber-200'
+                  : request.status === 'searching'
+                    ? 'bg-rose-50 text-rose-700 ring-rose-200'
+                    : request.status === 'cancelled'
+                      ? 'bg-slate-100 text-slate-500 ring-slate-200'
+                      : 'bg-emerald-50 text-emerald-700 ring-emerald-200'
               }`}
             >
-              {STATUS_LABEL[request.status] || request.status}
+              {expired ? 'Expired — no worker' : STATUS_LABEL[request.status] || request.status}
             </span>
+            {secondsLeft != null ? (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black ring-1 ${
+                  secondsLeft <= 30 ? 'bg-rose-600 text-white ring-rose-600' : 'bg-amber-50 text-amber-800 ring-amber-200'
+                }`}
+              >
+                <Clock className="h-3 w-3" />
+                {secondsLeft > 0
+                  ? `Expires in ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`
+                  : 'Expiring…'}
+              </span>
+            ) : null}
           </div>
           <p className="mt-1.5 text-base font-black text-slate-900">{categoryNames(request.lines)}</p>
         </div>
-        <span className="shrink-0 text-[11px] font-semibold text-slate-400">{timeAgo(request.createdAt)}</span>
+        <div className="shrink-0 text-right">
+          <p className="text-[11px] font-bold text-slate-600">Booked {formatDateTime(request.createdAt)}</p>
+          <p className="text-[10px] font-semibold text-slate-400">{timeAgo(request.createdAt)}</p>
+        </div>
       </div>
 
       <div className="mt-3 space-y-1.5 text-xs text-slate-600">
@@ -268,13 +347,61 @@ function BookingCard({ request, onAssign, onWithdraw }) {
           <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
           <span className="line-clamp-2">{request.locationText || 'Location not provided'}</span>
         </p>
-        <p className="flex items-center gap-2">
+        <p className="flex flex-wrap items-center gap-2">
           <Calendar className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-          Start {formatDateTime(request.startDate)}
-          {request.shiftStart ? ` · ${request.shiftStart}${request.shiftEnd ? `–${request.shiftEnd}` : ''}` : ''}
+          {isInstant ? (
+            <>
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase text-amber-700 ring-1 ring-amber-200">
+                <Zap className="h-3 w-3" /> Instant
+              </span>
+              <span className="font-semibold text-slate-800">ASAP — {formatDateOnly(request.startDate)}</span>
+            </>
+          ) : (
+            <>
+              <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-black uppercase text-sky-700 ring-1 ring-sky-200">
+                Scheduled
+              </span>
+              <span className="font-semibold text-slate-800">{formatDateOnly(request.startDate)}</span>
+              {request.shiftStart ? (
+                <span className="text-slate-600">
+                  · {request.shiftStart}
+                  {request.shiftEnd ? ` – ${request.shiftEnd}` : ''}
+                </span>
+              ) : (
+                <span className="text-slate-400">· time slot not given</span>
+              )}
+            </>
+          )}
+        </p>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="inline-flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            {durationText(request) || 'Duration not given'}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Users className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            {workers} worker{workers > 1 ? 's' : ''}
+          </span>
+          {request.labourCharge ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Wallet className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              Est. labour ₹{Number(request.labourCharge).toLocaleString('en-IN')}
+            </span>
+          ) : null}
         </p>
         {request.notes ? <p className="rounded-lg bg-slate-50 p-2 text-[11px] italic text-slate-500">“{request.notes}”</p> : null}
       </div>
+
+      {expired ? (
+        <div className="mt-3 flex items-center gap-2 rounded-xl bg-amber-50 p-2.5 text-xs text-amber-900 ring-1 ring-amber-200">
+          <XCircle className="h-4 w-4 shrink-0" />
+          <span>
+            <span className="font-bold">Booking expired</span> — no worker was assigned within the search window
+            {request.searchExpiredAt ? ` (expired ${formatDateTime(request.searchExpiredAt)})` : ''}. It reopens here if
+            the customer taps “Try again”.
+          </span>
+        </div>
+      ) : null}
 
       {request.labourId ? (
         <div className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-50 p-2.5 text-xs text-emerald-900 ring-1 ring-emerald-200">
@@ -295,6 +422,7 @@ function BookingCard({ request, onAssign, onWithdraw }) {
                 <li key={a._id} className="flex items-center gap-2 text-xs">
                   <span className="font-semibold text-slate-800">{a.labourId?.fullName || 'Worker'}</span>
                   <span className="text-slate-400">{a.labourId?.phone}</span>
+                  <span className="text-[10px] text-slate-400">· sent {formatDateTime(a.offeredAt || a.createdAt)}</span>
                   <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${badge.className}`}>
                     {badge.label}
                   </span>
@@ -329,8 +457,16 @@ function BookingCard({ request, onAssign, onWithdraw }) {
   )
 }
 
+const RADIUS_OPTIONS = [2, 5, 10, 15, 25, 50]
+
+function isEligibleForBulk(w) {
+  return !w.hasActiveJob && ['verified', 'approved'].includes(w.kycStatus)
+}
+
 function AssignWorkerModal({ request, onClose }) {
-  const [showAll, setShowAll] = useState(false)
+  const bookingCategoryId = request.lines?.[0]?.categoryId?._id ?? request.lines?.[0]?.categoryId ?? ''
+  const [categoryFilter, setCategoryFilter] = useState(bookingCategoryId ? String(bookingCategoryId) : 'all')
+  const [radiusKm, setRadiusKm] = useState('')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selected, setSelected] = useState([])
@@ -342,17 +478,30 @@ function AssignWorkerModal({ request, onClose }) {
 
   const { data, isLoading, isFetching } = useGetIndividualBookingWorkersQuery({
     id: request._id,
-    ...(showAll ? { all: 'true' } : {}),
+    categoryId: categoryFilter || 'all',
+    ...(radiusKm ? { radiusKm } : {}),
     ...(debouncedSearch ? { search: debouncedSearch } : {}),
   })
   const [assign, { isLoading: assigning }] = useAssignIndividualBookingWorkersMutation()
 
-  const workers = data?.workers ?? []
+  const workers = useMemo(() => data?.workers ?? [], [data])
+  const categories = data?.categories ?? []
   const minWallet = data?.minimumWalletBalance ?? 0
   const selectedSet = useMemo(() => new Set(selected), [selected])
+  const bulkIds = useMemo(() => workers.filter(isEligibleForBulk).map((w) => String(w._id)), [workers])
+  const allBulkSelected = bulkIds.length > 0 && bulkIds.every((id) => selectedSet.has(id))
 
   const toggle = (id) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  const toggleSelectAll = () => {
+    if (allBulkSelected) {
+      const bulkSet = new Set(bulkIds)
+      setSelected((prev) => prev.filter((id) => !bulkSet.has(id)))
+    } else {
+      setSelected((prev) => [...new Set([...prev, ...bulkIds])])
+    }
   }
 
   const handleAssign = async () => {
@@ -384,8 +533,8 @@ function AssignWorkerModal({ request, onClose }) {
           </button>
         </div>
 
-        <div className="flex flex-col gap-2 border-b border-slate-100 p-4 sm:flex-row sm:items-center">
-          <div className="relative flex-1">
+        <div className="flex flex-col gap-2 border-b border-slate-100 p-4">
+          <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
@@ -394,10 +543,52 @@ function AssignWorkerModal({ request, onClose }) {
               className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-slate-400"
             />
           </div>
-          <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-bold text-slate-600">
-            <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
-            Show all workers (any skill)
-          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-500">
+              Skill
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-slate-400"
+              >
+                <option value="all">All skills</option>
+                {categories.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.name}
+                    {String(c._id) === String(bookingCategoryId) ? ' (booking skill)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-500">
+              Distance from booking
+              <select
+                value={radiusKm}
+                onChange={(e) => setRadiusKm(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-slate-400"
+              >
+                <option value="">Any distance</option>
+                {RADIUS_OPTIONS.map((km) => (
+                  <option key={km} value={km}>
+                    Within {km} km
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] text-slate-500">
+              {workers.length} worker{workers.length === 1 ? '' : 's'} found · {bulkIds.length} ready (KYC verified, not busy)
+            </span>
+            <button
+              type="button"
+              disabled={!bulkIds.length}
+              onClick={toggleSelectAll}
+              className="rounded-lg px-2.5 py-1 text-xs font-black text-slate-900 ring-1 ring-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {allBulkSelected ? 'Clear selection' : `Select all ready (${bulkIds.length})`}
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-3">
@@ -406,7 +597,7 @@ function AssignWorkerModal({ request, onClose }) {
               <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
             </div>
           ) : workers.length === 0 ? (
-            <p className="py-10 text-center text-sm text-slate-500">No workers found. Try “Show all workers”.</p>
+            <p className="py-10 text-center text-sm text-slate-500">No workers found. Try “All skills” or a bigger distance.</p>
           ) : (
             <ul className={`space-y-2 ${isFetching ? 'opacity-60' : ''}`}>
               {workers.map((w) => {

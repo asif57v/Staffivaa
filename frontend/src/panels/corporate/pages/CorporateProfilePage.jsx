@@ -8,22 +8,15 @@ import {
   Building2,
   CheckCircle2,
   Clock,
-  FileText,
   HardHat,
   IndianRupee,
   Navigation,
   RefreshCw,
   ShieldCheck,
-  Trash2,
-  Upload,
 } from 'lucide-react'
 import { assetUrlFromUpload, uploadDocument } from '../../../api/uploadApi.js'
 import { UPLOAD_FOLDERS } from '../../../constants/uploadFolders.js'
-import {
-  CORPORATE_DOCUMENT_OPTIONS,
-  CORPORATE_DOCUMENT_TYPES,
-  INDIAN_STATES,
-} from '../../../constants/corporateVerification.js'
+import { INDIAN_STATES } from '../../../constants/corporateVerification.js'
 import { LanguageSwitcher } from '../../../components/common/LanguageSwitcher.jsx'
 import { CORPORATE_STATUS } from '../../../constants/userRoles.js'
 import { useAuth } from '../../../hooks/useAuth.js'
@@ -48,9 +41,7 @@ import { AppPrimaryButton } from '../../../components/app/AppPrimaryButton.jsx'
 import { GlassPanel } from '../../../components/ui/GlassPanel.jsx'
 import { dataUrlToFile, saveKycDraft, loadKycDraft, clearKycDraft } from '../../../lib/kycDraftStorage.js'
 import {
-  useAddCorporateDocumentMutation,
   usePatchCorporateMeMutation,
-  useRemoveCorporateDocumentMutation,
   useSubmitCorporateVerificationMutation,
 } from '../../../store/api/workforceApi.js'
 
@@ -62,41 +53,28 @@ const BENEFIT_ICONS = [Briefcase, HardHat, IndianRupee]
 
 const GMAPS_LIBRARIES = ['places']
 
+/** Corporate KYC is a single Aadhaar card photo, kept under the `aadhaar_front` slot. */
 function profileToPhotos(p) {
   if (!p) return {}
-  const res = {}
-  if (p.kycFrontImageUrl) res.aadhaar_front = p.kycFrontImageUrl
-  if (p.kycBackImageUrl) res.aadhaar_back = p.kycBackImageUrl
-  if (p.kycPanImageUrl) res.pan = p.kycPanImageUrl
-  if (p.kycSelfieUrl) res.selfie = p.kycSelfieUrl
-  if (Array.isArray(p.kycPhotos)) {
-    for (const ph of p.kycPhotos) {
-      if (ph?.url) {
-        if (ph.type === 'aadhaar_front' && !res.aadhaar_front) res.aadhaar_front = ph.url
-        if (ph.type === 'aadhaar_back' && !res.aadhaar_back) res.aadhaar_back = ph.url
-        if (ph.type === 'pan' && !res.pan) res.pan = ph.url
-        if (ph.type === 'selfie' && !res.selfie) res.selfie = ph.url
-      }
-    }
-  }
-  if (Array.isArray(p.documents)) {
-    for (const d of p.documents) {
-      if (d?.url) {
+  const photoUrl = Array.isArray(p.kycPhotos)
+    ? p.kycPhotos.find((ph) => ph?.url && ph.type === 'aadhaar_front')?.url
+    : undefined
+  const docUrl = Array.isArray(p.documents)
+    ? p.documents.find((d) => {
+        if (!d?.url) return false
         const type = (d.documentType || '').toLowerCase()
         const label = (d.label || '').toLowerCase()
-        if ((type === 'aadhaar_front' || type === 'authorized_signatory_id' || label.includes('aadhaar front') || label.includes('aadhar front') || label.includes('signatory id')) && !res.aadhaar_front) {
-          res.aadhaar_front = d.url
-        } else if ((type === 'aadhaar_back' || label.includes('aadhaar back') || label.includes('aadhar back')) && !res.aadhaar_back) {
-          res.aadhaar_back = d.url
-        } else if ((type === 'pan' || type === 'pan_card' || label.includes('pan')) && !res.pan) {
-          res.pan = d.url
-        } else if ((type === 'selfie' || label.includes('selfie') || label.includes('representative photo')) && !res.selfie) {
-          res.selfie = d.url
-        }
-      }
-    }
-  }
-  return res
+        return (
+          type === 'aadhaar_front' ||
+          type === 'authorized_signatory_id' ||
+          label.includes('aadhaar front') ||
+          label.includes('aadhar front') ||
+          label.includes('signatory id')
+        )
+      })?.url
+    : undefined
+  const url = p.kycFrontImageUrl || photoUrl || docUrl
+  return url ? { aadhaar_front: url } : {}
 }
 
 function profileToForm(profile, user) {
@@ -110,8 +88,6 @@ function profileToForm(profile, user) {
     state: profile?.state || '',
     pincode: profile?.pincode || '',
     contactPersonName: profile?.contactPersonName || user?.fullName || '',
-    contactEmail: profile?.contactEmail || user?.email || '',
-    website: profile?.website || '',
   }
 }
 
@@ -154,9 +130,11 @@ export function CorporateProfilePage() {
         const draft = await loadKycDraft(user?._id, 'corporate')
         if (!cancelled && draft) {
           const remotePhotos = profileToPhotos(profile)
+          // Older drafts may still hold Aadhaar back / PAN / selfie slots — only the Aadhaar card is kept now.
+          const draftAadhaar = draft.photos?.aadhaar_front
           const mergedPhotos = {
             ...remotePhotos,
-            ...(draft.photos || {}),
+            ...(draftAadhaar ? { aadhaar_front: draftAadhaar } : {}),
           }
           if (Object.keys(mergedPhotos).length > 0) {
             setPhotos(mergedPhotos)
@@ -224,8 +202,6 @@ export function CorporateProfilePage() {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [isApproved])
-  const [docType, setDocType] = useState(CORPORATE_DOCUMENT_TYPES.COMPANY_REGISTRATION)
-  const [uploading, setUploading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [banner, setBanner] = useState(null)
   const [autocomplete, setAutocomplete] = useState(null)
@@ -337,8 +313,6 @@ export function CorporateProfilePage() {
   }
 
   const [patchCorporateMe] = usePatchCorporateMeMutation()
-  const [addDocument] = useAddCorporateDocumentMutation()
-  const [removeDocument] = useRemoveCorporateDocumentMutation()
   const [submitVerification] = useSubmitCorporateVerificationMutation()
 
   useEffect(() => {
@@ -352,7 +326,7 @@ export function CorporateProfilePage() {
       ...remotePhotos,
       ...(prev || {}),
     }))
-  }, [user?._id, profile?.companyName, profile?.kycFrontImageUrl, profile?.kycPanImageUrl])
+  }, [user?._id, profile?.companyName, profile?.kycFrontImageUrl])
 
   const draftProfile = useMemo(
     () =>
@@ -361,9 +335,6 @@ export function CorporateProfilePage() {
         documents,
         kycPhotos: Object.values(photos).filter(Boolean),
         kycFrontImageUrl: photos.aadhaar_front,
-        kycBackImageUrl: photos.aadhaar_back,
-        kycPanImageUrl: photos.pan,
-        kycSelfieUrl: photos.selfie,
       }),
     [form, documents, photos],
   )
@@ -424,20 +395,15 @@ export function CorporateProfilePage() {
       return null
     }
 
-    const [frontDoc, backDoc, panDoc, selfieDoc] = await Promise.all([
-      uploadSlot('aadhaar_front', 'Authorized Signatory Aadhaar (Front)', currentPhotos.aadhaar_front),
-      uploadSlot('aadhaar_back', 'Authorized Signatory Aadhaar (Back)', currentPhotos.aadhaar_back),
-      uploadSlot('pan', 'Company PAN Card', currentPhotos.pan),
-      uploadSlot('selfie', 'Authorized Representative Live Photo', currentPhotos.selfie),
-    ])
+    const aadhaarDoc = await uploadSlot(
+      'aadhaar_front',
+      'Authorized Signatory Aadhaar Card',
+      currentPhotos.aadhaar_front,
+    )
 
-    const photoList = [frontDoc, backDoc, panDoc, selfieDoc].filter(Boolean)
     return {
-      kycFrontImageUrl: frontDoc?.url || '',
-      kycBackImageUrl: backDoc?.url || '',
-      kycPanImageUrl: panDoc?.url || '',
-      kycSelfieUrl: selfieDoc?.url || '',
-      kycPhotos: photoList,
+      kycFrontImageUrl: aadhaarDoc?.url || '',
+      kycPhotos: aadhaarDoc ? [aadhaarDoc] : [],
     }
   }
 
@@ -483,60 +449,6 @@ export function CorporateProfilePage() {
     }
   }
 
-  const handleUpload = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file || !canEdit) return
-    setBanner(null)
-    setUploading(true)
-    try {
-      try {
-        await saveDetailsQuiet()
-      } catch (_quietErr) {
-        // Silent background save shouldn't block document upload
-      }
-      const uploaded = await uploadDocument(file, UPLOAD_FOLDERS.KYC_DOCUMENTS)
-      const url = assetUrlFromUpload(uploaded)
-      const option = CORPORATE_DOCUMENT_OPTIONS.find((o) => o.value === docType)
-      const res = await addDocument({
-        documentType: docType,
-        label: option?.label || 'Document',
-        url,
-      }).unwrap()
-      refreshUser(res)
-      setBanner({ variant: 'success', message: `${option?.label || 'Document'} uploaded` })
-    } catch (err) {
-      setBanner({
-        variant: 'error',
-        message: err?.data?.message || err?.message || 'Upload failed',
-      })
-    } finally {
-      setUploading(false)
-      e.target.value = ''
-    }
-  }
-
-  const saveDetailsQuiet = async () => {
-    const uploadedPhotos = await uploadAllPhotos(photos)
-    const res = await patchCorporateMe({
-      ...form,
-      panNumber: normalizePan(form.panNumber),
-      gstNumber: normalizeGst(form.gstNumber),
-      pincode: String(form.pincode || '').replace(/\D/g, '').slice(0, 6),
-      ...uploadedPhotos,
-    }).unwrap()
-    refreshUser(res)
-  }
-
-  const handleRemove = async (docId) => {
-    if (!canEdit) return
-    try {
-      const res = await removeDocument(docId).unwrap()
-      refreshUser(res)
-    } catch (err) {
-      setBanner({ variant: 'error', message: err?.data?.message || 'Could not remove document' })
-    }
-  }
-
   const handleSubmit = async () => {
     setBanner(null)
     if (!progress.readyToSubmit) {
@@ -572,8 +484,6 @@ export function CorporateProfilePage() {
       setBusy(false)
     }
   }
-
-  const uploadedTypes = new Set(documents.map((d) => d.documentType).filter(Boolean))
 
   return (
     <div className="space-y-4 pb-10">
@@ -680,7 +590,7 @@ export function CorporateProfilePage() {
           </div>
           <div>
             <label className={labelClass} htmlFor="panNumber">
-              Company PAN *
+              Company PAN (optional)
             </label>
             <input
               id="panNumber"
@@ -830,32 +740,6 @@ export function CorporateProfilePage() {
               placeholder="110001"
             />
           </div>
-          <div>
-            <label className={labelClass} htmlFor="contactEmail">
-              Billing email
-            </label>
-            <input
-              id="contactEmail"
-              type="email"
-              className={inputClass}
-              value={form.contactEmail}
-              onChange={setField('contactEmail')}
-              disabled={!canEdit}
-            />
-          </div>
-          <div>
-            <label className={labelClass} htmlFor="website">
-              Website (optional)
-            </label>
-            <input
-              id="website"
-              className={inputClass}
-              value={form.website}
-              onChange={setField('website')}
-              disabled={!canEdit}
-              placeholder="https://"
-            />
-          </div>
         </div>
 
         {canEdit ? (
@@ -878,101 +762,15 @@ export function CorporateProfilePage() {
           )}
         </div>
 
-        {/* 1. Mandatory & Primary Photo Upload Grid (Signatory Aadhaar Front/Back, PAN, Selfie) */}
+        {/* 1. Mandatory KYC photo (single Authorized Signatory Aadhaar card photo) */}
         <div>
           <BusinessKycPhotoUploadGrid
             variant="corporate"
             photos={photos}
             onChange={setPhotos}
-            disabled={!canEdit || busy || uploading}
+            disabled={!canEdit || busy}
           />
         </div>
-
-        {/* 2. Additional Corporate Documents (COI, GST Certificate, CIN, etc.) */}
-        <div className="pt-4 border-t border-slate-100 space-y-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Additional Corporate Documents (Optional)</p>
-            <p className="text-xs text-slate-600">
-              Attach Certificate of Incorporation, GST Certificate, or MOA/AOA files.
-            </p>
-          </div>
-
-          {canEdit ? (
-            <div className="space-y-3">
-              <div>
-                <label className={labelClass} htmlFor="docType">
-                  Document type
-                </label>
-                <select
-                  id="docType"
-                  className={inputClass}
-                  value={docType}
-                  onChange={(e) => setDocType(e.target.value)}
-                >
-                  {CORPORATE_DOCUMENT_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value} disabled={uploadedTypes.has(opt.value) && opt.value !== CORPORATE_DOCUMENT_TYPES.OTHER}>
-                      {opt.label}
-                      {uploadedTypes.has(opt.value) && opt.value !== CORPORATE_DOCUMENT_TYPES.OTHER ? ' ✓' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm font-bold text-slate-700 transition hover:border-brand/40 hover:bg-brand/5">
-                <Upload className="h-5 w-5 text-brand" aria-hidden />
-                {uploading ? 'Uploading…' : 'Attach additional document (PDF / Image)'}
-                <input
-                  type="file"
-                  className="sr-only"
-                  accept=".pdf,image/*"
-                  onChange={handleUpload}
-                  disabled={uploading || busy}
-                />
-              </label>
-            </div>
-          ) : null}
-        </div>
-
-        {documents.length > 0 ? (
-          <ul className="mt-4 space-y-2">
-            {documents.map((doc) => (
-              <li
-                key={doc._id || doc.url}
-                className="flex items-center gap-3 rounded-xl border border-slate-200/90 bg-slate-50/80 px-3 py-3"
-              >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-slate-600 shadow-sm">
-                  <FileText className="h-4 w-4" aria-hidden />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-slate-900">{doc.label}</p>
-                  {doc.uploadedAt ? (
-                    <p className="text-[11px] text-slate-500">
-                      {new Date(doc.uploadedAt).toLocaleDateString('en-IN')}
-                    </p>
-                  ) : null}
-                </div>
-                {doc.url ? (
-                  <a href={doc.url} target="_blank" rel="noreferrer" className="text-xs font-bold text-brand">
-                    View
-                  </a>
-                ) : null}
-                {canEdit && doc._id ? (
-                  <button
-                    type="button"
-                    onClick={() => handleRemove(doc._id)}
-                    className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-700"
-                    aria-label="Remove"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-      ) : (
-        <p className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-          No documents uploaded yet.
-        </p>
-      )}
       </GlassPanel>
 
       <GlassPanel className="border-slate-200/90 p-4">
@@ -992,7 +790,7 @@ export function CorporateProfilePage() {
         <AppPrimaryButton
           type="button"
           className="w-full py-3.5 text-sm"
-          disabled={!progress.readyToSubmit || busy || uploading}
+          disabled={!progress.readyToSubmit || busy}
           onClick={handleSubmit}
         >
           {busy ? (

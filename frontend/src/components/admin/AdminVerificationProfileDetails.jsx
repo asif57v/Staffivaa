@@ -57,7 +57,6 @@ export function AdminVerificationProfileDetails({ user, variant }) {
           <DetailRow label="Mobile" value={profile.contactPhone ? `+91 ${profile.contactPhone}` : undefined} />
         ) : null}
         <DetailRow label="Account phone" value={user?.phone ? `+91 ${user.phone}` : undefined} mono />
-        {isCorporate ? <DetailRow label="Website" value={profile.website} /> : null}
       </DetailSection>
 
       {!isCorporate && (

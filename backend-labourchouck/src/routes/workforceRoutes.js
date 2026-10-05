@@ -36,6 +36,7 @@ import {
   reviewCorporateAdmin,
   reviewContractorAdmin,
 } from '../controllers/corporateController.js'
+import { retryIndividualSearch } from '../controllers/individualDispatchController.js'
 import { bookingLimiter, paymentLimiter } from '../middleware/rateLimiters.js'
 
 const router = Router()
@@ -54,6 +55,7 @@ router.post(
   cancelRequestByClient,
 )
 
+router.post('/requests/:id/retry-search', bookingLimiter, restrictTo(USER_ROLES.INDIVIDUAL), retryIndividualSearch)
 router.post('/requests/:id/payment/order', paymentLimiter, restrictTo(...APP_ROLES), createRazorpayOrder)
 router.post('/requests/:id/payment/verify', paymentLimiter, restrictTo(...APP_ROLES), verifyRazorpayPayment)
 router.post('/requests/:id/pay-platform-fee', restrictTo(USER_ROLES.CORPORATE, USER_ROLES.CONTRACTOR), payPlatformFee)

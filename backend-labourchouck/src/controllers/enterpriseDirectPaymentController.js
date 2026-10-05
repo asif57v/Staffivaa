@@ -27,6 +27,32 @@ const todayKey = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/**
+ * Admin-set worker pay (per day / per hour) for an assignment. Must be > 0 and not above the enterprise rate.
+ * Returns { payRate } or { error }.
+ */
+export function parseWorkerPayRate(job, raw) {
+  const payRate = raw === undefined || raw === null || raw === '' ? Number(job.salary) : Math.round(Number(raw))
+  const unit = job.salaryType === 'hourly' ? 'hour' : 'day'
+  if (!Number.isFinite(payRate) || payRate <= 0) {
+    return { error: `Enter the worker's pay per ${unit}` }
+  }
+  if (payRate > Number(job.salary)) {
+    return { error: `Worker pay can't be more than the enterprise rate (${inr(job.salary)} / ${unit})` }
+  }
+  return { payRate }
+}
+
+/** Per-worker payout for one paid period: worker gets payRate × units, Staffivaa keeps the rest. */
+function workerPayoutSplit(entry, payment) {
+  const grossAmount = Math.round(payment.rate * payment.units)
+  const rate = Number(entry.payRate) > 0 ? Number(entry.payRate) : payment.rate
+  const amount = Math.min(grossAmount, Math.round(rate * payment.units))
+  const commissionAmount = grossAmount - amount
+  const commissionPercent = grossAmount > 0 ? Math.round((commissionAmount / grossAmount) * 10000) / 100 : 0
+  return { grossAmount, amount, commissionAmount, commissionPercent }
+}
+
 function computeAmount(job, units) {
   const workersCount = payableWorkersCount(job)
   const rate = job.salary
@@ -143,6 +169,20 @@ export const payDirectJob = asyncHandler(async (req, res) => {
     type: 'ENTERPRISE_DIRECT_PAYMENT',
     message: `${req.user.fullName || 'An enterprise'} paid ${inr(amount)} for "${job.jobTitle}" (${periodKey}).`,
   })
+  // Persistent admin alert: the assigned workers can now be paid out to their wallets
+  const admins = await User.find({ role: USER_ROLES.ADMIN, isActive: true }).select('_id').lean()
+  for (const admin of admins) {
+    triggerNotification({
+      userId: admin._id,
+      title: 'Enterprise payment received 💰',
+      body: `${req.user.fullName || 'An enterprise'} paid ${inr(amount)} for "${job.jobTitle}" (${periodKey}, ${workersCount} worker(s)). Add the payout to the workers' wallets.`,
+      type: 'ENTERPRISE_DIRECT_PAYMENT',
+      relatedId: job._id,
+      relatedModel: 'EnterpriseJob',
+      url: '/admin/enterprise-requests',
+      recipientRole: 'admin',
+    }).catch((err) => console.error('[Admin Notification Error]:', err.message))
+  }
 
   return sendSuccess(res, { message: `${inr(amount)} paid successfully`, data: { payment, walletBalance: wallet.balance } })
 })
@@ -234,7 +274,8 @@ export const payoutAssignedWorker = asyncHandler(async (req, res) => {
     return sendError(res, { message: 'This worker is already paid for this period', statusCode: HTTP_STATUS.CONFLICT })
   }
 
-  const amount = Math.round(payment.rate * payment.units)
+  // The worker gets the pay the admin set at assignment (payRate × units); the rest is Staffivaa's margin
+  const { grossAmount, amount, commissionAmount, commissionPercent } = workerPayoutSplit(entry, payment)
   const isRegistered = Boolean(entry.workerId) && !entry.isExternal
   const mode = isRegistered ? 'wallet' : String(req.body?.mode || '').toLowerCase()
   if (!PAYOUT_MODES.includes(mode) || (!isRegistered && mode === 'wallet')) {
@@ -249,6 +290,9 @@ export const payoutAssignedWorker = asyncHandler(async (req, res) => {
         'assignedWorkers.$.payouts': {
           periodKey,
           amount,
+          grossAmount,
+          commissionPercent,
+          commissionAmount,
           mode,
           note: String(note || '').trim().slice(0, 300),
           paidAt: new Date(),
@@ -272,7 +316,7 @@ export const payoutAssignedWorker = asyncHandler(async (req, res) => {
         payerName: 'Staffivaa',
         payerType: 'system',
         type: 'Credit',
-        source: 'Enterprise Daily/Hourly Job Payout',
+        source: `Enterprise job payout · ${job.jobTitle} · ${periodKey}`,
         amount,
         balanceAfter: worker.walletBalance,
         status: 'Completed',
@@ -288,11 +332,15 @@ export const payoutAssignedWorker = asyncHandler(async (req, res) => {
       triggerNotification({
         userId: worker._id,
         title: `${inr(amount)} Credited to Your Wallet 💰`,
-        body: `Payment for "${job.jobTitle}" (${periodKey}) has been added to your Staffivaa wallet.`,
+        body: `Payment for "${job.jobTitle}" (${periodKey}) — ${inr(amount)} has been added to your Staffivaa wallet.`,
         type: 'ENTERPRISE_DIRECT_PAYOUT',
         relatedId: job._id,
         relatedModel: 'EnterpriseJob',
+        url: '/app/enterprise-jobs',
       }).catch((err) => console.error('[Notification Error]:', err.message))
+      // Refresh the worker's job card + wallet instantly
+      emitToUser('labour', String(worker._id), 'enterprise_direct_assignment_updated', { type: 'payout', jobId: job._id })
+      emitToUser('labour', String(worker._id), 'wallet_updated', { balance: worker.walletBalance })
     } catch (err) {
       // Roll back the claim so the admin can retry
       await EnterpriseJob.updateOne(
@@ -307,15 +355,18 @@ export const payoutAssignedWorker = asyncHandler(async (req, res) => {
     adminId: req.user._id,
     action: isRegistered ? 'Credited Worker Wallet (Daily/Hourly Job)' : 'Marked Worker Paid Manually (Daily/Hourly Job)',
     module: 'Enterprise Admin',
-    newValue: { jobId: job._id, entryId: entry._id, periodKey, amount, mode },
+    newValue: { jobId: job._id, entryId: entry._id, periodKey, grossAmount, commissionPercent, commissionAmount, amount, mode },
     req,
   })
 
   emitToUser('enterprise', String(job.enterpriseId), 'enterprise_jobs_updated', { type: 'worker_paid', jobId: job._id })
 
   const fresh = await EnterpriseJob.findById(job._id).select('assignedWorkers')
+  const marginNote = commissionAmount ? ` · Staffivaa keeps ${inr(commissionAmount)}` : ''
   return sendSuccess(res, {
-    message: isRegistered ? `${inr(amount)} added to ${entry.name || 'worker'}'s wallet` : `Marked as paid (${mode})`,
+    message: isRegistered
+      ? `${inr(amount)} added to ${entry.name || 'worker'}'s wallet${marginNote}`
+      : `Marked as paid ${inr(amount)} (${mode})${marginNote}`,
     data: fresh.assignedWorkers.id(entry._id),
   })
 })

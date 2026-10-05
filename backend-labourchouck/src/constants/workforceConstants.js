@@ -87,3 +87,6 @@ export const BILLING_MODE = {
   POSTPAID: 'postpaid',
   MILESTONE: 'milestone',
 }
+
+/** How long a customer's individual booking stays open for admin assignment before it expires. */
+export const INDIVIDUAL_SEARCH_SECONDS = 90

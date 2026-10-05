@@ -12,6 +12,7 @@ import {
   getDirectRequestMatchingWorkers,
   assignDirectRequestWorkers,
   removeDirectRequestWorker,
+  updateDirectRequestWorkerPay,
 } from '../controllers/adminEnterpriseController.js'
 import {
   sendJobEndReminder,
@@ -54,6 +55,7 @@ router.patch('/direct-requests/:id/respond', respondEnterpriseDirectRequest)
 router.get('/direct-requests/:id/matching-workers', getDirectRequestMatchingWorkers)
 router.post('/direct-requests/:id/assign-workers', assignDirectRequestWorkers)
 router.delete('/direct-requests/:id/assigned-workers/:entryId', removeDirectRequestWorker)
+router.patch('/direct-requests/:id/assigned-workers/:entryId', updateDirectRequestWorkerPay)
 router.post('/direct-requests/:id/send-reminder', sendJobEndReminder)
 router.post('/direct-requests/:id/assigned-workers/:entryId/payout', payoutAssignedWorker)
 router.get('/direct-payments', getAdminDirectPayments)

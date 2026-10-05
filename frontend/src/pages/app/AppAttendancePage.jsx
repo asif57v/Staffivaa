@@ -12,7 +12,9 @@ import {
 import {
   useGetLabourCurrentEmploymentQuery,
   useGetLabourEmploymentHistoryQuery,
+  useGetLabourDirectAssignmentsQuery,
 } from '../../store/api/enterpriseApi.js'
+import { DirectWorkDayPanel, DirectAttendanceLog } from '../../components/app/CheckInOtpBox.jsx'
 import { ProfessionalSalarySlipModal } from '../../components/labour/salary/ProfessionalSalarySlipModal.jsx'
 import { useAuth } from '../../hooks/useAuth.js'
 import { getSocket } from '../../services/socket.js'
@@ -218,7 +220,13 @@ export function AppAttendancePage() {
   const [gpsStatus, setGpsStatus] = useState('idle') // idle | watching | error
 
   const assignments = assignmentsData?.assignments ?? []
-  const records = attendanceData?.records ?? []
+  // Admin-assigned enterprise work has its own OTP start/end flow (section below) — keep it out of this tracker
+  const records = (attendanceData?.records ?? []).filter((r) => r.source !== 'enterprise_direct')
+
+  const { data: directAssignmentsRes } = useGetLabourDirectAssignmentsQuery(undefined, { pollingInterval: 60000 })
+  const directJobs = (directAssignmentsRes?.data || []).filter(
+    (j) => j.assignmentStatus !== 'ended' || j.todayAttendance || (j.attendance || []).length,
+  )
 
   const persistDemo = useCallback((next) => {
     saveJobDemoState(next)
@@ -677,6 +685,29 @@ export function AppAttendancePage() {
         <h1 className="text-2xl font-extrabold text-slate-900">Project Attendance</h1>
         <p className="mt-2 text-sm text-slate-600">Track your attendance for corporate and client projects.</p>
       </div>
+
+      {directJobs.length > 0 && (
+        <section className="space-y-3" aria-label="Enterprise daily work">
+          <h2 className="text-[15px] font-extrabold text-slate-900">Enterprise daily work</h2>
+          {directJobs.map((job) => (
+            <div key={job._id} className="space-y-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{job.companyName}</p>
+                <p className="text-[15px] font-extrabold text-slate-900">{job.jobTitle}</p>
+                <p className="text-[11.5px] font-medium text-slate-500">
+                  {job.shift || 'Shift as per employer'}
+                  {job.workingHours ? ` · ${job.workingHours} hrs/day` : ''}
+                </p>
+              </div>
+              <DirectWorkDayPanel job={job} />
+              <div className="space-y-1.5">
+                <p className="text-[10.5px] font-extrabold uppercase tracking-wide text-slate-400">Attendance history</p>
+                <DirectAttendanceLog records={job.attendance} />
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
 
       {!primaryAssignment ? (
         <div style={{

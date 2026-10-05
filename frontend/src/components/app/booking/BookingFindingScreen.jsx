@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { Loader2, MapPin, Radio, Sparkles } from 'lucide-react'
+import { Loader2, MapPin, Radio, RotateCcw, SearchX, Sparkles } from 'lucide-react'
 import { AppButton } from '../../app-ui/buttons/AppButton.jsx'
 
 const MESSAGES = [
@@ -10,25 +10,92 @@ const MESSAGES = [
   'You will be notified as soon as a worker accepts…',
 ]
 
-// No client-side timeout: individual bookings wait in the admin queue until a worker is assigned.
-export function BookingFindingScreen({ categoryLabel, onCancel, cancelling = false }) {
+const SEARCH_SECONDS = 90
+
+// Matches the server's INDIVIDUAL_SEARCH_SECONDS: after this the booking expires for the admin too.
+// `expired` comes from the server (it is the source of truth); the local timer just keeps the UI in step.
+export function BookingFindingScreen({
+  categoryLabel,
+  onCancel,
+  cancelling = false,
+  expired = false,
+  onRetry,
+  retrying = false,
+}) {
   const reduce = useReducedMotion()
   const [msgIndex, setMsgIndex] = useState(0)
-  const [progress, setProgress] = useState(0)
+  const [attempt, setAttempt] = useState(0)
+  const [elapsed, setElapsed] = useState(0)
+  const timedOut = expired || elapsed >= SEARCH_SECONDS
 
   useEffect(() => {
+    const startedAt = Date.now()
     const msgTimer = window.setInterval(() => {
       setMsgIndex((i) => (i + 1) % MESSAGES.length)
     }, 2200)
-    const progTimer = window.setInterval(() => {
-      setProgress((p) => (p >= 100 ? 0 : p + 4))
-    }, 180)
+    const tick = window.setInterval(() => {
+      const secs = Math.min(SEARCH_SECONDS, Math.floor((Date.now() - startedAt) / 1000))
+      setElapsed(secs)
+      if (secs >= SEARCH_SECONDS) {
+        window.clearInterval(tick)
+        window.clearInterval(msgTimer)
+      }
+    }, 500)
 
     return () => {
       window.clearInterval(msgTimer)
-      window.clearInterval(progTimer)
+      window.clearInterval(tick)
     }
-  }, [])
+  }, [attempt])
+
+  const retry = async () => {
+    if (onRetry && (await onRetry()) === false) return
+    setElapsed(0)
+    setMsgIndex(0)
+    setAttempt((a) => a + 1)
+  }
+
+  if (timedOut) {
+    return (
+      <motion.div
+        initial={reduce ? false : { opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex min-h-[60vh] flex-col items-center justify-center px-4 py-10 text-center"
+      >
+        <span className="flex h-20 w-20 items-center justify-center rounded-full bg-amber-50 text-amber-500 ring-8 ring-amber-50/60">
+          <SearchX className="h-9 w-9" aria-hidden />
+        </span>
+        <h2 className="mt-6 text-xl font-black tracking-tight text-slate-900">No worker found</h2>
+        {categoryLabel ? <p className="mt-1 text-sm font-semibold text-brand">{categoryLabel}</p> : null}
+        <p className="mt-3 max-w-xs text-sm font-medium text-slate-600">
+          Nearby workers seem busy right now, so this search has expired. Tap “Try again” and our team will search for
+          another {SEARCH_SECONDS} seconds.
+        </p>
+
+        <div className="mt-8 flex w-full max-w-xs flex-col gap-3">
+          <AppButton type="button" className="w-full" onClick={retry} disabled={retrying} loading={retrying}>
+            {retrying ? null : <RotateCcw className="mr-2 h-4 w-4" aria-hidden />}
+            {retrying ? 'Searching…' : 'Try again'}
+          </AppButton>
+          {onCancel ? (
+            <AppButton
+              type="button"
+              variant="danger"
+              className="w-full"
+              disabled={cancelling}
+              loading={cancelling}
+              onClick={onCancel}
+            >
+              {cancelling ? 'Cancelling…' : 'Cancel booking'}
+            </AppButton>
+          ) : null}
+        </div>
+      </motion.div>
+    )
+  }
+
+  const progress = (elapsed / SEARCH_SECONDS) * 100
+  const remaining = SEARCH_SECONDS - elapsed
 
   return (
     <motion.div
@@ -85,7 +152,10 @@ export function BookingFindingScreen({ categoryLabel, onCancel, cancelling = fal
             transition={{ duration: 0.2 }}
           />
         </motion.div>
-        <p className="mt-2 text-[11px] font-semibold text-slate-500">Our team is assigning the best worker nearby</p>
+        <p className="mt-2 text-[11px] font-semibold text-slate-500">
+          Our team is assigning the best worker nearby · {Math.floor(remaining / 60)}:
+          {String(remaining % 60).padStart(2, '0')}
+        </p>
       </motion.div>
 
       <div className="mt-8 flex flex-wrap justify-center gap-2">

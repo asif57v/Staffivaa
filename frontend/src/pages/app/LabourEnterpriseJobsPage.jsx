@@ -1,12 +1,18 @@
-import { useState, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Briefcase, Search, X, SlidersHorizontal, MapPin, Wallet,
   Users, Clock, ChevronRight, Building2, ShieldCheck, Star,
   Filter, CheckCircle2, Home, Truck, UtensilsCrossed, HeartPulse,
 } from 'lucide-react'
-import { useGetPublicEnterpriseJobsQuery, useGetMyEnterpriseApplicationsQuery } from '../../store/api/enterpriseApi.js'
+import {
+  useGetPublicEnterpriseJobsQuery,
+  useGetMyEnterpriseApplicationsQuery,
+  useGetLabourDirectAssignmentsQuery,
+} from '../../store/api/enterpriseApi.js'
+import { DirectWorkDayPanel, DirectAttendanceLog } from '../../components/app/CheckInOtpBox.jsx'
 import { useAuth } from '../../hooks/useAuth.js'
 
 // ─── Status Config Mappings ───────────────────────────────────────────────────
@@ -53,6 +59,192 @@ function companyName(job) {
 
 function companyLogo(job) {
   return job?.enterpriseId?.profileImageUrl || null
+}
+
+// ─── Admin-assigned daily/hourly work ─────────────────────────────────────────
+const ASSIGNMENT_STATUS_BADGE = {
+  active: { label: 'Active', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  upcoming: { label: 'Upcoming', className: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  ended: { label: 'Ended', className: 'bg-slate-100 text-slate-500 border-slate-200' },
+}
+
+function fmtDate(d) {
+  if (!d) return null
+  return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function PaymentsReceived({ job }) {
+  if (!job.payouts?.length) return null
+  return (
+    <div className="space-y-1.5 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
+      <p className="flex items-center justify-between text-[11px] font-extrabold uppercase tracking-wide text-emerald-700">
+        <span className="flex items-center gap-1">
+          <Wallet className="h-3.5 w-3.5" /> Payments received
+        </span>
+        <span>₹{Number(job.totalPaid || 0).toLocaleString('en-IN')}</span>
+      </p>
+      <ul className="divide-y divide-emerald-100">
+        {[...job.payouts]
+          .sort((a, b) => String(b.periodKey).localeCompare(String(a.periodKey)))
+          .map((p) => (
+            <li key={p._id || p.periodKey} className="flex items-start justify-between gap-2 py-1.5 text-[12px]">
+              <span>
+                <span className="font-bold text-slate-800">
+                  {new Date(`${p.periodKey}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </span>
+                <span className="block text-[10.5px] font-medium text-slate-500">
+                  {p.mode === 'wallet' ? 'Added to wallet' : `Paid by ${p.mode}`} ·{' '}
+                  {new Date(p.paidAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </span>
+              <span className="shrink-0 font-black text-emerald-700">+₹{Number(p.amount).toLocaleString('en-IN')}</span>
+            </li>
+          ))}
+      </ul>
+    </div>
+  )
+}
+
+function AssignedWorkInfo({ job }) {
+  const start = fmtDate(job.timeline?.expectedJoiningDate)
+  const end = fmtDate(job.timeline?.projectEndDate)
+  return (
+    <div className="space-y-1.5 text-[12px] text-slate-600">
+      <p className="flex items-start gap-2">
+        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+        <span>{job.locationText}</span>
+      </p>
+      <p className="flex items-center gap-2">
+        <Clock className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        <span>
+          {start ? `From ${start}` : 'Start date TBD'}
+          {end ? ` to ${end}` : ''}
+          {job.shift ? ` · ${job.shift}` : ''}
+          {job.workingHours ? ` · ${job.workingHours} hrs/day` : ''}
+        </span>
+      </p>
+      <p className="flex items-center gap-2">
+        <Wallet className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        {/* payRate = the pay Staffivaa set for this worker (the enterprise rate is never sent to the worker) */}
+        <span className="font-bold text-slate-800">{fmtSalary(job.payRate, job.salaryType)}</span>
+        {job.totalPaid > 0 ? (
+          <span className="text-emerald-700 font-semibold">· ₹{Number(job.totalPaid).toLocaleString('en-IN')} paid</span>
+        ) : null}
+      </p>
+      <p className="flex items-center gap-2">
+        <Users className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        <span>
+          Team of {job.teamSize} · assigned {job.assignedAt ? timeAgo(job.assignedAt).toLowerCase() : 'recently'}
+        </span>
+      </p>
+    </div>
+  )
+}
+
+function AssignedWorkHeader({ job }) {
+  const badge = ASSIGNMENT_STATUS_BADGE[job.assignmentStatus] || ASSIGNMENT_STATUS_BADGE.active
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+          <Building2 className="h-3 w-3" /> {job.companyName}
+        </p>
+        <h3 className="mt-0.5 text-[15px] font-extrabold text-slate-900 leading-snug">{job.jobTitle}</h3>
+        {job.categoryId?.name ? <p className="text-[12px] font-semibold text-indigo-600">{job.categoryId.name}</p> : null}
+      </div>
+      <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-extrabold ${badge.className}`}>
+        {badge.label}
+      </span>
+    </div>
+  )
+}
+
+/** Compact card; tapping it opens the full details + attendance sheet. */
+function AssignedWorkCard({ job, highlighted = false, onOpen }) {
+  return (
+    <div
+      id={`assigned-work-${job._id}`}
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(job)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onOpen(job)
+      }}
+      className={`scroll-mt-20 cursor-pointer bg-white rounded-2xl border shadow-sm p-4 space-y-3 transition-all duration-500 active:scale-[0.99] ${
+        highlighted ? 'border-emerald-400 ring-4 ring-emerald-200' : 'border-emerald-100'
+      }`}
+    >
+      <AssignedWorkHeader job={job} />
+      <AssignedWorkInfo job={job} />
+
+      {/* Quick action — clicks here must not open the sheet */}
+      <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+        <DirectWorkDayPanel job={job} />
+      </div>
+
+      <p className="flex items-center justify-center gap-1 border-t border-slate-100 pt-2.5 text-[12px] font-extrabold text-indigo-600">
+        View details &amp; attendance <ChevronRight className="h-3.5 w-3.5" />
+      </p>
+    </div>
+  )
+}
+
+/** Full details for one assigned job: info, today's check-in / timer, attendance history, payments. */
+function AssignedWorkSheet({ job, onClose }) {
+  const records = job.attendance || []
+  const completed = records.filter((r) => r.state === 'completed')
+  const totalMinutes = completed.reduce((s, r) => s + (r.totalWorkingMinutes || 0), 0)
+  // Portal to <body> so the app shell (bottom nav, transformed parents) can never sit on top of the sheet
+  return createPortal(
+    <div className="fixed inset-0 z-1000 flex items-end justify-center bg-slate-900/50" onClick={onClose}>
+      <motion.div
+        initial={{ y: 40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 pb-8 space-y-4"
+      >
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <AssignedWorkHeader job={job} />
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Close">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <AssignedWorkInfo job={job} />
+
+        {job.jobDescription ? (
+          <p className="rounded-xl bg-slate-50 p-3 text-[12px] text-slate-600 whitespace-pre-line">{job.jobDescription}</p>
+        ) : null}
+
+        <section className="space-y-2">
+          <h4 className="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Today</h4>
+          <DirectWorkDayPanel job={job} />
+        </section>
+
+        <section className="space-y-2">
+          <h4 className="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Attendance</h4>
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="rounded-xl bg-slate-50 p-2.5">
+              <p className="text-[10px] font-bold uppercase text-slate-400">Days worked</p>
+              <p className="text-[16px] font-black text-slate-900">{completed.length}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-2.5">
+              <p className="text-[10px] font-bold uppercase text-slate-400">Total hours</p>
+              <p className="text-[16px] font-black text-slate-900">
+                {Math.floor(totalMinutes / 60)}h {totalMinutes % 60}m
+              </p>
+            </div>
+          </div>
+          <DirectAttendanceLog records={records} />
+        </section>
+
+        <PaymentsReceived job={job} />
+      </motion.div>
+    </div>,
+    document.body,
+  )
 }
 
 // ─── Perk chips config ────────────────────────────────────────────────────────
@@ -350,6 +542,39 @@ export function LabourEnterpriseJobsPage() {
   // Fetch applications for current worker to show real-time applied status & progress
   const { data: myAppsData } = useGetMyEnterpriseApplicationsQuery(undefined, { skip: !isLabour })
 
+  // Daily/hourly enterprise work that Admin assigned directly to this worker
+  const { data: assignedData } = useGetLabourDirectAssignmentsQuery(undefined, {
+    skip: !isLabour,
+    pollingInterval: 60000,
+    refetchOnMountOrArgChange: true,
+  })
+  const assignedWork = useMemo(() => {
+    const order = { active: 0, upcoming: 1, ended: 2 }
+    return [...(assignedData?.data || [])].sort((a, b) => order[a.assignmentStatus] - order[b.assignmentStatus])
+  }, [assignedData])
+
+  // ?job=<id> (e.g. after verifying the check-in OTP from Home) scrolls to and highlights that card
+  const [searchParams] = useSearchParams()
+  const targetJobId = searchParams.get('job')
+  const [highlightJobId, setHighlightJobId] = useState(null)
+  const [openJobId, setOpenJobId] = useState(null)
+  // Always render the sheet from the latest list data so the timer / OTP state stays live
+  const openJob = openJobId ? assignedWork.find((j) => String(j._id) === openJobId) : null
+  const scrolledForRef = useRef(null)
+  useEffect(() => {
+    if (!targetJobId || scrolledForRef.current === targetJobId) return undefined
+    if (!assignedWork.some((j) => String(j._id) === targetJobId)) return undefined
+    scrolledForRef.current = targetJobId
+    const el = document.getElementById(`assigned-work-${targetJobId}`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const on = setTimeout(() => setHighlightJobId(targetJobId), 0)
+    const off = setTimeout(() => setHighlightJobId(null), 3500)
+    return () => {
+      clearTimeout(on)
+      clearTimeout(off)
+    }
+  }, [targetJobId, assignedWork])
+
   const applicationsMap = useMemo(() => {
     const map = {}
     const list = myAppsData?.data || []
@@ -498,6 +723,29 @@ export function LabourEnterpriseJobsPage() {
       </div>
 
       <div className="px-4 py-4 space-y-6 pb-32">
+
+        {/* ── My assigned work (admin-assigned daily/hourly requests) ──────── */}
+        {assignedWork.length > 0 && (
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <h2 className="text-[15px] font-extrabold text-slate-900">My assigned work</h2>
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">
+                {assignedWork.length}
+              </span>
+            </div>
+            {assignedWork.map((job) => (
+              <AssignedWorkCard
+                key={job._id}
+                job={job}
+                highlighted={highlightJobId === String(job._id)}
+                onOpen={(j) => setOpenJobId(String(j._id))}
+              />
+            ))}
+          </section>
+        )}
+
+        {openJob && <AssignedWorkSheet job={openJob} onClose={() => setOpenJobId(null)} />}
 
         {/* ── Error ─────────────────────────────────────────────────────────── */}
         {isError && (

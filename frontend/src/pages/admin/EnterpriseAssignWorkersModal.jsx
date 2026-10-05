@@ -23,6 +23,26 @@ export function EnterpriseAssignWorkersModal({ job, onClose }) {
   const [selectedIds, setSelectedIds] = useState([])
   const [externalRows, setExternalRows] = useState([emptyExternal()])
 
+  // Worker pay (per day / per hour) — what the assigned workers see and get credited. Linked to the margin %.
+  const enterpriseRate = Number(job.salary) || 0
+  const unit = job.salaryType === 'hourly' ? 'hour' : 'day'
+  const lastRate = [...(job.assignedWorkers || [])].reverse().find((w) => Number(w.payRate) > 0)?.payRate
+  const marginOf = (pay) =>
+    enterpriseRate > 0 && pay !== '' ? String(Math.round(((enterpriseRate - Number(pay)) / enterpriseRate) * 1000) / 10) : ''
+  const [payInput, setPayInput] = useState(() => String(lastRate ?? enterpriseRate))
+  const [marginInput, setMarginInput] = useState(() => marginOf(lastRate ?? enterpriseRate))
+  const payNum = Number(payInput)
+  const payValid = payInput !== '' && Number.isFinite(payNum) && payNum > 0 && payNum <= enterpriseRate
+  const onPayChange = (value) => {
+    setPayInput(value)
+    setMarginInput(marginOf(value))
+  }
+  const onMarginChange = (value) => {
+    setMarginInput(value)
+    const pct = Number(value)
+    if (value !== '' && Number.isFinite(pct)) setPayInput(String(Math.round(enterpriseRate * (1 - pct / 100))))
+  }
+
   // Debounce the search box
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput.trim()), 300)
@@ -65,11 +85,16 @@ export function EnterpriseAssignWorkersModal({ job, onClose }) {
       toast.error('Select or add at least one worker')
       return
     }
+    if (!payValid) {
+      toast.error(`Worker pay must be between ₹1 and ₹${enterpriseRate} / ${unit}`)
+      return
+    }
     try {
       const res = await assignWorkers({
         id: job._id,
         workerIds: selectedIds,
         externalWorkers: filledExternal.map((r) => ({ name: r.name.trim(), phone: r.phone.trim() })),
+        payRate: Math.round(payNum),
       }).unwrap()
       toast.success(res?.message || 'Workers assigned')
       onClose()
@@ -92,6 +117,53 @@ export function EnterpriseAssignWorkersModal({ job, onClose }) {
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700">
             <X className="h-5 w-5" />
           </button>
+        </div>
+
+        {/* Worker pay */}
+        <div className="mx-5 mt-4 rounded-xl bg-amber-50/70 p-3.5 ring-1 ring-amber-100">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Worker pay · shown to the worker</p>
+          <div className="mt-2 flex flex-wrap items-end gap-3">
+            <label className="text-[11px] font-bold text-slate-600">
+              Pay per {unit}
+              <span className="mt-1 flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 focus-within:border-brand">
+                <span className="text-sm font-black text-slate-500">₹</span>
+                <input
+                  type="number"
+                  min="1"
+                  max={enterpriseRate}
+                  value={payInput}
+                  onChange={(e) => onPayChange(e.target.value)}
+                  className="w-24 bg-transparent text-sm font-black text-slate-900 outline-none"
+                />
+              </span>
+            </label>
+            <label className="text-[11px] font-bold text-slate-600">
+              Staffivaa margin
+              <span className="mt-1 flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 focus-within:border-brand">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={marginInput}
+                  onChange={(e) => onMarginChange(e.target.value)}
+                  className="w-16 bg-transparent text-sm font-black text-slate-900 outline-none"
+                />
+                <span className="text-sm font-black text-slate-500">%</span>
+              </span>
+            </label>
+          </div>
+          {payValid ? (
+            <p className="mt-2 text-[11px] font-semibold text-slate-600">
+              Enterprise pays ₹{enterpriseRate.toLocaleString('en-IN')} / {unit} per worker · worker gets{' '}
+              <span className="font-black text-emerald-700">₹{Math.round(payNum).toLocaleString('en-IN')}</span> · Staffivaa keeps{' '}
+              <span className="font-black text-slate-900">₹{(enterpriseRate - Math.round(payNum)).toLocaleString('en-IN')}</span>
+            </p>
+          ) : (
+            <p className="mt-2 text-[11px] font-bold text-rose-600">
+              Pay must be between ₹1 and ₹{enterpriseRate.toLocaleString('en-IN')} (the enterprise rate).
+            </p>
+          )}
         </div>
 
         {/* Tabs */}
@@ -259,7 +331,7 @@ export function EnterpriseAssignWorkersModal({ job, onClose }) {
             </button>
             <button
               type="button"
-              disabled={assigning || totalPicked === 0}
+              disabled={assigning || totalPicked === 0 || !payValid}
               onClick={handleAssign}
               className="rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-50"
             >

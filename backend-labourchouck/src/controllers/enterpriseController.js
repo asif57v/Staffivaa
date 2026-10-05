@@ -16,8 +16,13 @@ import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
 import { USER_ROLES } from '../constants/roles.js'
 import { logAudit } from '../utils/auditLogger.js'
-import { emitToRole } from '../utils/socket.js'
+import { emitToRole, emitToUser } from '../utils/socket.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
+import {
+  createDirectCheckInRecord,
+  loadDirectAttendanceByJob,
+  summarizeDirectRecord,
+} from './enterpriseDirectAttendanceController.js'
 
 // ─── Helper: Safe Populate Constants ─────────────────────────────────────────
 const COMPANY_SELECT = 'fullName profileImageUrl enterpriseProfile phone email'
@@ -405,14 +410,29 @@ export const getEnterpriseJobs = asyncHandler(async (req, res) => {
 
   const jobs = await EnterpriseJob.find({ enterpriseId: req.user._id })
     .populate('categoryId', CATEGORY_SELECT)
-    .populate('assignedWorkers.workerId', 'fullName phone profileImageUrl')
+    .populate('assignedWorkers.workerId', 'fullName profileImageUrl')
     .sort({ createdAt: -1 })
 
   const now = new Date()
+  const directAttendanceByJob = await loadDirectAttendanceByJob(
+    jobs.filter((j) => j.dispatchMode === 'admin').map((j) => j._id),
+  )
 
   const jobsWithStats = await Promise.all(
     jobs.map(async (job) => {
       const jobObj = job.toObject()
+      // Workers are arranged by Staffivaa — never expose their phone numbers to the enterprise.
+      // Worker pay rates and payout records (Staffivaa's margin) are internal to Staffivaa.
+      jobObj.assignedWorkers = (jobObj.assignedWorkers || []).map(
+        ({ phone: _phone, payouts: _payouts, payRate: _payRate, ...w }) => w,
+      )
+      delete jobObj.payoutCommissionPercent // legacy field from the earlier %-commission payouts
+      if (job.dispatchMode === 'admin') {
+        // Daily OTP check-in → start → end → OTP check-out records (check-out OTP code is for the enterprise)
+        jobObj.directAttendance = (directAttendanceByJob[String(job._id)] || []).map((r) =>
+          summarizeDirectRecord(r, { includeOtpCode: true }),
+        )
+      }
       const acceptedCount = await EnterpriseApplication.countDocuments({
         jobId: job._id,
         status: { $in: HIRED_STATUSES },
@@ -2191,4 +2211,260 @@ export const getJobWorkersAttendance = asyncHandler(async (req, res) => {
   )
 
   return sendSuccess(res, { data: results, standardShiftHours })
+})
+
+/**
+ * GET /api/enterprise/my-direct-assignments
+ * Daily/hourly enterprise requests where Admin assigned this labour (EnterpriseJob.assignedWorkers).
+ */
+export const getLabourDirectAssignments = asyncHandler(async (req, res) => {
+  if (req.user.role !== USER_ROLES.LABOUR) {
+    return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  const jobs = await EnterpriseJob.find({
+    dispatchMode: 'admin',
+    'assignedWorkers.workerId': req.user._id,
+  })
+    .select(
+      'jobTitle department categoryId numberOfWorkers locationText locationPoint salary salaryType workingHours shift ' +
+        'jobDescription contractDuration timeline status adminRequestStatus enterpriseId assignedWorkers createdAt',
+    )
+    .populate('categoryId', 'name')
+    .populate('enterpriseId', 'fullName profileImageUrl enterpriseProfile.companyName')
+    .sort({ 'timeline.expectedJoiningDate': -1, createdAt: -1 })
+    .limit(50)
+    .lean()
+
+  const now = new Date()
+  const me = String(req.user._id)
+  const todayKey = istDateKey(now)
+  // Self-heal: a check-in verified today without an attendance record (e.g. verified before the
+  // attendance flow existed) gets its record now, so the work timer runs from the real check-in time.
+  for (const job of jobs) {
+    const mine = (job.assignedWorkers || []).find((w) => String(w.workerId) === me)
+    const todayCheckIn = (mine?.checkIns || []).find((c) => c.dateKey === todayKey)
+    if (todayCheckIn) {
+      await createDirectCheckInRecord({ job, workerId: req.user._id, dateKey: todayKey, verifiedAt: todayCheckIn.verifiedAt })
+    }
+  }
+  const attendanceByJob = await loadDirectAttendanceByJob(jobs.map((j) => j._id), { workerId: req.user._id })
+  const data = jobs.map((job) => {
+    const attendance = (attendanceByJob[String(job._id)] || []).map((r) => summarizeDirectRecord(r))
+    const mine = (job.assignedWorkers || []).find((w) => String(w.workerId) === me) || {}
+    const endDate = job.timeline?.projectEndDate ? new Date(job.timeline.projectEndDate) : null
+    const startDate = job.timeline?.expectedJoiningDate ? new Date(job.timeline.expectedJoiningDate) : null
+    const isEnded = job.status === 'closed' || (endDate && endDate.getTime() < now.getTime() - 24 * 60 * 60 * 1000)
+    const isUpcoming = !isEnded && startDate && startDate > now
+    // The worker only sees the pay Staffivaa set for them — never the enterprise rate or Staffivaa's margin.
+    const { assignedWorkers, salary, ...rest } = job
+    return {
+      ...rest,
+      payRate: Number(mine.payRate) > 0 ? Number(mine.payRate) : salary,
+      companyName: job.enterpriseId?.enterpriseProfile?.companyName || job.enterpriseId?.fullName || 'Enterprise',
+      assignedAt: mine.assignedAt || null,
+      payouts: (mine.payouts || []).map((p) => ({
+        _id: p._id,
+        periodKey: p.periodKey,
+        amount: p.amount,
+        mode: p.mode,
+        paidAt: p.paidAt,
+      })),
+      totalPaid: (mine.payouts || []).reduce((s, p) => s + (Number(p.amount) || 0), 0),
+      teamSize: (assignedWorkers || []).length,
+      // Never send the OTP code to the worker — only that one is waiting to be entered.
+      pendingCheckInOtp:
+        mine.checkInOtp?.code && (!mine.checkInOtp.expiresAt || new Date(mine.checkInOtp.expiresAt) > now)
+          ? { expiresAt: mine.checkInOtp.expiresAt, dateKey: mine.checkInOtp.dateKey }
+          : null,
+      checkIns: mine.checkIns || [],
+      todayAttendance: attendance.find((a) => a.dateKey === todayKey) || null,
+      attendance,
+      assignmentStatus: isEnded ? 'ended' : isUpcoming ? 'upcoming' : 'active',
+    }
+  })
+
+  return sendSuccess(res, { data })
+})
+
+// ── In-app check-in OTP for admin-assigned daily/hourly workers ─────────────────
+const CHECKIN_OTP_TTL_MS = 30 * 60 * 1000
+const CHECKIN_OTP_MAX_ATTEMPTS = 5
+
+/** Calendar date in India, used to record one check-in per worker per day. */
+function istDateKey(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(date)
+}
+
+/**
+ * POST /api/enterprise/jobs/:id/assigned-workers/:entryId/checkin-otp
+ * Enterprise generates a 4-digit OTP for one assigned (registered) worker. The worker's app is told to
+ * ask for it; the enterprise shares the code in person and the worker enters it to verify.
+ */
+export const generateCheckInOtp = asyncHandler(async (req, res) => {
+  if (req.user.role !== USER_ROLES.ENTERPRISE) {
+    return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+  const job = await EnterpriseJob.findOne({ _id: req.params.id, enterpriseId: req.user._id, dispatchMode: 'admin' })
+  if (!job) return sendError(res, { message: 'Job not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  if (job.status === 'closed') {
+    return sendError(res, { message: 'This contract is already concluded', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const entry = job.assignedWorkers.id(req.params.entryId)
+  if (!entry) return sendError(res, { message: 'Assigned worker not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  if (!entry.workerId || entry.isExternal) {
+    return sendError(res, {
+      message: 'This worker is not on the Staffivaa app, so in-app OTP is not available.',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+    })
+  }
+
+  const now = new Date()
+  const dateKey = istDateKey(now)
+  if ((entry.checkIns || []).some((c) => c.dateKey === dateKey)) {
+    return sendError(res, { message: `${entry.name || 'Worker'} is already verified for today`, statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const code = String(crypto.randomInt(1000, 10000))
+  entry.checkInOtp = { code, dateKey, generatedAt: now, expiresAt: new Date(now.getTime() + CHECKIN_OTP_TTL_MS), attempts: 0 }
+  await job.save()
+
+  const workerId = String(entry.workerId)
+  emitToUser('labour', workerId, 'enterprise_direct_assignment_updated', { type: 'checkin_otp', jobId: job._id })
+  triggerNotification({
+    userId: entry.workerId,
+    title: 'Enter check-in OTP 🔐',
+    body: `Your employer generated a check-in OTP for "${job.jobTitle}". Ask them for the code and enter it in the app.`,
+    type: 'ENTERPRISE_CHECKIN_OTP',
+    relatedId: job._id,
+    relatedModel: 'EnterpriseJob',
+    url: '/app/enterprise-jobs',
+  }).catch((err) => console.error('[Notification Error]:', err.message))
+
+  return sendSuccess(res, {
+    message: 'OTP generated',
+    data: { entryId: entry._id, checkInOtp: entry.checkInOtp },
+  })
+})
+
+/**
+ * POST /api/enterprise/my-direct-assignments/:jobId/request-checkin
+ * Worker taps "Check in" on site → a check-in OTP is generated for the enterprise (shown on their job page),
+ * the enterprise shares it and the worker enters it to start the day.
+ */
+export const requestCheckInOtp = asyncHandler(async (req, res) => {
+  if (req.user.role !== USER_ROLES.LABOUR) {
+    return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+  const job = await EnterpriseJob.findOne({
+    _id: req.params.jobId,
+    dispatchMode: 'admin',
+    'assignedWorkers.workerId': req.user._id,
+  })
+  if (!job) return sendError(res, { message: 'Assignment not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  if (job.status === 'closed') {
+    return sendError(res, { message: 'This contract is already concluded', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const now = new Date()
+  const dateKey = istDateKey(now)
+  const startKey = job.timeline?.expectedJoiningDate ? istDateKey(new Date(job.timeline.expectedJoiningDate)) : null
+  if (startKey && dateKey < startKey) {
+    return sendError(res, {
+      message: `This work starts on ${new Date(job.timeline.expectedJoiningDate).toLocaleDateString('en-IN')}.`,
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+    })
+  }
+
+  const entry = job.assignedWorkers.find((w) => String(w.workerId) === String(req.user._id))
+  const todayCheckIn = (entry.checkIns || []).find((c) => c.dateKey === dateKey)
+  if (todayCheckIn) {
+    // Already verified today — make sure the attendance record (and work timer) exists instead of failing
+    await createDirectCheckInRecord({ job, workerId: req.user._id, dateKey, verifiedAt: todayCheckIn.verifiedAt })
+    return sendSuccess(res, { message: 'You are already checked in — your work timer is running.', data: { alreadyCheckedIn: true } })
+  }
+
+  const code = String(crypto.randomInt(1000, 10000))
+  entry.checkInOtp = { code, dateKey, generatedAt: now, expiresAt: new Date(now.getTime() + CHECKIN_OTP_TTL_MS), attempts: 0 }
+  await job.save()
+
+  emitToUser('enterprise', String(job.enterpriseId), 'enterprise_jobs_updated', { type: 'checkin_requested', jobId: job._id })
+  triggerNotification({
+    userId: job.enterpriseId,
+    title: 'Worker checking in 🔐',
+    body: `${entry.name || 'Your worker'} is on site for "${job.jobTitle}". Open the job to see the check-in OTP and share it with them.`,
+    type: 'ENTERPRISE_CHECKIN_REQUESTED',
+    relatedId: job._id,
+    relatedModel: 'EnterpriseJob',
+  }).catch((err) => console.error('[Notification Error]:', err.message))
+
+  return sendSuccess(res, {
+    message: 'Check-in OTP sent to your employer',
+    data: { expiresAt: entry.checkInOtp.expiresAt },
+  })
+})
+
+/**
+ * POST /api/enterprise/my-direct-assignments/:jobId/verify-otp  { code }
+ * The assigned worker enters the OTP shared by the enterprise. It only matches this worker's own entry.
+ */
+export const verifyCheckInOtp = asyncHandler(async (req, res) => {
+  if (req.user.role !== USER_ROLES.LABOUR) {
+    return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+  const code = String(req.body?.code || '').trim()
+  if (!/^\d{4}$/.test(code)) {
+    return sendError(res, { message: 'Enter the 4-digit OTP', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const job = await EnterpriseJob.findOne({
+    _id: req.params.jobId,
+    dispatchMode: 'admin',
+    'assignedWorkers.workerId': req.user._id,
+  })
+  if (!job) return sendError(res, { message: 'Assignment not found', statusCode: HTTP_STATUS.NOT_FOUND })
+
+  const entry = job.assignedWorkers.find((w) => String(w.workerId) === String(req.user._id))
+  const otp = entry?.checkInOtp
+  if (!otp?.code) {
+    return sendError(res, { message: 'No active OTP. Ask your employer to generate one.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+  if (otp.expiresAt && otp.expiresAt < new Date()) {
+    return sendError(res, { message: 'OTP expired. Ask your employer to generate a new one.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+  if ((otp.attempts || 0) >= CHECKIN_OTP_MAX_ATTEMPTS) {
+    return sendError(res, { message: 'Too many wrong attempts. Ask your employer for a new OTP.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  if (otp.code !== code) {
+    otp.attempts = (otp.attempts || 0) + 1
+    await job.save()
+    const left = CHECKIN_OTP_MAX_ATTEMPTS - otp.attempts
+    return sendError(res, {
+      message: left > 0 ? `OTP does not match. ${left} attempt(s) left.` : 'OTP does not match. Ask your employer for a new OTP.',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+    })
+  }
+
+  const verifiedAt = new Date()
+  if (!(entry.checkIns || []).some((c) => c.dateKey === otp.dateKey)) {
+    entry.checkIns.push({ dateKey: otp.dateKey, verifiedAt })
+  }
+  entry.checkInOtp = undefined
+  await job.save()
+  // Today's attendance starts here; the worker then starts / ends work from the app.
+  await createDirectCheckInRecord({ job, workerId: req.user._id, dateKey: otp.dateKey, verifiedAt })
+
+  emitToUser('enterprise', String(job.enterpriseId), 'enterprise_jobs_updated', { type: 'checkin_verified', jobId: job._id })
+  triggerNotification({
+    userId: job.enterpriseId,
+    title: 'Worker verified ✅',
+    body: `${entry.name || 'Your worker'} verified the check-in OTP for "${job.jobTitle}".`,
+    type: 'ENTERPRISE_CHECKIN_VERIFIED',
+    relatedId: job._id,
+    relatedModel: 'EnterpriseJob',
+  }).catch((err) => console.error('[Notification Error]:', err.message))
+
+  return sendSuccess(res, { message: 'Checked in — your work timer has started.', data: { verifiedAt } })
 })

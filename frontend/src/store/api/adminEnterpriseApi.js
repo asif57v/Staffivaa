@@ -48,12 +48,20 @@ export const adminEnterpriseApi = baseApi.injectEndpoints({
       providesTags: ['AdminEnterpriseDirectRequests'],
     }),
     assignDirectRequestWorkers: builder.mutation({
-      query: ({ id, workerIds, externalWorkers }) => ({
+      query: ({ id, workerIds, externalWorkers, payRate }) => ({
         url: `/admin/enterprise/direct-requests/${id}/assign-workers`,
         method: 'POST',
-        body: { workerIds, externalWorkers },
+        body: { workerIds, externalWorkers, payRate },
       }),
       invalidatesTags: ['AdminEnterpriseDirectRequests', 'EnterpriseJobs'],
+    }),
+    updateDirectRequestWorkerPay: builder.mutation({
+      query: ({ id, entryId, payRate }) => ({
+        url: `/admin/enterprise/direct-requests/${id}/assigned-workers/${entryId}`,
+        method: 'PATCH',
+        body: { payRate },
+      }),
+      invalidatesTags: ['AdminEnterpriseDirectRequests'],
     }),
     removeDirectRequestWorker: builder.mutation({
       query: ({ id, entryId }) => ({
@@ -202,6 +210,7 @@ export const {
   useGetDirectRequestMatchingWorkersQuery,
   useAssignDirectRequestWorkersMutation,
   useRemoveDirectRequestWorkerMutation,
+  useUpdateDirectRequestWorkerPayMutation,
   useSendDirectRequestReminderMutation,
   usePayoutDirectRequestWorkerMutation,
   useGetAdminDirectPaymentsQuery,
