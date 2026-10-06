@@ -6,6 +6,7 @@
 export const NOTIF_TYPE = {
   NEW_ORDER: 'NEW_ORDER',
   BOOKING_CREATED: 'BOOKING_CREATED',
+  BOOKING_ADMIN_ACCEPTED: 'BOOKING_ADMIN_ACCEPTED',
   BOOKING_UPDATED: 'BOOKING_UPDATED',
   BOOKING_CANCELLED: 'BOOKING_CANCELLED',
   WORKER_FOUND: 'WORKER_FOUND',
@@ -32,6 +33,7 @@ export function notificationUrlFor({ role, type, requestId, assignmentId }) {
     case NOTIF_TYPE.PAYMENT_RECEIVED:
       if (requestId) return isLabour ? '/app/jobs' : `/app/booking/flow?step=active&ref=`
       return isLabour ? '/app/jobs' : '/app/bookings'
+    case NOTIF_TYPE.BOOKING_ADMIN_ACCEPTED:
     case NOTIF_TYPE.BOOKING_CANCELLED:
     case NOTIF_TYPE.BOOKING_EXPIRED:
       return isLabour ? '/app/jobs' : '/app/bookings'
@@ -50,8 +52,16 @@ export function bookingCreatedNotif(reference) {
   const ref = reference || 'new'
   return {
     title: 'Booking Created!',
-    body: `Your job booking #${ref} has been created. Our team is assigning a worker for you.`,
+    body: `Your job booking #${ref} has been created. Admin will accept your booking soon and assign a worker to you.`,
     type: NOTIF_TYPE.BOOKING_CREATED,
+  }
+}
+
+export function bookingAdminAcceptedNotif() {
+  return {
+    title: 'Booking Accepted',
+    body: 'Your booking has been accepted by admin. A worker will be assigned shortly.',
+    type: NOTIF_TYPE.BOOKING_ADMIN_ACCEPTED,
   }
 }
 

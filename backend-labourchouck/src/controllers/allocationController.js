@@ -1,6 +1,6 @@
 import mongoose from 'mongoose'
 import { USER_ROLES, KYC_STATUS } from '../constants/roles.js'
-import { REQUEST_STATUS, ASSIGNMENT_STATUS, REQUEST_SOURCE, INDIVIDUAL_SEARCH_SECONDS } from '../constants/workforceConstants.js'
+import { REQUEST_STATUS, ASSIGNMENT_STATUS, REQUEST_SOURCE } from '../constants/workforceConstants.js'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { Allocation } from '../models/Allocation.js'
 import { Assignment } from '../models/Assignment.js'
@@ -205,6 +205,7 @@ export const listLabourAssignments = asyncHandler(async (req, res) => {
       // If the request has already been accepted by someone else or moved forward
       const validOfferStatuses = [
         'searching',
+        'admin_accepted',
         'allocating',
         'assigned',
         'confirmed',
@@ -475,6 +476,7 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
 
     const acceptableRequestStatuses = [
       REQUEST_STATUS.SEARCHING,
+      REQUEST_STATUS.ADMIN_ACCEPTED,
       REQUEST_STATUS.ALLOCATING,
       REQUEST_STATUS.ASSIGNED,
       REQUEST_STATUS.PENDING_REVIEW,
@@ -694,9 +696,11 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
       const isAdminDispatch = request.dispatchMode === 'admin'
 
       if (isAdminDispatch) {
-        // Goes back to the admin queue for manual re-assignment with a fresh search window
+        // Goes back to "Admin is assigning a worker" so admin can pick another worker without accepting again.
+        // No search timer: admin already accepted, so the booking must not auto-expire.
+        request.status = REQUEST_STATUS.ADMIN_ACCEPTED
         request.expiresAt = undefined
-        request.searchExpiresAt = new Date(Date.now() + INDIVIDUAL_SEARCH_SECONDS * 1000)
+        request.searchExpiresAt = undefined
       } else {
         // Extend expiration timer by 10 minutes so listLabourAssignments does not filter it out
         request.expiresAt = new Date(Date.now() + 10 * 60 * 1000)
@@ -885,7 +889,7 @@ export const respondToAssignment = asyncHandler(async (req, res) => {
           }).catch(() => {})
         }
         emitRequestStatusUpdate(request._id.toString(), {
-          requestStatus: REQUEST_STATUS.SEARCHING,
+          requestStatus: request.status,
           event: 'status_changed',
           assignmentStatus: assignment.status,
           updatedAt: new Date()

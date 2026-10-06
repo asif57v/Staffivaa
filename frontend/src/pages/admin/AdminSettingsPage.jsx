@@ -18,6 +18,7 @@ export function AdminSettingsPage() {
   const [minimumEnterpriseSecurityBalance, setMinimumEnterpriseSecurityBalance] = useState(0)
   const [isEnterpriseSecurityBalanceEnabled, setIsEnterpriseSecurityBalanceEnabled] = useState(false)
   const [minimumLabourWalletBalance, setMinimumLabourWalletBalance] = useState(0)
+  const [acceptWindowSeconds, setAcceptWindowSeconds] = useState(90)
   const [advancePaymentPercentage, setAdvancePaymentPercentage] = useState(0)
   const [remainingPaymentPercentage, setRemainingPaymentPercentage] = useState(100)
   const [platformFeeType, setPlatformFeeType] = useState('percentage')
@@ -76,6 +77,7 @@ export function AdminSettingsPage() {
       setMinimumEnterpriseSecurityBalance(data.settings.minimumEnterpriseSecurityBalance ?? 0)
       setIsEnterpriseSecurityBalanceEnabled(data.settings.isEnterpriseSecurityBalanceEnabled ?? false)
       setMinimumLabourWalletBalance(data.settings.minimumLabourWalletBalance ?? 0)
+      setAcceptWindowSeconds(data.settings.individualAcceptWindowSeconds ?? 90)
       setAdvancePaymentPercentage(data.settings.advancePaymentPercentage ?? 0)
       setRemainingPaymentPercentage(data.settings.remainingPaymentPercentage ?? 100)
       setPlatformFeeType(data.settings.platformFeeType || 'percentage')
@@ -129,6 +131,10 @@ export function AdminSettingsPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (acceptWindowSeconds < 30 || acceptWindowSeconds > 1800) {
+      toast.error('Individual booking accept time must be between 30 seconds and 30 minutes.')
+      return
+    }
     try {
       await updateSettings({
         otpProvider,
@@ -139,6 +145,7 @@ export function AdminSettingsPage() {
         minimumEnterpriseSecurityBalance,
         isEnterpriseSecurityBalanceEnabled,
         minimumLabourWalletBalance,
+        individualAcceptWindowSeconds: acceptWindowSeconds,
         advancePaymentPercentage,
         remainingPaymentPercentage,
         platformFeeType,
@@ -357,6 +364,52 @@ export function AdminSettingsPage() {
               className="w-full max-w-md px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
               placeholder="e.g. 100"
             />
+          </div>
+        </GlassPanel>
+
+        {/* Individual booking accept window */}
+        <GlassPanel className="p-6 md:p-8 border border-slate-200/60 shadow-sm space-y-6 bg-white/85">
+          <div className="border-b border-slate-100 pb-4 mb-4">
+            <h3 className="text-lg font-bold text-slate-900">Individual Booking Accept Time</h3>
+            <p className="text-xs text-slate-500">
+              How long a new customer booking waits for you to accept it before it expires. Customers see this countdown.
+              Applies to new bookings only; you can also add time to a pending booking from the Individual Bookings page.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-bold text-slate-700">Accept time</label>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                max="30"
+                value={Math.floor(acceptWindowSeconds / 60)}
+                onChange={(e) =>
+                  setAcceptWindowSeconds(Math.max(0, Number(e.target.value) || 0) * 60 + (acceptWindowSeconds % 60))
+                }
+                className="w-24 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
+              />
+              <span className="text-sm font-semibold text-slate-600">min</span>
+              <input
+                type="number"
+                min="0"
+                max="59"
+                value={acceptWindowSeconds % 60}
+                onChange={(e) =>
+                  setAcceptWindowSeconds(
+                    Math.floor(acceptWindowSeconds / 60) * 60 + Math.min(59, Math.max(0, Number(e.target.value) || 0)),
+                  )
+                }
+                className="w-24 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
+              />
+              <span className="text-sm font-semibold text-slate-600">sec</span>
+            </div>
+            <p
+              className={`text-xs ${acceptWindowSeconds < 30 || acceptWindowSeconds > 1800 ? 'text-rose-600 font-bold' : 'text-slate-500'}`}
+            >
+              Allowed: 30 seconds to 30 minutes. Default is 1 min 30 sec.
+            </p>
           </div>
         </GlassPanel>
 

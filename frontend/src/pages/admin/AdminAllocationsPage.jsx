@@ -21,6 +21,7 @@ import { useGetAdminRequestsQuery } from '../../store/api/workforceApi.js'
 
 const STATUS_BADGES = {
   searching: { label: 'Searching Worker', bg: 'bg-amber-50 text-amber-800 border-amber-200', icon: Search },
+  admin_accepted: { label: 'Admin Accepted', bg: 'bg-indigo-50 text-indigo-800 border-indigo-200', icon: UserCheck },
   allocating: { label: 'Allocating', bg: 'bg-amber-50 text-amber-800 border-amber-200', icon: Clock },
   assigned: { label: 'Worker Assigned', bg: 'bg-blue-50 text-blue-800 border-blue-200', icon: UserCheck },
   confirmed: { label: 'Confirmed', bg: 'bg-emerald-50 text-emerald-800 border-emerald-200', icon: CheckCircle2 },

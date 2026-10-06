@@ -314,6 +314,23 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       providesTags: ['AdminIndividualBookings'],
     }),
+    acceptIndividualBooking: build.mutation({
+      query: (id) => ({
+        url: `/admin/workforce/individual-bookings/${id}/accept`,
+        method: 'POST',
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: ['AdminIndividualBookings', 'AdminRequests'],
+    }),
+    extendIndividualBooking: build.mutation({
+      query: ({ id, seconds }) => ({
+        url: `/admin/workforce/individual-bookings/${id}/extend`,
+        method: 'POST',
+        body: { seconds },
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: ['AdminIndividualBookings'],
+    }),
     assignIndividualBookingWorkers: build.mutation({
       query: ({ id, labourIds }) => ({
         url: `/admin/workforce/individual-bookings/${id}/assign`,
@@ -757,6 +774,8 @@ export const {
   useSendToVendorClientRequestMutation,
   useGetAdminIndividualBookingsQuery,
   useGetIndividualBookingWorkersQuery,
+  useAcceptIndividualBookingMutation,
+  useExtendIndividualBookingMutation,
   useAssignIndividualBookingWorkersMutation,
   useWithdrawIndividualBookingOfferMutation,
 } = workforceApi

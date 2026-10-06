@@ -79,6 +79,13 @@ const systemSettingsSchema = new mongoose.Schema(
     minimumLabourWalletBalanceUpdatedAt: {
       type: Date,
     },
+    // Individual bookings: how long a new request waits for admin to accept before it expires (seconds)
+    individualAcceptWindowSeconds: {
+      type: Number,
+      default: 90,
+      min: 30,
+      max: 1800,
+    },
     advancePaymentPercentage: {
       type: Number,
       default: 0,

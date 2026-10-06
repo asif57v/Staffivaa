@@ -1,6 +1,7 @@
 import { SystemSettings } from '../models/SystemSettings.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
-import { sendSuccess } from '../utils/apiResponse.js'
+import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
+import { INDIVIDUAL_SEARCH_MIN_SECONDS, INDIVIDUAL_SEARCH_MAX_SECONDS } from '../constants/workforceConstants.js'
 import { logAudit } from '../utils/auditLogger.js'
 
 export const getSettings = asyncHandler(async (req, res) => {
@@ -34,6 +35,7 @@ export const updateSettings = asyncHandler(async (req, res) => {
     minimumEnterpriseSecurityBalance,
     isEnterpriseSecurityBalanceEnabled,
     minimumLabourWalletBalance,
+    individualAcceptWindowSeconds,
     advancePaymentPercentage,
     remainingPaymentPercentage,
     platformFeeType,
@@ -79,6 +81,16 @@ export const updateSettings = asyncHandler(async (req, res) => {
       settings.minimumLabourWalletBalanceUpdatedBy = req.user._id
       settings.minimumLabourWalletBalanceUpdatedAt = new Date()
     }
+  }
+  if (individualAcceptWindowSeconds != null) {
+    const secs = Math.round(Number(individualAcceptWindowSeconds))
+    if (!Number.isFinite(secs) || secs < INDIVIDUAL_SEARCH_MIN_SECONDS || secs > INDIVIDUAL_SEARCH_MAX_SECONDS) {
+      return sendError(res, {
+        message: `Accept time must be between ${INDIVIDUAL_SEARCH_MIN_SECONDS} and ${INDIVIDUAL_SEARCH_MAX_SECONDS} seconds.`,
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+      })
+    }
+    settings.individualAcceptWindowSeconds = secs
   }
   if (advancePaymentPercentage != null) settings.advancePaymentPercentage = Number(advancePaymentPercentage)
   if (remainingPaymentPercentage != null) settings.remainingPaymentPercentage = Number(remainingPaymentPercentage)

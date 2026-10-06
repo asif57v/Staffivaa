@@ -405,6 +405,7 @@ export function AppShell() {
 
       const validOfferStatuses = [
         'searching',
+        'admin_accepted',
         'allocating',
         'assigned',
         'confirmed',
@@ -494,11 +495,8 @@ export function AppShell() {
     }
 
     if (walletPolicy.isLowBalance) {
-      setWalletGate({
-        balance: walletPolicy.balance,
-        minimumRequired: walletPolicy.minimumRequired,
-        requiredAmount: walletPolicy.minimumRequired,
-      })
+      // Low wallet: go straight to the wallet to recharge instead of showing a blocking modal.
+      navigate('/app/wallet', { replace: true })
       return
     }
 
@@ -537,7 +535,8 @@ export function AppShell() {
       }
       const gate = readWalletGateFromError(e, walletPolicy)
       if (gate) {
-        setWalletGate(gate)
+        // Server says balance is too low for this job's fee: send the worker straight to the wallet.
+        navigate('/app/wallet', { replace: true })
         return
       }
       dispatchAlert('Failed to accept', payload?.message || e?.message || 'Please try from Offers tab.', true);

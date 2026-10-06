@@ -25,7 +25,9 @@ import { adminInitials, formatLastLoginDisplay, formatLastLoginRelative } from '
 import { listenForNativeFcmToken, syncPushToken } from '../lib/pushSync.js'
 import { isRoleMatch } from '../lib/roleUtils.js'
 import { useDispatch } from 'react-redux'
+import toast from 'react-hot-toast'
 import { connectSocket } from '../services/socket.js'
+import { bindAdminRingUnlock, playAdminRing } from '../lib/adminRingSound.js'
 import {
   workforceApi,
   useGetNotificationsQuery,
@@ -102,7 +104,35 @@ export function AdminLayout() {
     socket.on('attendance:updated', handleDashboardUpdate)
     socket.on('wallet:updated', handleDashboardUpdate)
 
+    // Ring on every kind of new request: individual, corporate, enterprise.
+    bindAdminRingUnlock()
+    const refreshCounts = () => dispatch(workforceApi.util.invalidateTags(['AdminDashboard']))
+    const onIndividualRequest = () => {
+      playAdminRing()
+      refreshCounts()
+    }
+    const onCorporateRequest = (payload) => {
+      playAdminRing()
+      refreshCounts()
+      toast(`New corporate request ${payload?.reference || ''} from ${payload?.clientName || 'a client'}`, {
+        icon: '🏢',
+        id: `corp-${payload?.requestId}`,
+      })
+    }
+    const onAdminNotification = (payload) => {
+      if (payload?.type !== 'ENTERPRISE_DIRECT_REQUEST') return
+      playAdminRing()
+      refreshCounts()
+      toast(payload?.message || 'New enterprise request', { icon: '📥', id: `ent-${payload?.jobId}` })
+    }
+    socket.on('individual_booking_pending', onIndividualRequest)
+    socket.on('corporate_client_request_created', onCorporateRequest)
+    socket.on('admin_notification', onAdminNotification)
+
     return () => {
+      socket.off('individual_booking_pending', onIndividualRequest)
+      socket.off('corporate_client_request_created', onCorporateRequest)
+      socket.off('admin_notification', onAdminNotification)
       socket.off('dashboard:updated', handleDashboardUpdate)
       socket.off('notification:new')
       socket.off('booking:updated', handleDashboardUpdate)
@@ -173,6 +203,9 @@ export function AdminLayout() {
     if (pathname === '/admin/enterprise-withdrawals') {
       updateSeen('pendingWithdrawalsCount', stats.pendingWithdrawalsCount || 0)
     }
+    if (pathname === '/admin/individual-bookings') {
+      updateSeen('pendingIndividualBookings', stats.pendingIndividualBookings || 0)
+    }
     if (pathname === '/admin/client-requests') {
       updateSeen('pendingClientRequests', stats.pendingClientRequests || 0)
     }
@@ -187,6 +220,7 @@ export function AdminLayout() {
     if ((stats.supportTickets || 0) < (updated.supportTickets || 0)) updateSeen('supportTickets', stats.supportTickets || 0)
     if ((stats.pendingRefundsCount || 0) < (updated.pendingRefundsCount || 0)) updateSeen('pendingRefundsCount', stats.pendingRefundsCount || 0)
     if ((stats.pendingWithdrawalsCount || 0) < (updated.pendingWithdrawalsCount || 0)) updateSeen('pendingWithdrawalsCount', stats.pendingWithdrawalsCount || 0)
+    if ((stats.pendingIndividualBookings || 0) < (updated.pendingIndividualBookings || 0)) updateSeen('pendingIndividualBookings', stats.pendingIndividualBookings || 0)
     if ((stats.pendingClientRequests || 0) < (updated.pendingClientRequests || 0)) updateSeen('pendingClientRequests', stats.pendingClientRequests || 0)
     if ((stats.pendingEnterpriseDirectRequests || 0) < (updated.pendingEnterpriseDirectRequests || 0)) updateSeen('pendingEnterpriseDirectRequests', stats.pendingEnterpriseDirectRequests || 0)
 
@@ -358,6 +392,7 @@ export function AdminLayout() {
                   else if (to === '/admin/reports') badgeCount = Math.max(0, (stats.supportTickets || 0) - (lastSeen.supportTickets || 0))
                   else if (to === '/admin/refunds') badgeCount = Math.max(0, (stats.pendingRefundsCount || 0) - (lastSeen.pendingRefundsCount || 0))
                   else if (to === '/admin/enterprise-withdrawals') badgeCount = Math.max(0, (stats.pendingWithdrawalsCount || 0) - (lastSeen.pendingWithdrawalsCount || 0))
+                  else if (to === '/admin/individual-bookings') badgeCount = Math.max(0, (stats.pendingIndividualBookings || 0) - (lastSeen.pendingIndividualBookings || 0))
                   else if (to === '/admin/client-requests') badgeCount = Math.max(0, (stats.pendingClientRequests || 0) - (lastSeen.pendingClientRequests || 0))
                   else if (to === '/admin/enterprise-requests') badgeCount = Math.max(0, (stats.pendingEnterpriseDirectRequests || 0) - (lastSeen.pendingEnterpriseDirectRequests || 0))
                 }

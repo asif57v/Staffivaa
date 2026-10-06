@@ -25,7 +25,7 @@ export const INDIVIDUAL_BOOKING_STORAGE_KEY = 'lc_homeowner_bookings_v1'
 export const INDIVIDUAL_BOOKINGS_UPDATED_EVENT = 'lc-individual-bookings-updated'
 
 /** Statuses that should surface a Swiggy-style floating live job widget. */
-export const LIVE_BOOKING_STATUSES = ['searching', 'accepted', 'assigned', 'in_progress', 'on_site']
+export const LIVE_BOOKING_STATUSES = ['searching', 'admin_accepted', 'accepted', 'assigned', 'in_progress', 'on_site']
 
 export const INDIVIDUAL_BOOKING_WORKFLOW = [
   { id: 'submitted', label: 'Request raised', short: 'Submitted' },
@@ -140,7 +140,7 @@ export function getActiveLiveBooking(bookings) {
  */
 export function resolveLiveBookingFlowStep(booking) {
   const status = String(booking?.status || '').toLowerCase()
-  if (status === 'searching') return 'searching'
+  if (status === 'searching' || status === 'admin_accepted') return 'searching'
   if (['accepted', 'assigned', 'in_progress', 'on_site'].includes(status)) return 'active'
   return null
 }
@@ -164,6 +164,14 @@ export function liveBookingWidgetCopy(booking) {
   if (status === 'searching') {
     return {
       title: 'Finding labour',
+      subtitle: category,
+      tone: 'searching',
+      live: true,
+    }
+  }
+  if (status === 'admin_accepted') {
+    return {
+      title: 'Admin is assigning a worker',
       subtitle: category,
       tone: 'searching',
       live: true,
@@ -385,6 +393,9 @@ export function bookingStatusToUi(status) {
   if (s === 'in_progress') {
     return { label: 'Work in progress', variant: 'brand', tone: 'bg-[#FEF3C7] text-[#D97706] ring-1 ring-[#FDE68A]' }
   }
+  if (s === 'admin_accepted') {
+    return { label: 'Admin assigning worker', variant: 'sky', tone: 'bg-[#E0E7FF]/40 text-[#4F46E5] ring-1 ring-[#E0E7FF]' }
+  }
   if (s === 'searching') {
     return { label: 'Finding labour', variant: 'sky', tone: 'bg-[#E0E7FF]/20 text-[#A5B4FC] ring-1 ring-[#E0E7FF]' }
   }
@@ -400,10 +411,26 @@ export function bookingStatusToUi(status) {
   return { label: 'In progress', variant: 'slate', tone: 'bg-slate-50 text-slate-500 ring-1 ring-slate-200' }
 }
 
+/**
+ * True when a still-pending booking is past its accept window. Uses the server's searchExpiresAt (admin can
+ * change the window / extend it); falls back to the old 2.5 min age rule only when it is unknown.
+ */
+export function isPendingBookingTimedOut(status, createdAt, searchExpiresAt) {
+  const s = String(status || '').toLowerCase()
+  if (s !== 'searching' && s !== 'pending_review') return false
+  if (searchExpiresAt) {
+    const end = new Date(searchExpiresAt).getTime()
+    if (Number.isFinite(end)) return Date.now() > end + 60 * 1000
+  }
+  const ageMs = createdAt ? Date.now() - new Date(createdAt).getTime() : 0
+  return ageMs > 2.5 * 60 * 1000
+}
+
 /** Active step index 0..4 for workflow timeline. */
 export function bookingWorkflowStepIndex(status) {
   const s = String(status || '').toLowerCase()
   if (s === 'searching') return 0
+  if (s === 'admin_accepted') return 1
   if (s === 'pending_review') return 1
   if (s === 'confirmed') return 1
   if (s === 'assigned' || s === 'accepted') return 2

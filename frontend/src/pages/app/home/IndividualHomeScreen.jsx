@@ -323,7 +323,7 @@ function formatBannerPrice(rawPrice) {
   }, [bookings])
 
   const ongoingBookings = useMemo(() => {
-    const activeStatuses = ['pending_review', 'searching', 'accepted', 'assigned', 'in_progress', 'confirmed']
+    const activeStatuses = ['pending_review', 'searching', 'admin_accepted', 'accepted', 'assigned', 'in_progress', 'confirmed']
     return sortedBookings.filter((b) => activeStatuses.includes(String(b?.status).toLowerCase())).slice(0, 2)
   }, [sortedBookings])
 

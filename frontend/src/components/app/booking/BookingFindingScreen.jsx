@@ -5,54 +5,65 @@ import { AppButton } from '../../app-ui/buttons/AppButton.jsx'
 
 const MESSAGES = [
   'Booking received by our team…',
+  'Admin will accept your booking soon…',
+  'We will notify you as soon as it is accepted…',
+]
+
+const ASSIGNING_MESSAGES = [
+  'Your booking has been accepted by admin…',
   'Selecting the right worker for your job…',
-  'Checking worker availability in your area…',
   'You will be notified as soon as a worker accepts…',
 ]
 
-const SEARCH_SECONDS = 90
+function formatDuration(totalSeconds) {
+  const mins = Math.floor(totalSeconds / 60)
+  const secs = totalSeconds % 60
+  if (mins > 0 && secs > 0) return `${mins} min ${secs} sec`
+  if (mins > 0) return `${mins} min`
+  return `${secs} seconds`
+}
 
-// Matches the server's INDIVIDUAL_SEARCH_SECONDS: after this the booking expires for the admin too.
-// `expired` comes from the server (it is the source of truth); the local timer just keeps the UI in step.
+// The countdown is driven by the server's searchExpiresAt (admin can change the window or add time).
+// `expired` also comes from the server; the local clock only keeps the UI in step between polls.
 export function BookingFindingScreen({
   categoryLabel,
   onCancel,
   cancelling = false,
   expired = false,
+  // Admin accepted the booking: the 90s accept timer no longer applies, we are just assigning a worker.
+  adminAccepted = false,
+  // ISO time when the admin-accept window ends (null until the first server response).
+  searchExpiresAt = null,
   onRetry,
   retrying = false,
 }) {
   const reduce = useReducedMotion()
   const [msgIndex, setMsgIndex] = useState(0)
-  const [attempt, setAttempt] = useState(0)
-  const [elapsed, setElapsed] = useState(0)
-  const timedOut = expired || elapsed >= SEARCH_SECONDS
+  const [now, setNow] = useState(() => Date.now())
+  // Largest remaining time seen for this window = total length (grows if admin adds time).
+  const [peak, setPeak] = useState(0)
+  const endMs = searchExpiresAt ? new Date(searchExpiresAt).getTime() : null
+  const remaining = endMs && Number.isFinite(endMs) ? Math.max(0, Math.ceil((endMs - now) / 1000)) : null
+  if (remaining != null && remaining > peak) setPeak(remaining)
+  const timedOut = expired || (!adminAccepted && remaining === 0)
+  const messages = adminAccepted ? ASSIGNING_MESSAGES : MESSAGES
 
   useEffect(() => {
-    const startedAt = Date.now()
     const msgTimer = window.setInterval(() => {
-      setMsgIndex((i) => (i + 1) % MESSAGES.length)
+      setMsgIndex((i) => i + 1)
     }, 2200)
-    const tick = window.setInterval(() => {
-      const secs = Math.min(SEARCH_SECONDS, Math.floor((Date.now() - startedAt) / 1000))
-      setElapsed(secs)
-      if (secs >= SEARCH_SECONDS) {
-        window.clearInterval(tick)
-        window.clearInterval(msgTimer)
-      }
-    }, 500)
-
+    const tick = window.setInterval(() => setNow(Date.now()), 500)
     return () => {
       window.clearInterval(msgTimer)
       window.clearInterval(tick)
     }
-  }, [attempt])
+  }, [])
 
   const retry = async () => {
     if (onRetry && (await onRetry()) === false) return
-    setElapsed(0)
+    setPeak(0)
+    setNow(Date.now())
     setMsgIndex(0)
-    setAttempt((a) => a + 1)
   }
 
   if (timedOut) {
@@ -69,7 +80,7 @@ export function BookingFindingScreen({
         {categoryLabel ? <p className="mt-1 text-sm font-semibold text-brand">{categoryLabel}</p> : null}
         <p className="mt-3 max-w-xs text-sm font-medium text-slate-600">
           Nearby workers seem busy right now, so this search has expired. Tap “Try again” and our team will search for
-          another {SEARCH_SECONDS} seconds.
+          another {peak > 0 ? formatDuration(peak) : 'while'}.
         </p>
 
         <div className="mt-8 flex w-full max-w-xs flex-col gap-3">
@@ -94,8 +105,8 @@ export function BookingFindingScreen({
     )
   }
 
-  const progress = (elapsed / SEARCH_SECONDS) * 100
-  const remaining = SEARCH_SECONDS - elapsed
+  const total = Math.max(peak, 1)
+  const progress = remaining == null ? 0 : ((total - remaining) / total) * 100
 
   return (
     <motion.div
@@ -131,7 +142,9 @@ export function BookingFindingScreen({
         </motion.span>
       </motion.div>
 
-      <h2 className="mt-8 text-xl font-black tracking-tight text-slate-900">Assigning a worker for you</h2>
+      <h2 className="mt-8 text-xl font-black tracking-tight text-slate-900">
+        {adminAccepted ? 'Admin is assigning a worker' : 'Admin will accept your booking soon and assign a worker to you'}
+      </h2>
       {categoryLabel ? (
         <p className="mt-1 text-sm font-semibold text-brand">{categoryLabel}</p>
       ) : null}
@@ -141,9 +154,10 @@ export function BookingFindingScreen({
         animate={{ opacity: 1, y: 0 }}
         className="mt-3 max-w-xs text-sm font-medium text-slate-600"
       >
-        {MESSAGES[msgIndex]}
+        {messages[msgIndex % messages.length]}
       </motion.p>
 
+      {adminAccepted || remaining == null ? null : (
       <motion.div className="mt-6 w-full max-w-xs">
         <motion.div className="h-2 overflow-hidden rounded-full bg-slate-100">
           <motion.div
@@ -153,10 +167,11 @@ export function BookingFindingScreen({
           />
         </motion.div>
         <p className="mt-2 text-[11px] font-semibold text-slate-500">
-          Our team is assigning the best worker nearby · {Math.floor(remaining / 60)}:
+          Waiting for admin to accept · {Math.floor(remaining / 60)}:
           {String(remaining % 60).padStart(2, '0')}
         </p>
       </motion.div>
+      )}
 
       <div className="mt-8 flex flex-wrap justify-center gap-2">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-900 ring-1 ring-emerald-200/80">
@@ -165,7 +180,7 @@ export function BookingFindingScreen({
         </span>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-3 py-1.5 text-[11px] font-bold text-sky-900 ring-1 ring-sky-200/80">
           <MapPin className="h-3.5 w-3.5" aria-hidden />
-          Searching nearby
+          {adminAccepted ? 'Admin accepted' : 'Awaiting admin'}
         </span>
       </div>
 

@@ -6,6 +6,7 @@ import {
   bookingStatusToUi,
   formatBookingSchedule,
   formatInr,
+  isPendingBookingTimedOut,
   totalWorkersFromLines,
 } from '../../../lib/individualBookings.js'
 
@@ -39,10 +40,9 @@ function getThumbnail(bookingLine) {
   return '/home_service_hero.png'
 }
 
-function getStatusBadge(status, createdAt) {
+function getStatusBadge(status, createdAt, searchExpiresAt) {
   const s = String(status || '').toLowerCase()
-  const ageMs = createdAt ? (Date.now() - new Date(createdAt).getTime()) : 0
-  const isTimedOut = (s === 'searching' || s === 'pending_review') && ageMs > 2.5 * 60 * 1000
+  const isTimedOut = isPendingBookingTimedOut(s, createdAt, searchExpiresAt)
 
   if (!isTimedOut && (s === 'searching' || s === 'pending_review')) {
     return {
@@ -50,6 +50,14 @@ function getStatusBadge(status, createdAt) {
       tone: 'bg-[#FFFDF5] text-[#D6A11E] border border-[#FDF2C2]',
       dot: 'bg-[#F4C542]',
       border: 'border-l-4 border-l-[#F4C542]',
+    }
+  }
+  if (s === 'admin_accepted') {
+    return {
+      label: 'Assigning Worker',
+      tone: 'bg-[#F4F9FD] text-[#2B76D9] border border-[#C6E1F7]',
+      dot: 'bg-[#3B82F6]',
+      border: 'border-l-4 border-l-[#3B82F6]',
     }
   }
   if (s === 'in_progress' || s === 'on_site') {
@@ -113,7 +121,7 @@ export function IndividualBookingHistoryList({ items, isDemo, onTrack, onRebook,
   return (
     <ul className="space-y-3">
       {items.map((h, idx) => {
-        const badge = getStatusBadge(h.status, h.createdAt)
+        const badge = getStatusBadge(h.status, h.createdAt, h.searchExpiresAt)
         const primary = (h.lines || [])[0]
         const title = primary?.categoryName || 'Labour booking'
         const workers = totalWorkersFromLines(h.lines)

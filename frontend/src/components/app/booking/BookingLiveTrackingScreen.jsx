@@ -381,7 +381,7 @@ export function BookingLiveTrackingScreen({ booking, worker, draft, onBack, onCa
         }
         onBack()
       }
-    } else if (currentStatus === 'searching') {
+    } else if (currentStatus === 'searching' || currentStatus === 'admin_accepted') {
       onBack()
     }
   }, [currentStatus, onBack, request?.cancelReason, requestId, booking?.requestId, booking?.ref])

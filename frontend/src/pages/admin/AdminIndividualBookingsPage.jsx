@@ -3,6 +3,7 @@ import {
   BellRing,
   Calendar,
   CheckCircle2,
+  CircleCheck,
   Clock,
   Home,
   Loader2,
@@ -24,6 +25,10 @@ import { useSocket } from '../../hooks/useSocket.js'
 import {
   useGetAdminIndividualBookingsQuery,
   useGetIndividualBookingWorkersQuery,
+  useAcceptIndividualBookingMutation,
+  useExtendIndividualBookingMutation,
+  useGetSettingsQuery,
+  useUpdateSettingsMutation,
   useAssignIndividualBookingWorkersMutation,
   useWithdrawIndividualBookingOfferMutation,
 } from '../../store/api/workforceApi.js'
@@ -49,7 +54,8 @@ const OFFER_BADGE = {
 }
 
 const STATUS_LABEL = {
-  searching: 'Awaiting worker',
+  searching: 'New request',
+  admin_accepted: 'Accepted — assign worker',
   accepted: 'Accepted',
   confirmed: 'Confirmed',
   platform_fee_pending: 'Fee pending',
@@ -130,6 +136,75 @@ function categoryNames(lines) {
   return lines.map((l) => `${l.categoryId?.name || 'Worker'}${l.quantity > 1 ? ` ×${l.quantity}` : ''}`).join(', ') || '—'
 }
 
+/** Admin sets how long a new booking waits for accept (the countdown customers see). */
+function AcceptTimeSetting() {
+  const { data } = useGetSettingsQuery()
+  const [updateSettings, { isLoading: saving }] = useUpdateSettingsMutation()
+  const saved = data?.settings?.individualAcceptWindowSeconds ?? 90
+  const [mins, setMins] = useState(null)
+  const [secs, setSecs] = useState(null)
+  const curMins = mins ?? Math.floor(saved / 60)
+  const curSecs = secs ?? saved % 60
+  const total = (Number(curMins) || 0) * 60 + (Number(curSecs) || 0)
+  const valid = total >= 30 && total <= 1800
+  const dirty = total !== saved
+
+  const handleSave = async () => {
+    if (!valid) return
+    try {
+      await updateSettings({ individualAcceptWindowSeconds: total }).unwrap()
+      toast.success('Accept time updated — applies to new bookings')
+      setMins(null)
+      setSecs(null)
+    } catch (err) {
+      toast.error(err?.data?.message || 'Could not update accept time')
+    }
+  }
+
+  return (
+    <GlassPanel className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="flex items-center gap-2 text-sm font-black text-slate-900">
+          <Clock className="h-4 w-4 text-brand" /> Booking accept time
+        </p>
+        <p className="mt-0.5 text-xs text-slate-500">
+          How long a new booking waits for you to accept. Customers see this countdown (30 sec – 30 min).
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="number"
+          min="0"
+          max="30"
+          value={curMins}
+          onChange={(e) => setMins(e.target.value)}
+          className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-bold outline-none focus:border-slate-400"
+        />
+        <span className="text-xs font-semibold text-slate-500">min</span>
+        <input
+          type="number"
+          min="0"
+          max="59"
+          value={curSecs}
+          onChange={(e) => setSecs(e.target.value)}
+          className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-bold outline-none focus:border-slate-400"
+        />
+        <span className="text-xs font-semibold text-slate-500">sec</span>
+        <button
+          type="button"
+          disabled={!dirty || !valid || saving}
+          onClick={handleSave}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          Save
+        </button>
+        {!valid ? <span className="text-[11px] font-bold text-rose-600">Min 30 sec, max 30 min</span> : null}
+      </div>
+    </GlassPanel>
+  )
+}
+
 export function AdminIndividualBookingsPage() {
   const [tab, setTab] = useState('awaiting')
   const [search, setSearch] = useState('')
@@ -146,6 +221,10 @@ export function AdminIndividualBookingsPage() {
     { pollingInterval: 30000 },
   )
   const [withdrawOffer] = useWithdrawIndividualBookingOfferMutation()
+  const [acceptBooking] = useAcceptIndividualBookingMutation()
+  const [acceptingId, setAcceptingId] = useState(null)
+  const [extendIndividualBooking] = useExtendIndividualBookingMutation()
+  const [extendingId, setExtendingId] = useState(null)
 
   const requests = data?.requests ?? []
   const counts = data?.counts ?? {}
@@ -179,6 +258,34 @@ export function AdminIndividualBookingsPage() {
     }
   }, [socket, refetch])
 
+  const handleAccept = async (id) => {
+    if (acceptingId) return
+    setAcceptingId(id)
+    try {
+      const res = await acceptBooking(id).unwrap()
+      toast.success(res?.message || 'Booking accepted')
+    } catch (err) {
+      toast.error(err?.data?.message || 'Could not accept booking')
+      refetch()
+    } finally {
+      setAcceptingId(null)
+    }
+  }
+
+  const handleExtend = async (id, seconds) => {
+    if (extendingId) return
+    setExtendingId(id)
+    try {
+      await extendIndividualBooking({ id, seconds }).unwrap()
+      toast.success('Time added — customer countdown updated')
+    } catch (err) {
+      toast.error(err?.data?.message || 'Could not add time')
+      refetch()
+    } finally {
+      setExtendingId(null)
+    }
+  }
+
   const handleWithdraw = async (assignmentId) => {
     try {
       await withdrawOffer(assignmentId).unwrap()
@@ -196,7 +303,7 @@ export function AdminIndividualBookingsPage() {
             <Home className="h-5 w-5 text-brand" /> Individual Bookings
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Customer bookings wait here until you assign a worker. The worker gets the normal job ring and accepts as usual
+            Customer bookings wait here until you accept them, then assign a worker. The worker gets the normal job ring and accepts as usual
             (wallet balance is checked on accept).
           </p>
         </div>
@@ -208,6 +315,8 @@ export function AdminIndividualBookingsPage() {
           <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} /> Refresh
         </button>
       </div>
+
+      <AcceptTimeSetting />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap gap-2">
@@ -257,7 +366,7 @@ export function AdminIndividualBookingsPage() {
         <GlassPanel className="p-10 text-center">
           <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-400" />
           <p className="mt-3 text-sm font-bold text-slate-700">
-            {tab === 'awaiting' ? 'No bookings waiting for assignment.' : 'No bookings here.'}
+            {tab === 'awaiting' ? 'No bookings waiting for you.' : 'No bookings here.'}
           </p>
         </GlassPanel>
       ) : (
@@ -267,6 +376,10 @@ export function AdminIndividualBookingsPage() {
               key={r._id}
               request={r}
               searchWindowSeconds={data?.searchWindowSeconds ?? 90}
+              onAccept={() => handleAccept(r._id)}
+              accepting={acceptingId === r._id}
+              onExtend={(seconds) => handleExtend(r._id, seconds)}
+              extending={extendingId === r._id}
               onAssign={() => setAssignTarget(r)}
               onWithdraw={handleWithdraw}
             />
@@ -279,10 +392,12 @@ export function AdminIndividualBookingsPage() {
   )
 }
 
-function BookingCard({ request, onAssign, onWithdraw, searchWindowSeconds = 90 }) {
+function BookingCard({ request, onAccept, accepting, onExtend, extending, onAssign, onWithdraw, searchWindowSeconds = 90 }) {
   const client = request.clientId || {}
   const assignments = request.assignments || []
-  const canAssign = request.status === 'searching' && !request.labourId
+  // New request: only "Accept booking". Worker assignment unlocks once admin accepted (enforced on the server too).
+  const canAccept = request.status === 'searching' && !request.labourId
+  const canAssign = request.status === 'admin_accepted' && !request.labourId
   const ringing = assignments.filter((a) => a.status === 'offered')
   const isInstant = request.bookingType !== 'scheduled'
   const workers = workerCount(request.lines)
@@ -291,7 +406,8 @@ function BookingCard({ request, onAssign, onWithdraw, searchWindowSeconds = 90 }
   const searchEndsAt =
     request.searchExpiresAt ||
     (request.createdAt ? new Date(new Date(request.createdAt).getTime() + searchWindowSeconds * 1000).toISOString() : null)
-  const secondsLeft = useSearchSecondsLeft(searchEndsAt, canAssign)
+  const secondsLeft = useSearchSecondsLeft(searchEndsAt, canAccept)
+  const [customMinutes, setCustomMinutes] = useState('')
 
   return (
     <GlassPanel className="p-5">
@@ -305,7 +421,9 @@ function BookingCard({ request, onAssign, onWithdraw, searchWindowSeconds = 90 }
                   ? 'bg-amber-50 text-amber-700 ring-amber-200'
                   : request.status === 'searching'
                     ? 'bg-rose-50 text-rose-700 ring-rose-200'
-                    : request.status === 'cancelled'
+                    : request.status === 'admin_accepted'
+                      ? 'bg-indigo-50 text-indigo-700 ring-indigo-200'
+                      : request.status === 'cancelled'
                       ? 'bg-slate-100 text-slate-500 ring-slate-200'
                       : 'bg-emerald-50 text-emerald-700 ring-emerald-200'
               }`}
@@ -441,6 +559,58 @@ function BookingCard({ request, onAssign, onWithdraw, searchWindowSeconds = 90 }
             })}
           </ul>
         </div>
+      ) : null}
+
+      {canAccept ? (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-xl bg-slate-50 p-2 text-[11px] font-bold text-slate-600">
+          <span className="inline-flex items-center gap-1">
+            <Clock className="h-3 w-3" /> Add time:
+          </span>
+          {[60, 120, 300].map((s) => (
+            <button
+              key={s}
+              type="button"
+              disabled={extending}
+              onClick={() => onExtend(s)}
+              className="rounded-lg bg-white px-2 py-1 ring-1 ring-slate-200 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              +{s / 60} min
+            </button>
+          ))}
+          <input
+            type="number"
+            min="1"
+            max="30"
+            value={customMinutes}
+            onChange={(e) => setCustomMinutes(e.target.value)}
+            placeholder="min"
+            className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] outline-none focus:border-slate-400"
+          />
+          <button
+            type="button"
+            disabled={extending || !(Number(customMinutes) > 0)}
+            onClick={() => {
+              onExtend(Math.round(Number(customMinutes) * 60))
+              setCustomMinutes('')
+            }}
+            className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-2 py-1 text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {extending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+            Add
+          </button>
+        </div>
+      ) : null}
+
+      {canAccept ? (
+        <button
+          type="button"
+          onClick={onAccept}
+          disabled={accepting}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-sm font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {accepting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CircleCheck className="h-4 w-4" />}
+          {accepting ? 'Accepting…' : 'Accept booking'}
+        </button>
       ) : null}
 
       {canAssign ? (

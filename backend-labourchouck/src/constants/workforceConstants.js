@@ -5,6 +5,8 @@ export const REQUEST_SOURCE = {
 
 export const REQUEST_STATUS = {
   SEARCHING: 'searching',
+  // Individual bookings: admin accepted the request, worker not assigned yet (no search timer).
+  ADMIN_ACCEPTED: 'admin_accepted',
   PENDING_REVIEW: 'pending_review',
   ADMIN_REVIEW: 'admin_review',
   CONFIRMED: 'confirmed',
@@ -90,3 +92,6 @@ export const BILLING_MODE = {
 
 /** How long a customer's individual booking stays open for admin assignment before it expires. */
 export const INDIVIDUAL_SEARCH_SECONDS = 90
+/** Admin-configurable bounds (SystemSettings.individualAcceptWindowSeconds); INDIVIDUAL_SEARCH_SECONDS is the default. */
+export const INDIVIDUAL_SEARCH_MIN_SECONDS = 30
+export const INDIVIDUAL_SEARCH_MAX_SECONDS = 1800

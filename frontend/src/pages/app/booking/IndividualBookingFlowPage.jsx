@@ -128,6 +128,10 @@ export function IndividualBookingFlowPage() {
   const [noMatch, setNoMatch] = useState(false)
   // Server-side search window ran out (cancelReason search_expired); customer can retry the same booking.
   const [searchExpired, setSearchExpired] = useState(false)
+  // Admin accepted the booking (status admin_accepted): countdown stops, text becomes "Admin is assigning a worker".
+  const [adminAccepted, setAdminAccepted] = useState(false)
+  // Server deadline for the admin-accept window (admin can change / extend it); drives the countdown.
+  const [searchExpiresAt, setSearchExpiresAt] = useState(null)
   const [searchAttempt, setSearchAttempt] = useState(0)
   const [imageFiles, setImageFiles] = useState([])
   const [isLocating, setIsLocating] = useState(false)
@@ -310,6 +314,11 @@ export function IndividualBookingFlowPage() {
           return
         }
 
+        if (!cancelled && !stopPolling) {
+          setAdminAccepted(request?.status === 'admin_accepted')
+          if (request?.searchExpiresAt) setSearchExpiresAt(request.searchExpiresAt)
+        }
+
         const acceptedAssignment = assignments?.find(a => ['accepted', 'on_site', 'in_progress', 'completed'].includes(a.status))
         console.log('[Homeowner] Poll specific request:', id, 'status:', request?.status, 'acceptedAssignment:', !!acceptedAssignment)
 
@@ -359,6 +368,11 @@ export function IndividualBookingFlowPage() {
           console.log('[Homeowner] Active request not found or cancelled in pollAllRequests')
           handleCancellationOrTimeout()
           return
+        }
+
+        if (!cancelled && !stopPolling) {
+          setAdminAccepted(activeReq.status === 'admin_accepted')
+          if (activeReq.searchExpiresAt) setSearchExpiresAt(activeReq.searchExpiresAt)
         }
 
         // Now fetch that specific request to get its assignments
@@ -451,6 +465,17 @@ export function IndividualBookingFlowPage() {
         transitionToActive(workerInfo)
       })
 
+      socket.on('bookingAdminAccepted', (data) => {
+        if (data?.requestId && requestId && String(data.requestId) !== String(requestId)) return
+        setAdminAccepted(true)
+        setSearchExpired(false)
+      })
+
+      socket.on('bookingSearchExtended', (data) => {
+        if (data?.requestId && requestId && String(data.requestId) !== String(requestId)) return
+        if (data?.searchExpiresAt) setSearchExpiresAt(data.searchExpiresAt)
+      })
+
       socket.on('bookingCancelledByLabour', (data) => {
         console.log('[Homeowner] bookingCancelledByLabour socket event received:', data)
         if (data?.fullCancel || data?.reason === 'labour_cancelled_unpaid') {
@@ -523,6 +548,8 @@ export function IndividualBookingFlowPage() {
         socket.off('connect_error')
         socket.off('reconnect')
         socket.off('bookingAccepted')
+        socket.off('bookingAdminAccepted')
+        socket.off('bookingSearchExtended')
         socket.off('bookingCancelledByLabour')
         socket.off('bookingExpired')
         socket.off('booking_cancelled')
@@ -811,7 +838,10 @@ export function IndividualBookingFlowPage() {
     const requestId = booking?.requestId
     if (requestId) {
       try {
-        await retrySearch(requestId).unwrap()
+        const retried = await retrySearch(requestId).unwrap()
+        // Set the new deadline before clearing "expired" so the screen doesn't flash the old (past) deadline.
+        const nextEnd = retried?.request?.searchExpiresAt
+        if (nextEnd) setSearchExpiresAt(nextEnd)
       } catch (err) {
         console.error('[Homeowner] retry search failed:', err)
         window.alert(err?.data?.message || 'Could not search again. Please try booking again.')
@@ -819,6 +849,7 @@ export function IndividualBookingFlowPage() {
       }
     }
     setSearchExpired(false)
+    setAdminAccepted(false)
     setSearchAttempt((n) => n + 1)
     return true
   }, [activeBooking, refParam, retrySearch])
@@ -842,12 +873,22 @@ export function IndividualBookingFlowPage() {
   if (step === 'searching' && !noMatch) {
     return (
       <div className="pb-8">
-        <FlowHeader title="Assigning worker" subtitle="Hang tight — our team is assigning a worker to your booking" onBack={leaveFlow} />
+        <FlowHeader
+          title={adminAccepted ? 'Assigning worker' : 'Booking request sent'}
+          subtitle={
+            adminAccepted
+              ? 'Admin is assigning a worker'
+              : 'Admin will accept your booking soon and assign a worker to you'
+          }
+          onBack={leaveFlow}
+        />
         <BookingFindingScreen
           categoryLabel={draft.categoryName}
           onCancel={handleCancelBooking}
           cancelling={cancellingBooking}
-          expired={searchExpired}
+          expired={searchExpired && !adminAccepted}
+          adminAccepted={adminAccepted}
+          searchExpiresAt={searchExpiresAt}
           onRetry={handleRetrySearch}
           retrying={retryingSearch}
         />

@@ -5,7 +5,6 @@ import {
   REQUEST_STATUS,
   SCHEDULE_TYPE,
   ASSIGNMENT_STATUS,
-  INDIVIDUAL_SEARCH_SECONDS,
 } from '../constants/workforceConstants.js'
 import { WorkforceRequest, generateRequestReference } from '../models/WorkforceRequest.js'
 import { Assignment } from '../models/Assignment.js'
@@ -30,7 +29,7 @@ import {
 } from '../utils/bookingNotificationCopy.js'
 import { SystemSettings } from '../models/SystemSettings.js'
 import LocationMatchingService from '../services/LocationMatchingService.js'
-import { notifyAdminsIndividualBookingPending } from './individualDispatchController.js'
+import { notifyAdminsIndividualBookingPending, getIndividualSearchWindowSeconds } from './individualDispatchController.js'
 
 function parseLines(lines) {
   if (!Array.isArray(lines) || !lines.length) return null
@@ -231,6 +230,7 @@ export const createRequest = asyncHandler(async (req, res) => {
     }
   }
 
+  const individualSearchSeconds = sourceType === REQUEST_SOURCE.INDIVIDUAL ? await getIndividualSearchWindowSeconds() : 0
   const request = await WorkforceRequest.create({
     reference: generateRequestReference(sourceType === REQUEST_SOURCE.CORPORATE ? 'CR' : 'IR'),
     sourceType,
@@ -277,7 +277,7 @@ export const createRequest = asyncHandler(async (req, res) => {
     ...(sourceType === REQUEST_SOURCE.INDIVIDUAL && {
       // Individual bookings wait in the admin queue (no auto-expiry); admin manually offers them to workers.
       dispatchMode: 'admin',
-      searchExpiresAt: new Date(Date.now() + INDIVIDUAL_SEARCH_SECONDS * 1000),
+      searchExpiresAt: new Date(Date.now() + individualSearchSeconds * 1000),
       userPlatformFee: 0,
       userPaymentStatus: 'paid',
     }),

@@ -278,7 +278,7 @@ export function AdminClientRequestsPage() {
             <Inbox className="h-5 w-5" />
           </span>
           <div>
-            <h1 className="text-2xl font-extrabold text-slate-900">Client Requests</h1>
+            <h1 className="text-2xl font-extrabold text-slate-900">Corporate Booking</h1>
             <p className="text-sm text-slate-600">
               Incoming workforce requests from corporate clients — review, assign vendors, or accept directly.
             </p>

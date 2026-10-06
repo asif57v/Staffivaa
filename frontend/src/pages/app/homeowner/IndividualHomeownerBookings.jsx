@@ -9,6 +9,7 @@ import { IndividualBookingHistoryList } from '../../../components/app/booking/In
 import {
   displayBookingsList,
   findBookingByRef,
+  isPendingBookingTimedOut,
   loadIndividualBookings,
   rebookDraftFromRecord,
   saveIndividualBookings,
@@ -84,16 +85,15 @@ export function IndividualHomeownerBookings() {
   const filteredHistory = useMemo(() => {
     return displayHistory.filter((item) => {
       const status = String(item.status || '').toLowerCase()
-      const ageMs = item.createdAt ? (Date.now() - new Date(item.createdAt).getTime()) : 0
-      const isTimedOut = (status === 'searching' || status === 'pending_review') && ageMs > 2.5 * 60 * 1000
+      const isTimedOut = isPendingBookingTimedOut(status, item.createdAt, item.searchExpiresAt)
       const effectiveStatus = isTimedOut ? 'cancelled' : status
 
       if (selectedFilter === 'all') return true
       if (selectedFilter === 'active') {
-        return ['searching', 'pending_review', 'confirmed', 'assigned', 'accepted', 'in_progress', 'on_site'].includes(effectiveStatus)
+        return ['searching', 'admin_accepted', 'pending_review', 'confirmed', 'assigned', 'accepted', 'in_progress', 'on_site'].includes(effectiveStatus)
       }
       if (selectedFilter === 'finding_labour') {
-        return effectiveStatus === 'searching' || effectiveStatus === 'pending_review'
+        return effectiveStatus === 'searching' || effectiveStatus === 'admin_accepted' || effectiveStatus === 'pending_review'
       }
       if (selectedFilter === 'in_progress') {
         return effectiveStatus === 'in_progress' || effectiveStatus === 'on_site'
@@ -116,8 +116,12 @@ export function IndividualHomeownerBookings() {
     setHistory(prevHistory => {
       let updated = false
       const newHistory = prevHistory.map(b => {
-        const ageMs = b.createdAt ? (Date.now() - new Date(b.createdAt).getTime()) : 0
-        const isLocallyTimedOut = (b.status === 'searching' || b.status === 'pending_review') && ageMs > 2.5 * 60 * 1000
+        const serverReqForTimeout = b.requestId ? serverRequestsData?.requests?.find(r => r._id === b.requestId) : null
+        const isLocallyTimedOut = isPendingBookingTimedOut(
+          b.status,
+          b.createdAt,
+          serverReqForTimeout?.searchExpiresAt || b.searchExpiresAt,
+        )
 
         if (!b.requestId) {
           if (isLocallyTimedOut && b.status !== 'cancelled') {
@@ -164,12 +168,14 @@ export function IndividualHomeownerBookings() {
           userPlatformFee: serverReq.userPlatformFee ?? b.userPlatformFee,
           labourCharge: serverReq.labourCharge ?? b.labourCharge,
           createdAt: serverReq.createdAt || b.createdAt,
+          searchExpiresAt: serverReq.searchExpiresAt || b.searchExpiresAt,
         }
 
         // Check if anything changed
         const hasChanged = newStatus !== b.status ||
           mergedBooking.ref !== b.ref ||
           mergedBooking.address !== b.address ||
+          mergedBooking.searchExpiresAt !== b.searchExpiresAt ||
           mergedBooking.userPlatformFee !== b.userPlatformFee ||
           mergedBooking.labourCharge !== b.labourCharge ||
           JSON.stringify(mergedBooking.lines) !== JSON.stringify(b.lines)
@@ -242,10 +248,9 @@ export function IndividualHomeownerBookings() {
       const booking = findBookingByRef(displayHistory, ref)
       if (booking) {
         const status = String(booking.status || '').toLowerCase()
-        const ageMs = booking.createdAt ? (Date.now() - new Date(booking.createdAt).getTime()) : 0
-        const isTimedOut = (status === 'searching' || status === 'pending_review') && ageMs > 2.5 * 60 * 1000
+        const isTimedOut = isPendingBookingTimedOut(status, booking.createdAt, booking.searchExpiresAt)
 
-        if (!isTimedOut && (status === 'searching' || status === 'pending_review')) {
+        if (status === 'admin_accepted' || (!isTimedOut && (status === 'searching' || status === 'pending_review'))) {
           navigate(buildBookingFlowPath('searching', { ref }))
           return
         }

@@ -5,6 +5,8 @@ import {
   REQUEST_STATUS,
   ASSIGNMENT_STATUS,
   INDIVIDUAL_SEARCH_SECONDS,
+  INDIVIDUAL_SEARCH_MIN_SECONDS,
+  INDIVIDUAL_SEARCH_MAX_SECONDS,
 } from '../constants/workforceConstants.js'
 import { WorkforceRequest } from '../models/WorkforceRequest.js'
 import { Assignment } from '../models/Assignment.js'
@@ -13,16 +15,16 @@ import { User } from '../models/User.js'
 import { SystemSettings } from '../models/SystemSettings.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { HTTP_STATUS, sendError, sendSuccess } from '../utils/apiResponse.js'
-import { emitToUser, emitToRole } from '../utils/socket.js'
+import { emitToUser, emitToRole, getIO } from '../utils/socket.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
 import { triggerBookingNotif } from '../utils/triggerBookingNotif.js'
-import { newJobOfferNotif, searchExpiredUserNotif } from '../utils/bookingNotificationCopy.js'
+import { newJobOfferNotif, searchExpiredUserNotif, bookingAdminAcceptedNotif } from '../utils/bookingNotificationCopy.js'
 import { logAudit } from '../utils/auditLogger.js'
 
 const ACTIVE_ASSIGNMENT_STATUSES = [ASSIGNMENT_STATUS.ACCEPTED, ASSIGNMENT_STATUS.ON_SITE, ASSIGNMENT_STATUS.IN_PROGRESS]
 
 const TAB_STATUS_FILTERS = {
-  awaiting: [REQUEST_STATUS.SEARCHING],
+  awaiting: [REQUEST_STATUS.SEARCHING, REQUEST_STATUS.ADMIN_ACCEPTED],
   active: [
     REQUEST_STATUS.ACCEPTED,
     REQUEST_STATUS.CONFIRMED,
@@ -36,6 +38,16 @@ const TAB_STATUS_FILTERS = {
 }
 
 const SEARCH_EXPIRED_REASON = 'search_expired'
+
+/** Admin-configured accept window (seconds) for new / retried individual bookings. */
+export async function getIndividualSearchWindowSeconds() {
+  const doc = await SystemSettings.findOne({ singletonId: 'SYSTEM_SETTINGS' }).select('individualAcceptWindowSeconds').lean()
+  const secs = Number(doc?.individualAcceptWindowSeconds)
+  if (!Number.isFinite(secs) || secs < INDIVIDUAL_SEARCH_MIN_SECONDS || secs > INDIVIDUAL_SEARCH_MAX_SECONDS) {
+    return INDIVIDUAL_SEARCH_SECONDS
+  }
+  return secs
+}
 
 /** Extra per-tab conditions: expired bookings are cancelled ones whose search window ran out. */
 const TAB_EXTRA_FILTERS = {
@@ -59,6 +71,8 @@ function distanceKmBetween(lat1, lng1, lat2, lng2) {
  * Notify every admin (socket + push) that an individual booking is waiting for manual worker assignment.
  */
 export async function notifyAdminsIndividualBookingPending(request, { clientName, reason = 'created' } = {}) {
+  const windowSeconds = await getIndividualSearchWindowSeconds()
+  const windowText = windowSeconds % 60 === 0 ? `${windowSeconds / 60} min` : `${windowSeconds} seconds`
   const requestId = request._id.toString()
   emitToRole('admin', 'individual_booking_pending', {
     requestId,
@@ -79,8 +93,8 @@ export async function notifyAdminsIndividualBookingPending(request, { clientName
     reason === 'worker_cancelled'
       ? `Worker cancelled booking ${ref}. Please assign a new worker.`
       : reason === 'retry'
-        ? `${clientName || 'A customer'} retried expired booking ${ref} (${request.locationText || 'location pending'}). Assign a worker within ${INDIVIDUAL_SEARCH_SECONDS} seconds.`
-        : `${clientName || 'A customer'} created booking ${ref} (${request.locationText || 'location pending'}). Assign a worker.`
+        ? `${clientName || 'A customer'} retried expired booking ${ref} (${request.locationText || 'location pending'}). Accept it within ${windowText}.`
+        : `${clientName || 'A customer'} created booking ${ref} (${request.locationText || 'location pending'}). Accept it within ${windowText}, then assign a worker.`
 
   const admins = await User.find({ role: USER_ROLES.ADMIN, isActive: true }).select('_id').lean()
   for (const admin of admins) {
@@ -203,7 +217,7 @@ export const listIndividualBookingsAdmin = asyncHandler(async (req, res) => {
     data: {
       requests: requests.map((r) => ({ ...r, assignments: byRequest[r._id.toString()] || [] })),
       counts: { awaiting, active, expired },
-      searchWindowSeconds: INDIVIDUAL_SEARCH_SECONDS,
+      searchWindowSeconds: await getIndividualSearchWindowSeconds(),
     },
   })
 })
@@ -332,6 +346,189 @@ export const listEligibleWorkersAdmin = asyncHandler(async (req, res) => {
   })
 })
 
+/**
+ * POST /admin/workforce/individual-bookings/:id/accept
+ * Admin accepts a pending (searching) booking. Only valid while the search window is still open; stops the timer
+ * (admin_accepted bookings are never picked up by the expiry job) and unlocks worker assignment.
+ */
+export const acceptIndividualBookingAdmin = asyncHandler(async (req, res) => {
+  const existing = await WorkforceRequest.findById(req.params.id).select('sourceType dispatchMode status labourId').lean()
+  if (!existing) return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  if (existing.sourceType !== REQUEST_SOURCE.INDIVIDUAL || existing.dispatchMode !== 'admin') {
+    return sendError(res, { message: 'Only individual bookings can be accepted here.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+  if (existing.status === REQUEST_STATUS.ADMIN_ACCEPTED) {
+    return sendError(res, {
+      message: 'This booking is already accepted. Assign a worker.',
+      statusCode: HTTP_STATUS.CONFLICT,
+      code: 'BOOKING_ALREADY_ACCEPTED',
+    })
+  }
+  if (existing.status === REQUEST_STATUS.CANCELLED) {
+    return sendError(res, {
+      message: 'This booking has expired or was cancelled.',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+      code: 'BOOKING_EXPIRED',
+    })
+  }
+  if (existing.status !== REQUEST_STATUS.SEARCHING || existing.labourId) {
+    return sendError(res, { message: 'This booking is no longer pending.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const now = new Date()
+  // Conditional update: wins/loses atomically against a double click, another admin, or the expiry job.
+  const request = await WorkforceRequest.findOneAndUpdate(
+    {
+      _id: existing._id,
+      status: REQUEST_STATUS.SEARCHING,
+      labourId: null,
+      $or: [
+        { searchExpiresAt: { $gt: now } },
+        // Bookings created before searchExpiresAt existed: window starts at creation.
+        { searchExpiresAt: null, createdAt: { $gt: new Date(now.getTime() - INDIVIDUAL_SEARCH_SECONDS * 1000) } },
+      ],
+    },
+    {
+      $set: { status: REQUEST_STATUS.ADMIN_ACCEPTED, adminAcceptedAt: now, adminAcceptedBy: req.user._id },
+      $unset: { searchExpiresAt: '', expiresAt: '' },
+    },
+    { new: true },
+  )
+  if (!request) {
+    return sendError(res, {
+      message: 'This booking expired or is no longer pending.',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+      code: 'BOOKING_EXPIRED',
+    })
+  }
+
+  const requestId = request._id.toString()
+  const payload = {
+    requestId,
+    reference: request.reference || null,
+    status: REQUEST_STATUS.ADMIN_ACCEPTED,
+    adminAcceptedAt: request.adminAcceptedAt,
+    message: 'Admin is assigning a worker',
+  }
+  try {
+    const io = getIO()
+    io.to(`request_${requestId}`).emit('bookingAdminAccepted', payload)
+    if (request.clientId) {
+      emitToUser('individual', request.clientId.toString(), 'bookingAdminAccepted', payload)
+      emitToUser('individual', request.clientId.toString(), 'request_updated', { requestId })
+    }
+  } catch (err) {
+    console.error('Socket emit error on admin accept:', err)
+  }
+  emitToRole('admin', 'individual_booking_updated', { requestId, reason: 'admin_accepted' })
+
+  if (request.clientId) {
+    triggerBookingNotif({
+      userId: request.clientId,
+      copy: bookingAdminAcceptedNotif(),
+      relatedId: request._id,
+      relatedModel: 'WorkforceRequest',
+      requestId: request._id,
+    }).catch((err) => console.error('[Notification Error]:', err.message))
+  }
+
+  await logAudit({
+    adminId: req.user._id,
+    action: 'ACCEPT_INDIVIDUAL_BOOKING',
+    module: 'workforce',
+    newValue: { requestId: request._id },
+    req,
+  }).catch(() => {})
+
+  sendSuccess(res, { data: { request }, message: 'Booking accepted. You can now assign a worker.' })
+})
+
+/**
+ * POST /admin/workforce/individual-bookings/:id/extend  { seconds }
+ * Adds time to a pending (searching) booking's accept window. The expiry job reads searchExpiresAt, so it
+ * respects the new deadline automatically. Rejected once admin accepted or the window already ran out.
+ */
+export const extendIndividualBookingTimerAdmin = asyncHandler(async (req, res) => {
+  const seconds = Math.round(Number(req.body?.seconds))
+  if (!Number.isFinite(seconds) || seconds < 10 || seconds > INDIVIDUAL_SEARCH_MAX_SECONDS) {
+    return sendError(res, {
+      message: `Enter extra time between 10 seconds and ${INDIVIDUAL_SEARCH_MAX_SECONDS / 60} minutes.`,
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+    })
+  }
+
+  const existing = await WorkforceRequest.findById(req.params.id).select('sourceType dispatchMode status labourId searchExpiresAt createdAt').lean()
+  if (!existing) return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  if (existing.sourceType !== REQUEST_SOURCE.INDIVIDUAL || existing.dispatchMode !== 'admin') {
+    return sendError(res, { message: 'Only individual bookings can be extended here.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+  if (existing.status !== REQUEST_STATUS.SEARCHING || existing.labourId) {
+    return sendError(res, {
+      message: existing.status === REQUEST_STATUS.ADMIN_ACCEPTED
+        ? 'Booking is already accepted, so it has no timer.'
+        : 'Only pending bookings can be extended.',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+      code: 'BOOKING_NOT_PENDING',
+    })
+  }
+
+  const now = Date.now()
+  // Legacy bookings without searchExpiresAt: window started at creation.
+  const currentEnd = existing.searchExpiresAt
+    ? new Date(existing.searchExpiresAt).getTime()
+    : new Date(existing.createdAt).getTime() + INDIVIDUAL_SEARCH_SECONDS * 1000
+  if (currentEnd <= now) {
+    return sendError(res, {
+      message: 'This booking has already expired.',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+      code: 'BOOKING_EXPIRED',
+    })
+  }
+  // Cap the remaining time so repeated extends cannot exceed the max window.
+  const nextEnd = new Date(Math.min(currentEnd + seconds * 1000, now + INDIVIDUAL_SEARCH_MAX_SECONDS * 1000))
+
+  // Conditional on the deadline we read, so a concurrent extend/accept/expire is not clobbered.
+  const request = await WorkforceRequest.findOneAndUpdate(
+    {
+      _id: existing._id,
+      status: REQUEST_STATUS.SEARCHING,
+      labourId: null,
+      searchExpiresAt: existing.searchExpiresAt ? existing.searchExpiresAt : null,
+    },
+    { $set: { searchExpiresAt: nextEnd } },
+    { new: true },
+  )
+  if (!request) {
+    return sendError(res, {
+      message: 'Booking changed or expired. Please refresh.',
+      statusCode: HTTP_STATUS.CONFLICT,
+      code: 'BOOKING_CHANGED',
+    })
+  }
+
+  const requestId = request._id.toString()
+  const payload = { requestId, reference: request.reference || null, searchExpiresAt: nextEnd.toISOString() }
+  try {
+    getIO().to(`request_${requestId}`).emit('bookingSearchExtended', payload)
+    if (request.clientId) {
+      emitToUser('individual', request.clientId.toString(), 'bookingSearchExtended', payload)
+    }
+  } catch (err) {
+    console.error('Socket emit error on timer extend:', err)
+  }
+  emitToRole('admin', 'individual_booking_updated', { requestId, reason: 'timer_extended' })
+
+  await logAudit({
+    adminId: req.user._id,
+    action: 'EXTEND_INDIVIDUAL_BOOKING_TIMER',
+    module: 'workforce',
+    newValue: { requestId: request._id, addedSeconds: seconds, searchExpiresAt: nextEnd },
+    req,
+  }).catch(() => {})
+
+  sendSuccess(res, { data: { request }, message: 'Time added.' })
+})
+
 /** POST /admin/workforce/individual-bookings/:id/assign  { labourIds: string[] } */
 export const assignWorkersToIndividualBookingAdmin = asyncHandler(async (req, res) => {
   const request = await WorkforceRequest.findById(req.params.id)
@@ -339,7 +536,14 @@ export const assignWorkersToIndividualBookingAdmin = asyncHandler(async (req, re
   if (request.sourceType !== REQUEST_SOURCE.INDIVIDUAL) {
     return sendError(res, { message: 'Only individual bookings can be assigned here.', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
-  if (request.status !== REQUEST_STATUS.SEARCHING || request.labourId) {
+  if (request.status === REQUEST_STATUS.SEARCHING && !request.labourId) {
+    return sendError(res, {
+      message: 'Accept this booking first, then assign a worker.',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+      code: 'BOOKING_NOT_ADMIN_ACCEPTED',
+    })
+  }
+  if (request.status !== REQUEST_STATUS.ADMIN_ACCEPTED || request.labourId) {
     return sendError(res, {
       message: 'This booking already has a worker or is no longer open for assignment.',
       statusCode: HTTP_STATUS.BAD_REQUEST,
@@ -523,7 +727,7 @@ export async function expireIndividualSearches() {
 
 /**
  * POST /workforce/requests/:id/retry-search (customer)
- * Reopens an expired search (or extends a still-open one) for another INDIVIDUAL_SEARCH_SECONDS and re-alerts admins.
+ * Reopens an expired search (or extends a still-open one) for another accept window and re-alerts admins.
  */
 export const retryIndividualSearch = asyncHandler(async (req, res) => {
   const request = await WorkforceRequest.findById(req.params.id)
@@ -542,7 +746,8 @@ export const retryIndividualSearch = asyncHandler(async (req, res) => {
   request.status = REQUEST_STATUS.SEARCHING
   request.cancelReason = undefined
   request.searchExpiredAt = undefined
-  request.searchExpiresAt = new Date(Date.now() + INDIVIDUAL_SEARCH_SECONDS * 1000)
+  const windowSeconds = await getIndividualSearchWindowSeconds()
+  request.searchExpiresAt = new Date(Date.now() + windowSeconds * 1000)
   await request.save()
 
   notifyAdminsIndividualBookingPending(request, { clientName: req.user.fullName, reason: 'retry' }).catch((err) =>
@@ -551,7 +756,7 @@ export const retryIndividualSearch = asyncHandler(async (req, res) => {
   emitToRole('admin', 'individual_booking_updated', { requestId: request._id.toString() })
 
   sendSuccess(res, {
-    data: { request, searchWindowSeconds: INDIVIDUAL_SEARCH_SECONDS },
+    data: { request, searchWindowSeconds: windowSeconds },
     message: 'Searching again',
   })
 })

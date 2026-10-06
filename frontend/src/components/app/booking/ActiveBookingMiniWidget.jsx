@@ -91,7 +91,7 @@ export function ActiveBookingMiniWidget() {
   useEffect(() => {
     const status = String(booking?.status || '').toLowerCase()
     if (!booking) return undefined
-    if (!['searching', 'accepted', 'assigned', 'in_progress', 'on_site'].includes(status)) return undefined
+    if (!['searching', 'admin_accepted', 'accepted', 'assigned', 'in_progress', 'on_site'].includes(status)) return undefined
 
     const requestId = booking.requestId
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
@@ -140,7 +140,7 @@ export function ActiveBookingMiniWidget() {
 
         // No server id — cannot verify; drop searching chip if stale
         if (!requestId) {
-          if (status === 'searching') {
+          if (status === 'searching' || status === 'admin_accepted') {
             stop()
             clearChip('search_expired', { notifyWorker: false })
           }
@@ -161,7 +161,7 @@ export function ActiveBookingMiniWidget() {
           if (res.status === 404 || res.status === 410) {
             stop()
             clearChip('cancelled', {
-              notifyWorker: status !== 'searching',
+              notifyWorker: status !== 'searching' && status !== 'admin_accepted',
               message: 'Worker cancelled the booking.',
             })
           }
@@ -189,7 +189,7 @@ export function ActiveBookingMiniWidget() {
           return
         }
 
-        if (status === 'searching') {
+        if (status === 'searching' || status === 'admin_accepted') {
           const accepted = assignments?.find((a) =>
             ['accepted', 'on_site', 'in_progress', 'completed'].includes(a.status),
           )
@@ -220,11 +220,11 @@ export function ActiveBookingMiniWidget() {
           setBooking(null)
           return
         }
-        if (!active && reqStatus === 'searching') {
+        if (!active && (reqStatus === 'searching' || reqStatus === 'admin_accepted')) {
           // Paid re-search — keep chip but switch to finding state
           const updated = {
             ...booking,
-            status: 'searching',
+            status: reqStatus,
             assignedWorker: null,
             jobTimelineStep: 'sent',
           }

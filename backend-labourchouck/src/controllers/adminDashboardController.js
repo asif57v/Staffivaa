@@ -106,6 +106,8 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
   
   // Pending Corporate Client Requests (admin_review)
   const pendingClientRequests = await WorkforceRequest.countDocuments({ sourceType: 'corporate', status: 'admin_review' })
+  // New individual bookings waiting for admin to accept
+  const pendingIndividualBookings = await WorkforceRequest.countDocuments({ sourceType: 'individual', dispatchMode: 'admin', status: 'searching' })
   const pendingEnterpriseDirectRequests = await EnterpriseJob.countDocuments({ dispatchMode: 'admin', adminRequestStatus: 'pending' })
   
   return sendSuccess(res, {
@@ -135,6 +137,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       pendingRefundsCount,
       pendingWithdrawalsCount,
       pendingClientRequests,
+      pendingIndividualBookings,
       pendingEnterpriseDirectRequests,
     }
   })
