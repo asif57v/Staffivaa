@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { 
   ArrowLeft, Plus, Trash2, Navigation, ChevronDown, 
   MapPin, Clock, Calendar, Users, Briefcase, RefreshCw, Minus
@@ -52,7 +52,13 @@ export function CorporateRequestNewPage() {
   const [locationLng, setLocationLng] = useState(null)
   const [vendorSearchRadius, setVendorSearchRadius] = useState('')
   const [notes, setNotes] = useState('')
-  const [lines, setLines] = useState([emptyLine()])
+  // Banner / push deep-link: ?categoryId=&quantity= pre-selects the skill
+  const [searchParams] = useSearchParams()
+  const [lines, setLines] = useState(() => {
+    const categoryId = searchParams.get('categoryId') || ''
+    const quantity = Math.max(1, parseInt(searchParams.get('quantity')) || 1)
+    return [categoryId ? { ...emptyLine(), categoryId, quantity } : emptyLine()]
+  })
   const isSubmittingRef = useRef(false)
   const lastSubmitTimeRef = useRef(0)
   const [categories, setCategories] = useState([])

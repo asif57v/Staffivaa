@@ -36,6 +36,7 @@ export const updateSettings = asyncHandler(async (req, res) => {
     isEnterpriseSecurityBalanceEnabled,
     minimumLabourWalletBalance,
     individualAcceptWindowSeconds,
+    individualAcceptNoLimit,
     advancePaymentPercentage,
     remainingPaymentPercentage,
     platformFeeType,
@@ -82,6 +83,7 @@ export const updateSettings = asyncHandler(async (req, res) => {
       settings.minimumLabourWalletBalanceUpdatedAt = new Date()
     }
   }
+  if (individualAcceptNoLimit != null) settings.individualAcceptNoLimit = Boolean(individualAcceptNoLimit)
   if (individualAcceptWindowSeconds != null) {
     const secs = Math.round(Number(individualAcceptWindowSeconds))
     if (!Number.isFinite(secs) || secs < INDIVIDUAL_SEARCH_MIN_SECONDS || secs > INDIVIDUAL_SEARCH_MAX_SECONDS) {

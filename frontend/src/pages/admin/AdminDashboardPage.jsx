@@ -79,15 +79,15 @@ export function AdminDashboardPage() {
       <div className="w-full space-y-8 pb-8 animate-pulse">
         <div>
           <div className="h-8 w-48 bg-slate-200 rounded-lg"></div>
-          <div className="h-4 w-96 bg-slate-200 rounded-lg mt-3"></div>
+          <div className="h-4 w-96 max-w-full bg-slate-200 rounded-lg mt-3"></div>
         </div>
-        <div className="grid gap-6 grid-cols-4 w-full">
+        <div className="grid gap-6 grid-cols-4 w-full max-md:grid-cols-2 max-md:gap-3">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="h-32 bg-slate-200 rounded-2xl"></div>
           ))}
         </div>
-        <div className="grid gap-6 grid-cols-3 w-full">
-          <div className="h-80 bg-slate-200 rounded-2xl col-span-2"></div>
+        <div className="grid gap-6 grid-cols-3 w-full max-md:grid-cols-1">
+          <div className="h-80 bg-slate-200 rounded-2xl col-span-2 max-md:col-span-1"></div>
           <div className="h-80 bg-slate-200 rounded-2xl col-span-1"></div>
         </div>
       </div>
@@ -171,7 +171,7 @@ export function AdminDashboardPage() {
         </div>
       </motion.div>
 
-      <div className="grid gap-6 grid-cols-4 w-full">
+      <div className="grid gap-6 grid-cols-4 w-full max-md:grid-cols-2 max-md:gap-3">
         {cards.map((s, i) => (
           <motion.div
             key={s.label}
@@ -198,7 +198,7 @@ export function AdminDashboardPage() {
       </div>
 
       {/* Analytics Charts */}
-      <div className="grid gap-6 grid-cols-2 w-full">
+      <div className="grid gap-6 grid-cols-2 w-full max-md:grid-cols-1 max-md:gap-4">
         <GlassPanel className="p-6 border border-slate-200/60 shadow-sm">
           <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500 mb-4">Revenue Trend (Last 6 Months)</h3>
           <div className="h-64 w-full">
@@ -258,8 +258,8 @@ export function AdminDashboardPage() {
         </GlassPanel>
       )}
 
-      <div className="grid gap-6 grid-cols-3 w-full">
-        <GlassPanel className="p-8 col-span-2 shadow-sm border border-slate-200/60">
+      <div className="grid gap-6 grid-cols-3 w-full max-md:grid-cols-1">
+        <GlassPanel className="p-8 col-span-2 max-md:col-span-1 max-md:p-4 shadow-sm border border-slate-200/60">
           <div className="flex items-center justify-between gap-4">
             <h2 className="text-lg font-bold text-slate-900">Shortcuts</h2>
             <Activity className="h-5 w-5 text-slate-300" aria-hidden />

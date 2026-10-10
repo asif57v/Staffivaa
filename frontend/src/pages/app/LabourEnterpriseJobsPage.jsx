@@ -640,7 +640,7 @@ export function LabourEnterpriseJobsPage() {
     filters.perks.length
 
   return (
-    <div className="-mx-4 min-h-screen bg-[#F8F9FB] overflow-x-hidden">
+    <div className="-mx-4 min-h-screen bg-[#F8F9FB] overflow-x-hidden pb-28">
 
       {/* ── Hero ───────────────────────────────────────────────────────────── */}
       <div className="relative overflow-hidden bg-gradient-to-br from-indigo-700 via-indigo-600 to-purple-700 px-5 pt-12 pb-20">

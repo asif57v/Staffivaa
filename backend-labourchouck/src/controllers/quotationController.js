@@ -8,6 +8,7 @@ import { emitToCorporate, emitToVendor, emitToRole } from '../utils/socket.js'
 import { User } from '../models/User.js'
 import { sendNotificationToUsers } from '../services/notificationService.js'
 import CommissionService from '../services/CommissionService.js'
+import { notifyCorporateClient } from '../utils/corporateNotifications.js'
 
 export const submitQuotationVendor = asyncHandler(async (req, res) => {
   let requestId = req.body.requestId || req.params.id
@@ -179,6 +180,8 @@ export const submitQuotationVendor = asyncHandler(async (req, res) => {
 
   await quotation.save()
 
+  notifyCorporateClient(request, quotation.status === 'revised' ? 'quotation_revised' : 'quotation_received')
+
   // Emit socket update to Corporate
   emitToCorporate(request.clientId.toString(), 'vendor_submitted_quotation', {
     requestId: request._id.toString(),
@@ -290,6 +293,12 @@ export const respondToQuotationCorporate = asyncHandler(async (req, res) => {
     quotationStatus: quotation.status,
   })
 
+  // Confirm to the corporate client that their response reached admin
+  notifyCorporateClient(
+    request,
+    action === 'approve' ? 'quotation_accept_sent' : action === 'reject' ? 'quotation_reject_sent' : 'quotation_revision_sent',
+  )
+
   // Send Notification to Admins
   try {
     const adminUsers = await User.find({ role: { $in: ['admin', 'superadmin'] } }).select('_id')
@@ -369,10 +378,13 @@ export const approveQuotation = asyncHandler(async (req, res) => {
       requestId: request._id.toString(),
       status: request.status
     })
-    emitToVendor(quotation.vendorId.toString(), 'request_status_update', {
-      requestId: request._id.toString(),
-      status: request.status
-    })
+    if (quotation.vendorId) {
+      emitToVendor(quotation.vendorId.toString(), 'request_status_update', {
+        requestId: request._id.toString(),
+        status: request.status
+      })
+    }
+    notifyCorporateClient(request, 'quotation_admin_approved')
   }
 
   sendSuccess(res, { data: { quotation } })
@@ -395,10 +407,13 @@ export const rejectQuotation = asyncHandler(async (req, res) => {
       requestId: request._id.toString(),
       status: request.status
     })
-    emitToVendor(quotation.vendorId.toString(), 'request_status_update', {
-      requestId: request._id.toString(),
-      status: request.status
-    })
+    if (quotation.vendorId) {
+      emitToVendor(quotation.vendorId.toString(), 'request_status_update', {
+        requestId: request._id.toString(),
+        status: request.status
+      })
+    }
+    notifyCorporateClient(request, 'quotation_admin_rejected')
   }
 
   sendSuccess(res, { data: { quotation } })

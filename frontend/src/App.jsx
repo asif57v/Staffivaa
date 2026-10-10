@@ -49,6 +49,7 @@ const AdminPromotionsOffersPage = lazy(() => import('./pages/admin/marketing/Adm
 const AdminPopularServicesPage = lazy(() => import('./pages/admin/marketing/AdminPopularServicesPage.jsx').then(m => ({ default: m.AdminPopularServicesPage })))
 const AdminSponsoredAdsPage = lazy(() => import('./pages/admin/marketing/AdminSponsoredAdsPage.jsx').then(m => ({ default: m.AdminSponsoredAdsPage })))
 const AdminBannerManagementPage = lazy(() => import('./pages/admin/marketing/AdminBannerManagementPage.jsx').then(m => ({ default: m.AdminBannerManagementPage })))
+const AdminPushNotificationsPage = lazy(() => import('./pages/admin/marketing/AdminPushNotificationsPage.jsx').then(m => ({ default: m.AdminPushNotificationsPage })))
 const AdminCampaignAnalyticsPage = lazy(() => import('./pages/admin/marketing/AdminCampaignAnalyticsPage.jsx').then(m => ({ default: m.AdminCampaignAnalyticsPage })))
 const AdminCommissionPage = lazy(() => import('./panels/admin/pages/AdminCommissionPage.jsx').then(m => ({ default: m.default })))
 const AdminEnterpriseVerificationPage = lazy(() => import('./pages/admin/AdminEnterpriseVerificationPage.jsx').then(m => ({ default: m.AdminEnterpriseVerificationPage })))
@@ -203,6 +204,7 @@ function App() {
                 <Route path="marketing/promotions" element={<AdminPromotionsOffersPage />} />
                 <Route path="marketing/ads" element={<AdminSponsoredAdsPage />} />
                 <Route path="marketing/banners" element={<AdminBannerManagementPage />} />
+                <Route path="marketing/push-notifications" element={<AdminPushNotificationsPage />} />
                 <Route path="marketing/analytics" element={<AdminCampaignAnalyticsPage />} />
                 <Route path="legal-content" element={<AdminLegalContentPage />} />
               </Route>

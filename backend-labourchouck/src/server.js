@@ -9,6 +9,7 @@ import { startPayrollEngineJob } from './utils/payrollJob.js'
 import { startCommissionOverdueJob } from './utils/commissionJob.js'
 import { runPaymentSchedulerChecks } from './utils/paymentScheduler.js'
 import { initializeFirebaseAdmin } from './config/firebase.js'
+import { runDueScheduledCampaigns } from './controllers/adminPushController.js'
 import { seedDefaultLegalPages } from './controllers/legalController.js'
 
 import { autoClosePastAttendanceRecords } from './controllers/attendanceController.js'
@@ -35,6 +36,11 @@ async function main() {
     autoClosePastAttendanceRecords().catch((err) => console.error('[Attendance Auto-Close Error]:', err.message))
   }, 15 * 60 * 1000)
   
+  // Dispatch admin push campaigns that were scheduled for later (checked every minute)
+  setInterval(() => {
+    runDueScheduledCampaigns().catch((err) => console.error('[Push Scheduler Error]:', err.message))
+  }, 60 * 1000)
+
   // Run Payment Scheduler every 15 minutes
   runPaymentSchedulerChecks().catch((err) => console.error('[Payment Scheduler Startup Error]:', err.message))
   setInterval(() => {

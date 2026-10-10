@@ -27,6 +27,7 @@ import {
   useGetIndividualBookingWorkersQuery,
   useAcceptIndividualBookingMutation,
   useExtendIndividualBookingMutation,
+  useRemoveIndividualBookingTimerMutation,
   useGetSettingsQuery,
   useUpdateSettingsMutation,
   useAssignIndividualBookingWorkersMutation,
@@ -141,21 +142,28 @@ function AcceptTimeSetting() {
   const { data } = useGetSettingsQuery()
   const [updateSettings, { isLoading: saving }] = useUpdateSettingsMutation()
   const saved = data?.settings?.individualAcceptWindowSeconds ?? 90
+  const savedNoLimit = Boolean(data?.settings?.individualAcceptNoLimit)
+  const [noLimitDraft, setNoLimitDraft] = useState(null)
+  const noLimit = noLimitDraft ?? savedNoLimit
   const [mins, setMins] = useState(null)
   const [secs, setSecs] = useState(null)
   const curMins = mins ?? Math.floor(saved / 60)
   const curSecs = secs ?? saved % 60
   const total = (Number(curMins) || 0) * 60 + (Number(curSecs) || 0)
-  const valid = total >= 30 && total <= 1800
-  const dirty = total !== saved
+  const valid = noLimit || (total >= 30 && total <= 1800)
+  const dirty = noLimit !== savedNoLimit || (!noLimit && total !== saved)
 
   const handleSave = async () => {
     if (!valid) return
     try {
-      await updateSettings({ individualAcceptWindowSeconds: total }).unwrap()
+      await updateSettings({
+        individualAcceptNoLimit: noLimit,
+        ...(noLimit ? {} : { individualAcceptWindowSeconds: total }),
+      }).unwrap()
       toast.success('Accept time updated — applies to new bookings')
       setMins(null)
       setSecs(null)
+      setNoLimitDraft(null)
     } catch (err) {
       toast.error(err?.data?.message || 'Could not update accept time')
     }
@@ -168,14 +176,25 @@ function AcceptTimeSetting() {
           <Clock className="h-4 w-4 text-brand" /> Booking accept time
         </p>
         <p className="mt-0.5 text-xs text-slate-500">
-          How long a new booking waits for you to accept. Customers see this countdown (30 sec – 30 min).
+          Default time a new booking waits for you to accept (30 sec – 30 min). Customers see this countdown. Turn on
+          "No time limit" to hide it: bookings then stay open until you accept or the customer cancels.
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        <label className="mr-1 flex cursor-pointer items-center gap-1.5 text-xs font-bold text-slate-700">
+          <input
+            type="checkbox"
+            checked={noLimit}
+            onChange={(e) => setNoLimitDraft(e.target.checked)}
+            className="h-4 w-4 accent-slate-900"
+          />
+          No time limit
+        </label>
         <input
           type="number"
           min="0"
           max="30"
+          disabled={noLimit}
           value={curMins}
           onChange={(e) => setMins(e.target.value)}
           className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-bold outline-none focus:border-slate-400"
@@ -185,6 +204,7 @@ function AcceptTimeSetting() {
           type="number"
           min="0"
           max="59"
+          disabled={noLimit}
           value={curSecs}
           onChange={(e) => setSecs(e.target.value)}
           className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-bold outline-none focus:border-slate-400"
@@ -225,6 +245,7 @@ export function AdminIndividualBookingsPage() {
   const [acceptingId, setAcceptingId] = useState(null)
   const [extendIndividualBooking] = useExtendIndividualBookingMutation()
   const [extendingId, setExtendingId] = useState(null)
+  const [removeTimer] = useRemoveIndividualBookingTimerMutation()
 
   const requests = data?.requests ?? []
   const counts = data?.counts ?? {}
@@ -280,6 +301,20 @@ export function AdminIndividualBookingsPage() {
       toast.success('Time added — customer countdown updated')
     } catch (err) {
       toast.error(err?.data?.message || 'Could not add time')
+      refetch()
+    } finally {
+      setExtendingId(null)
+    }
+  }
+
+  const handleRemoveTimer = async (id) => {
+    if (extendingId) return
+    setExtendingId(id)
+    try {
+      await removeTimer(id).unwrap()
+      toast.success('Time limit removed. Booking stays open until accepted or cancelled')
+    } catch (err) {
+      toast.error(err?.data?.message || 'Could not remove the time limit')
       refetch()
     } finally {
       setExtendingId(null)
@@ -379,6 +414,7 @@ export function AdminIndividualBookingsPage() {
               onAccept={() => handleAccept(r._id)}
               accepting={acceptingId === r._id}
               onExtend={(seconds) => handleExtend(r._id, seconds)}
+              onRemoveTimer={() => handleRemoveTimer(r._id)}
               extending={extendingId === r._id}
               onAssign={() => setAssignTarget(r)}
               onWithdraw={handleWithdraw}
@@ -392,7 +428,7 @@ export function AdminIndividualBookingsPage() {
   )
 }
 
-function BookingCard({ request, onAccept, accepting, onExtend, extending, onAssign, onWithdraw, searchWindowSeconds = 90 }) {
+function BookingCard({ request, onAccept, accepting, onExtend, onRemoveTimer, extending, onAssign, onWithdraw, searchWindowSeconds = 90 }) {
   const client = request.clientId || {}
   const assignments = request.assignments || []
   // New request: only "Accept booking". Worker assignment unlocks once admin accepted (enforced on the server too).
@@ -403,8 +439,10 @@ function BookingCard({ request, onAccept, accepting, onExtend, extending, onAssi
   const workers = workerCount(request.lines)
   const expired = isSearchExpired(request)
   // Older bookings have no searchExpiresAt; their window started at creation (same rule as the server).
-  const searchEndsAt =
-    request.searchExpiresAt ||
+  const noLimit = Boolean(request.searchNoLimit)
+  const searchEndsAt = noLimit
+    ? null
+    : request.searchExpiresAt ||
     (request.createdAt ? new Date(new Date(request.createdAt).getTime() + searchWindowSeconds * 1000).toISOString() : null)
   const secondsLeft = useSearchSecondsLeft(searchEndsAt, canAccept)
   const [customMinutes, setCustomMinutes] = useState('')
@@ -440,6 +478,10 @@ function BookingCard({ request, onAccept, accepting, onExtend, extending, onAssi
                 {secondsLeft > 0
                   ? `Expires in ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`
                   : 'Expiring…'}
+              </span>
+            ) : canAccept && noLimit ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600 ring-1 ring-slate-200">
+                <Clock className="h-3 w-3" /> No time limit
               </span>
             ) : null}
           </div>
@@ -561,7 +603,7 @@ function BookingCard({ request, onAccept, accepting, onExtend, extending, onAssi
         </div>
       ) : null}
 
-      {canAccept ? (
+      {canAccept && !noLimit ? (
         <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-xl bg-slate-50 p-2 text-[11px] font-bold text-slate-600">
           <span className="inline-flex items-center gap-1">
             <Clock className="h-3 w-3" /> Add time:
@@ -597,6 +639,15 @@ function BookingCard({ request, onAccept, accepting, onExtend, extending, onAssi
           >
             {extending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
             Add
+          </button>
+          <button
+            type="button"
+            disabled={extending}
+            onClick={onRemoveTimer}
+            title="Hide the countdown: the booking stays open until you accept or the customer cancels"
+            className="ml-auto rounded-lg bg-white px-2 py-1 text-rose-700 ring-1 ring-rose-200 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Remove time limit
           </button>
         </div>
       ) : null}
@@ -713,7 +764,7 @@ function AssignWorkerModal({ request, onClose }) {
               className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-slate-400"
             />
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 max-md:grid-cols-1">
             <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-500">
               Skill
               <select

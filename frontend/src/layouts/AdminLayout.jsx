@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   Bell,
+  X,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -57,6 +58,7 @@ export function AdminLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
 
   // Search query states
   const [searchQuery, setSearchQuery] = useState('')
@@ -234,6 +236,7 @@ export function AdminLayout() {
     setMobileOpen(false)
     setProfileOpen(false)
     setNotifOpen(false)
+    setSearchOpen(false)
   }, [pathname])
 
   // --- FCM Token Auto-sync & Foreground Listener ---
@@ -364,6 +367,14 @@ export function AdminLayout() {
         >
           {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
         </button>
+        <button
+          type="button"
+          onClick={() => setMobileOpen(false)}
+          className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200/90 bg-white text-slate-500 shadow-sm md:hidden"
+          aria-label="Close menu"
+        >
+          <X className="h-5 w-5" />
+        </button>
       </div>
 
       <nav
@@ -478,18 +489,34 @@ export function AdminLayout() {
   `
 
   return (
-    <div className="flex h-screen w-full bg-slate-50/50 text-slate-900">
+    <div className="flex h-dvh w-full bg-slate-50/50 text-slate-900">
+      {mobileOpen ? (
+        <button
+          type="button"
+          aria-label="Close menu"
+          className="fixed inset-0 z-[65] bg-slate-900/40 backdrop-blur-[1px] md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      ) : null}
       <aside
-        className={`relative z-[60] flex flex-col border-r border-slate-200/80 bg-white transition-all duration-300 ${collapsed ? 'w-20' : 'w-72'}`}
+        className={`relative z-[60] flex flex-col border-r border-slate-200/80 bg-white transition-all duration-300 md:${collapsed ? 'w-20' : 'w-72'} max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-[70] max-md:h-dvh max-md:w-[min(18rem,86vw)] max-md:shadow-2xl max-md:transition-transform ${mobileOpen ? '' : 'max-md:-translate-x-full'}`}
       >
         {sidebarInner}
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="relative z-30 flex h-17 shrink-0 items-center gap-4 border-b border-slate-200/70 bg-white/80 px-6 shadow-[0_8px_30px_-18px_rgba(15,23,42,0.12)] backdrop-blur-xl">
+        <header className="relative z-30 flex h-17 shrink-0 items-center gap-2 md:gap-4 border-b border-slate-200/70 bg-white/80 px-3 md:px-6 shadow-[0_8px_30px_-18px_rgba(15,23,42,0.12)] backdrop-blur-xl">
           <button
             type="button"
-            className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200/70 bg-white text-slate-600 shadow-sm transition hover:border-brand/30 hover:shadow-md"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200/70 bg-white text-slate-600 shadow-sm md:hidden"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Open menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            className="hidden h-11 w-11 items-center justify-center rounded-xl border border-slate-200/70 bg-white text-slate-600 shadow-sm transition hover:border-brand/30 hover:shadow-md md:flex"
             onClick={() => setCollapsed((c) => !c)}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -497,19 +524,19 @@ export function AdminLayout() {
             {collapsed ? <PanelLeft className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
           </button>
 
-          <div className="flex min-w-0 flex-1 items-center gap-6">
-            <nav aria-label="Breadcrumb" className="flex items-center text-sm text-slate-500 font-medium">
-              <Link to="/admin" className="hover:text-slate-900 transition">Admin</Link>
+          <div className="flex min-w-0 flex-1 items-center gap-3 md:gap-6">
+            <nav aria-label="Breadcrumb" className="flex min-w-0 items-center text-sm text-slate-500 font-medium">
+              <Link to="/admin" className={`hover:text-slate-900 transition ${pathname !== '/admin' ? 'max-md:hidden' : ''}`}>Admin</Link>
               {pathname !== '/admin' && (
                 <>
-                  <ChevronRight className="h-4 w-4 mx-1 text-slate-400" />
-                  <span className="text-slate-900 font-semibold">{title}</span>
+                  <ChevronRight className="h-4 w-4 mx-1 text-slate-400 max-md:hidden" />
+                  <span className="truncate text-slate-900 font-semibold">{title}</span>
                 </>
               )}
             </nav>
 
-            <div className="relative flex-1 max-w-md ml-auto mr-4">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <div className={`relative flex-1 max-w-md ml-auto mr-4 ${searchOpen ? 'max-md:absolute max-md:inset-x-0 max-md:top-full max-md:z-40 max-md:m-0 max-md:max-w-none max-md:border-b max-md:border-slate-200/70 max-md:bg-white max-md:p-3 max-md:shadow-lg' : 'max-md:hidden'}`}>
+              <div className="absolute inset-y-0 left-0 pl-3 max-md:left-3 flex items-center pointer-events-none">
                 <Search className="h-4 w-4 text-slate-400" />
               </div>
               <input
@@ -556,6 +583,15 @@ export function AdminLayout() {
           </div>
 
           <div className="flex shrink-0 items-center gap-2 md:gap-3">
+            <button
+              type="button"
+              onClick={() => setSearchOpen((o) => !o)}
+              className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200/70 bg-white text-slate-600 shadow-sm md:hidden"
+              aria-label="Search"
+              aria-expanded={searchOpen}
+            >
+              {searchOpen ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
+            </button>
             <div className="relative" ref={notifRef}>
               <button
                 type="button"
@@ -582,7 +618,7 @@ export function AdminLayout() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={reduce ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
                     transition={{ duration: 0.18 }}
-                    className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[22rem] origin-top-right"
+                    className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[22rem] origin-top-right max-md:fixed max-md:inset-x-3 max-md:top-[4.5rem] max-md:w-auto"
                   >
                     <GlassPanel className="p-0 overflow-hidden shadow-xl ring-1 ring-slate-200/60 max-h-[30rem] flex flex-col">
                       <div className="flex items-center justify-between border-b border-slate-100 bg-linear-to-br from-slate-50/95 to-white px-4 py-3">
@@ -686,12 +722,12 @@ export function AdminLayout() {
                 <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-linear-to-br from-brand-bright to-brand text-xs font-black text-white shadow-inner ring-2 ring-white">
                   {initials}
                 </span>
-                <div className="min-w-0 text-left">
+                <div className="min-w-0 text-left max-md:hidden">
                   <p className="truncate text-sm font-bold text-slate-900">{displayName}</p>
                   <p className="truncate text-[11px] font-medium text-slate-500">{displayEmail}</p>
                 </div>
                 <ChevronDown
-                  className={`h-4 w-4 shrink-0 text-slate-400 transition ${profileOpen ? '-rotate-180' : ''}`}
+                  className={`h-4 w-4 shrink-0 text-slate-400 transition max-md:hidden ${profileOpen ? '-rotate-180' : ''}`}
                   aria-hidden
                 />
               </button>

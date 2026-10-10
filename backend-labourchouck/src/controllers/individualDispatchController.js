@@ -49,6 +49,12 @@ export async function getIndividualSearchWindowSeconds() {
   return secs
 }
 
+/** True when admin turned the accept countdown off: new bookings stay open until accepted or cancelled. */
+export async function getIndividualSearchNoLimit() {
+  const doc = await SystemSettings.findOne({ singletonId: 'SYSTEM_SETTINGS' }).select('individualAcceptNoLimit').lean()
+  return Boolean(doc?.individualAcceptNoLimit)
+}
+
 /** Extra per-tab conditions: expired bookings are cancelled ones whose search window ran out. */
 const TAB_EXTRA_FILTERS = {
   expired: { status: REQUEST_STATUS.CANCELLED, cancelReason: SEARCH_EXPIRED_REASON },
@@ -384,8 +390,9 @@ export const acceptIndividualBookingAdmin = asyncHandler(async (req, res) => {
       labourId: null,
       $or: [
         { searchExpiresAt: { $gt: now } },
+        { searchNoLimit: true },
         // Bookings created before searchExpiresAt existed: window starts at creation.
-        { searchExpiresAt: null, createdAt: { $gt: new Date(now.getTime() - INDIVIDUAL_SEARCH_SECONDS * 1000) } },
+        { searchExpiresAt: null, searchNoLimit: { $ne: true }, createdAt: { $gt: new Date(now.getTime() - INDIVIDUAL_SEARCH_SECONDS * 1000) } },
       ],
     },
     {
@@ -457,8 +464,11 @@ export const extendIndividualBookingTimerAdmin = asyncHandler(async (req, res) =
     })
   }
 
-  const existing = await WorkforceRequest.findById(req.params.id).select('sourceType dispatchMode status labourId searchExpiresAt createdAt').lean()
+  const existing = await WorkforceRequest.findById(req.params.id).select('sourceType dispatchMode status labourId searchExpiresAt searchNoLimit createdAt').lean()
   if (!existing) return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  if (existing.searchNoLimit) {
+    return sendError(res, { message: 'This booking has no time limit, so there is nothing to extend.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
   if (existing.sourceType !== REQUEST_SOURCE.INDIVIDUAL || existing.dispatchMode !== 'admin') {
     return sendError(res, { message: 'Only individual bookings can be extended here.', statusCode: HTTP_STATUS.BAD_REQUEST })
   }
@@ -527,6 +537,53 @@ export const extendIndividualBookingTimerAdmin = asyncHandler(async (req, res) =
   }).catch(() => {})
 
   sendSuccess(res, { data: { request }, message: 'Time added.' })
+})
+
+/**
+ * POST /admin/workforce/individual-bookings/:id/remove-timer
+ * Removes the accept countdown from a pending booking: it then stays open until admin accepts it or the
+ * customer cancels. The customer's screen stops showing the timer.
+ */
+export const removeIndividualBookingTimerAdmin = asyncHandler(async (req, res) => {
+  const request = await WorkforceRequest.findOneAndUpdate(
+    {
+      _id: req.params.id,
+      sourceType: REQUEST_SOURCE.INDIVIDUAL,
+      dispatchMode: 'admin',
+      status: REQUEST_STATUS.SEARCHING,
+      labourId: null,
+      $or: [{ searchExpiresAt: { $gt: new Date() } }, { searchNoLimit: true }],
+    },
+    { $set: { searchNoLimit: true }, $unset: { searchExpiresAt: '' } },
+    { new: true },
+  )
+  if (!request) {
+    return sendError(res, {
+      message: 'Only a pending booking that has not expired can have its timer removed.',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+      code: 'BOOKING_NOT_PENDING',
+    })
+  }
+
+  const requestId = request._id.toString()
+  const payload = { requestId, reference: request.reference || null, searchExpiresAt: null, noTimeLimit: true }
+  try {
+    getIO().to(`request_${requestId}`).emit('bookingSearchExtended', payload)
+    if (request.clientId) emitToUser('individual', request.clientId.toString(), 'bookingSearchExtended', payload)
+  } catch (err) {
+    console.error('Socket emit error on timer removal:', err)
+  }
+  emitToRole('admin', 'individual_booking_updated', { requestId, reason: 'timer_removed' })
+
+  await logAudit({
+    adminId: req.user._id,
+    action: 'REMOVE_INDIVIDUAL_BOOKING_TIMER',
+    module: 'workforce',
+    newValue: { requestId: request._id },
+    req,
+  }).catch(() => {})
+
+  sendSuccess(res, { data: { request }, message: 'Time limit removed.' })
 })
 
 /** POST /admin/workforce/individual-bookings/:id/assign  { labourIds: string[] } */
@@ -668,7 +725,7 @@ export async function expireIndividualSearches() {
     $or: [
       { searchExpiresAt: { $lte: new Date() } },
       // Bookings created before searchExpiresAt existed: window starts at creation.
-      { searchExpiresAt: null, createdAt: { $lte: new Date(Date.now() - INDIVIDUAL_SEARCH_SECONDS * 1000) } },
+      { searchExpiresAt: null, searchNoLimit: { $ne: true }, createdAt: { $lte: new Date(Date.now() - INDIVIDUAL_SEARCH_SECONDS * 1000) } },
     ],
   })
     .select('_id reference clientId')
@@ -747,7 +804,13 @@ export const retryIndividualSearch = asyncHandler(async (req, res) => {
   request.cancelReason = undefined
   request.searchExpiredAt = undefined
   const windowSeconds = await getIndividualSearchWindowSeconds()
-  request.searchExpiresAt = new Date(Date.now() + windowSeconds * 1000)
+  if (await getIndividualSearchNoLimit()) {
+    request.searchNoLimit = true
+    request.searchExpiresAt = undefined
+  } else {
+    request.searchNoLimit = false
+    request.searchExpiresAt = new Date(Date.now() + windowSeconds * 1000)
+  }
   await request.save()
 
   notifyAdminsIndividualBookingPending(request, { clientName: req.user.fullName, reason: 'retry' }).catch((err) =>

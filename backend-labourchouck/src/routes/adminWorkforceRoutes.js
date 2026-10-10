@@ -32,6 +32,7 @@ import {
   listEligibleWorkersAdmin,
   acceptIndividualBookingAdmin,
   extendIndividualBookingTimerAdmin,
+  removeIndividualBookingTimerAdmin,
   assignWorkersToIndividualBookingAdmin,
   withdrawIndividualOfferAdmin,
 } from '../controllers/individualDispatchController.js'
@@ -85,6 +86,7 @@ router.get('/individual-bookings', listIndividualBookingsAdmin)
 router.get('/individual-bookings/:id/workers', listEligibleWorkersAdmin)
 router.post('/individual-bookings/:id/accept', acceptIndividualBookingAdmin)
 router.post('/individual-bookings/:id/extend', extendIndividualBookingTimerAdmin)
+router.post('/individual-bookings/:id/remove-timer', removeIndividualBookingTimerAdmin)
 router.post('/individual-bookings/:id/assign', assignWorkersToIndividualBookingAdmin)
 router.post('/individual-bookings/assignments/:assignmentId/withdraw', withdrawIndividualOfferAdmin)
 

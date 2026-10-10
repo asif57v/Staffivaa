@@ -234,7 +234,7 @@ export function AdminCampaignAnalyticsPage() {
         <div className="flex justify-between items-center">
           <div>
             <div className="h-7 w-56 bg-slate-200 rounded-lg" />
-            <div className="h-4 w-80 bg-slate-200 rounded-lg mt-2" />
+            <div className="h-4 w-80 max-w-full bg-slate-200 rounded-lg mt-2" />
           </div>
           <div className="h-10 w-28 bg-slate-200 rounded-xl" />
         </div>

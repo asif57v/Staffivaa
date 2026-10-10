@@ -397,7 +397,7 @@ export function AdminBusinessVerificationPage() {
         </button>
       </div>
 
-      <div className="grid gap-3 grid-cols-3 w-full">
+      <div className="grid gap-3 grid-cols-3 w-full max-md:grid-cols-1">
         {statCards.map((c, i) => (
           <motion.button
             key={c.key}

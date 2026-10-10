@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { PromoBannerCarousel } from '../../../components/app/PromoBannerCarousel.jsx'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGetEnterpriseSecuritySettingsQuery, useGetEnterpriseDashboardOverviewQuery } from '../../../store/api/enterpriseApi.js'
 import { ShieldAlert, Plus, FileText, ChevronDown } from 'lucide-react'
@@ -43,6 +44,8 @@ export function EnterpriseDashboardPage() {
 
       {/* 1. Header — Company name from real profile */}
       <CompanyOverview companyName={profile.companyName} date={currentDate} time={currentTime} />
+
+      <PromoBannerCarousel />
 
       {/* Payment Overdue Warning Banner with Breakdown & Dynamic Duration */}
       {securityInfo.isPaymentOverdueRestricted && (

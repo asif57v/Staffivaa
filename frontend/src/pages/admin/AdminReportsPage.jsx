@@ -289,7 +289,7 @@ export function AdminReportsPage() {
         <>
           {activeTab === 'attendance' && (
             <GlassPanel className="p-0 overflow-hidden border border-slate-200/60 shadow-sm">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-left text-sm max-md:block max-md:overflow-x-auto max-md:whitespace-nowrap">
                 <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold uppercase tracking-wider text-slate-500">
                   <tr>
                     <th className="px-6 py-4">Worker</th>
@@ -331,7 +331,7 @@ export function AdminReportsPage() {
 
           {activeTab === 'transactions' && (
             <GlassPanel className="p-0 overflow-hidden border border-slate-200/60 shadow-sm">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-left text-sm max-md:block max-md:overflow-x-auto max-md:whitespace-nowrap">
                 <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold uppercase tracking-wider text-slate-500">
                   <tr>
                     <th className="px-6 py-4">Transaction ID</th>
@@ -375,7 +375,7 @@ export function AdminReportsPage() {
 
           {activeTab === 'audit' && (
             <GlassPanel className="p-0 overflow-hidden border border-slate-200/60 shadow-sm">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-left text-sm max-md:block max-md:overflow-x-auto max-md:whitespace-nowrap">
                 <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold uppercase tracking-wider text-slate-500">
                   <tr>
                     <th className="px-6 py-4">Administrator</th>

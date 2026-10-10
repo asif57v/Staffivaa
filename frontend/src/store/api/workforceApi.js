@@ -322,6 +322,14 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       invalidatesTags: ['AdminIndividualBookings', 'AdminRequests'],
     }),
+    removeIndividualBookingTimer: build.mutation({
+      query: (id) => ({
+        url: `/admin/workforce/individual-bookings/${id}/remove-timer`,
+        method: 'POST',
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: ['AdminIndividualBookings'],
+    }),
     extendIndividualBooking: build.mutation({
       query: ({ id, seconds }) => ({
         url: `/admin/workforce/individual-bookings/${id}/extend`,
@@ -776,6 +784,7 @@ export const {
   useGetIndividualBookingWorkersQuery,
   useAcceptIndividualBookingMutation,
   useExtendIndividualBookingMutation,
+  useRemoveIndividualBookingTimerMutation,
   useAssignIndividualBookingWorkersMutation,
   useWithdrawIndividualBookingOfferMutation,
 } = workforceApi

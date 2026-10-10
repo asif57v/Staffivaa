@@ -19,6 +19,7 @@ import adminAuditLogRoutes from './adminAuditLogRoutes.js'
 import adminSupportTicketRoutes from './adminSupportTicketRoutes.js'
 import adminSettingsRoutes from './adminSettingsRoutes.js'
 import adminMarketingRoutes from './adminMarketingRoutes.js'
+import adminPushRoutes from './adminPushRoutes.js'
 import marketingRoutes from './marketingRoutes.js'
 import payrollRoutes from './payrollRouter.js'
 import adminCommissionRoutes from './adminCommissionRoutes.js'
@@ -58,6 +59,7 @@ router.use('/admin/audit-logs', adminAuditLogRoutes)
 router.use('/admin/tickets', adminSupportTicketRoutes)
 router.use('/admin/settings', adminSettingsRoutes)
 router.use('/admin/marketing', adminMarketingRoutes)
+router.use('/admin/push-notifications', adminPushRoutes)
 router.use('/marketing', marketingRoutes)
 router.use('/payroll', payrollRoutes)
 router.use('/admin/commission', adminCommissionRoutes)

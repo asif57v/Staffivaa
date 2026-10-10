@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
+import { PromoBannerCarousel } from '../../../components/app/PromoBannerCarousel.jsx'
 import { ClipboardList, IndianRupee, Users, ChevronRight, FileText, CheckCircle, Menu, MapPin, ChevronDown, Bell, Calendar, Hammer, Pencil, Plus } from 'lucide-react'
 import { VendorSkillsModal } from '../../../components/vendor/VendorSkillsModal.jsx'
 import { readAppUserLocation } from '../../../lib/appUserLocationStorage.js'
@@ -271,6 +272,8 @@ export function VendorDashboardPage() {
             </div>
           </div>
       </section>
+
+      <PromoBannerCarousel className="px-4" />
 
       <div className="relative z-10 mt-5 px-4 grid grid-cols-3 gap-2">
         {[

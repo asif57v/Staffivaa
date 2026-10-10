@@ -107,6 +107,8 @@ const workforceRequestSchema = new mongoose.Schema(
     adminDispatchedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     // Individual bookings: search window end. Past this with no worker, the booking expires (cancelReason search_expired).
     searchExpiresAt: Date,
+    // No countdown: stays open until admin accepts or the customer cancels (searchExpiresAt is unset).
+    searchNoLimit: { type: Boolean, default: false },
     searchExpiredAt: Date,
     advancePaymentStatus: {
       type: String,

@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Calendar,
   Check,
+  Headset,
   CheckCircle2,
   ImagePlus,
   IndianRupee,
@@ -76,7 +77,7 @@ function isSlotExpired(slot, selectedDate) {
   return currentHour >= slotStartHour
 }
 
-function FlowHeader({ title, subtitle, onBack }) {
+function FlowHeader({ title, subtitle, onBack, action }) {
   return (
     <motion.div layout className="-mx-4 px-4 pb-2">
       <div className="flex items-start gap-2">
@@ -91,8 +92,11 @@ function FlowHeader({ title, subtitle, onBack }) {
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-brand">Booking</p>
           <h1 className="text-xl font-black tracking-tight text-slate-900">{title}</h1>
-          {subtitle ? <p className="mt-1 text-xs text-slate-600">{subtitle}</p> : null}
+          {subtitle ? (
+            <p className={`mt-1 text-xs text-slate-600 ${action ? 'truncate' : ''}`}>{subtitle}</p>
+          ) : null}
         </div>
+        {action}
       </div>
     </motion.div>
   )
@@ -132,6 +136,8 @@ export function IndividualBookingFlowPage() {
   const [adminAccepted, setAdminAccepted] = useState(false)
   // Server deadline for the admin-accept window (admin can change / extend it); drives the countdown.
   const [searchExpiresAt, setSearchExpiresAt] = useState(null)
+  // Admin removed (or turned off) the accept countdown: the booking stays open until accepted or cancelled.
+  const [searchNoLimit, setSearchNoLimit] = useState(false)
   const [searchAttempt, setSearchAttempt] = useState(0)
   const [imageFiles, setImageFiles] = useState([])
   const [isLocating, setIsLocating] = useState(false)
@@ -316,6 +322,7 @@ export function IndividualBookingFlowPage() {
 
         if (!cancelled && !stopPolling) {
           setAdminAccepted(request?.status === 'admin_accepted')
+          setSearchNoLimit(Boolean(request?.searchNoLimit))
           if (request?.searchExpiresAt) setSearchExpiresAt(request.searchExpiresAt)
         }
 
@@ -372,6 +379,7 @@ export function IndividualBookingFlowPage() {
 
         if (!cancelled && !stopPolling) {
           setAdminAccepted(activeReq.status === 'admin_accepted')
+          setSearchNoLimit(Boolean(activeReq.searchNoLimit))
           if (activeReq.searchExpiresAt) setSearchExpiresAt(activeReq.searchExpiresAt)
         }
 
@@ -473,7 +481,11 @@ export function IndividualBookingFlowPage() {
 
       socket.on('bookingSearchExtended', (data) => {
         if (data?.requestId && requestId && String(data.requestId) !== String(requestId)) return
-        if (data?.searchExpiresAt) setSearchExpiresAt(data.searchExpiresAt)
+        if (data?.noTimeLimit) setSearchNoLimit(true)
+        else if (data?.searchExpiresAt) {
+          setSearchNoLimit(false)
+          setSearchExpiresAt(data.searchExpiresAt)
+        }
       })
 
       socket.on('bookingCancelledByLabour', (data) => {
@@ -841,6 +853,7 @@ export function IndividualBookingFlowPage() {
         const retried = await retrySearch(requestId).unwrap()
         // Set the new deadline before clearing "expired" so the screen doesn't flash the old (past) deadline.
         const nextEnd = retried?.request?.searchExpiresAt
+        setSearchNoLimit(Boolean(retried?.request?.searchNoLimit))
         if (nextEnd) setSearchExpiresAt(nextEnd)
       } catch (err) {
         console.error('[Homeowner] retry search failed:', err)
@@ -874,21 +887,37 @@ export function IndividualBookingFlowPage() {
     return (
       <div className="pb-8">
         <FlowHeader
-          title={adminAccepted ? 'Assigning worker' : 'Booking request sent'}
-          subtitle={
-            adminAccepted
-              ? 'Admin is assigning a worker'
-              : 'Admin will accept your booking soon and assign a worker to you'
-          }
+          title="Booking status"
+          subtitle={[
+            draft.categoryName,
+            draft.bookingType === 'scheduled' && draft.serviceDate
+              ? [draft.serviceDate, draft.timeSlot].filter(Boolean).join(', ')
+              : 'As soon as possible',
+          ]
+            .filter(Boolean)
+            .join(' · ')}
           onBack={leaveFlow}
+          action={
+            <button
+              type="button"
+              onClick={() => navigate('/app/support')}
+              className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-800 shadow-sm transition hover:border-brand/35 hover:text-brand cursor-pointer active:scale-95"
+              aria-label="Get help"
+            >
+              <Headset className="h-5 w-5" />
+            </button>
+          }
         />
         <BookingFindingScreen
           categoryLabel={draft.categoryName}
+          placedAt={activeBooking?.createdAt}
+          onHome={leaveFlow}
           onCancel={handleCancelBooking}
           cancelling={cancellingBooking}
           expired={searchExpired && !adminAccepted}
           adminAccepted={adminAccepted}
           searchExpiresAt={searchExpiresAt}
+          noTimeLimit={searchNoLimit}
           onRetry={handleRetrySearch}
           retrying={retryingSearch}
         />

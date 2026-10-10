@@ -51,6 +51,7 @@ import {
   loadIndividualBookings,
   resolveLiveBookingFlowStep,
 } from '../../../lib/individualBookings.js'
+import { runBannerAction } from '../../../lib/bannerAction.js'
 import { buildBookingFlowPath } from '../../../lib/bookingFlowNavigation.js'
 
 const TRADE_VISUAL_ICONS = [HardHat, Wrench, PaintRoller, Hammer, Sparkles]
@@ -396,6 +397,8 @@ function formatBannerPrice(rawPrice) {
     if (slide._id) {
       apiClient.post('/marketing/track', { type: 'BANNER', id: slide._id, action: 'CLICK' }).catch(() => {})
     }
+
+    if (slide.action?.type && slide.action.type !== 'NONE' && runBannerAction(slide, 'individual', navigate)) return
 
     if (slide.linkedGroup) {
       setSelectedGroupId(String(slide.linkedGroup))

@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { PromoBannerCarousel } from '../../../components/app/PromoBannerCarousel.jsx'
 import { Link } from 'react-router-dom'
 import { Building2, ClipboardList, Clock, FileText, Plus, ShieldCheck, Users, Settings, ArrowRight, ChevronRight, UserPlus, CalendarCheck } from 'lucide-react'
 import { useAuth } from '../../../hooks/useAuth.js'
@@ -181,6 +182,8 @@ export function CorporateDashboardPage() {
           </Link>
         </div>
       </div>
+
+      <PromoBannerCarousel />
 
       {/* Summary Stats Grid */}
       <div className="grid grid-cols-2 gap-3">

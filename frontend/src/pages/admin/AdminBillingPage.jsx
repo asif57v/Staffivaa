@@ -203,19 +203,19 @@ export function AdminBillingPage() {
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="relative">
+          <div className="flex items-center gap-3 max-md:flex-wrap max-md:w-full">
+            <div className="relative max-md:w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search vendor, corporate, ID..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/50 w-[250px] transition"
+                className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/50 w-[250px] max-md:w-full transition"
               />
             </div>
             
-            <div className="flex items-center gap-1.5 border border-slate-200 bg-slate-50 p-1 rounded-xl">
+            <div className="flex items-center gap-1.5 max-md:overflow-x-auto max-md:max-w-full border border-slate-200 bg-slate-50 p-1 rounded-xl">
               <FilterBtn label="All" active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} />
               <FilterBtn label="Pending" active={statusFilter === 'pending'} onClick={() => setStatusFilter('pending')} />
               <FilterBtn label="Completed" active={statusFilter === 'completed'} onClick={() => setStatusFilter('completed')} />

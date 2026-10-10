@@ -19,6 +19,7 @@ export function AdminSettingsPage() {
   const [isEnterpriseSecurityBalanceEnabled, setIsEnterpriseSecurityBalanceEnabled] = useState(false)
   const [minimumLabourWalletBalance, setMinimumLabourWalletBalance] = useState(0)
   const [acceptWindowSeconds, setAcceptWindowSeconds] = useState(90)
+  const [acceptNoLimit, setAcceptNoLimit] = useState(false)
   const [advancePaymentPercentage, setAdvancePaymentPercentage] = useState(0)
   const [remainingPaymentPercentage, setRemainingPaymentPercentage] = useState(100)
   const [platformFeeType, setPlatformFeeType] = useState('percentage')
@@ -78,6 +79,7 @@ export function AdminSettingsPage() {
       setIsEnterpriseSecurityBalanceEnabled(data.settings.isEnterpriseSecurityBalanceEnabled ?? false)
       setMinimumLabourWalletBalance(data.settings.minimumLabourWalletBalance ?? 0)
       setAcceptWindowSeconds(data.settings.individualAcceptWindowSeconds ?? 90)
+      setAcceptNoLimit(Boolean(data.settings.individualAcceptNoLimit))
       setAdvancePaymentPercentage(data.settings.advancePaymentPercentage ?? 0)
       setRemainingPaymentPercentage(data.settings.remainingPaymentPercentage ?? 100)
       setPlatformFeeType(data.settings.platformFeeType || 'percentage')
@@ -131,7 +133,7 @@ export function AdminSettingsPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (acceptWindowSeconds < 30 || acceptWindowSeconds > 1800) {
+    if (!acceptNoLimit && (acceptWindowSeconds < 30 || acceptWindowSeconds > 1800)) {
       toast.error('Individual booking accept time must be between 30 seconds and 30 minutes.')
       return
     }
@@ -146,6 +148,7 @@ export function AdminSettingsPage() {
         isEnterpriseSecurityBalanceEnabled,
         minimumLabourWalletBalance,
         individualAcceptWindowSeconds: acceptWindowSeconds,
+        individualAcceptNoLimit: acceptNoLimit,
         advancePaymentPercentage,
         remainingPaymentPercentage,
         platformFeeType,
@@ -203,7 +206,7 @@ export function AdminSettingsPage() {
     return (
       <div className="w-full space-y-6 pb-8 animate-pulse">
         <div className="h-8 w-48 bg-slate-200 rounded-lg"></div>
-        <div className="h-4 w-96 bg-slate-200 rounded-lg mt-3"></div>
+        <div className="h-4 w-96 max-w-full bg-slate-200 rounded-lg mt-3"></div>
         <div className="h-96 bg-slate-200 rounded-2xl mt-8"></div>
       </div>
     )
@@ -378,8 +381,17 @@ export function AdminSettingsPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-slate-700">Accept time</label>
-            <div className="flex flex-wrap items-center gap-2">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-700">
+              <input
+                type="checkbox"
+                checked={acceptNoLimit}
+                onChange={(e) => setAcceptNoLimit(e.target.checked)}
+                className="h-4 w-4 accent-slate-900"
+              />
+              No time limit (no countdown for customers; bookings stay open until you accept or the customer cancels)
+            </label>
+            <label className="block text-sm font-bold text-slate-700">Default accept time</label>
+            <div className={`flex flex-wrap items-center gap-2 ${acceptNoLimit ? 'pointer-events-none opacity-40' : ''}`}>
               <input
                 type="number"
                 min="0"

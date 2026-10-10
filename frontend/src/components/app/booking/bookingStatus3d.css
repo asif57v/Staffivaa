@@ -1,0 +1,315 @@
+/* "Waiting for admin approval" screen: pure CSS 3D scene + status timeline. */
+.bs3d {
+  --bs-brand: #ffd100;
+  --bs-accent: #ffb300;
+  --bs-done: #059669;
+  --bs-accent-soft: color-mix(in srgb, var(--bs-accent) 55%, white);
+  --bs-amber: #ffb300;
+  --bs-dark: #0f172a;
+  --bs-text: #0f172a;
+  --bs-muted: #475569;
+  font-family: inherit;
+  color: var(--bs-text);
+}
+
+/* ---------- Stage ---------- */
+.bs3d-stage {
+  position: relative;
+  height: 212px;
+  border-radius: 28px;
+  overflow: hidden;
+  perspective: 900px;
+}
+
+.bs3d-chip {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.08);
+}
+.bs3d-chip-dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bs-amber);
+}
+.bs3d-chip-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--bs-amber);
+  animation: bs3d-halo 1.6s ease-out infinite;
+}
+.bs3d-chip--accent .bs3d-chip-dot,
+.bs3d-chip--accent .bs3d-chip-dot::after {
+  background: var(--bs-accent);
+}
+
+/* Floor plane with ripples + orbit */
+.bs3d-floor {
+  position: absolute;
+  left: 50%;
+  top: 64%;
+  width: 300px;
+  height: 300px;
+  margin: -150px 0 0 -150px;
+  transform: rotateX(66deg);
+  transform-style: preserve-3d;
+}
+.bs3d-ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--bs-accent);
+  opacity: 0;
+  animation: bs3d-ripple 3.6s linear infinite;
+}
+.bs3d-ripple:nth-child(2) { animation-delay: 1.2s; }
+.bs3d-ripple:nth-child(3) { animation-delay: 2.4s; }
+.bs3d-disc {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 96px;
+  height: 96px;
+  margin: -48px 0 0 -48px;
+  border-radius: 50%;
+  background: var(--bs-accent);
+  opacity: 0.35;
+}
+.bs3d-orbit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 240px;
+  height: 240px;
+  margin: -120px 0 0 -120px;
+  border-radius: 50%;
+  border: 2px dashed rgba(6, 35, 31, 0.3);
+  transform-style: preserve-3d;
+  animation: bs3d-spin-z 16s linear infinite;
+}
+.bs3d-badge-slot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+}
+.bs3d-badge {
+  position: absolute;
+  left: -19px;
+  top: -19px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--bs-dark);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(6, 35, 31, 0.25);
+  transform: rotateX(-66deg);
+  animation: bs3d-badge-face 16s linear infinite;
+}
+
+/* House */
+.bs3d-shadow {
+  position: absolute;
+  left: 50%;
+  top: 64%;
+  width: 104px;
+  height: 22px;
+  margin: -11px 0 0 -52px;
+  border-radius: 50%;
+  background: rgba(6, 35, 31, 0.45);
+  filter: blur(6px);
+  animation: bs3d-shadow 3s ease-in-out infinite;
+}
+.bs3d-house-wrap {
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+  animation: bs3d-bob 3s ease-in-out infinite;
+}
+.bs3d-house {
+  position: absolute;
+  transform-style: preserve-3d;
+  transform: rotateX(-18deg) rotateY(0deg);
+  animation: bs3d-house-spin 10s linear infinite;
+}
+.bs3d-face {
+  position: absolute;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.bs3d-wall-fb { left: -38px; top: -24px; width: 76px; height: 48px; background: #fff3c4; }
+.bs3d-wall-side { left: -32px; top: -24px; width: 64px; height: 48px; background: #f3d97a; }
+.bs3d-front { transform: translateZ(32px); }
+.bs3d-back { transform: rotateY(180deg) translateZ(32px); align-items: center; }
+.bs3d-right { transform: rotateY(90deg) translateZ(38px); align-items: center; }
+.bs3d-left { transform: rotateY(-90deg) translateZ(38px); align-items: center; }
+.bs3d-door { width: 18px; height: 28px; border-radius: 3px 3px 0 0; background: var(--bs-amber); }
+.bs3d-window { width: 16px; height: 14px; margin: 0 5px; border-radius: 2px; background: #ffffff; box-shadow: inset 0 0 0 2px #e0a800; }
+.bs3d-gable {
+  position: absolute;
+  left: -38px;
+  top: -50px;
+  width: 76px;
+  height: 26px;
+  background: #fffbe6;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+.bs3d-gable-front { transform: translateZ(32px); }
+.bs3d-gable-back { transform: rotateY(180deg) translateZ(32px); }
+.bs3d-roof {
+  position: absolute;
+  left: 0;
+  top: -38px;
+  width: 54px;
+  height: 76px;
+  transform-origin: 0 50%;
+}
+.bs3d-roof-r { background: #ffd100; transform: translateY(-50px) rotateZ(34.3deg) rotateX(90deg); }
+.bs3d-roof-l { background: #e0a800; transform: translateY(-50px) rotateZ(145.7deg) rotateX(90deg); }
+
+/* Floating cubes */
+.bs3d-cube-pos { position: absolute; transform-style: preserve-3d; }
+.bs3d-cube {
+  position: relative;
+  transform-style: preserve-3d;
+  animation: bs3d-tumble 12s linear infinite;
+}
+.bs3d-cube--slow { animation-duration: 18s; }
+.bs3d-cube--rev { animation-direction: reverse; }
+.bs3d-cube > span { position: absolute; inset: 0; }
+
+/* ---------- Timeline ---------- */
+.bs3d-card {
+  background: #fff;
+  border-radius: 22px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.05);
+}
+.bs3d-step { position: relative; display: flex; gap: 12px; padding-bottom: 18px; }
+.bs3d-step:last-child { padding-bottom: 0; }
+.bs3d-line {
+  position: absolute;
+  left: 11px;
+  top: 26px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: #e4e8f0;
+}
+.bs3d-step--done .bs3d-line { background: var(--bs-done); }
+.bs3d-marker {
+  position: relative;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bs3d-marker--done { background: var(--bs-done); color: #fff; }
+.bs3d-marker--active { background: var(--bs-amber); border: 5px solid #ffefb3; }
+.bs3d-marker--active::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: var(--bs-amber);
+  animation: bs3d-halo 1.6s ease-out infinite;
+  z-index: -1;
+}
+.bs3d-marker--pending { border: 2px solid #c5ccdd; background: #fff; }
+.bs3d-indeterminate {
+  position: relative;
+  height: 4px;
+  margin-top: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bs-accent) 12%, white);
+}
+.bs3d-indeterminate::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  border-radius: inherit;
+  background: var(--bs-accent);
+  animation: bs3d-slide 1.8s ease-in-out infinite;
+}
+
+/* ---------- Keyframes ---------- */
+@keyframes bs3d-ripple {
+  0% { transform: scale(0.18); opacity: 0.95; }
+  100% { transform: scale(1); opacity: 0; }
+}
+@keyframes bs3d-spin-z {
+  to { transform: rotateZ(360deg); }
+}
+@keyframes bs3d-badge-face {
+  from { transform: rotateZ(0deg) rotateX(-66deg); }
+  to { transform: rotateZ(-360deg) rotateX(-66deg); }
+}
+@keyframes bs3d-house-spin {
+  from { transform: rotateX(-18deg) rotateY(0deg); }
+  to { transform: rotateX(-18deg) rotateY(360deg); }
+}
+@keyframes bs3d-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes bs3d-shadow {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.72); opacity: 0.55; }
+}
+@keyframes bs3d-tumble {
+  from { transform: rotateX(0deg) rotateY(0deg); }
+  to { transform: rotateX(360deg) rotateY(360deg); }
+}
+@keyframes bs3d-halo {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+@keyframes bs3d-slide {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bs3d *,
+  .bs3d *::before,
+  .bs3d *::after {
+    animation: none !important;
+  }
+  .bs3d-ripple:nth-child(1) { opacity: 0.5; transform: scale(0.45); }
+  .bs3d-ripple:nth-child(2) { opacity: 0.3; transform: scale(0.7); }
+  .bs3d-ripple:nth-child(3) { opacity: 0.15; transform: scale(0.95); }
+  .bs3d-house { transform: rotateX(-14deg) rotateY(-20deg); }
+  .bs3d-cube { transform: rotateX(-24deg) rotateY(38deg); }
+  .bs3d-indeterminate::before { left: 0; width: 45%; }
+}
+
+/* Friendly worker greeting with folded hands (namaste) next to the house */

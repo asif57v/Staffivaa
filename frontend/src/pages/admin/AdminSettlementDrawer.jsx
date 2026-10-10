@@ -205,7 +205,7 @@ function OverviewTab({ request, allocation, assignments, grossAmount, corpFee, g
   
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
           <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">Corporate Client</p>
           <p className="text-sm font-bold text-slate-900">{request.clientId?.corporateProfile?.companyName || request.clientId?.fullName || 'N/A'}</p>
@@ -284,7 +284,7 @@ function OverviewTab({ request, allocation, assignments, grossAmount, corpFee, g
           {ledger.length === 0 ? (
             <p className="p-5 text-center text-xs text-slate-400 font-semibold">No payouts released yet.</p>
           ) : (
-            <table className="w-full text-left whitespace-nowrap">
+            <table className="w-full text-left whitespace-nowrap max-md:block max-md:overflow-x-auto">
               <thead>
                 <tr className="bg-slate-50/50 text-[10px] font-black uppercase text-slate-400 border-b border-slate-100">
                   <th className="px-5 py-2">Date</th>
@@ -489,7 +489,7 @@ function InvoicesTab({ requestId, onGenerate }) {
       </div>
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         {isLoading ? <p className="p-5 text-center text-xs">Loading...</p> : invoices.length === 0 ? <p className="p-8 text-center text-xs text-slate-400 font-semibold">No invoices generated.</p> : (
-          <table className="w-full text-left whitespace-nowrap">
+          <table className="w-full text-left whitespace-nowrap max-md:block max-md:overflow-x-auto">
             <thead className="bg-slate-50/50 text-[10px] font-black uppercase text-slate-400 border-b border-slate-100">
               <tr><th className="px-5 py-2">Invoice #</th><th className="px-5 py-2">Date</th><th className="px-5 py-2">Total</th><th className="px-5 py-2">Status</th></tr>
             </thead>

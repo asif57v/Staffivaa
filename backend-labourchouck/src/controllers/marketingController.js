@@ -3,6 +3,7 @@ import { sendSuccess, HTTP_STATUS } from '../utils/apiResponse.js'
 import { Offer } from '../models/Offer.js'
 import { SponsoredAd } from '../models/SponsoredAd.js'
 import { Banner } from '../models/Banner.js'
+import { normalizeRole } from '../utils/roleUtils.js'
 import { PopularService } from '../models/PopularService.js'
 
 export const getActivePopularServices = asyncHandler(async (req, res) => {
@@ -107,15 +108,31 @@ export const getActiveAds = asyncHandler(async (req, res) => {
 
 export const getActiveBanners = asyncHandler(async (req, res) => {
   const now = new Date()
+  const role = normalizeRole(req.user?.role)
   const banners = await Banner.find({
     isActive: true,
-    $or: [
-      { startDate: null, endDate: null },
-      { startDate: { $lte: now }, endDate: { $gte: now } },
-      { startDate: { $lte: now }, endDate: null },
-      { startDate: null, endDate: { $gte: now } }
-    ]
-  }).sort({ position: 1, priority: -1 }).lean()
+    $and: [
+      {
+        $or: [
+          { startDate: null, endDate: null },
+          { startDate: { $lte: now }, endDate: { $gte: now } },
+          { startDate: { $lte: now }, endDate: null },
+          { startDate: null, endDate: { $gte: now } },
+        ],
+      },
+      // Empty targetRoles (or legacy banners without the field) = everyone.
+      {
+        $or: [
+          { targetRoles: { $exists: false } },
+          { targetRoles: { $size: 0 } },
+          ...(role ? [{ targetRoles: role }] : []),
+        ],
+      },
+    ],
+  })
+    .sort({ position: 1, priority: -1 })
+    .populate('action.skillIds', 'name slug group')
+    .lean()
 
   return sendSuccess(res, { data: { banners } })
 })

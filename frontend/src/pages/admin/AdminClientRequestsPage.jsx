@@ -843,7 +843,7 @@ export function AdminClientRequestsPage() {
                 </div>
 
                 {/* Workers Count & Days */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">Workers Count</label>
                     <input 
@@ -867,7 +867,7 @@ export function AdminClientRequestsPage() {
                 </div>
 
                 {/* Logistics */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
                   <div>
                     <label className="block font-bold text-slate-300 mb-1">Transportation (₹)</label>
                     <input 
@@ -891,7 +891,7 @@ export function AdminClientRequestsPage() {
                 </div>
 
                 {/* Food & Accommodation */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
                   <div>
                     <label className="block font-bold text-slate-300 mb-1">Food / Catering (₹)</label>
                     <input 

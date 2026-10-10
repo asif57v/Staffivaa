@@ -21,6 +21,7 @@ import { sendNotificationToUser } from '../services/notificationService.js'
 import { logAudit } from '../utils/auditLogger.js'
 import CommissionService from '../services/CommissionService.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
+import { notifyCorporateClient } from '../utils/corporateNotifications.js'
 import { triggerBookingNotif } from '../utils/triggerBookingNotif.js'
 import {
   bookingCreatedNotif,
@@ -29,7 +30,7 @@ import {
 } from '../utils/bookingNotificationCopy.js'
 import { SystemSettings } from '../models/SystemSettings.js'
 import LocationMatchingService from '../services/LocationMatchingService.js'
-import { notifyAdminsIndividualBookingPending, getIndividualSearchWindowSeconds } from './individualDispatchController.js'
+import { notifyAdminsIndividualBookingPending, getIndividualSearchWindowSeconds, getIndividualSearchNoLimit } from './individualDispatchController.js'
 
 function parseLines(lines) {
   if (!Array.isArray(lines) || !lines.length) return null
@@ -231,6 +232,7 @@ export const createRequest = asyncHandler(async (req, res) => {
   }
 
   const individualSearchSeconds = sourceType === REQUEST_SOURCE.INDIVIDUAL ? await getIndividualSearchWindowSeconds() : 0
+  const individualNoLimit = sourceType === REQUEST_SOURCE.INDIVIDUAL ? await getIndividualSearchNoLimit() : false
   const request = await WorkforceRequest.create({
     reference: generateRequestReference(sourceType === REQUEST_SOURCE.CORPORATE ? 'CR' : 'IR'),
     sourceType,
@@ -277,7 +279,9 @@ export const createRequest = asyncHandler(async (req, res) => {
     ...(sourceType === REQUEST_SOURCE.INDIVIDUAL && {
       // Individual bookings wait in the admin queue (no auto-expiry); admin manually offers them to workers.
       dispatchMode: 'admin',
-      searchExpiresAt: new Date(Date.now() + individualSearchSeconds * 1000),
+      ...(individualNoLimit
+        ? { searchNoLimit: true }
+        : { searchExpiresAt: new Date(Date.now() + individualSearchSeconds * 1000) }),
       userPlatformFee: 0,
       userPaymentStatus: 'paid',
     }),
@@ -291,13 +295,17 @@ export const createRequest = asyncHandler(async (req, res) => {
   }
 
   // Notify Customer / User that booking was created successfully
-  triggerBookingNotif({
-    userId: user._id,
-    copy: bookingCreatedNotif(request.reference || request._id.toString().slice(-6)),
-    relatedId: request._id,
-    relatedModel: 'WorkforceRequest',
-    requestId: request._id,
-  }).catch((err) => console.error('[Notification Error]:', err.message))
+  if (sourceType === REQUEST_SOURCE.CORPORATE) {
+    notifyCorporateClient(request, 'request_submitted')
+  } else {
+    triggerBookingNotif({
+      userId: user._id,
+      copy: bookingCreatedNotif(request.reference || request._id.toString().slice(-6)),
+      relatedId: request._id,
+      relatedModel: 'WorkforceRequest',
+      requestId: request._id,
+    }).catch((err) => console.error('[Notification Error]:', err.message))
+  }
 
   emitToUser('individual', user._id.toString(), 'request_created', { requestId: request._id.toString() })
   if (sourceType === REQUEST_SOURCE.CORPORATE) {
@@ -689,14 +697,20 @@ export const patchRequestStatusAdmin = asyncHandler(async (req, res) => {
   }
 
   // Trigger Notification to client
-  await triggerNotification({
-    userId: request.clientId,
-    title: 'Booking Update',
-    body: `Your booking status has been updated to ${status}.`,
-    type: 'BOOKING_UPDATED',
-    relatedId: request._id,
-    relatedModel: 'WorkforceRequest'
-  })
+  if (request.sourceType === REQUEST_SOURCE.CORPORATE && status === REQUEST_STATUS.REJECTED) {
+    await notifyCorporateClient(request, 'request_rejected', request.adminNote)
+  } else if (request.sourceType === REQUEST_SOURCE.CORPORATE && status === REQUEST_STATUS.ACCEPTED && previousStatus !== status) {
+    await notifyCorporateClient(request, 'request_accepted')
+  } else {
+    await triggerNotification({
+      userId: request.clientId,
+      title: 'Booking Update',
+      body: `Your booking status has been updated to ${status}.`,
+      type: 'BOOKING_UPDATED',
+      relatedId: request._id,
+      relatedModel: 'WorkforceRequest'
+    })
+  }
   
   emitToUser('individual', request.clientId?.toString(), 'request_updated', { requestId: request._id.toString() })
   
@@ -1309,12 +1323,7 @@ export const acceptCorporateRequestAdmin = asyncHandler(async (req, res) => {
     status: REQUEST_STATUS.ACCEPTED,
   })
 
-  sendNotificationToUser(
-    request.clientId.toString(),
-    'Request Accepted',
-    'Your workforce request has been accepted by Admin and is now active.',
-    { url: `/corporate/requests/${request._id}`, recipientRole: 'corporate' }
-  )
+  await notifyCorporateClient(request, 'request_accepted')
 
   // Log audit trail
   await logAudit({

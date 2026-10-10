@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useCreateEnterpriseJobMutation, useGetEnterpriseSecuritySettingsQuery } from '../../../store/api/enterpriseApi.js'
 import { EnterpriseJobCategorySelector } from '../../../components/app/EnterpriseJobCategorySelector.jsx'
@@ -9,6 +9,7 @@ import { ShieldAlert, ArrowLeft, CheckCircle2 } from 'lucide-react'
 
 export function EnterpriseJobNewPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [createJob, { isLoading }] = useCreateEnterpriseJobMutation()
   const { data: securityResponse } = useGetEnterpriseSecuritySettingsQuery()
 
@@ -20,8 +21,8 @@ export function EnterpriseJobNewPage() {
   const [formData, setFormData] = useState({
     jobTitle: '',
     department: '',
-    categoryId: '',
-    numberOfWorkers: 1,
+    categoryId: searchParams.get('categoryId') || '',
+    numberOfWorkers: Math.max(1, parseInt(searchParams.get('quantity')) || 1),
     locationText: '',
     locationPoint: null,
     salary: '',
@@ -167,7 +168,7 @@ export function EnterpriseJobNewPage() {
     // Timeline Validations
     const { timeline } = formData
     if (isAdminDispatch) {
-      if (timeline.applicationStartDate < todayStr || timeline.applicationLastDate < todayStr || timeline.expectedJoiningDate < todayStr) {
+      if (!timeline.expectedJoiningDate || timeline.expectedJoiningDate < todayStr) {
         toast.error('Past dates cannot be selected for daily/hourly requests')
         return
       }
@@ -176,11 +177,11 @@ export function EnterpriseJobNewPage() {
         return
       }
     }
-    if (!timeline.applicationLastDate || !timeline.expectedJoiningDate) {
+    if (!isAdminDispatch && (!timeline.applicationLastDate || !timeline.expectedJoiningDate)) {
       toast.error('Application Deadline and Expected Joining Date are required')
       return
     }
-    if (new Date(timeline.applicationLastDate) < new Date(timeline.applicationStartDate)) {
+    if (!isAdminDispatch && new Date(timeline.applicationLastDate) < new Date(timeline.applicationStartDate)) {
       toast.error('Application Deadline must be after Start Date')
       return
     }
@@ -188,7 +189,7 @@ export function EnterpriseJobNewPage() {
       toast.error('Expected Joining Date must be after Interview Date')
       return
     }
-    if (new Date(timeline.expectedJoiningDate) < new Date(timeline.applicationLastDate)) {
+    if (!isAdminDispatch && new Date(timeline.expectedJoiningDate) < new Date(timeline.applicationLastDate)) {
       toast.error('Expected Joining Date must be after Application Deadline')
       return
     }
@@ -205,7 +206,15 @@ export function EnterpriseJobNewPage() {
         workingHours: parseInt(formData.workingHours, 10),
         // No interview round or project dates for daily/hourly requirements
         ...(isAdminDispatch && {
-          timeline: { ...formData.timeline, interviewStartDate: '', projectStartDate: '', projectEndDate: '' },
+          // No application window either: admin arranges workers, so it just runs until the joining date.
+          timeline: {
+            ...formData.timeline,
+            applicationStartDate: todayStr,
+            applicationLastDate: formData.timeline.expectedJoiningDate,
+            interviewStartDate: '',
+            projectStartDate: '',
+            projectEndDate: '',
+          },
         }),
       }
 
@@ -467,6 +476,8 @@ export function EnterpriseJobNewPage() {
             </h4>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              {!isAdminDispatch && (
+              <>
               <div className="space-y-1.5">
                 <label className="block text-[12px] font-bold text-slate-700 uppercase tracking-wide">
                   Application Start Date *
@@ -495,6 +506,9 @@ export function EnterpriseJobNewPage() {
                   className="w-full rounded-[10px] border border-slate-200 bg-slate-50 px-4 py-3 text-[14px] font-medium text-slate-900 outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
                 />
               </div>
+
+              </>
+              )}
 
               {!isAdminDispatch && (
                 <div className="space-y-1.5">

@@ -41,6 +41,7 @@ import { AppSectionHeader } from '../../../components/app-ui/layout/AppSectionHe
 import { GlassPanel } from '../../../components/ui/GlassPanel.jsx'
 import { LabourProjectEarningsCard } from '../../../components/app/LabourProjectEarningsCard.jsx'
 import { EnterprisePromotionalBanner } from '../../../components/app/EnterprisePromotionalBanner.jsx'
+import { PromoBannerCarousel } from '../../../components/app/PromoBannerCarousel.jsx'
 import { useNow } from '../../../hooks/useNow.js'
 import { formatSecondsAsClock } from '../../../lib/formatDurationClock.js'
 import {
@@ -958,6 +959,10 @@ export function LabourHomeScreen({ user }) {
             </div>
           )}
         </section>
+        </FadeInSection>
+
+        <FadeInSection delay={0.04}>
+          <PromoBannerCarousel className="px-4 mb-4" />
         </FadeInSection>
 
         {/* Enterprise Promotional Banner */}

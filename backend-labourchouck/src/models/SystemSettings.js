@@ -86,6 +86,8 @@ const systemSettingsSchema = new mongoose.Schema(
       min: 30,
       max: 1800,
     },
+    // When true new individual bookings have no countdown: they stay open until admin accepts or the customer cancels.
+    individualAcceptNoLimit: { type: Boolean, default: false },
     advancePaymentPercentage: {
       type: Number,
       default: 0,

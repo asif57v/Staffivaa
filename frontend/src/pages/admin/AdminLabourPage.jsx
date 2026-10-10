@@ -375,7 +375,7 @@ export function AdminLabourPage() {
         </div>
       </motion.div>
 
-      <div className="grid gap-3 grid-cols-4 w-full">
+      <div className="grid gap-3 grid-cols-4 w-full max-md:grid-cols-2">
         {statCards.map((c, i) => {
           const inner = (
             <GlassPanel
