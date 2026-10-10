@@ -764,7 +764,7 @@ function AssignWorkerModal({ request, onClose }) {
               className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-slate-400"
             />
           </div>
-          <div className="grid grid-cols-2 gap-2 max-md:grid-cols-1">
+          <div className="grid grid-cols-2 gap-2 max-[767px]:grid-cols-1">
             <label className="flex flex-col gap-1 text-[11px] font-bold text-slate-500">
               Skill
               <select

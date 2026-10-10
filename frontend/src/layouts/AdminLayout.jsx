@@ -39,7 +39,7 @@ import {
   useGetAdminDashboardStatsQuery
 } from '../store/api/workforceApi.js'
 
-const STORAGE_KEY = 'lc-admin-sidebar-collapsed'
+const STORAGE_KEY = 'lc-admin-sidebar-hidden'
 
 export function AdminLayout() {
   const { pathname } = useLocation()
@@ -343,25 +343,25 @@ export function AdminLayout() {
   const sidebarInner = (
     <>
       <div
-        className={`relative flex h-17 shrink-0 items-center border-b border-slate-200/70 bg-linear-to-b from-slate-50/90 to-white px-3 ${collapsed ? 'md:justify-center' : 'justify-between gap-2'}`}
+        className={`relative flex h-17 shrink-0 items-center border-b border-slate-200/70 bg-linear-to-b from-slate-50/90 to-white px-3 ${collapsed ? 'sm:justify-center' : 'justify-between gap-2'}`}
       >
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-linear-to-r from-brand/25 via-slate-200/60 to-transparent" aria-hidden />
         <Link
           to="/admin"
-          className={`relative z-10 flex min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-1.5 transition hover:bg-slate-100/50 ${collapsed ? 'md:justify-center' : ''}`}
+          className={`relative z-10 flex min-w-0 items-center gap-2.5 rounded-xl px-1.5 py-1.5 transition hover:bg-slate-100/50 ${collapsed ? 'sm:justify-center' : ''}`}
           title="Dashboard"
         >
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br from-[#FFD100] to-[#FFB300] text-white shadow-[0_8px_20px_-6px_rgba(255,209,0,0.45)] ring-1 ring-white/50 p-1.5 overflow-hidden">
             <img src="/logo-transparent.png" alt="Staffivaa Logo" className="h-full w-full object-contain brightness-0 invert" aria-hidden />
           </span>
-          <span className={`min-w-0 truncate pt-0.5 ${collapsed ? 'md:sr-only' : ''}`}>
+          <span className={`min-w-0 truncate pt-0.5 ${collapsed ? 'sm:sr-only' : ''}`}>
             <span className="block text-[22px] leading-none font-black tracking-tight text-[#FFD100]" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>Staffivaa</span>
           </span>
         </Link>
         <button
           type="button"
           onClick={() => setCollapsed((c) => !c)}
-          className="relative z-10 hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200/90 bg-white text-slate-500 shadow-sm transition hover:border-brand/35 hover:text-brand md:flex"
+          className="relative z-10 hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200/90 bg-white text-slate-500 shadow-sm transition hover:border-brand/35 hover:text-brand min-[768px]:flex"
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
@@ -370,7 +370,7 @@ export function AdminLayout() {
         <button
           type="button"
           onClick={() => setMobileOpen(false)}
-          className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200/90 bg-white text-slate-500 shadow-sm md:hidden"
+          className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200/90 bg-white text-slate-500 shadow-sm min-[768px]:hidden"
           aria-label="Close menu"
         >
           <X className="h-5 w-5" />
@@ -387,7 +387,7 @@ export function AdminLayout() {
             className={`${si > 0 ? 'mt-5 border-t border-slate-100 pt-5' : ''} mb-1 last:mb-0`}
           >
             {section.title ? (
-              <div className={`mb-2.5 flex items-center gap-2 px-3 ${collapsed ? 'md:hidden' : ''}`}>
+              <div className={`mb-2.5 flex items-center gap-2 px-3 ${collapsed ? 'min-[768px]:hidden' : ''}`}>
                 <span className="h-px w-4 shrink-0 rounded-full bg-brand/40" aria-hidden />
                 <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{section.title}</p>
               </div>
@@ -431,7 +431,7 @@ export function AdminLayout() {
                     title={label}
                     className={({ isActive }) =>
                       `group relative flex items-center gap-3 rounded-xl py-2.5 text-sm font-semibold transition duration-200 md:px-2 ${
-                        collapsed ? 'md:justify-center md:px-0' : 'px-3'
+                        collapsed ? 'sm:justify-center md:px-0' : 'px-3'
                       } ${
                         isActive
                           ? 'bg-linear-to-r from-brand/12 to-emerald-50/50 text-slate-900 shadow-[inset_0_0_0_1px_rgba(28,175,98,0.12)]'
@@ -459,7 +459,7 @@ export function AdminLayout() {
                             </span>
                           )}
                         </div>
-                        <span className={`min-w-0 flex-1 truncate ${collapsed ? 'md:sr-only' : ''}`}>{label}</span>
+                        <span className={`min-w-0 flex-1 truncate ${collapsed ? 'sm:sr-only' : ''}`}>{label}</span>
                         {!collapsed ? (
                           <ChevronRight
                             className={`h-4 w-4 shrink-0 transition ${isActive ? 'translate-x-0 text-brand opacity-100' : 'text-slate-300 opacity-0 group-hover:translate-x-0.5 group-hover:opacity-100'}`}
@@ -482,7 +482,7 @@ export function AdminLayout() {
 
   const sidebarClassName = `
     flex h-dvh max-h-dvh shrink-0 flex-col overflow-hidden border-r border-slate-200/80 bg-white shadow-[6px_0_32px_-12px_rgba(15,23,42,0.1)] transition-[transform,width] duration-300 ease-out
-    w-[min(18rem,88vw)] max-md:max-w-[18rem]
+    w-[min(18rem,88vw)] max-[767px]:max-w-[18rem]
     ${collapsed ? 'md:w-19' : 'md:w-64'}
     fixed inset-y-0 left-0 z-50 md:relative md:z-20
     ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
@@ -494,21 +494,21 @@ export function AdminLayout() {
         <button
           type="button"
           aria-label="Close menu"
-          className="fixed inset-0 z-[65] bg-slate-900/40 backdrop-blur-[1px] md:hidden"
+          className="fixed inset-0 z-[65] bg-slate-900/40 backdrop-blur-[1px] min-[768px]:hidden"
           onClick={() => setMobileOpen(false)}
         />
       ) : null}
       <aside
-        className={`relative z-[60] flex flex-col border-r border-slate-200/80 bg-white transition-all duration-300 md:${collapsed ? 'w-20' : 'w-72'} max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-[70] max-md:h-dvh max-md:w-[min(18rem,86vw)] max-md:shadow-2xl max-md:transition-transform ${mobileOpen ? '' : 'max-md:-translate-x-full'}`}
+        className={`relative z-[60] flex flex-col border-r border-slate-200/80 bg-white transition-all duration-300 ${collapsed ? 'min-[768px]:hidden' : 'w-72'} max-[767px]:fixed max-[767px]:inset-y-0 max-[767px]:left-0 max-[767px]:z-[70] max-[767px]:h-dvh max-[767px]:w-[min(18rem,86vw)] max-[767px]:shadow-2xl max-[767px]:transition-transform ${mobileOpen ? '' : 'max-[767px]:-translate-x-full'}`}
       >
         {sidebarInner}
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="relative z-30 flex h-17 shrink-0 items-center gap-2 md:gap-4 border-b border-slate-200/70 bg-white/80 px-3 md:px-6 shadow-[0_8px_30px_-18px_rgba(15,23,42,0.12)] backdrop-blur-xl">
+        <header className="relative z-30 flex h-17 shrink-0 items-center gap-4 max-[767px]:gap-2 border-b border-slate-200/70 bg-white/80 px-6 max-[767px]:px-3 shadow-[0_8px_30px_-18px_rgba(15,23,42,0.12)] backdrop-blur-xl">
           <button
             type="button"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200/70 bg-white text-slate-600 shadow-sm md:hidden"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200/70 bg-white text-slate-600 shadow-sm min-[768px]:hidden"
             onClick={() => setMobileOpen(true)}
             aria-label="Open menu"
           >
@@ -516,7 +516,7 @@ export function AdminLayout() {
           </button>
           <button
             type="button"
-            className="hidden h-11 w-11 items-center justify-center rounded-xl border border-slate-200/70 bg-white text-slate-600 shadow-sm transition hover:border-brand/30 hover:shadow-md md:flex"
+            className="hidden h-11 w-11 items-center justify-center rounded-xl border border-slate-200/70 bg-white text-slate-600 shadow-sm transition hover:border-brand/30 hover:shadow-md min-[768px]:flex"
             onClick={() => setCollapsed((c) => !c)}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -524,19 +524,19 @@ export function AdminLayout() {
             {collapsed ? <PanelLeft className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
           </button>
 
-          <div className="flex min-w-0 flex-1 items-center gap-3 md:gap-6">
+          <div className="flex min-w-0 flex-1 items-center gap-6 max-[767px]:gap-3">
             <nav aria-label="Breadcrumb" className="flex min-w-0 items-center text-sm text-slate-500 font-medium">
-              <Link to="/admin" className={`hover:text-slate-900 transition ${pathname !== '/admin' ? 'max-md:hidden' : ''}`}>Admin</Link>
+              <Link to="/admin" className={`hover:text-slate-900 transition ${pathname !== '/admin' ? 'max-[767px]:hidden' : ''}`}>Admin</Link>
               {pathname !== '/admin' && (
                 <>
-                  <ChevronRight className="h-4 w-4 mx-1 text-slate-400 max-md:hidden" />
+                  <ChevronRight className="h-4 w-4 mx-1 text-slate-400 max-[767px]:hidden" />
                   <span className="truncate text-slate-900 font-semibold">{title}</span>
                 </>
               )}
             </nav>
 
-            <div className={`relative flex-1 max-w-md ml-auto mr-4 ${searchOpen ? 'max-md:absolute max-md:inset-x-0 max-md:top-full max-md:z-40 max-md:m-0 max-md:max-w-none max-md:border-b max-md:border-slate-200/70 max-md:bg-white max-md:p-3 max-md:shadow-lg' : 'max-md:hidden'}`}>
-              <div className="absolute inset-y-0 left-0 pl-3 max-md:left-3 flex items-center pointer-events-none">
+            <div className={`relative flex-1 max-w-md ml-auto mr-4 ${searchOpen ? 'max-[767px]:absolute max-[767px]:inset-x-0 max-[767px]:top-full max-[767px]:z-40 max-[767px]:m-0 max-[767px]:max-w-none max-[767px]:border-b max-[767px]:border-slate-200/70 max-[767px]:bg-white max-[767px]:p-3 max-[767px]:shadow-lg' : 'max-[767px]:hidden'}`}>
+              <div className="absolute inset-y-0 left-0 pl-3 max-[767px]:left-3 flex items-center pointer-events-none">
                 <Search className="h-4 w-4 text-slate-400" />
               </div>
               <input
@@ -586,7 +586,7 @@ export function AdminLayout() {
             <button
               type="button"
               onClick={() => setSearchOpen((o) => !o)}
-              className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200/70 bg-white text-slate-600 shadow-sm md:hidden"
+              className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200/70 bg-white text-slate-600 shadow-sm min-[768px]:hidden"
               aria-label="Search"
               aria-expanded={searchOpen}
             >
@@ -618,7 +618,7 @@ export function AdminLayout() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={reduce ? undefined : { opacity: 0, y: 4, scale: 0.98 }}
                     transition={{ duration: 0.18 }}
-                    className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[22rem] origin-top-right max-md:fixed max-md:inset-x-3 max-md:top-[4.5rem] max-md:w-auto"
+                    className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[22rem] origin-top-right max-[767px]:fixed max-[767px]:inset-x-3 max-[767px]:top-[4.5rem] max-[767px]:w-auto"
                   >
                     <GlassPanel className="p-0 overflow-hidden shadow-xl ring-1 ring-slate-200/60 max-h-[30rem] flex flex-col">
                       <div className="flex items-center justify-between border-b border-slate-100 bg-linear-to-br from-slate-50/95 to-white px-4 py-3">
@@ -722,12 +722,12 @@ export function AdminLayout() {
                 <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-linear-to-br from-brand-bright to-brand text-xs font-black text-white shadow-inner ring-2 ring-white">
                   {initials}
                 </span>
-                <div className="min-w-0 text-left max-md:hidden">
+                <div className="min-w-0 text-left max-[767px]:hidden">
                   <p className="truncate text-sm font-bold text-slate-900">{displayName}</p>
                   <p className="truncate text-[11px] font-medium text-slate-500">{displayEmail}</p>
                 </div>
                 <ChevronDown
-                  className={`h-4 w-4 shrink-0 text-slate-400 transition max-md:hidden ${profileOpen ? '-rotate-180' : ''}`}
+                  className={`h-4 w-4 shrink-0 text-slate-400 transition max-[767px]:hidden ${profileOpen ? '-rotate-180' : ''}`}
                   aria-hidden
                 />
               </button>

@@ -123,7 +123,7 @@ export function AdminSponsoredAdsPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 relative">
-      <div className="flex justify-between items-center max-md:flex-wrap max-md:gap-3">
+      <div className="flex justify-between items-center max-[767px]:flex-wrap max-[767px]:gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Sponsored Ads</h1>
           <p className="text-sm text-slate-500">Manage advertisements shown inside the User App</p>
@@ -259,7 +259,7 @@ export function AdminSponsoredAdsPage() {
                       </div>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+                  <div className="grid grid-cols-2 gap-4 max-[767px]:grid-cols-1">
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1">Redirect URL</label>
                       <input type="url" required value={formData.redirectUrl} onChange={e => setFormData({...formData, redirectUrl: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="https://..." />

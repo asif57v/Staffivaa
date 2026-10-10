@@ -674,7 +674,7 @@ export function AdminPopularServicesPage() {
                   </div>
 
                   {/* Price & Original Price with auto-discount */}
-                  <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
+                  <div className="grid grid-cols-2 gap-3 max-[767px]:grid-cols-1">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">Offer Price (₹) *</label>
                       <input
@@ -701,7 +701,7 @@ export function AdminPopularServicesPage() {
                   </div>
 
                   {/* Discount & Rating */}
-                  <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
+                  <div className="grid grid-cols-2 gap-3 max-[767px]:grid-cols-1">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">Discount Tag</label>
                       <input
@@ -725,7 +725,7 @@ export function AdminPopularServicesPage() {
                   </div>
 
                   {/* Reviews & Priority */}
-                  <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
+                  <div className="grid grid-cols-2 gap-3 max-[767px]:grid-cols-1">
                     <div>
                       <label className="block font-bold text-slate-700 mb-1">Review Sub-text</label>
                       <input
