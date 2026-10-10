@@ -793,7 +793,7 @@ export function AdminEnterprisePayrollsPage() {
             </div>
 
             {/* Detailed Daily Attendance Log Table */}
-            <div className="overflow-y-auto max-md:overflow-x-auto flex-1 rounded-2xl border border-slate-200">
+            <div className="overflow-y-auto max-[767px]:overflow-x-auto flex-1 rounded-2xl border border-slate-200">
               {selectedAttendance.attendanceLogs?.length > 0 ? (
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>

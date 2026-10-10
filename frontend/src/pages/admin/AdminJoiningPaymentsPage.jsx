@@ -622,7 +622,7 @@ export function AdminJoiningPaymentsPage() {
                 </div>
 
                 {/* Company & Candidate Details */}
-                <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
+                <div className="grid grid-cols-2 gap-3 max-[767px]:grid-cols-1">
                   <div className="p-4 bg-white border border-slate-100 rounded-2xl space-y-1">
                     <p className="text-[10px] font-extrabold text-slate-400 uppercase">Enterprise Client</p>
                     <p className="font-extrabold text-slate-900">{selectedInvoice.enterpriseId?.enterpriseProfile?.companyName || selectedInvoice.enterpriseId?.fullName}</p>
