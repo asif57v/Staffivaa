@@ -26,6 +26,7 @@ import {
 import {
   createAllocationAdmin,
   replaceAssignmentAdmin,
+  assignWorkersToCorporateRequestAdmin,
 } from '../controllers/allocationController.js'
 import {
   listIndividualBookingsAdmin,
@@ -74,6 +75,7 @@ router.get('/requests', listAdminRequests)
 router.get('/client-requests', listAdminCorporateClientRequests)
 router.post('/client-requests/:id/accept', acceptCorporateRequestAdmin)
 router.post('/client-requests/:id/send-to-vendor', sendToVendorCorporateRequestAdmin)
+router.post('/client-requests/:id/assign-workers', assignWorkersToCorporateRequestAdmin)
 router.patch('/requests/:id/status', patchRequestStatusAdmin)
 router.post('/requests/:id/reminder', sendPaymentReminderAdmin)
 router.post('/requests/:id/record-payment', recordOfflinePaymentAdmin)

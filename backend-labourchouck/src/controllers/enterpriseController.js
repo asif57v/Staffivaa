@@ -1979,6 +1979,67 @@ export const getLabourEmploymentHistory = asyncHandler(async (req, res) => {
   return sendSuccess(res, { data: history })
 })
 
+/**
+ * PATCH /api/enterprise/jobs/:id/cancel-request
+ * Enterprise cancels a daily/hourly request routed to Admin, any time before work starts
+ * (while pending review, or accepted with no check-ins / payouts yet).
+ */
+export const cancelEnterpriseDirectRequest = asyncHandler(async (req, res) => {
+  if (req.user.role !== USER_ROLES.ENTERPRISE) {
+    return sendError(res, { message: 'Unauthorized', statusCode: HTTP_STATUS.FORBIDDEN })
+  }
+
+  const job = await EnterpriseJob.findOne({ _id: req.params.id, enterpriseId: req.user._id, dispatchMode: 'admin' })
+  if (!job) {
+    return sendError(res, { message: 'Request not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+  if (!['pending', 'accepted'].includes(job.adminRequestStatus || 'pending') || job.status === 'closed') {
+    return sendError(res, { message: 'This request can no longer be cancelled.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+  const workStarted = (job.assignedWorkers || []).some((w) => w.checkIns?.length || w.payouts?.length)
+  if (workStarted) {
+    return sendError(res, {
+      message: 'Work has already started on this request. Use "Conclude Project" instead.',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+    })
+  }
+
+  const assignedLabourIds = (job.assignedWorkers || []).filter((w) => w.workerId).map((w) => String(w.workerId))
+
+  job.adminRequestStatus = 'cancelled'
+  job.status = 'closed'
+  job.isLive = false
+  job.cancelledByEnterpriseAt = new Date()
+  await job.save()
+
+  const company = req.user.enterpriseProfile?.companyName || req.user.fullName || 'An enterprise'
+  const admins = await User.find({ role: USER_ROLES.ADMIN, isActive: true }).select('_id').lean()
+  for (const admin of admins) {
+    triggerNotification({
+      userId: admin._id,
+      title: 'Enterprise Request Cancelled',
+      body: `${company} cancelled the ${job.salaryType} requirement "${job.jobTitle}".`,
+      type: 'ENTERPRISE_DIRECT_REQUEST_CANCELLED',
+      relatedId: job._id,
+      relatedModel: 'EnterpriseJob',
+      recipientRole: 'admin',
+    }).catch(() => {})
+  }
+  for (const labourId of assignedLabourIds) {
+    triggerNotification({
+      userId: labourId,
+      title: 'Job Cancelled',
+      body: `The job "${job.jobTitle}" was cancelled by the company.`,
+      type: 'ENTERPRISE_DIRECT_REQUEST_CANCELLED',
+      relatedId: job._id,
+      relatedModel: 'EnterpriseJob',
+    }).catch(() => {})
+  }
+  emitToRole('admin', 'enterprise_jobs_updated', { type: 'enterprise_direct_request_cancelled', jobId: job._id })
+
+  return sendSuccess(res, { message: 'Request cancelled successfully', data: job })
+})
+
 /** PATCH /api/enterprise/jobs/:id/conclude - Conclude an Enterprise Job and set end date */
 export const concludeEnterpriseJob = asyncHandler(async (req, res) => {
   if (req.user.role !== USER_ROLES.ENTERPRISE && req.user.role !== USER_ROLES.ADMIN) {

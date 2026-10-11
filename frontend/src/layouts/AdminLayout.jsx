@@ -34,12 +34,23 @@ import {
   useGetNotificationsQuery,
   useMarkNotificationReadMutation,
   useMarkAllNotificationsReadMutation,
+  useMarkNotificationsReadByTypesMutation,
   useDeleteNotificationMutation,
   useSearchModulesQuery,
   useGetAdminDashboardStatsQuery
 } from '../store/api/workforceApi.js'
 
 const STORAGE_KEY = 'lc-admin-sidebar-hidden'
+
+// Notification types shown as a sidebar badge for a page; opening the page marks them read.
+const ROUTE_NOTIFICATION_TYPES = {
+  '/admin/refunds': ['REFUND_REQUESTED'],
+  '/admin/enterprise-withdrawals': ['WITHDRAWAL_REQUESTED'],
+  '/admin/client-requests': ['CORPORATE_CLIENT_REQUEST'],
+  '/admin/individual-bookings': ['INDIVIDUAL_BOOKING_PENDING'],
+  '/admin/enterprise-requests': ['ENTERPRISE_DIRECT_REQUEST'],
+  '/admin/reports': ['SUPPORT_TICKET_CREATED'],
+}
 
 export function AdminLayout() {
   const { pathname } = useLocation()
@@ -68,7 +79,18 @@ export function AdminLayout() {
   const { data: notifData } = useGetNotificationsQuery(undefined, { skip: !user })
   const [markRead] = useMarkNotificationReadMutation()
   const [markAllRead] = useMarkAllNotificationsReadMutation()
+  const [markReadByTypes] = useMarkNotificationsReadByTypesMutation()
   const [deleteNotif] = useDeleteNotificationMutation()
+
+  // Opening a page clears its unread notifications (badge disappears, like other apps).
+  useEffect(() => {
+    const route = Object.keys(ROUTE_NOTIFICATION_TYPES).find((r) => pathname.startsWith(r))
+    if (!route || !notifData?.notifications) return
+    const types = ROUTE_NOTIFICATION_TYPES[route]
+    if (notifData.notifications.some((n) => !n.isRead && types.includes(n.type))) {
+      markReadByTypes(types)
+    }
+  }, [pathname, notifData, markReadByTypes])
 
   // Socket setup
   useEffect(() => {
@@ -411,10 +433,7 @@ export function AdminLayout() {
                 // Count unread notifications matching target route
                 if (notifData?.notifications) {
                   const unreadMatching = notifData.notifications.filter(n => {
-                    if (n.isRead) return false
-                    if (to === '/admin/refunds' && n.type === 'REFUND_REQUESTED') return true
-                    if (to === '/admin/enterprise-withdrawals' && n.type === 'WITHDRAWAL_REQUESTED') return true
-                    return false
+                    return !n.isRead && ROUTE_NOTIFICATION_TYPES[to]?.includes(n.type)
                   }).length
                   badgeCount = Math.max(badgeCount, unreadMatching)
                 }
@@ -642,6 +661,7 @@ export function AdminLayout() {
                               if (item.type?.includes('SHIFT') || item.type?.includes('ATTENDANCE')) return '/admin/attendance'
                               if (item.type?.includes('PAYMENT') || item.type?.includes('INVOICE') || item.type?.includes('PAYROLL')) return '/admin/enterprise-payroll'
                               if (item.type.startsWith('KYC')) return '/admin/business-verification'
+                              if (item.type === 'INDIVIDUAL_BOOKING_PENDING') return '/admin/individual-bookings'
                               if (item.type.startsWith('BOOKING')) return '/admin/bookings'
                               if (item.type.startsWith('REFUND')) return '/admin/refunds'
                               if (item.type.startsWith('WITHDRAWAL')) return '/admin/enterprise-withdrawals'

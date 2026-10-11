@@ -361,7 +361,9 @@ export const listMyRequests = asyncHandler(async (req, res) => {
  * Client cancels a booking (searching / accepted / fee pending).
  * Cancels the request + all assignments and notifies every related worker.
  */
-export const cancelRequestByClient = asyncHandler(async (req, res) => {
+const isAdmin = (req) => req.user?.role === USER_ROLES.ADMIN
+
+export const cancelRequestByClient =asyncHandler(async (req, res) => {
   const request = await WorkforceRequest.findById(req.params.id)
   if (!request) return sendError(res, { message: 'Booking not found', statusCode: HTTP_STATUS.NOT_FOUND })
 
@@ -373,6 +375,19 @@ export const cancelRequestByClient = asyncHandler(async (req, res) => {
   const terminal = [REQUEST_STATUS.CANCELLED, REQUEST_STATUS.COMPLETED, REQUEST_STATUS.REJECTED]
   if (terminal.includes(request.status)) {
     return sendError(res, { message: 'Booking is already closed.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const isCorporate = request.sourceType === REQUEST_SOURCE.CORPORATE
+  // Corporate clients can cancel until the advance payment is made (request, admin-accepted and quotation phases).
+  const corporateLocked = [
+    'advance_paid', 'project_active', 'work_started', 'in_progress', 'on_site', 'attendance_tracking',
+    'billing', 'settlement_pending', 'settlement_completed',
+  ]
+  if (isCorporate && !isAdmin(req) && corporateLocked.includes(request.status)) {
+    return sendError(res, {
+      message: 'This project has already started and can no longer be cancelled. Please contact support.',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+    })
   }
 
   const previousStatus = request.status
@@ -489,6 +504,48 @@ export const cancelRequestByClient = asyncHandler(async (req, res) => {
     })
   } catch (_) {}
 
+  if (isCorporate) {
+    try {
+      // Close any open quotation so neither vendor nor admin can act on it.
+      await Quotation.updateMany(
+        { requestId: request._id, status: { $in: ['draft', 'submitted', 'under_review', 'revision_requested', 'revised', 'pending'] } },
+        { $set: { status: 'rejected' } },
+      )
+
+      const clientName = isAdmin(req) ? 'Admin' : req.user.corporateProfile?.companyName || req.user.fullName || 'The corporate client'
+      const ref = request.reference || ''
+      const admins = await User.find({ role: USER_ROLES.ADMIN, isActive: true }).select('_id').lean()
+      for (const admin of admins) {
+        triggerNotification({
+          userId: admin._id,
+          title: 'Corporate Request Cancelled',
+          body: `${clientName} cancelled workforce request ${ref}.`,
+          type: 'CORPORATE_REQUEST_CANCELLED',
+          relatedId: request._id,
+          relatedModel: 'WorkforceRequest',
+          url: '/admin/client-requests',
+          recipientRole: 'admin',
+        }).catch(() => {})
+      }
+
+      const allocation = await Allocation.findOne({ requestId: request._id }).select('vendorId').lean()
+      if (allocation?.vendorId) {
+        triggerNotification({
+          userId: allocation.vendorId,
+          title: 'Request Cancelled',
+          body: `Workforce request ${ref} was cancelled by the client.`,
+          type: 'CORPORATE_REQUEST_CANCELLED',
+          relatedId: request._id,
+          relatedModel: 'WorkforceRequest',
+          recipientRole: 'contractor',
+        }).catch(() => {})
+      }
+      emitToRole('admin', 'dashboard:updated', {})
+    } catch (err) {
+      console.error('Corporate cancel cleanup error:', err.message)
+    }
+  }
+
   sendSuccess(res, {
     data: { request: request.toObject() },
     message: 'Booking cancelled successfully.',
@@ -499,7 +556,7 @@ export const getRequest = asyncHandler(async (req, res) => {
   const request = await WorkforceRequest.findById(req.params.id)
     .populate('projectId', 'name')
     .populate('siteId', 'name')
-    .populate('clientId', 'fullName corporateProfile.companyName')
+    .populate('clientId', 'fullName phone corporateProfile.companyName')
     .populate('lines.categoryId', 'name baseRate platformFee')
     .lean()
   if (!request) return sendError(res, { message: 'Not found', statusCode: HTTP_STATUS.NOT_FOUND })
@@ -520,7 +577,19 @@ export const getRequest = asyncHandler(async (req, res) => {
   if (!isOwner && !isAdmin && !isAllocatedVendor) {
     return sendError(res, { message: 'Forbidden', statusCode: HTTP_STATUS.FORBIDDEN })
   }
-    
+
+  // Corporate clients never receive worker phone numbers (prevents bypassing the platform).
+  if (isOwner && !isAdmin) {
+    for (const a of assignments) {
+      if (a.labourId && typeof a.labourId === 'object') delete a.labourId.phone
+    }
+  }
+
+  // The client's phone is only for the client themself and admins (not vendors).
+  if (!isOwner && !isAdmin && request.clientId && typeof request.clientId === 'object') {
+    delete request.clientId.phone
+  }
+
   // Calculate a basic payment summary based on lines
   let serviceCost = request.labourCharge || 0;
   if (!serviceCost) {

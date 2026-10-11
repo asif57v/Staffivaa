@@ -415,6 +415,15 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       invalidatesTags: ['AdminRequests', 'Requests'],
     }),
+    assignWorkersToClientRequest: build.mutation({
+      query: ({ id, assignments }) => ({
+        url: `/admin/workforce/client-requests/${id}/assign-workers`,
+        method: 'POST',
+        body: { assignments },
+      }),
+      transformResponse: unwrap,
+      invalidatesTags: ['AdminRequests', 'AdminClientRequests', 'Assignments'],
+    }),
     createAllocation: build.mutation({
       query: (body) => ({ url: '/admin/workforce/allocations', method: 'POST', body }),
       transformResponse: unwrap,
@@ -630,6 +639,11 @@ export const workforceApi = baseApi.injectEndpoints({
       transformResponse: unwrap,
       invalidatesTags: ['Notifications'],
     }),
+    markNotificationsReadByTypes: build.mutation({
+      query: (types) => ({ url: '/notifications/read-by-types', method: 'PATCH', body: { types } }),
+      transformResponse: unwrap,
+      invalidatesTags: ['Notifications'],
+    }),
     deleteNotification: build.mutation({
       query: (id) => ({ url: `/notifications/${id}`, method: 'DELETE' }),
       transformResponse: unwrap,
@@ -743,6 +757,7 @@ export const {
   useHoldSettlementMutation,
   useAddFinanceNoteMutation,
   useCreateAllocationMutation,
+  useAssignWorkersToClientRequestMutation,
   useReviewCorporateMutation,
   useReviewVendorMutation,
   useGenerateInvoiceMutation,
@@ -768,6 +783,7 @@ export const {
   useGetNotificationsQuery,
   useMarkNotificationReadMutation,
   useMarkAllNotificationsReadMutation,
+  useMarkNotificationsReadByTypesMutation,
   useDeleteNotificationMutation,
   useSendSelfTestNotificationMutation,
   useGetAuditLogsQuery,

@@ -126,7 +126,131 @@ export const createAllocationAdmin = asyncHandler(async (req, res) => {
   sendSuccess(res, { data: { allocation, assignments } }, HTTP_STATUS.CREATED)
 })
 
-export const replaceAssignmentAdmin = asyncHandler(async (req, res) => {
+/**
+ * POST /admin/workforce/client-requests/:id/assign-workers
+ * Admin fulfils a directly-accepted corporate request with its own workers (same shape as the vendor flow:
+ * assignments are created as accepted, with a per-day rate, and the counts must match the requested skills).
+ * Body: { assignments: [{ labourId, categoryId, perDayRate }] }
+ */
+export const assignWorkersToCorporateRequestAdmin = asyncHandler(async (req, res) => {
+  const request = await WorkforceRequest.findById(req.params.id)
+  if (!request || request.sourceType !== REQUEST_SOURCE.CORPORATE) {
+    return sendError(res, { message: 'Corporate request not found', statusCode: HTTP_STATUS.NOT_FOUND })
+  }
+
+  const closed = [REQUEST_STATUS.CANCELLED, REQUEST_STATUS.REJECTED, REQUEST_STATUS.COMPLETED, REQUEST_STATUS.ADMIN_REVIEW]
+  if (closed.includes(request.status)) {
+    return sendError(res, {
+      message: request.status === REQUEST_STATUS.ADMIN_REVIEW ? 'Accept the request directly before assigning workers.' : 'This request is closed.',
+      statusCode: HTTP_STATUS.BAD_REQUEST,
+    })
+  }
+
+  let allocation = await Allocation.findOne({ requestId: request._id })
+  if (allocation?.vendorId) {
+    return sendError(res, { message: 'This request is handled by a vendor. The vendor assigns the workers.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const assignments = Array.isArray(req.body?.assignments) ? req.body.assignments : []
+  if (!assignments.length) {
+    return sendError(res, { message: 'Select at least one worker.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  const alreadyAssigned = await Assignment.countDocuments({
+    requestId: request._id,
+    status: { $nin: [ASSIGNMENT_STATUS.REPLACED, ASSIGNMENT_STATUS.DECLINED, ASSIGNMENT_STATUS.CANCELLED] },
+  })
+  if (alreadyAssigned > 0) {
+    return sendError(res, { message: 'Workers are already assigned to this request.', statusCode: HTTP_STATUS.CONFLICT })
+  }
+
+  const requested = {}
+  for (const line of request.lines || []) requested[String(line.categoryId)] = (requested[String(line.categoryId)] || 0) + (line.quantity || 1)
+  const given = {}
+  const labourIds = new Set()
+  for (const a of assignments) {
+    if (!mongoose.Types.ObjectId.isValid(a.labourId) || !mongoose.Types.ObjectId.isValid(a.categoryId)) {
+      return sendError(res, { message: 'Invalid worker or skill.', statusCode: HTTP_STATUS.BAD_REQUEST })
+    }
+    if (!(Number(a.perDayRate) > 0)) {
+      return sendError(res, { message: 'A valid per-day rate is required for every worker.', statusCode: HTTP_STATUS.BAD_REQUEST })
+    }
+    if (labourIds.has(String(a.labourId))) {
+      return sendError(res, { message: 'A worker was selected twice.', statusCode: HTTP_STATUS.BAD_REQUEST })
+    }
+    labourIds.add(String(a.labourId))
+    given[String(a.categoryId)] = (given[String(a.categoryId)] || 0) + 1
+  }
+  for (const [cat, qty] of Object.entries(requested)) {
+    if ((given[cat] || 0) !== qty) {
+      return sendError(res, { message: 'The number of workers must match the request for each skill.', statusCode: HTTP_STATUS.BAD_REQUEST })
+    }
+  }
+
+  const labours = await User.find({ _id: { $in: [...labourIds] }, role: USER_ROLES.LABOUR, isActive: true }).select('_id').lean()
+  if (labours.length !== labourIds.size) {
+    return sendError(res, { message: 'One or more selected workers are not available.', statusCode: HTTP_STATUS.BAD_REQUEST })
+  }
+
+  let durationDays = 1
+  if (request.endDate && request.startDate) {
+    durationDays = Math.max(1, Math.ceil(Math.abs(new Date(request.endDate) - new Date(request.startDate)) / 86400000) + 1)
+  }
+  const dailyTotal = assignments.reduce((sum, a) => sum + Number(a.perDayRate), 0)
+
+  if (!allocation) {
+    allocation = await Allocation.create({ requestId: request._id, adminId: req.user._id })
+  }
+  allocation.adminId = req.user._id
+  allocation.totalLabourCost = dailyTotal * durationDays
+  await allocation.save()
+
+  const created = await Assignment.insertMany(
+    assignments.map((a) => ({
+      allocationId: allocation._id,
+      requestId: request._id,
+      labourId: a.labourId,
+      categoryId: a.categoryId,
+      perDayRate: Number(a.perDayRate),
+      status: ASSIGNMENT_STATUS.ACCEPTED,
+      acceptedAt: new Date(),
+    })),
+  )
+
+  // Only move a freshly accepted request forward; never roll back quotation/project statuses.
+  if (request.status === REQUEST_STATUS.ACCEPTED) {
+    request.status = REQUEST_STATUS.ASSIGNED
+    await request.save()
+  }
+
+  for (const a of created) {
+    emitToUser('labour', String(a.labourId), 'assignment_assigned', { assignmentId: a._id.toString() })
+    triggerNotification({
+      userId: a.labourId,
+      title: 'New Job Assigned',
+      body: `You have been assigned to request ${request.reference || ''}. Please check your schedule.`,
+      type: 'LABOUR_ASSIGNED',
+      relatedId: a._id,
+      relatedModel: 'Assignment',
+    }).catch(() => {})
+  }
+
+  try {
+    emitRequestStatusUpdate(request._id.toString(), { requestStatus: request.status, event: 'workers_assigned', updatedAt: new Date() })
+  } catch (_) {}
+
+  await logAudit({
+    adminId: req.user._id,
+    action: 'Assign Workers (Corporate Direct)',
+    newValue: { requestId: request._id, count: created.length },
+    module: 'Operations',
+    req,
+  })
+
+  sendSuccess(res, { data: { assignments: created, totalLabourCost: allocation.totalLabourCost } }, HTTP_STATUS.CREATED)
+})
+
+export const replaceAssignmentAdmin =asyncHandler(async (req, res) => {
   const { newLabourId, reason } = req.body
   const old = await Assignment.findById(req.params.id)
   if (!old) return sendError(res, { message: 'Assignment not found', statusCode: HTTP_STATUS.NOT_FOUND })

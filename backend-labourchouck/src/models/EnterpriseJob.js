@@ -79,8 +79,9 @@ const enterpriseJobSchema = new mongoose.Schema(
     },
     adminRequestStatus: {
       type: String,
-      enum: ['pending', 'accepted', 'rejected'],
+      enum: ['pending', 'accepted', 'rejected', 'cancelled'],
     },
+    cancelledByEnterpriseAt: { type: Date },
     adminRespondedAt: { type: Date },
     adminRespondedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     adminResponseNote: { type: String, trim: true },

@@ -29,6 +29,7 @@ import {
   requestCheckInOtp,
   getLabourEmploymentHistory,
   concludeEnterpriseJob,
+  cancelEnterpriseDirectRequest,
   getEnterpriseWorkerAttendance,
   getJobWorkersAttendance,
 } from '../controllers/enterpriseController.js'
@@ -79,6 +80,7 @@ router.get('/security-settings', protect, getEnterpriseSecuritySettings)
 router.get('/jobs', protect, getEnterpriseJobs)
 router.post('/jobs', protect, createEnterpriseJob)
 router.patch('/jobs/:id/conclude', protect, concludeEnterpriseJob)
+router.patch('/jobs/:id/cancel-request', protect, cancelEnterpriseDirectRequest)
 router.get('/jobs/:id/direct-payments', protect, getJobDirectPayments)
 router.post('/jobs/:id/direct-payments', protect, payDirectJob)
 

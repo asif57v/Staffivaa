@@ -180,7 +180,7 @@ export const getEnterpriseDirectRequests = asyncHandler(async (req, res) => {
     ]),
   ])
 
-  const stats = { pending: 0, accepted: 0, rejected: 0 }
+  const stats = { pending: 0, accepted: 0, rejected: 0, cancelled: 0 }
   counts.forEach((c) => {
     if (c._id in stats) stats[c._id] = c.count
   })

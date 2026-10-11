@@ -12,6 +12,7 @@ import {
   useUpdateApplicationStatusMutation,
   useGetJobWorkersAttendanceQuery,
   useConcludeEnterpriseJobMutation,
+  useCancelEnterpriseDirectRequestMutation,
   useGenerateEnterpriseCheckInOtpMutation,
   useRegenerateEnterpriseCheckoutOtpMutation,
 } from '../../../store/api/enterpriseApi.js'
@@ -386,6 +387,7 @@ export function EnterpriseJobDetailPage() {
   const [showConcludeModal, setShowConcludeModal] = useState(false)
   const [concludeDate, setConcludeDate] = useState(() => new Date().toISOString().split('T')[0])
   const [concludeJob, { isLoading: isConcluding }] = useConcludeEnterpriseJobMutation()
+  const [cancelDirectRequest, { isLoading: isCancellingRequest }] = useCancelEnterpriseDirectRequestMutation()
 
   const handleConcludeJob = async () => {
     try {
@@ -527,7 +529,20 @@ export function EnterpriseJobDetailPage() {
     pending: { label: 'SENT TO ADMIN', badge: 'bg-amber-100 text-amber-800', card: 'bg-amber-50 border-amber-100 text-amber-900', text: 'Your request is with Staffivaa Admin for review. You will be notified once it is accepted.' },
     accepted: { label: 'ACCEPTED BY ADMIN', badge: 'bg-emerald-100 text-emerald-800', card: 'bg-emerald-50 border-emerald-100 text-emerald-900', text: 'Staffivaa Admin has accepted this request and will arrange the workers.' },
     rejected: { label: 'REJECTED BY ADMIN', badge: 'bg-rose-100 text-rose-800', card: 'bg-rose-50 border-rose-100 text-rose-900', text: 'Staffivaa Admin declined this request.' },
+    cancelled: { label: 'REQUEST CANCELLED', badge: 'bg-slate-200 text-slate-700', card: 'bg-slate-50 border-slate-200 text-slate-700', text: 'You cancelled this request.' },
   }[adminStatus]
+
+  const canCancelRequest = isAdminDispatch && job.status !== 'closed' && ['pending', 'accepted'].includes(adminStatus)
+
+  const handleCancelRequest = async () => {
+    if (!window.confirm('Cancel this request? Staffivaa will be notified and this cannot be undone.')) return
+    try {
+      await cancelDirectRequest(jobId).unwrap()
+      toast.success('Request cancelled')
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to cancel request')
+    }
+  }
 
   return (
     <div className="px-3.5 py-4 sm:p-6 pb-28 space-y-5 max-w-7xl mx-auto min-h-screen bg-slate-50/50">
@@ -543,7 +558,7 @@ export function EnterpriseJobDetailPage() {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-[20px] sm:text-[22px] font-extrabold text-slate-900 leading-tight">{job.jobTitle}</h1>
-              {isAdminDispatch && job.status !== 'closed' ? (
+              {isAdminDispatch && (job.status !== 'closed' || adminStatus === 'cancelled') ? (
                 <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${adminStatusMeta.badge}`}>
                   {adminStatusMeta.label}
                 </span>
@@ -570,19 +585,36 @@ export function EnterpriseJobDetailPage() {
         </div>
 
         {/* Conclude Project Action Button */}
-        <div>
-          {job.status === 'closed' ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {adminStatus === 'cancelled' && job.status === 'closed' ? (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-[12px] font-bold">
+              Request Cancelled
+            </div>
+          ) : job.status === 'closed' ? (
             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-[12px] font-bold">
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
               Contract Concluded {job.timeline?.projectEndDate ? `(${new Date(job.timeline.projectEndDate).toLocaleDateString('en-IN')})` : ''}
             </div>
-          ) : isAdminDispatch && adminStatus !== 'accepted' ? null : (
-            <button
-              onClick={() => setShowConcludeModal(true)}
-              className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[12px] font-extrabold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
-            >
-              🏁 Conclude Project / End Contract
-            </button>
+          ) : (
+            <>
+              {canCancelRequest && (
+                <button
+                  onClick={handleCancelRequest}
+                  disabled={isCancellingRequest}
+                  className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-[12px] font-extrabold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-60"
+                >
+                  {isCancellingRequest ? 'Cancelling…' : '✕ Cancel Request'}
+                </button>
+              )}
+              {!(isAdminDispatch && adminStatus !== 'accepted') && (
+                <button
+                  onClick={() => setShowConcludeModal(true)}
+                  className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[12px] font-extrabold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                >
+                  🏁 Conclude Project / End Contract
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

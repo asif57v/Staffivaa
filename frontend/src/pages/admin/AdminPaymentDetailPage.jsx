@@ -262,6 +262,16 @@ export function AdminPaymentDetailPage() {
             </span>
           </div>
           <div className="flex items-start">
+            <span className="w-24 text-slate-400 font-bold">Phone</span>
+            {request.clientId?.phone ? (
+              <a href={`tel:${request.clientId.phone}`} className="font-bold text-slate-800 hover:text-[#6366f1]">
+                {request.clientId.phone}
+              </a>
+            ) : (
+              <span className="font-bold text-slate-400">N/A</span>
+            )}
+          </div>
+          <div className="flex items-start">
             <span className="w-24 text-slate-400 font-bold">Vendor</span>
             <span className="font-bold text-slate-700">
               {allocation?.vendorId?.contractorProfile?.companyName || allocation?.vendorId?.fullName || 'XYZ Contractors'}

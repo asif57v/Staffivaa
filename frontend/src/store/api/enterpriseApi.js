@@ -151,6 +151,10 @@ export const enterpriseApi = baseApi.injectEndpoints({
       providesTags: ['LabourEmployment', 'EnterprisePayrolls'],
     }),
 
+    cancelEnterpriseDirectRequest: builder.mutation({
+      query: (id) => ({ url: `/enterprise/jobs/${id}/cancel-request`, method: 'PATCH' }),
+      invalidatesTags: ['EnterpriseJobs', 'EnterpriseWorkforce'],
+    }),
     concludeEnterpriseJob: builder.mutation({
       query: ({ id, endDate }) => ({
         url: `/enterprise/jobs/${id}/conclude`,
@@ -371,6 +375,7 @@ export const {
   useRegenerateEnterpriseCheckoutOtpMutation,
   useGetLabourEmploymentHistoryQuery,
   useConcludeEnterpriseJobMutation,
+  useCancelEnterpriseDirectRequestMutation,
   useGetEnterpriseCompanyApplicationsQuery,
   useUpdateApplicationStatusMutation,
   useScheduleInterviewMutation,

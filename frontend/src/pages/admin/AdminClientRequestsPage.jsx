@@ -31,8 +31,183 @@ import {
   useListVendorVerificationsQuery,
   useGetAdminQuotationQuery,
   useSubmitAdminQuotationMutation,
+  useAssignWorkersToClientRequestMutation,
+  useGetIndividualBookingWorkersQuery,
 } from '../../store/api/workforceApi.js'
 import toast from 'react-hot-toast'
+
+// Modal: admin picks its own workers for a directly-accepted corporate request.
+function AssignWorkersModal({ request, onClose, onDone }) {
+  const lines = (request.lines || []).filter((l) => l.categoryId?._id)
+  const [activeLine, setActiveLine] = useState(0)
+  const [search, setSearch] = useState('')
+  const [showAll, setShowAll] = useState(false)
+  // selected[categoryId] = [{ labourId, name, phone, rate }]
+  const [selected, setSelected] = useState({})
+  const [assign, { isLoading: assigning }] = useAssignWorkersToClientRequestMutation()
+
+  const line = lines[activeLine]
+  const catId = line?.categoryId?._id
+  const { data, isFetching } = useGetIndividualBookingWorkersQuery(
+    { id: request._id, categoryId: showAll ? 'all' : catId, search: search.trim() || undefined },
+    { skip: !catId },
+  )
+  const workers = data?.workers ?? []
+  const defaultRate = line?.categoryId?.baseRate || 800
+
+  const pickedIds = new Set(Object.values(selected).flat().map((s) => s.labourId))
+  const lineSelected = selected[catId] || []
+
+  const toggle = (w) => {
+    setSelected((prev) => {
+      const list = prev[catId] || []
+      if (list.some((s) => s.labourId === w._id)) {
+        return { ...prev, [catId]: list.filter((s) => s.labourId !== w._id) }
+      }
+      if (list.length >= (line.quantity || 1)) {
+        toast.error(`Only ${line.quantity || 1} ${line.categoryId.name} needed`)
+        return prev
+      }
+      return { ...prev, [catId]: [...list, { labourId: w._id, name: w.fullName, phone: w.phone, rate: defaultRate }] }
+    })
+  }
+
+  const setRate = (labourId, rate) =>
+    setSelected((prev) => ({
+      ...prev,
+      [catId]: (prev[catId] || []).map((s) => (s.labourId === labourId ? { ...s, rate } : s)),
+    }))
+
+  const complete = lines.every((l) => (selected[l.categoryId._id] || []).length === (l.quantity || 1))
+
+  const submit = async () => {
+    const assignments = lines.flatMap((l) =>
+      (selected[l.categoryId._id] || []).map((s) => ({ labourId: s.labourId, categoryId: l.categoryId._id, perDayRate: Number(s.rate) })),
+    )
+    if (assignments.some((a) => !(a.perDayRate > 0))) {
+      toast.error('Enter a valid per-day rate for every worker')
+      return
+    }
+    try {
+      await assign({ id: request._id, assignments }).unwrap()
+      toast.success('Workers assigned successfully')
+      onDone()
+    } catch (err) {
+      toast.error(err?.data?.message || 'Failed to assign workers')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-xs">
+      <div className="relative flex max-h-[90vh] w-full max-w-xl flex-col rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-200">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <h3 className="text-lg font-extrabold text-slate-900">Assign Workers</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Request <span className="font-bold text-slate-700">{request.reference}</span> — pick workers for each skill and set their per-day rate.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 cursor-pointer">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {lines.length > 1 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {lines.map((l, i) => (
+              <button
+                key={l.categoryId._id}
+                type="button"
+                onClick={() => setActiveLine(i)}
+                className={`rounded-full border px-3 py-1 text-xs font-bold cursor-pointer ${i === activeLine ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-600'}`}
+              >
+                {l.categoryId.name} ({(selected[l.categoryId._id] || []).length}/{l.quantity || 1})
+              </button>
+            ))}
+          </div>
+        )}
+        {lines.length === 1 && (
+          <p className="mt-3 text-xs font-bold text-slate-700">
+            {line.categoryId.name}: {lineSelected.length}/{line.quantity || 1} selected
+          </p>
+        )}
+
+        <div className="mt-3 flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search worker by name or phone..."
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 pl-9 pr-3 text-xs font-semibold focus:border-brand focus:outline-hidden"
+            />
+          </div>
+          <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 cursor-pointer">
+            <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> All skills
+          </label>
+        </div>
+
+        <div className="mt-3 min-h-[8rem] flex-1 space-y-2 overflow-y-auto pr-1">
+          {isFetching ? (
+            <p className="p-6 text-center text-xs text-slate-400">Loading workers…</p>
+          ) : workers.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400">No workers found.</p>
+          ) : (
+            workers.map((w) => {
+              const sel = lineSelected.find((s) => s.labourId === w._id)
+              const usedElsewhere = !sel && pickedIds.has(w._id)
+              return (
+                <div
+                  key={w._id}
+                  className={`flex items-center justify-between gap-3 rounded-2xl p-3 ring-1 transition ${sel ? 'bg-emerald-50/70 ring-emerald-400' : 'bg-white ring-slate-100'} ${usedElsewhere || w.hasActiveJob ? 'opacity-50' : 'cursor-pointer hover:bg-slate-50'}`}
+                  onClick={() => !usedElsewhere && !w.hasActiveJob && toggle(w)}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-bold text-slate-900">{w.fullName}</p>
+                    <p className="text-[11px] text-slate-500">
+                      {w.phone}
+                      {w.distanceKm != null ? ` • ${Number(w.distanceKm).toFixed(1)} km` : ''}
+                      {w.skillMatch ? ' • skill match' : ''}
+                      {w.hasActiveJob ? ' • busy' : ''}
+                    </p>
+                  </div>
+                  {sel ? (
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <span className="text-[11px] font-bold text-slate-500">₹/day</span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={sel.rate}
+                        onChange={(e) => setRate(w._id, e.target.value)}
+                        className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-xs font-bold"
+                      />
+                    </div>
+                  ) : (
+                    <input type="checkbox" readOnly checked={false} className="h-4 w-4" />
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+          <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer">
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!complete || assigning}
+            onClick={submit}
+            className="rounded-xl bg-slate-900 px-5 py-2 text-xs font-bold text-white disabled:opacity-50 cursor-pointer"
+          >
+            {assigning ? 'Assigning…' : 'Assign Workers'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const STATUS_FILTERS = [
   { value: '', label: 'Pending Review' },
@@ -78,6 +253,8 @@ export function AdminClientRequestsPage() {
   )
   const [acceptRequest, { isLoading: accepting }] = useAcceptClientRequestMutation()
   const [sendToVendor, { isLoading: sending }] = useSendToVendorClientRequestMutation()
+
+  const [requestForWorkers, setRequestForWorkers] = useState(null)
 
   // Vendor selection modal state
   const [selectedRequestForVendor, setSelectedRequestForVendor] = useState(null)
@@ -450,14 +627,24 @@ export function AdminClientRequestsPage() {
                           </p>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenQuotationModal(r)}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 px-3 py-1.5 text-xs font-black shadow-xs transition cursor-pointer"
-                      >
-                        <FileText className="h-3.5 w-3.5" />
-                        Quotation
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setRequestForWorkers(r)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 text-xs font-black shadow-xs transition cursor-pointer"
+                        >
+                          <UserCheck className="h-3.5 w-3.5" />
+                          Assign Workers
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenQuotationModal(r)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 px-3 py-1.5 text-xs font-black shadow-xs transition cursor-pointer"
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                          Quotation
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -608,6 +795,17 @@ export function AdminClientRequestsPage() {
           )
         })}
       </ul>
+
+      {requestForWorkers && (
+        <AssignWorkersModal
+          request={requestForWorkers}
+          onClose={() => setRequestForWorkers(null)}
+          onDone={() => {
+            setRequestForWorkers(null)
+            refetch()
+          }}
+        />
+      )}
 
       {/* Vendor Selection Modal */}
       {selectedRequestForVendor && (

@@ -312,13 +312,13 @@ export function CorporateRequestNewPage() {
 
           {/* Site Selector Widget (Always visible, disabled if no project) */}
           <div className={`bg-white border border-slate-200 rounded-[12px] shadow-sm flex flex-col overflow-hidden transition-all duration-300 ${(!projectId || projectId === 'none') ? 'opacity-50 pointer-events-none' : ''}`}>
-            <div className="h-[48px] px-1.5 flex items-center">
+            <div className={`min-h-[48px] px-1.5 flex ${isAddingSite ? 'items-start py-2' : 'items-center'}`}>
               <div className="h-8 w-8 shrink-0 bg-brand/10 rounded-[8px] flex items-center justify-center">
                 <MapPin className="h-4 w-4 text-brand" />
               </div>
               
               {isAddingSite ? (
-                <div className="flex-1 ml-2 flex flex-col gap-2 py-2 pr-1.5">
+                <div className="flex-1 ml-2 flex flex-col gap-2 pr-1.5">
                   <input 
                     type="text" 
                     placeholder="Site name..." 

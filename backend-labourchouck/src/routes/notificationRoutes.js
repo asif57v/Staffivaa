@@ -6,6 +6,7 @@ import {
   getNotifications,
   markRead,
   markAllRead,
+  markReadByTypes,
   deleteNotification
 } from '../controllers/notificationController.js';
 
@@ -17,6 +18,7 @@ router.use(protect);
 router.post('/send-test', createSelfTestNotification);
 router.get('/', getNotifications);
 router.patch('/read-all', markAllRead);
+router.patch('/read-by-types', markReadByTypes);
 router.patch('/:id/read', markRead);
 router.delete('/:id', deleteNotification);
 

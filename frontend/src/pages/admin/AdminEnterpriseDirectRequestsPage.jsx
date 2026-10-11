@@ -37,6 +37,7 @@ const STATUS_FILTERS = [
   { value: 'pending', label: 'Pending Review' },
   { value: 'accepted', label: 'Accepted' },
   { value: 'rejected', label: 'Rejected' },
+  { value: 'cancelled', label: 'Cancelled' },
   { value: 'all', label: 'All' },
 ]
 
@@ -44,6 +45,7 @@ const STATUS_BADGE = {
   pending: { label: 'Pending Review', icon: Clock, className: 'bg-amber-100 text-amber-800 ring-amber-200/60' },
   accepted: { label: 'Accepted', icon: CheckCircle2, className: 'bg-emerald-100 text-emerald-800 ring-emerald-200/60' },
   rejected: { label: 'Rejected', icon: XCircle, className: 'bg-rose-100 text-rose-800 ring-rose-200/60' },
+  cancelled: { label: 'Cancelled', icon: XCircle, className: 'bg-slate-200 text-slate-700 ring-slate-300/60' },
 }
 
 function formatDate(d) {
@@ -372,7 +374,13 @@ export function AdminEnterpriseDirectRequestsPage() {
                     </div>
                   )}
 
-                  {!isPending && (
+                  {job.adminRequestStatus === 'cancelled' ? (
+                    <div className="rounded-xl bg-slate-50 px-3.5 py-2.5 text-xs text-slate-700 ring-1 ring-slate-200/60">
+                      <span className="font-bold">
+                        Cancelled by the enterprise on {formatDateTime(job.cancelledByEnterpriseAt)}
+                      </span>
+                    </div>
+                  ) : !isPending && (
                     <div
                       className={`rounded-xl px-3.5 py-2.5 text-xs ring-1 ${
                         job.adminRequestStatus === 'accepted'

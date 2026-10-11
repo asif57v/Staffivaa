@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Users, Building2, MapPin, Calendar, Clock, UserCircle, CheckCircle2, Construction, AlertCircle, XCircle, Phone, Star, Award, Shield, FileDown, MessageSquare, ChevronDown, ChevronUp, Check, ArrowRight, FileText } from 'lucide-react'
-import { useGetRequestQuery, useRespondToQuotationMutation } from '../../../store/api/workforceApi.js'
+import { useGetRequestQuery, useRespondToQuotationMutation, useCancelWorkforceRequestMutation } from '../../../store/api/workforceApi.js'
 import { useAuth } from '../../../hooks/useAuth.js'
 import { useEffect, useState, useRef } from 'react'
 import { useSocket } from '../../../hooks/useSocket.js'
@@ -232,6 +232,8 @@ export function CorporateRequestDetailPage() {
   const { data, isLoading, isError, refetch } = useGetRequestQuery(id, { skip: !id })
   const [respondToQuotation, { isLoading: responding }] = useRespondToQuotationMutation()
 
+  const [cancelRequest, { isLoading: cancelling }] = useCancelWorkforceRequestMutation()
+
   const [showBreakdown, setShowBreakdown] = useState(false)
   const [showRevisionModal, setShowRevisionModal] = useState(false)
   const [revisionFeedback, setRevisionFeedback] = useState('')
@@ -365,6 +367,23 @@ export function CorporateRequestDetailPage() {
       setRevisionFeedback('')
     } catch (err) {
       alert(err?.data?.message || 'Action failed')
+    }
+  }
+
+  // Cancellable from request creation until the project actually starts (advance paid).
+  const nonCancellable = [
+    'advance_paid', 'project_active', 'work_started', 'in_progress', 'on_site', 'attendance_tracking',
+    'billing', 'settlement_pending', 'settlement_completed', 'completed', 'cancelled', 'rejected',
+  ]
+  const canCancel = !nonCancellable.includes(request.status)
+
+  const handleCancelRequest = async () => {
+    if (!window.confirm('Cancel this request? This cannot be undone.')) return
+    try {
+      await cancelRequest(id).unwrap()
+      refetch()
+    } catch (err) {
+      alert(err?.data?.message || 'Could not cancel the request')
     }
   }
 
@@ -867,7 +886,7 @@ export function CorporateRequestDetailPage() {
                         {a.labourId?.fullName || 'Worker'}
                       </p>
                       <p className="text-[11px] text-slate-500 font-medium">
-                        {['project_active', 'in_progress', 'completed', 'settlement_pending', 'settlement_completed'].includes(request.status) ? (a.labourId?.phone || a.status) : 'Number hidden'}
+                        Number hidden
                       </p>
                     </div>
                   </div>
@@ -919,6 +938,17 @@ export function CorporateRequestDetailPage() {
               </button>
             )}
           </>
+        )}
+
+        {canCancel && (
+          <button
+            type="button"
+            onClick={handleCancelRequest}
+            disabled={cancelling}
+            className="w-full flex items-center justify-center gap-2 rounded-[16px] border border-rose-200 bg-rose-50 py-3.5 text-[15px] font-bold text-rose-600 transition hover:bg-rose-100 active:scale-[0.98] disabled:opacity-60"
+          >
+            <XCircle className="h-4 w-4" /> {cancelling ? 'Cancelling…' : 'Cancel Request'}
+          </button>
         )}
       </div>
 

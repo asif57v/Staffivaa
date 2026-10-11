@@ -109,7 +109,24 @@ export const markRead = asyncHandler(async (req, res) => {
   });
 });
 
-export const markAllRead = asyncHandler(async (req, res) => {
+// Mark every unread notification of the given types as read (used when a user opens the matching page).
+export const markReadByTypes = asyncHandler(async (req, res) => {
+  const types = Array.isArray(req.body?.types) ? req.body.types.filter((t) => typeof t === 'string') : [];
+  if (!types.length) {
+    return sendSuccess(res, { message: 'Nothing to mark' });
+  }
+
+  const owner = { $or: [{ userId: req.user._id }] };
+  if (req.user.role === 'admin') {
+    owner.$or.push({ userId: { $exists: false } }, { userId: null });
+  }
+
+  await Notification.updateMany({ ...owner, type: { $in: types }, isRead: false }, { $set: { isRead: true } });
+
+  return sendSuccess(res, { message: 'Notifications marked as read' });
+});
+
+export const markAllRead =asyncHandler(async (req, res) => {
   let updateQuery = { userId: req.user._id };
   if (req.user.role === 'admin') {
     updateQuery = { $or: [{ userId: req.user._id }, { userId: null }, { userId: { $exists: false } }] };
