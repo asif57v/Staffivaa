@@ -13,19 +13,19 @@ import { asyncHandler } from '../utils/asyncHandler.js'
 import { sendSuccess } from '../utils/apiResponse.js'
 
 export const getDashboardStats = asyncHandler(async (req, res) => {
-  const totalUsers = await User.countDocuments({ role: 'individual' })
-  const totalLabour = await User.countDocuments({ role: 'labour' })
-  const totalVendors = await User.countDocuments({ role: 'contractor' })
-  const totalCorporateClients = await User.countDocuments({ role: 'corporate' })
+  const totalUsers = await User.countDocuments({ role: 'individual', accountStatus: { $ne: 'deleted' } })
+  const totalLabour = await User.countDocuments({ role: 'labour', accountStatus: { $ne: 'deleted' } })
+  const totalVendors = await User.countDocuments({ role: 'contractor', accountStatus: { $ne: 'deleted' } })
+  const totalCorporateClients = await User.countDocuments({ role: 'corporate', accountStatus: { $ne: 'deleted' } })
   
   const activeWorkforce = await Assignment.countDocuments({ status: { $in: ['accepted', 'on_site'] } })
   const activeProjects = await Project.countDocuments({ status: 'active' })
   
   const pendingRequests = await WorkforceRequest.countDocuments({ status: 'pending_review' })
   
-  const pendingLabourKyc = await User.countDocuments({ role: 'labour', 'labourProfile.kycStatus': 'pending' })
-  const pendingVendorKyc = await User.countDocuments({ role: 'contractor', 'contractorProfile.verificationStatus': 'pending' })
-  const pendingCorporateKyc = await User.countDocuments({ role: 'corporate', 'corporateProfile.status': 'pending' })
+  const pendingLabourKyc = await User.countDocuments({ role: 'labour', accountStatus: { $ne: 'deleted' }, 'labourProfile.kycStatus': 'pending' })
+  const pendingVendorKyc = await User.countDocuments({ role: 'contractor', accountStatus: { $ne: 'deleted' }, 'contractorProfile.verificationStatus': 'pending' })
+  const pendingCorporateKyc = await User.countDocuments({ role: 'corporate', accountStatus: { $ne: 'deleted' }, 'corporateProfile.status': 'pending' })
   const pendingKyc = pendingLabourKyc + pendingVendorKyc + pendingCorporateKyc
   
   const now = new Date()
@@ -36,7 +36,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
   const todayCheckIns = await AttendanceRecord.countDocuments({ checkInAt: { $gte: startOfToday, $lte: endOfToday } })
   const todayCheckOuts = await AttendanceRecord.countDocuments({ checkOutAt: { $gte: startOfToday, $lte: endOfToday } })
   
-  const newUsersToday = await User.countDocuments({ createdAt: { $gte: startOfToday, $lte: endOfToday } })
+  const newUsersToday = await User.countDocuments({ accountStatus: { $ne: 'deleted' }, createdAt: { $gte: startOfToday, $lte: endOfToday } })
   
   const totalBookings = await WorkforceRequest.countDocuments({})
   
@@ -149,7 +149,7 @@ export const getDashboardAnalytics = asyncHandler(async (req, res) => {
 
   // Growth Trend (registrations by role per month)
   const growthAgg = await User.aggregate([
-    { $match: { createdAt: { $gte: sixMonthsAgo } } },
+    { $match: { createdAt: { $gte: sixMonthsAgo }, accountStatus: { $ne: 'deleted' } } },
     { $group: {
         _id: {
           month: { $month: '$createdAt' },

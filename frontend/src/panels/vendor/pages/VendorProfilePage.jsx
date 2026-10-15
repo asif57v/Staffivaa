@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
+import { DeleteAccountSection } from '../../../components/common/DeleteAccountSection.jsx'
 import { Link } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
@@ -1096,6 +1097,8 @@ export function VendorProfilePage() {
       </GlassPanel>
 
       <LanguageSwitcher className="mt-4" />
+
+      <DeleteAccountSection className="mt-4" />
 
       <VendorSkillsModal
         isOpen={isSkillsModalOpen}

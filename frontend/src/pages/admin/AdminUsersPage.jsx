@@ -9,6 +9,7 @@ import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import { ROLE_LABELS, ROLE_LIST } from '../../constants/userRoles.js'
 import { ACCOUNT_STATUS_COLORS, ACCOUNT_STATUS_LABELS, ACCOUNT_STATUSES } from '../../constants/userStatuses.js'
 import { formatLastLoginDisplay } from '../../lib/formatAdminLastLogin.js'
+import { UserQuickActions } from '../../components/admin/UserQuickActions.jsx'
 
 function StatusPill({ status, active }) {
   const accountStatus = status || (active !== false ? ACCOUNT_STATUSES.ACTIVE : ACCOUNT_STATUSES.DELETED)
@@ -834,13 +835,14 @@ export function AdminUsersPage({ fixedRole, customTitle }) {
                       <td className="px-4 py-3 text-xs text-slate-500">
                         {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
                         <Link
                           to={`/admin/user/${u._id}`}
                           className="inline-flex items-center justify-center rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-brand transition hover:bg-brand/10 hover:text-brand"
                         >
                           View Details
                         </Link>
+                        <UserQuickActions user={u} onDone={load} />
                       </td>
                     </tr>
                   ))}
@@ -911,12 +913,15 @@ export function AdminUsersPage({ fixedRole, customTitle }) {
                       Last login: {formatLastLoginDisplay(u.lastLoginAt) || '—'}
                     </span>
                   </div>
-                  <Link
-                    to={`/admin/user/${u._id}`}
-                    className="inline-flex items-center justify-center rounded-lg bg-slate-100 px-3 py-1.5 text-[11px] font-semibold text-brand transition hover:bg-brand/10"
-                  >
-                    View Details
-                  </Link>
+                  <div className="flex items-center gap-1">
+                    <Link
+                      to={`/admin/user/${u._id}`}
+                      className="inline-flex items-center justify-center rounded-lg bg-slate-100 px-3 py-1.5 text-[11px] font-semibold text-brand transition hover:bg-brand/10"
+                    >
+                      View Details
+                    </Link>
+                    <UserQuickActions user={u} onDone={load} />
+                  </div>
                 </div>
               </GlassPanel>
             ))}

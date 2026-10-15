@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Loader2, User as UserIcon, Mail, Phone, Calendar, ShieldCheck,
@@ -13,6 +13,7 @@ import {
   fetchUserTransactionsAdmin
 } from '../../api/adminUsersApi.js'
 import { ApiError, apiRequest } from '../../api/http.js'
+import { adminDeleteUserAccount } from '../../api/deleteAccountApi.js'
 import { GlassPanel } from '../../components/ui/GlassPanel.jsx'
 import { ROLE_LABELS, USER_ROLES } from '../../constants/userRoles.js'
 import { ACCOUNT_STATUS_COLORS, ACCOUNT_STATUS_LABELS, ACCOUNT_STATUSES } from '../../constants/userStatuses.js'
@@ -250,6 +251,18 @@ export function AdminUserDetailsPage() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  const navigate = useNavigate()
+
+  const handleDeleteAccount = async (reason) => {
+    try {
+      await adminDeleteUserAccount(id, { reason, force: true })
+      closeDialog()
+      navigate('/admin/deleted-accounts', { replace: true })
+    } catch (e) {
+      alert(e.message)
+    }
+  }
 
   const openDialog = (config) => setDialogConfig({ isOpen: true, ...config })
   const closeDialog = () => setDialogConfig({ isOpen: false })
@@ -573,6 +586,22 @@ export function AdminUserDetailsPage() {
                 </button>
               )}
               
+              {currentStatus !== ACCOUNT_STATUSES.DELETED && (
+                <button
+                  onClick={() => openDialog({
+                    title: 'Delete Account',
+                    description: 'The account will be removed from all active lists and the user logged out. Its full data is kept in Deleted Accounts for security. This cannot be undone.',
+                    confirmText: 'Delete Account',
+                    requireReason: true,
+                    isDestructive: true,
+                    onConfirm: ({ reason }) => handleDeleteAccount(reason)
+                  })}
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
+                >
+                  <Trash2 className="h-4 w-4" /> Delete Account
+                </button>
+              )}
+
               <hr className="my-2 border-slate-100" />
 
               <button
@@ -582,24 +611,6 @@ export function AdminUserDetailsPage() {
                 <Wallet className="h-4 w-4" /> Adjust Wallet
               </button>
 
-              {currentStatus !== ACCOUNT_STATUSES.DELETED && (
-                <>
-                  <hr className="my-2 border-slate-100" />
-                  <button
-                    onClick={() => openDialog({
-                      title: 'Soft Delete Account',
-                      description: 'This will hide the user from the platform but preserve their data in the database.',
-                      confirmText: 'Soft Delete',
-                      requireReason: true,
-                      isDestructive: true,
-                      onConfirm: ({ reason }) => handleStatusChange(ACCOUNT_STATUSES.DELETED, reason)
-                    })}
-                    className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
-                  >
-                    <Trash2 className="h-4 w-4" /> Soft Delete
-                  </button>
-                </>
-              )}
             </div>
           </GlassPanel>
         </div>

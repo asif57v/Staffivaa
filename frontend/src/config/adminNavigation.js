@@ -34,6 +34,7 @@ import {
   Sparkles,
   Inbox,
   CalendarClock,
+  UserX,
 } from 'lucide-react'
 
 /**
@@ -72,6 +73,7 @@ export const ADMIN_NAV_SECTIONS = [
       { to: '/admin/corporates', label: 'Corporate Client', icon: Briefcase },
       { to: '/admin/labour', label: 'Labour / Worker', icon: HardHat },
       { to: '/admin/contractors', label: 'Contractor / Vendor', icon: Truck },
+      { to: '/admin/deleted-accounts', label: 'Deleted Accounts', icon: UserX },
     ],
   },
   {
@@ -147,6 +149,7 @@ const ROUTE_TITLES = [
   { prefix: '/admin/individuals', title: 'Individual Users' },
   { prefix: '/admin/corporates', title: 'Corporate Clients' },
   { prefix: '/admin/contractors', title: 'Contractors & Vendors' },
+  { prefix: '/admin/deleted-accounts', title: 'Deleted Accounts' },
   { prefix: '/admin/user', title: 'User Details' },
   { prefix: '/admin/settings', title: 'Settings' },
   { prefix: '/admin/reports', title: 'Reports & analytics' },

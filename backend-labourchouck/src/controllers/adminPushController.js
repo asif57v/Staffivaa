@@ -141,7 +141,7 @@ export const getRecipientsCount = asyncHandler(async (req, res) => {
 
 export const searchRecipients = asyncHandler(async (req, res) => {
   const q = String(req.query.q || '').trim()
-  const filter = { role: { $in: TARGET_ROLES }, isActive: true }
+  const filter = { role: { $in: TARGET_ROLES }, isActive: true, accountStatus: { $ne: 'deleted' } }
   // Empty query lists users alphabetically so admin can browse by role.
   if (q) {
     const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')

@@ -33,6 +33,8 @@ const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage.jsx').the
 const AdminLabourPage = lazy(() => import('./pages/admin/AdminLabourPage.jsx').then(m => ({ default: m.AdminLabourPage })))
 const AdminBusinessVerificationPage = lazy(() => import('./pages/admin/AdminBusinessVerificationPage.jsx').then(m => ({ default: m.AdminBusinessVerificationPage })))
 const AdminUserDetailsPage = lazy(() => import('./pages/admin/AdminUserDetailsPage.jsx').then(m => ({ default: m.AdminUserDetailsPage })))
+const AdminDeletedAccountsPage = lazy(() => import('./pages/admin/AdminDeletedAccountsPage.jsx').then(m => ({ default: m.AdminDeletedAccountsPage })))
+const AdminDeletedAccountDetailPage = lazy(() => import('./pages/admin/AdminDeletedAccountDetailPage.jsx').then(m => ({ default: m.AdminDeletedAccountDetailPage })))
 const AdminBuildMartLeadsPage = lazy(() => import('./pages/admin/AdminBuildMartLeadsPage.jsx').then(m => ({ default: m.AdminBuildMartLeadsPage })))
 const AdminBookingsPage = lazy(() => import('./pages/admin/AdminBookingsPage.jsx').then(m => ({ default: m.AdminBookingsPage })))
 const AdminAllocationsPage = lazy(() => import('./pages/admin/AdminAllocationsPage.jsx').then(m => ({ default: m.AdminAllocationsPage })))
@@ -177,6 +179,8 @@ function App() {
                 <Route path="corporates" element={<AdminUsersPage fixedRole="corporate" customTitle="Corporate Clients" />} />
                 <Route path="contractors" element={<AdminUsersPage fixedRole="contractor" customTitle="Contractors & Vendors" />} />
                 <Route path="user/:id" element={<AdminUserDetailsPage />} />
+                <Route path="deleted-accounts" element={<AdminDeletedAccountsPage />} />
+                <Route path="deleted-accounts/:id" element={<AdminDeletedAccountDetailPage />} />
                 <Route path="labour" element={<AdminLabourPage />} />
                 <Route path="business-verification" element={<AdminBusinessVerificationPage />} />
                 <Route path="enterprise-verification" element={<AdminEnterpriseVerificationPage />} />

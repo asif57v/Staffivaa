@@ -110,6 +110,7 @@ async function listByRole(req, res, role) {
     role === USER_ROLES.CORPORATE
       ? {
           role,
+          accountStatus: { $ne: 'deleted' },
           'corporateProfile.status': CORPORATE_STATUS.PENDING,
           $or: [
             { 'corporateProfile.documentsSubmittedAt': { $exists: true, $ne: null } },
@@ -118,6 +119,7 @@ async function listByRole(req, res, role) {
         }
       : {
           role,
+          accountStatus: { $ne: 'deleted' },
           'contractorProfile.verificationStatus': 'pending',
           $or: [
             { 'contractorProfile.documentsSubmittedAt': { $exists: true, $ne: null } },
@@ -135,12 +137,14 @@ async function listByRole(req, res, role) {
     User.countDocuments(query),
     User.countDocuments({
       role,
+      accountStatus: { $ne: 'deleted' },
       ...(role === USER_ROLES.CORPORATE
         ? { 'corporateProfile.documentsSubmittedAt': { $exists: true, $ne: null } }
         : { 'contractorProfile.documentsSubmittedAt': { $exists: true, $ne: null } }),
     }),
     User.countDocuments({
       role,
+      accountStatus: { $ne: 'deleted' },
       ...(role === USER_ROLES.CORPORATE
         ? { 'corporateProfile.status': CORPORATE_STATUS.APPROVED }
         : { 'contractorProfile.verificationStatus': 'approved' }),

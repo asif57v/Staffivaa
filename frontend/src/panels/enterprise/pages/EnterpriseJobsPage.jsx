@@ -105,7 +105,7 @@ export function EnterpriseJobsPage() {
               accepted: { text: 'ACCEPTED BY ADMIN', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
               rejected: { text: 'REJECTED BY ADMIN', className: 'bg-rose-100 text-rose-800 border-rose-200' },
               cancelled: { text: 'CANCELLED', className: 'bg-slate-200 text-slate-700 border-slate-300' },
-            }[job.adminRequestStatus || 'pending']
+            }[job.adminRequestStatus || 'pending'] || { text: 'SENT TO ADMIN', className: 'bg-amber-100 text-amber-800 border-amber-200' }
 
             const statusBadgeClass = isAdminDispatch
               ? adminBadge.className

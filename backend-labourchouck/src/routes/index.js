@@ -33,6 +33,7 @@ import enterpriseWalletRoutes from './enterpriseWalletRoutes.js'
 import adminEnterpriseWalletRoutes from './adminEnterpriseWalletRoutes.js'
 import legalRoutes from './legalRoutes.js'
 import paymentUniversalRoutes from './paymentUniversalRoutes.js'
+import adminDeletedAccountRoutes from './adminDeletedAccountRoutes.js'
 
 const router = Router()
 
@@ -71,5 +72,6 @@ router.use('/enterprise/wallet', enterpriseWalletRoutes)
 router.use('/admin/enterprise', adminEnterpriseRoutes)
 router.use('/admin/enterprise-wallets', adminEnterpriseWalletRoutes)
 router.use('/legal', legalRoutes)
+router.use('/admin/deleted-accounts', adminDeletedAccountRoutes)
 
 export default router

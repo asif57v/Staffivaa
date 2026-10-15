@@ -16,6 +16,7 @@ export const globalSearch = asyncHandler(async (req, res) => {
 
   const [users, bookings, projects, tickets, payments] = await Promise.all([
     User.find({
+      accountStatus: { $ne: 'deleted' },
       $or: [
         { fullName: regex },
         { email: regex },

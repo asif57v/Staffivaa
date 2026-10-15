@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
+import { DeleteAccountSection } from '../../components/common/DeleteAccountSection.jsx'
 import { Link, useNavigate } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 import { motion, useReducedMotion } from 'framer-motion'
@@ -662,6 +663,8 @@ export function AppProfilePage() {
         <LogOut className="h-4 w-4" aria-hidden />
         Sign out
       </button>
+
+      <DeleteAccountSection />
     </motion.div>
   )
 }

@@ -10,6 +10,7 @@ import { isValidAadhaarLength, maskAadhaarLast4, normalizeAadhaar } from '../uti
 import { normalizeStoredMediaUrl } from '../utils/mediaUrl.js'
 import { sendNotificationToUser } from '../services/notificationService.js'
 import { triggerNotification } from '../utils/notificationTrigger.js'
+import { deleteAccount } from '../services/deleteAccountService.js'
 import { logAudit } from '../utils/auditLogger.js'
 import { normalizeRole, isRoleMatch } from '../utils/roleUtils.js'
 
@@ -436,6 +437,38 @@ const KYC_PENDING_CONDITIONS = [
   { 'labourProfile.kycStatus': KYC_STATUS.PENDING },
 ]
 
+/** "Pending verification" across all roles — every branch is scoped to its own role so users of other roles never match */
+const ALL_ROLES_KYC_PENDING = {
+  $or: [
+    { role: USER_ROLES.LABOUR, $or: KYC_PENDING_CONDITIONS },
+    {
+      role: USER_ROLES.CONTRACTOR,
+      $or: [
+        { 'contractorProfile.verificationStatus': 'pending' },
+        { 'contractorProfile.verificationStatus': null },
+        { 'contractorProfile.verificationStatus': { $exists: false } },
+      ],
+    },
+    {
+      role: USER_ROLES.CORPORATE,
+      $or: [
+        { 'corporateProfile.status': 'pending' },
+        { 'corporateProfile.status': null },
+        { 'corporateProfile.status': { $exists: false } },
+      ],
+    },
+    {
+      role: USER_ROLES.ENTERPRISE,
+      $or: [
+        { 'enterpriseProfile.status': 'pending' },
+        { 'enterpriseProfile.status': null },
+        { 'enterpriseProfile.status': { $exists: false } },
+      ],
+    },
+    { role: USER_ROLES.INDIVIDUAL, isPhoneVerified: { $ne: true } },
+  ],
+}
+
 function mergeAnd(base, extraClauses) {
   const next = { ...base }
   const existing = Array.isArray(next.$and) ? [...next.$and] : []
@@ -518,6 +551,7 @@ export const listUsers = asyncHandler(async (req, res) => {
   else if (status && status !== 'all') {
     q.accountStatus = status
   }
+  if (q.accountStatus === undefined) q.accountStatus = { $ne: 'deleted' }
 
   const searchTrim = typeof search === 'string' ? search.trim() : ''
   if (searchTrim.length > MAX_SEARCH_LEN) {
@@ -640,21 +674,7 @@ export const listUsers = asyncHandler(async (req, res) => {
           ],
         })
       } else if (kycKey === 'pending') {
-        andParts.push({
-          $or: [
-            { $or: KYC_PENDING_CONDITIONS },
-            { 'contractorProfile.verificationStatus': 'pending' },
-            { 'contractorProfile.verificationStatus': null },
-            { 'contractorProfile.verificationStatus': { $exists: false } },
-            { 'corporateProfile.status': 'pending' },
-            { 'corporateProfile.status': null },
-            { 'corporateProfile.status': { $exists: false } },
-            { 'enterpriseProfile.status': 'pending' },
-            { 'enterpriseProfile.status': null },
-            { 'enterpriseProfile.status': { $exists: false } },
-            { role: 'individual', isPhoneVerified: { $ne: true } },
-          ],
-        })
+        andParts.push(ALL_ROLES_KYC_PENDING)
       }
     }
   }
@@ -768,23 +788,7 @@ export const listUsers = asyncHandler(async (req, res) => {
     // All roles combined
     const [pending, verified, failed, totalAll] = await Promise.all([
       User.countDocuments(
-        mergeAnd(statsBase, [
-          {
-            $or: [
-              { $or: KYC_PENDING_CONDITIONS },
-              { 'contractorProfile.verificationStatus': 'pending' },
-              { 'contractorProfile.verificationStatus': null },
-              { 'contractorProfile.verificationStatus': { $exists: false } },
-              { 'corporateProfile.status': 'pending' },
-              { 'corporateProfile.status': null },
-              { 'corporateProfile.status': { $exists: false } },
-              { 'enterpriseProfile.status': 'pending' },
-              { 'enterpriseProfile.status': null },
-              { 'enterpriseProfile.status': { $exists: false } },
-              { role: 'individual', isPhoneVerified: { $ne: true } },
-            ],
-          },
-        ]),
+        mergeAnd(statsBase, [ALL_ROLES_KYC_PENDING]),
       ),
       User.countDocuments(
         mergeAnd(statsBase, [
@@ -1184,6 +1188,17 @@ export const patchUserStatusAdmin = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id)
   if (!user) {
     return sendError(res, { message: 'User not found', statusCode: HTTP_STATUS.NOT_FOUND, code: 'NOT_FOUND' })
+  }
+
+  if (status === 'deleted') {
+    // Deleting goes through the archive flow so the data is kept in Admin > Deleted Accounts
+    try {
+      await deleteAccount({ userId: user._id, deletedBy: 'admin', admin: req.user, reason, req, force: true })
+    } catch (err) {
+      return sendError(res, { message: err.message, statusCode: HTTP_STATUS.BAD_REQUEST, code: err.code || 'DELETE_FAILED' })
+    }
+    await logAudit({ adminId: req.user._id, action: 'Deleted account', module: 'User Management', targetUser: user._id, reason, req })
+    return sendSuccess(res, { message: 'Account deleted and archived', data: { deleted: true } })
   }
 
   const oldStatus = user.accountStatus || 'active'

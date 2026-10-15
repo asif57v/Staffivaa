@@ -12,7 +12,7 @@ import { parseWorkerPayRate } from './enterpriseDirectPaymentController.js'
 
 /** GET /api/admin/enterprise/companies */
 export const getEnterpriseCompanies = asyncHandler(async (req, res) => {
-  const companies = await User.find({ role: USER_ROLES.ENTERPRISE })
+  const companies = await User.find({ role: USER_ROLES.ENTERPRISE, accountStatus: { $ne: 'deleted' } })
     .sort({ createdAt: -1 })
     .select('-passwordHash')
 

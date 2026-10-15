@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
-import { Bell, LogOut, Search, ChevronDown, Menu, X, Plus, Home, Users, Briefcase, MoreHorizontal, CheckCircle2, LayoutDashboard, Wallet, CalendarCheck, FileText, Check, Trash2, ExternalLink } from 'lucide-react'
+import { DeleteAccountModal } from '../components/common/DeleteAccountSection.jsx'
+import { Bell, LogOut, Trash2 as TrashIcon, Search, ChevronDown, Menu, X, Plus, Home, Users, Briefcase, MoreHorizontal, CheckCircle2, LayoutDashboard, Wallet, CalendarCheck, FileText, Check, Trash2, ExternalLink } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth.js'
 import { ENTERPRISE_STATUS } from '../constants/userRoles.js'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -178,6 +179,8 @@ export function EnterpriseShell() {
     return null
   }, [user])
 
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false)
+
   const handleLogout = async () => {
     await logout()
     navigate('/auth', { replace: true })
@@ -237,6 +240,10 @@ export function EnterpriseShell() {
                 </div>
               ))}
               <div className="pt-4 border-t border-slate-100 px-2">
+                <button onClick={() => { setMobileMenuOpen(false); setDeleteAccountOpen(true) }} className="flex items-center gap-3 w-full p-3 text-[15px] font-semibold text-slate-500 rounded-2xl active:bg-rose-50">
+                  <TrashIcon className="w-5 h-5" />
+                  Delete Account
+                </button>
                 <button onClick={handleLogout} className="flex items-center gap-3 w-full p-3 text-[15px] font-semibold text-rose-600 rounded-2xl active:bg-rose-50">
                   <LogOut className="w-5 h-5" />
                   Sign Out
@@ -481,6 +488,10 @@ export function EnterpriseShell() {
                         </p>
                         <p className="text-[12px] text-slate-500 font-medium truncate">{user?.phone}</p>
                       </div>
+                      <button onClick={() => { setProfileDropdownOpen(false); setDeleteAccountOpen(true) }} className="w-full text-left px-4 py-2.5 text-[13px] font-semibold text-slate-500 hover:bg-rose-50 hover:text-rose-600 flex items-center gap-2 transition">
+                        <TrashIcon className="w-4 h-4" />
+                        Delete Account
+                      </button>
                       <button onClick={handleLogout} className="w-full text-left px-4 py-2.5 text-[13px] font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition">
                         <LogOut className="w-4 h-4" />
                         Sign Out
@@ -555,6 +566,7 @@ export function EnterpriseShell() {
         })}
       </div>
       )}
+      <DeleteAccountModal open={deleteAccountOpen} onClose={() => setDeleteAccountOpen(false)} />
     </div>
   )
 }

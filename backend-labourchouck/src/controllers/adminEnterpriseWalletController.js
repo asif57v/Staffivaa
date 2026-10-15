@@ -14,7 +14,7 @@ export const getAdminEnterpriseWallets = asyncHandler(async (req, res) => {
     .lean()
 
   // Also include companies without wallet initialized yet
-  const allCompanies = await User.find({ role: USER_ROLES.ENTERPRISE }).select('fullName email phone enterpriseProfile').lean()
+  const allCompanies = await User.find({ role: USER_ROLES.ENTERPRISE, accountStatus: { $ne: 'deleted' } }).select('fullName email phone enterpriseProfile').lean()
 
   const walletMap = new Map(wallets.map((w) => [String(w.enterpriseId?._id), w]))
 
