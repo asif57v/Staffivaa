@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
+  ArrowDown,
+  ArrowUp,
   ChevronRight,
   FolderTree,
   Layers,
@@ -399,6 +401,25 @@ export function AdminLabourCategoriesPage() {
     }
   }
 
+  async function moveCategory(index, dir) {
+    const target = index + dir
+    if (target < 0 || target >= subcategories.length) return
+    setBanner('')
+    const reordered = [...subcategories]
+    ;[reordered[index], reordered[target]] = [reordered[target], reordered[index]]
+    try {
+      await Promise.all(
+        reordered
+          .map((c, i) => ({ c, order: i + 1 }))
+          .filter(({ c, order }) => c.sortOrder !== order)
+          .map(({ c, order }) => patchAdminLabourCategory(c._id, { sortOrder: order })),
+      )
+      await load()
+    } catch (e) {
+      setBanner(e instanceof ApiError ? e.message : 'Reorder failed')
+    }
+  }
+
   async function handleModalSubmit({ name, baseRate, platformFee, imageUrl }) {
     if (!name) {
       setModalError('Enter a name')
@@ -635,7 +656,7 @@ export function AdminLabourCategoriesPage() {
                   </div>
                 ) : (
                   <ul className="divide-y divide-slate-100">
-                    {subcategories.map((c) => (
+                    {subcategories.map((c, idx) => (
                       <li key={c._id} className="space-y-3 px-4 py-4 sm:px-5">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="flex min-w-0 items-center gap-3">
@@ -656,6 +677,24 @@ export function AdminLabourCategoriesPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => moveCategory(idx, -1)}
+                              disabled={idx === 0}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition hover:bg-slate-200/80 disabled:opacity-30"
+                              title="Move up (show earlier on home)"
+                            >
+                              <ArrowUp className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveCategory(idx, 1)}
+                              disabled={idx === subcategories.length - 1}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition hover:bg-slate-200/80 disabled:opacity-30"
+                              title="Move down (show later on home)"
+                            >
+                              <ArrowDown className="h-4 w-4" />
+                            </button>
                             <button
                               type="button"
                               onClick={() => openModal(c)}

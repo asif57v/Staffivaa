@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { Loader2, Wrench, ArrowRight } from 'lucide-react'
 import { GlassPanel } from '../../ui/GlassPanel.jsx'
+import { getCategoryImageUrl } from '../../../lib/labourCategoryDisplay.js'
 
 function getCategoryImage(name) {
   const n = String(name || '').toLowerCase();
@@ -101,7 +102,8 @@ export function IndividualLabourSubcategoriesSection({ subcategories, loading, o
       {!loading && subcategories.length > 0 ? (
         <div ref={gridRef} className="grid grid-cols-3 min-[480px]:grid-cols-4 md:grid-cols-5 gap-x-1.5 gap-y-1.5 md:gap-x-3 md:gap-y-2">
           {visibleCategories.map((cat, idx) => {
-            const imgSrc = getCategoryImage(cat.name)
+            const uploaded = String(cat.imageUrl || '').trim()
+            const imgSrc = uploaded ? getCategoryImageUrl(cat) : getCategoryImage(cat.name)
 
             const inner = (
               <>
