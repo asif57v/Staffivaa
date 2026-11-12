@@ -372,11 +372,12 @@ export const assignDirectRequestWorkers = asyncHandler(async (req, res) => {
   const joiningStr = job.timeline?.expectedJoiningDate
     ? new Date(job.timeline.expectedJoiningDate).toLocaleDateString('en-IN')
     : 'TBD'
+  const payUnit = job.salaryType === 'hourly' ? 'hour' : (job.salaryType === 'monthly' ? 'month' : 'day')
   for (const u of registered) {
     triggerNotification({
       userId: u._id,
       title: 'New Work Assignment 🏗️',
-      body: `You have been assigned to "${job.jobTitle}" at ${job.locationText}. Joining: ${joiningStr}. Pay: ₹${payRate.toLocaleString('en-IN')} / ${job.salaryType === 'hourly' ? 'hour' : 'day'}.`,
+      body: `You have been assigned to "${job.jobTitle}" at ${job.locationText}. Joining: ${joiningStr}. Pay: ₹${payRate.toLocaleString('en-IN')} / ${payUnit}.`,
       type: 'ENTERPRISE_DIRECT_ASSIGNMENT',
       relatedId: job._id,
       relatedModel: 'EnterpriseJob',
@@ -387,7 +388,7 @@ export const assignDirectRequestWorkers = asyncHandler(async (req, res) => {
 
   await logAudit({
     adminId: req.user._id,
-    action: 'Assigned Workers to Enterprise Daily/Hourly Request',
+    action: 'Assigned Workers to Enterprise Request',
     module: 'Enterprise Admin',
     details: { jobId: job._id, payRate, workers: newEntries.map((e) => ({ name: e.name, phone: e.phone, isExternal: e.isExternal })) },
     req,
@@ -416,7 +417,7 @@ export const removeDirectRequestWorker = asyncHandler(async (req, res) => {
 
   await logAudit({
     adminId: req.user._id,
-    action: 'Removed Worker from Enterprise Daily/Hourly Request',
+    action: 'Removed Worker from Enterprise Request',
     module: 'Enterprise Admin',
     details: { jobId: job._id, worker: removedName },
     req,
@@ -447,7 +448,7 @@ export const updateDirectRequestWorkerPay = asyncHandler(async (req, res) => {
   await job.save()
   await job.populate('assignedWorkers.workerId', ASSIGNED_WORKER_SELECT)
 
-  const unit = job.salaryType === 'hourly' ? 'hour' : 'day'
+  const unit = job.salaryType === 'hourly' ? 'hour' : (job.salaryType === 'monthly' ? 'month' : 'day')
   if (entry.workerId && !entry.isExternal && previous !== payRate) {
     const workerId = String(entry.workerId._id || entry.workerId)
     triggerNotification({

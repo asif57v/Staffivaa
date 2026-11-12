@@ -16,9 +16,9 @@ const PERIOD_KEY_RE = /^\d{4}-\d{2}-\d{2}$/
 const PAYOUT_MODES = ['wallet', 'cash', 'upi', 'bank', 'other']
 const inr = (n) => `₹${Number(n).toLocaleString('en-IN')}`
 
-/** Only accepted daily/hourly (admin dispatch) jobs take part in this flow. */
+/** Only accepted enterprise direct (admin dispatch) jobs take part in this flow. */
 const isDirectJob = (job) =>
-  job && job.dispatchMode === 'admin' && ['daily', 'hourly'].includes(job.salaryType)
+  job && job.dispatchMode === 'admin' && ['daily', 'hourly', 'monthly'].includes(job.salaryType)
 
 const payableWorkersCount = (job) => (job.assignedWorkers?.length || 0) || job.numberOfWorkers
 
@@ -28,12 +28,12 @@ const todayKey = () => {
 }
 
 /**
- * Admin-set worker pay (per day / per hour) for an assignment. Must be > 0 and not above the enterprise rate.
+ * Admin-set worker pay (per day / per hour / per month) for an assignment. Must be > 0 and not above the enterprise rate.
  * Returns { payRate } or { error }.
  */
 export function parseWorkerPayRate(job, raw) {
   const payRate = raw === undefined || raw === null || raw === '' ? Number(job.salary) : Math.round(Number(raw))
-  const unit = job.salaryType === 'hourly' ? 'hour' : 'day'
+  const unit = job.salaryType === 'hourly' ? 'hour' : (job.salaryType === 'monthly' ? 'month' : 'day')
   if (!Number.isFinite(payRate) || payRate <= 0) {
     return { error: `Enter the worker's pay per ${unit}` }
   }
@@ -72,7 +72,7 @@ async function loadEnterpriseDirectJob(req, res) {
   }
   if (!isDirectJob(job) || job.adminRequestStatus !== 'accepted') {
     sendError(res, {
-      message: 'Payments are only available for accepted daily/hourly requests',
+      message: 'Payments are only available for accepted enterprise direct requests',
       statusCode: HTTP_STATUS.BAD_REQUEST,
     })
     return null

@@ -23,9 +23,9 @@ export function EnterpriseAssignWorkersModal({ job, onClose }) {
   const [selectedIds, setSelectedIds] = useState([])
   const [externalRows, setExternalRows] = useState([emptyExternal()])
 
-  // Worker pay (per day / per hour) — what the assigned workers see and get credited. Linked to the margin %.
+  // Worker pay (per day / per hour / per month) — what the assigned workers see and get credited. Linked to the margin %.
   const enterpriseRate = Number(job.salary) || 0
-  const unit = job.salaryType === 'hourly' ? 'hour' : 'day'
+  const unit = job.salaryType === 'hourly' ? 'hour' : (job.salaryType === 'monthly' ? 'month' : 'day')
   const lastRate = [...(job.assignedWorkers || [])].reverse().find((w) => Number(w.payRate) > 0)?.payRate
   const marginOf = (pay) =>
     enterpriseRate > 0 && pay !== '' ? String(Math.round(((enterpriseRate - Number(pay)) / enterpriseRate) * 1000) / 10) : ''

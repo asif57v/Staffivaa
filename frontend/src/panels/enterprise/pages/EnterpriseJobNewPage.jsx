@@ -48,8 +48,8 @@ export function EnterpriseJobNewPage() {
     }
   })
 
-  // Daily/hourly requirements go to Admin instead of the labour feed (no interview round)
-  const isAdminDispatch = formData.salaryType === 'daily' || formData.salaryType === 'hourly'
+  // Enterprise requirements (daily, hourly, monthly) go to Admin instead of the labour feed (no interview round)
+  const isAdminDispatch = formData.salaryType === 'daily' || formData.salaryType === 'hourly' || formData.salaryType === 'monthly'
 
   const [shiftStartTime, setShiftStartTime] = useState('09:00')
   const [shiftEndTime, setShiftEndTime] = useState('18:00')
@@ -169,7 +169,7 @@ export function EnterpriseJobNewPage() {
     const { timeline } = formData
     if (isAdminDispatch) {
       if (!timeline.expectedJoiningDate || timeline.expectedJoiningDate < todayStr) {
-        toast.error('Past dates cannot be selected for daily/hourly requests')
+        toast.error('Past dates cannot be selected for expected joining date')
         return
       }
       if (shiftStartInPast) {
@@ -346,7 +346,7 @@ export function EnterpriseJobNewPage() {
               </select>
               {isAdminDispatch && (
                 <p className="rounded-lg bg-indigo-50 px-3 py-2 text-[11.5px] font-semibold text-indigo-700 ring-1 ring-indigo-100">
-                  Daily and hourly requirements are sent to Staffivaa Admin, who will arrange workers for you. There is no interview round.
+                  Requirements are sent to Staffivaa Admin, who will arrange and assign workers for you.
                 </p>
               )}
             </div>

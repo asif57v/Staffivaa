@@ -263,8 +263,7 @@ export const createEnterpriseJob = asyncHandler(async (req, res) => {
     jobDescription, timeline
   } = req.body
 
-  // Daily & hourly requirements are routed to Admin for direct fulfilment (no labour feed, no interviews).
-  // Monthly requirements keep the existing labour-feed hiring pipeline.
+  // Enterprise requirements (daily, hourly, monthly) are routed to Admin for direct fulfilment (no labour feed, no interviews).
   const isAdminDispatch = ADMIN_DISPATCH_SALARY_TYPES.includes(salaryType)
 
   const job = await EnterpriseJob.create({
@@ -283,7 +282,7 @@ export const createEnterpriseJob = asyncHandler(async (req, res) => {
 
     await logAudit({
       adminId: req.user._id,
-      action: 'Enterprise Daily/Hourly Request Sent to Admin',
+      action: 'Enterprise Request Sent to Admin',
       module: 'Enterprise Jobs',
       details: { jobId: job._id, title: job.jobTitle, salaryType: job.salaryType },
       req,
@@ -367,9 +366,9 @@ export const createEnterpriseJob = asyncHandler(async (req, res) => {
   })
 })
 
-const ADMIN_DISPATCH_SALARY_TYPES = ['daily', 'hourly']
+const ADMIN_DISPATCH_SALARY_TYPES = ['daily', 'hourly', 'monthly']
 
-/** Notify all admins that an enterprise raised a daily/hourly requirement */
+/** Notify all admins that an enterprise raised a requirement */
 async function notifyAdminsOfDirectRequest(enterpriseId, job) {
   try {
     const enterpriseUser = await User.findById(enterpriseId).select('fullName enterpriseProfile')
@@ -380,7 +379,7 @@ async function notifyAdminsOfDirectRequest(enterpriseId, job) {
     for (const admin of adminUsers) {
       triggerNotification({
         userId: admin._id,
-        title: 'New Enterprise Daily/Hourly Request 📥',
+        title: 'New Enterprise Request 📥',
         body,
         type: 'ENTERPRISE_DIRECT_REQUEST',
         relatedId: job._id,

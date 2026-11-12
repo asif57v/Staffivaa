@@ -79,7 +79,7 @@ function DetailTile({ label, icon: Icon, children }) {
 /** Assigned worker's pay (what the worker sees / gets credited) with inline edit. */
 function WorkerPayEditor({ job, entry }) {
   const enterpriseRate = Number(job.salary) || 0
-  const unit = job.salaryType === 'hourly' ? 'hour' : 'day'
+  const unit = job.salaryType === 'hourly' ? 'hour' : (job.salaryType === 'monthly' ? 'month' : 'day')
   const current = Number(entry.payRate) > 0 ? Number(entry.payRate) : enterpriseRate
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(String(current))
@@ -214,9 +214,9 @@ export function AdminEnterpriseDirectRequestsPage() {
           <CalendarClock className="h-5 w-5" />
         </span>
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900">Enterprise Daily / Hourly Requests</h1>
+          <h1 className="text-2xl font-extrabold text-slate-900">Enterprise Requirement Requests</h1>
           <p className="text-sm text-slate-600">
-            Daily and hourly requirements from enterprise clients come here instead of the labour feed. No interview round.
+            Requirements from enterprise clients come here instead of the public labour feed. Assign workers directly.
           </p>
         </div>
       </div>
@@ -263,7 +263,7 @@ export function AdminEnterpriseDirectRequestsPage() {
           <CalendarClock className="mx-auto h-10 w-10 text-slate-300" aria-hidden />
           <p className="mt-3 text-sm font-bold text-slate-700">No requests in this view.</p>
           <p className="mt-1 text-xs text-slate-500">
-            Enterprise jobs posted with a Daily or Hourly salary type will appear here.
+            Enterprise jobs posted will appear here.
           </p>
         </GlassPanel>
       )}

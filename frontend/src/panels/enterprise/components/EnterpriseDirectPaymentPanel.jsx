@@ -16,6 +16,8 @@ export function EnterpriseDirectPaymentPanel({ job }) {
   const payments = data?.data?.payments ?? []
   const quote = data?.data?.quote
   const isHourly = job.salaryType === 'hourly'
+  const isMonthly = job.salaryType === 'monthly'
+  const unitLabel = isHourly ? 'per hour' : (isMonthly ? 'per month' : 'per day')
 
   const [periodKey, setPeriodKey] = useState('')
   const [hours, setHours] = useState('')
@@ -41,7 +43,7 @@ export function EnterpriseDirectPaymentPanel({ job }) {
   return (
     <div className="pt-3 mt-2 border-t border-current/10 space-y-3 text-slate-900">
       <p className="text-[11px] sm:text-[12px] font-extrabold uppercase tracking-wide opacity-70">
-        Pay for this job ({isHourly ? 'per hour' : 'per day'})
+        Pay for this job ({unitLabel})
       </p>
 
       <div className="rounded-xl bg-white/80 border border-white p-3 space-y-3">
@@ -71,7 +73,7 @@ export function EnterpriseDirectPaymentPanel({ job }) {
         </div>
 
         <p className="text-[12.5px] font-semibold text-slate-700">
-          {inr(job.salary)} × {workers} worker(s){isHourly ? ` × ${selectedHours} hour(s)` : ' × 1 day'} ={' '}
+          {inr(job.salary)} × {workers} worker(s){isHourly ? ` × ${selectedHours} hour(s)` : (isMonthly ? ' × 1 month' : ' × 1 day')} ={' '}
           <span className="font-black text-emerald-700">{inr(amount)}</span>
         </p>
 
